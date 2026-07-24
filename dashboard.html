@@ -1,0 +1,515 @@
+<!-- AFFIN B1 Assurance — Operations Console (demonstration build) -->
+<!-- Prospek Cerah Inovasi IT Sdn. Bhd. · self-contained · sample data -->
+<div id="app">
+<header class="top">
+  <div class="top-l">
+    <span class="logo" aria-hidden="true"></span>
+    <div class="ttl"><b>AFFIN Assurance</b><span>B1 Construction Finance · Operations Console</span></div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab on" data-tab="portfolio">B1 Portfolio</button>
+    <button class="tab" data-tab="tracka">Track A · A1–A7 Savings</button>
+    <button class="tab" data-tab="bank">Bank View</button>
+  </nav>
+  <div class="top-r">
+    <span class="demo-badge" title="Sample portfolio for demonstration">DEMO DATA</span>
+    <button id="theme" class="theme-btn" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<!-- ============ PORTFOLIO ============ -->
+<section class="panel on" data-panel="portfolio">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="board">
+    <!-- left: table + filters -->
+    <div class="col-list">
+      <div class="ctrls">
+        <input id="search" class="search" placeholder="Search project, code, region…" aria-label="Search">
+        <div class="chips" id="chips">
+          <button class="chip on" data-f="all">All</button>
+          <button class="chip" data-f="risk">Risk</button>
+          <button class="chip" data-f="watch">Watch</button>
+          <button class="chip" data-f="ontrack">On-track</button>
+          <button class="chip" data-f="islamic">Islamic</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="ptable">
+          <thead><tr>
+            <th data-s="name">Project</th>
+            <th data-s="exposure" class="num">Exposure</th>
+            <th data-s="progress" class="num">Progress</th>
+            <th data-s="drawdown" class="num">Drawdown</th>
+            <th data-s="variance" class="num">Δ</th>
+            <th data-s="status">Status</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="listfoot" id="listfoot"></p>
+    </div>
+    <!-- right: detail -->
+    <div class="col-detail" id="detail"></div>
+  </div>
+</section>
+
+<!-- ============ TRACK A ============ -->
+<section class="panel" data-panel="tracka">
+  <div class="sec-intro">
+    <h2>Track A — where the operating cost actually comes out</h2>
+    <p>Seven modules, one mechanism: <b>convert full manual checking into exception-driven checking.</b> Each module attacks a specific line already on AFFIN’s P&amp;L. The bands below are illustrative reduction ranges applied to <b>your</b> baseline in the Discovery Workshop — no RM figure is presented as achieved until verified.</p>
+  </div>
+  <div class="mods" id="mods"></div>
+  <p class="mods-foot">Reduction bands are <b>Low / Base / High</b> planning ranges, not guarantees. Actual savings are computed on AFFIN’s own bills behind the Net-Benefit Go/No-Go gate.</p>
+</section>
+
+<!-- ============ BANK VIEW ============ -->
+<section class="panel" data-panel="bank">
+  <div class="sec-intro">
+    <h2>Bank View — the decision from your side of the desk</h2>
+    <p>The same programme, read through the four people who have to say yes. Below each: the question they actually ask, how the programme answers it, and what they watch on this console.</p>
+  </div>
+  <div class="roles" id="roles"></div>
+
+  <div class="objwrap">
+    <h3>Your objections, answered</h3>
+    <div class="table-scroll">
+      <table class="objtable" id="objtable"></table>
+    </div>
+  </div>
+
+  <div class="protect">
+    <h3>How your money is protected</h3>
+    <div class="protect-grid">
+      <div class="pcard"><span class="pdot d-ok"></span><h4>Net-Benefit gate</h4><p>We scale only if reduced existing cost + avoided loss exceed our fee + your implementation cost, and the Benefit-to-Cost Ratio clears a jointly-agreed hurdle.</p></div>
+      <div class="pcard"><span class="pdot d-teal"></span><h4>Pilot-first, reversible</h4><p>Two small pilots with a Day-90 Go/No-Go. If a pilot fails its gate, it stops — no lock-in, no scaled cost. You keep the evidence file.</p></div>
+      <div class="pcard"><span class="pdot d-brass"></span><h4>Malaysia-hosted</h4><p>Target 100% in-country deployment, no remote access — designed toward BNM RMiT and validated with Group Technology, Risk and Compliance before pilot.</p></div>
+      <div class="pcard"><span class="pdot d-ok"></span><h4>Human authority kept</h4><p>Shadow Mode runs beside your current process. The system flags and recommends; your QS, credit officers and committee decide. We augment, never replace.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>Prospek Cerah Inovasi IT Sdn. Bhd.</span>
+  <span class="foot-note">Demonstration console — sample portfolio for illustration. A live deployment runs on AFFIN’s own facilities and financing projects. External benchmark results are Partner-Provided and Pending Independent Verification.</span>
+  <span>July 2026</span>
+</footer>
+</div>
+
+<script>
+/* ================= DATA (illustrative sample portfolio) ================= */
+const MON=['Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+const P=[
+ {id:'MER',name:'Meridian Residences',code:'PJ-14 · KL',type:'High-rise',seg:'Conventional',region:'Kuala Lumpur',limit:85,contractor:'Med',inactive:6,
+  prog:[8,16,25,34,42,50,57,62],draw:[10,20,31,42,53,64,73,81]},
+ {id:'SAL',name:'Seri Austin Logistics Hub',code:'JHR-07',type:'Industrial',seg:'Islamic',region:'Johor',limit:120,contractor:'Low',inactive:3,
+  prog:[6,12,20,27,33,40,45,48],draw:[4,10,17,24,30,36,41,45]},
+ {id:'TTW',name:'Titiwangsa Mixed Development',code:'KL-22',type:'Mixed-use',seg:'Conventional',region:'Kuala Lumpur',limit:210,contractor:'High',inactive:41,
+  prog:[10,20,31,40,47,50,51,51],draw:[12,24,37,48,58,66,71,74]},
+ {id:'GBG',name:'Gebeng Petrochem Yard',code:'PHG-03',type:'Industrial',seg:'Conventional',region:'Pahang',limit:95,contractor:'Low',inactive:5,
+  prog:[8,15,23,31,38,45,50,53],draw:[6,13,21,28,35,42,47,50]},
+ {id:'CYV',name:'Cyber Valley Data Centre',code:'SGR-31',type:'Infrastructure',seg:'Islamic',region:'Selangor',limit:340,contractor:'Low',inactive:2,
+  prog:[9,18,27,35,43,50,55,58],draw:[7,16,25,33,41,48,53,56]},
+ {id:'BLP',name:'Bayan Lepas SME Factory',code:'PNG-09',type:'Industrial',seg:'Islamic',region:'Penang',limit:42,contractor:'Med',inactive:12,
+  prog:[10,19,28,37,45,52,57,60],draw:[12,23,34,45,55,64,70,75]},
+ {id:'KTP',name:'Kuantan Port Warehousing',code:'PHG-11',type:'Infrastructure',seg:'Conventional',region:'Pahang',limit:66,contractor:'Low',inactive:4,
+  prog:[7,14,21,28,34,40,44,47],draw:[5,12,19,26,32,38,42,45]},
+ {id:'ISK',name:'Iskandar Coastal Towers',code:'JHR-19',type:'High-rise',seg:'Conventional',region:'Johor',limit:158,contractor:'High',inactive:28,
+  prog:[11,21,31,40,47,52,54,55],draw:[13,26,39,51,61,69,75,80]},
+];
+const STAGES=[['Earthworks',10],['Substructure',25],['Superstructure',45],['M&E / Envelope',70],['Fit-out',88],['VP / Handover',100]];
+P.forEach(p=>{ p.progress=p.prog[7]; p.drawdown=p.draw[7]; p.variance=p.drawdown-p.progress; p.drawn=+(p.limit*p.drawdown/100).toFixed(1);
+  p.status = (p.variance>20||p.inactive>21)?'risk' : (p.variance>=6||p.inactive>10)?'watch' : 'ontrack';
+  p.rec = p.status==='risk'?'ESCALATE' : p.status==='watch'?'HOLD' : 'RELEASE'; });
+
+const ALERTS=[
+ ['risk','Titiwangsa Mixed Development','41 days with no detected site activity; drawdown 74% vs physical 51%. Facility release held; recovery review triggered.','2d ago'],
+ ['risk','Iskandar Coastal Towers','Cumulative drawdown outrunning physical progress by 25 points. Next disbursement held pending exception visit.','3d ago'],
+ ['watch','Meridian Residences','Tower B slab pour behind schedule; drawdown 19 points ahead. Exception site visit dispatched.','4d ago'],
+ ['watch','Bayan Lepas SME Factory','Envelope works slowing; drawdown gap widened to 15 points. Flagged for QS reconciliation.','6d ago'],
+ ['ontrack','Cyber Valley Data Centre','Milestone 4 (M&E) verified by drone + fixed-camera capture. Disbursement recommendation: RELEASE.','1d ago'],
+ ['risk','Titiwangsa Mixed Development','Contractor risk rating moved Med → High on two missed certifications.','8d ago'],
+];
+
+const MODULES=[
+ ['A1','Branch &amp; Space Optimisation','Lease and rental on under-utilised floor area — branches still sized for pre-digital footfall.','Footfall and transaction analytics identify space to sublet, downsize or convert; a data-driven lease-renewal calendar.','Right-sized estate; renewals negotiated from evidence, not habit.','RM / sq ft · space utilisation % · lease cost per branch','Turns a fixed property cost into a managed variable — one-off and recurring.',[4,8,12]],
+ ['A2','Predictive Maintenance','Emergency call-outs and premature replacement of gensets, lifts, chillers and ATM units.','IoT + condition monitoring converts breakdown repairs into scheduled planned maintenance and extends asset life.','Fewer downtime events; parts procured on plan, not in panic.','emergency-vs-planned ratio · MTBF · repair spend','Fewer branch disruptions and a predictable maintenance budget.',[10,18,25]],
+ ['A3','Energy Optimisation','HVAC over-run, out-of-hours load and inefficient equipment across the branch estate.','Anomaly detection, time-of-use control and branch-to-branch efficiency benchmarking.','Automated setpoints; an ESG reporting story as a by-product.','weather-adjusted kWh / branch · RM energy / branch','Cost saving plus a sustainability narrative for the board.',[8,15,22]],
+ ['A4','Procurement &amp; Vendor Cost','Duplicate vendors, price variance between branches, auto-renewals, double billing and maverick spend.','Spend analytics, vendor consolidation, contract re-negotiation and duplicate-invoice detection.','Central visibility; fast one-off cash recoveries.','unit-price variance · vendor count · recovered duplicate spend','The easiest first win — fast, provable hard cash.',[3,6,10]],
+ ['A5','Cash &amp; Liquidity Logistics','Cash-in-transit routes, idle cash holdings, over-frequent replenishment and cash insurance.','Demand forecasting optimises replenishment frequency and routing; reduces idle cash and CIT trips.','Lower cash-carrying and logistics cost; liquidity freed.','CIT trips · idle cash RM · replenishment cost','Releases trapped liquidity while cutting logistics spend.',[5,9,14]],
+ ['A6','Security &amp; Surveillance Efficiency','Manual guarding hours, redundant alarm and CCTV contracts, false-alarm call-outs.','Analytics-based surveillance, risk-based guarding-hours rationalisation and contract consolidation.','Same or better coverage on a risk basis; fewer false dispatches.','guarding RM / branch · false-alarm rate · contract count','Equivalent protection at a lower, risk-justified cost.',[4,8,12]],
+ ['A7','ATM Network Cost Intelligence','ATM downtime, redundant replenishment routes, low-utilisation machines and reactive maintenance.','Failure prediction, replenishment-route optimisation and low-value-site consolidation.','Higher uptime with fewer truck-rolls.','uptime % · replenishment cost · cost per transaction','A customer-facing uptime gain and an operating-cost win together.',[6,12,18]],
+];
+
+const ROLES=[
+ ['Group CRO / Credit','Risk','Will this lower NPL formation and give earlier, defensible warning — while my officers stay in control?',
+  'Earlier detection of stalls, fund diversion and progress–payment mismatch; a time-stamped, audit-ready evidence file. Every decision stays with your credit committee.',
+  'Flagged exposure · detection lead-time · drawdown-vs-progress variance'],
+ ['COO / Operations','Ops','Is this a real opex cut, or just another bill? And can my team actually run it?',
+  'A1–A7 remove existing cost lines and move operations from full-manual to exception-driven. Measured on your own bills; the console is built to be operated by your team.',
+  'inspections avoided · planned-vs-emergency ratio · energy / branch'],
+ ['CFO / Finance','Finance','Show me the net benefit, the payback and the downside.',
+  'The Net-Benefit Model runs on your inputs and returns Low/Base/High with a Benefit-to-Cost hurdle. Pilot-first and reversible caps the downside to a small, bounded cost.',
+  'net benefit · Benefit-to-Cost Ratio · avoidable exposure'],
+ ['CEO / Board &amp; Procurement','Board','Is it strategic, low-risk, provable, compliant and free of lock-in?',
+  'Two small reversible pilots, Malaysia-hosted, designed toward RMiT and Shariah, with graded evidence. Nothing scales without a positive, bank-confirmed result.',
+  'pilot Go/No-Go scorecard · data-residency status · evidence grade'],
+];
+
+const OBJ=[
+ ['“It’s just another software subscription that adds cost.”','The Net-Benefit gate: we scale only if reduced existing cost + avoided loss exceed our fee + your implementation cost. Below the agreed hurdle, we stop — the cost never lands.'],
+ ['“Our data cannot leave Malaysia — and there’s BNM RMiT.”','Target 100% Malaysia-hosted with no remote access, designed toward RMiT and validated with Group Technology, Risk and Compliance before any pilot begins.'],
+ ['“This will disrupt my credit officers and QS.”','Shadow Mode runs alongside the current process during the pilot. We flag and recommend; your people and committee decide. No workflow authority is removed.'],
+ ['“The China results could just be marketing.”','Every external figure is graded L2 — Partner-Provided, Pending Verification — and kept in an appendix. The pilot proves value on AFFIN’s own projects, not on our slides.'],
+ ['“Core-system integration is a huge project.”','The pilot needs only read-only baseline data and a few live projects — no core integration to prove value. Integration is scoped only after a Go decision.'],
+ ['“What if the pilot fails?”','Pilot-first, reversible, Day-90 Go/No-Go. If it fails its gate it stops — no lock-in, no scaled cost — and you keep the evidence file it produced.'],
+ ['“Shariah compliance for Affin Islamic.”','A Conventional + Islamic dual-track workflow with Shariah risk represented, confirmed with your Shariah function as part of pilot design.'],
+];
+
+/* ================= HELPERS ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const rm=n=> n>=1000? 'RM '+(n/1000).toFixed(2)+'bn' : 'RM '+n.toFixed(n<10?1:0)+'m';
+const STC={risk:'Risk',watch:'Watch',ontrack:'On-track'};
+let state={filter:'all',q:'',sort:'variance',dir:-1,sel:'TTW'};
+
+/* ================= KPIs ================= */
+function kpis(){
+  const tot=P.reduce((a,p)=>a+p.limit,0);
+  const flagged=P.filter(p=>p.status!=='ontrack').reduce((a,p)=>a+p.drawn,0);
+  const risk=P.filter(p=>p.status==='risk').length, watch=P.filter(p=>p.status==='watch').length, ok=P.filter(p=>p.status==='ontrack').length;
+  const data=[
+   ['Monitored exposure',rm(tot),P.length+' active financing projects',''],
+   ['Flagged exposure',rm(flagged),risk+' risk · '+watch+' watch · '+ok+' on-track','warn'],
+   ['Detection lead-time','≈ 4.5 mo','earlier than current cycle','ill'],
+   ['Inspections avoided','214','of 320 scheduled, YTD','ill'],
+  ];
+  $('#kpis').innerHTML=data.map(([k,v,d,t])=>`<div class="kpi ${t==='warn'?'kpi-warn':''}">
+    <span class="kpi-k">${k}${t==='ill'?'<i class="ill">illustrative</i>':''}</span>
+    <span class="kpi-v">${v}</span><span class="kpi-d">${d}</span></div>`).join('');
+}
+
+/* ================= TABLE ================= */
+function filtered(){
+  let a=P.filter(p=>{
+    if(state.filter==='islamic'&&p.seg!=='Islamic')return false;
+    if(['risk','watch','ontrack'].includes(state.filter)&&p.status!==state.filter)return false;
+    if(state.q){const s=(p.name+p.code+p.region+p.type).toLowerCase();if(!s.includes(state.q))return false;}
+    return true;});
+  a.sort((x,y)=>{let vx=x[state.sort],vy=y[state.sort];if(typeof vx==='string'){vx=vx.toLowerCase();vy=vy.toLowerCase();}
+    return (vx>vy?1:vx<vy?-1:0)*state.dir;});
+  return a;
+}
+function rows(){
+  const a=filtered();
+  $('#rows').innerHTML=a.map(p=>`<tr class="${p.id===state.sel?'sel':''}" data-id="${p.id}">
+    <td><b>${p.name}</b><span class="rsub">${p.code} · ${p.type} · ${p.seg==='Islamic'?'<i class="isl">Islamic</i>':'Conv.'}</span></td>
+    <td class="num">${rm(p.limit)}</td>
+    <td class="num">${p.progress}%</td>
+    <td class="num">${p.drawdown}%</td>
+    <td class="num var ${p.variance>20?'v-risk':p.variance>=6?'v-warn':'v-ok'}">${p.variance>0?'+':''}${p.variance}</td>
+    <td><span class="pill p-${p.status}">${STC[p.status]}</span></td></tr>`).join('');
+  $('#listfoot').textContent=`${a.length} of ${P.length} projects · sorted by ${state.sort} ${state.dir<0?'↓':'↑'}`;
+  $$('#rows tr').forEach(tr=>tr.onclick=()=>{state.sel=tr.dataset.id;rows();detail();});
+}
+
+/* ================= CHART ================= */
+function chart(p){
+  const W=440,H=170,pad=28,n=p.prog.length, xw=(W-pad*2)/(n-1);
+  const X=i=>pad+i*xw, Y=v=>H-pad-(v/100)*(H-pad*2);
+  const line=(arr)=>arr.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
+  const gapPts=p.prog.map((v,i)=>X(i)+','+Y(v)).concat(p.draw.map((v,i)=>X(i)+','+Y(v)).reverse()).join(' ');
+  const grid=[0,25,50,75,100].map(g=>`<line x1="${pad}" y1="${Y(g)}" x2="${W-pad}" y2="${Y(g)}" class="grid"/><text x="${pad-6}" y="${Y(g)+3}" class="gl">${g}</text>`).join('');
+  const labs=MON.map((m,i)=> i%2? '' : `<text x="${X(i)}" y="${H-8}" class="ml">${m}</text>`).join('');
+  const gapCol = p.variance>20?'var(--risk)':p.variance>=6?'var(--warn)':'var(--ok)';
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Drawdown versus physical progress over time">
+    ${grid}
+    <polygon points="${gapPts}" fill="${gapCol}" opacity="0.12"/>
+    <path d="${line(p.prog)}" class="ln ln-prog"/>
+    <path d="${line(p.draw)}" class="ln ln-draw" style="stroke:${gapCol}"/>
+    <circle cx="${X(n-1)}" cy="${Y(p.prog[n-1])}" r="3.5" class="dot" style="fill:var(--ok)"/>
+    <circle cx="${X(n-1)}" cy="${Y(p.draw[n-1])}" r="3.5" class="dot" style="fill:${gapCol}"/>
+    ${labs}
+  </svg>`;
+}
+
+/* ================= DETAIL ================= */
+function detail(){
+  const p=P.find(x=>x.id===state.sel);
+  const cur=STAGES.findIndex(s=>p.progress<s[1]);
+  const mile=STAGES.map((s,i)=>{const done=i<cur||cur===-1, now=i===cur;
+    return `<li class="${done?'m-done':now?'m-now':'m-todo'}"><span class="mk"></span>${s[0]}</li>`;}).join('');
+  const recClass={RELEASE:'r-ok',HOLD:'r-warn',ESCALATE:'r-risk'}[p.rec];
+  const recTxt={RELEASE:'Physical progress supports the drawdown. Disbursement recommended.',
+    HOLD:'Drawdown is ahead of verified progress. Hold release; dispatch an exception site visit.',
+    ESCALATE:'Material gap and/or prolonged inactivity. Hold release; trigger recovery review.'}[p.rec];
+  const caps=[['Satellite','optical, 10-day revisit'],['Drone','milestone flights'],['Fixed camera','continuous'],['IoT / site log','continuous']];
+  const alerts=ALERTS.filter(a=>a[1]===p.name);
+  $('#detail').innerHTML=`
+   <div class="d-head">
+     <div><h3>${p.name}</h3><span class="d-sub">${p.code} · ${p.type} · ${p.region} · ${p.seg}</span></div>
+     <span class="pill p-${p.status} big">${STC[p.status]}</span>
+   </div>
+   <div class="d-stats">
+     <div><span class="ds-k">Facility limit</span><span class="ds-v">${rm(p.limit)}</span></div>
+     <div><span class="ds-k">Drawn</span><span class="ds-v">${rm(p.drawn)} · ${p.drawdown}%</span></div>
+     <div><span class="ds-k">Physical progress</span><span class="ds-v">${p.progress}%</span></div>
+     <div><span class="ds-k">Variance</span><span class="ds-v var ${p.variance>20?'v-risk':p.variance>=6?'v-warn':'v-ok'}">${p.variance>0?'+':''}${p.variance} pts</span></div>
+     <div><span class="ds-k">Contractor risk</span><span class="ds-v">${p.contractor}</span></div>
+     <div><span class="ds-k">Last site activity</span><span class="ds-v ${p.inactive>21?'v-risk':p.inactive>10?'v-warn':''}">${p.inactive} days ago</span></div>
+   </div>
+   <div class="rec ${recClass}"><span class="rec-tag">${p.rec}</span><span class="rec-txt">${recTxt}</span></div>
+   <div class="d-chart">
+     <div class="dc-head"><span>Drawdown vs physical progress</span>
+       <span class="legend"><i class="lg lg-prog"></i>Progress <i class="lg lg-draw"></i>Drawdown</span></div>
+     ${chart(p)}
+   </div>
+   <div class="d-cols">
+     <div class="d-mile"><h4>Milestones</h4><ul class="mlist">${mile}</ul></div>
+     <div class="d-cap"><h4>Evidence captures</h4><ul class="clist">${caps.map(c=>`<li><b>${c[0]}</b><span>${c[1]}</span></li>`).join('')}</ul></div>
+   </div>
+   <div class="d-alerts"><h4>Alerts</h4>${alerts.length?alerts.map(a=>`<div class="al al-${a[0]}"><span class="al-t">${a[3]}</span>${a[2]}</div>`).join(''):'<p class="noal">No open alerts for this project.</p>'}</div>
+  `;
+}
+
+/* ================= TRACK A ================= */
+function tracka(){
+  $('#mods').innerHTML=MODULES.map(m=>{
+    const[code,name,cost,how,eff,meas,pov,band]=m;
+    const bar=(v,cls)=>`<div class="bl"><span class="bl-w bl-${cls}" style="width:${v*3.6}%"></span><span class="bl-v">${v}%</span></div>`;
+    return `<article class="mod">
+      <header><span class="mcode">${code}</span><h3>${name}</h3></header>
+      <div class="mrow"><span class="mk2">Costs AFFIN now</span><p>${cost}</p></div>
+      <div class="mrow"><span class="mk2">How the cost is removed</span><p>${how}</p></div>
+      <div class="mrow"><span class="mk2">Efficiency gained</span><p>${eff}</p></div>
+      <div class="mrow mrow-2"><div><span class="mk2">Measured by</span><p class="meas">${meas}</p></div></div>
+      <div class="mbands"><span class="mk2">Illustrative reduction band</span>
+        <div class="bands">${bar(band[0],'low')}${bar(band[1],'base')}${bar(band[2],'high')}</div>
+        <span class="blabels"><i>Low</i><i>Base</i><i>High</i></span></div>
+      <div class="mpov"><span class="povk">Bank POV</span>${pov}</div>
+    </article>`;}).join('');
+}
+
+/* ================= BANK VIEW ================= */
+function bank(){
+  $('#roles').innerHTML=ROLES.map(r=>{const[title,tag,q,a,w]=r;
+    return `<article class="role">
+      <header><span class="rtag">${tag}</span><h3>${title}</h3></header>
+      <p class="rq">“${q}”</p>
+      <p class="ra">${a}</p>
+      <div class="rw"><span class="rwk">Watches on this console</span>${w}</div>
+    </article>`;}).join('');
+  $('#objtable').innerHTML='<thead><tr><th>The objection</th><th>The answer</th></tr></thead><tbody>'+
+    OBJ.map(o=>`<tr><td class="obj-q">${o[0]}</td><td>${o[1]}</td></tr>`).join('')+'</tbody>';
+}
+
+/* ================= WIRING ================= */
+$$('.tab').forEach(t=>t.onclick=()=>{
+  $$('.tab').forEach(x=>x.classList.toggle('on',x===t));
+  $$('.panel').forEach(pn=>pn.classList.toggle('on',pn.dataset.panel===t.dataset.tab));
+});
+$$('#chips .chip').forEach(c=>c.onclick=()=>{state.filter=c.dataset.f;$$('#chips .chip').forEach(x=>x.classList.toggle('on',x===c));rows();});
+$('#search').oninput=e=>{state.q=e.target.value.toLowerCase().trim();rows();};
+$$('.ptable th').forEach(th=>th.onclick=()=>{const s=th.dataset.s;if(state.sort===s)state.dir*=-1;else{state.sort=s;state.dir=(s==='name')?1:-1;}rows();});
+$('#theme').onclick=()=>{const r=document.documentElement;const d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');};
+
+kpis();rows();detail();tracka();bank();
+</script>
+
+<style>
+:root{
+  --ink:#0A0F1A;--slate:#101B2C;--panel:#14213550;--card:#131F31;--card2:#0F1826;--line:#25374F;--line2:#1C2A3D;
+  --tx:#E9EEF5;--txd:#9DABBE;--txm:#6B7A8E;
+  --teal:#22AEBE;--brass:#CDA155;--ok:#43A877;--warn:#E0982B;--risk:#E15641;
+  --bg:var(--ink);--cd:var(--card);--cd2:var(--card2);--bd:var(--line);--bd2:var(--line2);
+  --fg:var(--tx);--fgd:var(--txd);--fgm:var(--txm);
+  --disp:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;--body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#EEF1F4;--cd:#FFFFFF;--cd2:#F5F7F9;--bd:#DEE3E9;--bd2:#E9EDF1;
+  --fg:#152030;--fgd:#4C5A6B;--fgm:#7B8797;--teal:#0E8391;--brass:#9A7327;--ok:#2F8A5E;--warn:#B9791B;--risk:#C3432F;}}
+:root[data-theme="light"]{
+  --bg:#EEF1F4;--cd:#FFFFFF;--cd2:#F5F7F9;--bd:#DEE3E9;--bd2:#E9EDF1;
+  --fg:#152030;--fgd:#4C5A6B;--fgm:#7B8797;--teal:#0E8391;--brass:#9A7327;--ok:#2F8A5E;--warn:#B9791B;--risk:#C3432F;}
+:root[data-theme="dark"]{
+  --bg:#0A0F1A;--cd:#131F31;--cd2:#0F1826;--bd:#25374F;--bd2:#1C2A3D;
+  --fg:#E9EEF5;--fgd:#9DABBE;--fgm:#6B7A8E;--teal:#22AEBE;--brass:#CDA155;--ok:#43A877;--warn:#E0982B;--risk:#E15641;}
+*{box-sizing:border-box}
+#app{background:var(--bg);color:var(--fg);font-family:var(--body);min-height:100vh;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+#app :focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+h2,h3,h4{margin:0}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:1.2rem;padding:.7rem 1.3rem;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd2)}
+.top-l{display:flex;align-items:center;gap:.6rem}
+.logo{width:26px;height:26px;border-radius:6px;background:conic-gradient(from 210deg,var(--teal),var(--brass),var(--teal));box-shadow:0 0 0 1px var(--bd) inset}
+.ttl{display:flex;flex-direction:column;line-height:1.15}
+.ttl b{font-family:var(--disp);letter-spacing:-.01em;font-size:1rem}
+.ttl span{font-size:.72rem;color:var(--fgm)}
+.tabs{display:flex;gap:.3rem;margin:0 auto}
+.tab{background:transparent;border:1px solid transparent;color:var(--fgd);padding:.45rem .9rem;border-radius:8px;
+  font-family:var(--body);font-size:.85rem;cursor:pointer;transition:.15s;white-space:nowrap}
+.tab:hover{color:var(--fg);background:var(--cd)}
+.tab.on{background:var(--cd);color:var(--fg);border-color:var(--bd);font-weight:600}
+.top-r{display:flex;align-items:center;gap:.6rem}
+.demo-badge{font-family:var(--mono);font-size:.62rem;font-weight:700;letter-spacing:.1em;color:var(--warn);
+  border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);background:color-mix(in srgb,var(--warn) 14%,transparent);padding:.28rem .5rem;border-radius:5px}
+.theme-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--bd);background:var(--cd);color:var(--fgd);cursor:pointer;font-size:1rem}
+
+.panel{display:none;padding:1.3rem;max-width:1360px;margin:0 auto}
+.panel.on{display:block}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.1rem}
+.kpi{background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.25rem}
+.kpi-warn{border-color:color-mix(in srgb,var(--warn) 40%,var(--bd))}
+.kpi-k{font-size:.74rem;color:var(--fgm);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:.4rem}
+.ill{font-style:normal;font-family:var(--mono);font-size:.56rem;color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);padding:.05rem .3rem;border-radius:4px;letter-spacing:.03em}
+.kpi-v{font-family:var(--disp);font-weight:800;font-size:1.85rem;line-height:1;font-variant-numeric:tabular-nums}
+.kpi-warn .kpi-v{color:var(--warn)}
+.kpi-d{font-size:.76rem;color:var(--fgd)}
+
+/* board */
+.board{display:grid;grid-template-columns:1.05fr 1fr;gap:1.1rem}
+.col-list{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1rem;display:flex;flex-direction:column;min-height:520px}
+.ctrls{display:flex;flex-direction:column;gap:.7rem;margin-bottom:.8rem}
+.search{background:var(--cd2);border:1px solid var(--bd);border-radius:8px;color:var(--fg);padding:.55rem .7rem;font-family:var(--body);font-size:.85rem}
+.search:focus{outline:none;border-color:var(--teal)}
+.chips{display:flex;gap:.4rem;flex-wrap:wrap}
+.chip{background:var(--cd2);border:1px solid var(--bd);color:var(--fgd);padding:.32rem .7rem;border-radius:20px;font-size:.76rem;cursor:pointer;transition:.15s}
+.chip:hover{color:var(--fg)}
+.chip.on{background:var(--teal);color:#fff;border-color:var(--teal)}
+.table-scroll{overflow-x:auto;flex:1}
+.ptable{width:100%;border-collapse:collapse;font-size:.84rem}
+.ptable th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--fgm);padding:.5rem .5rem;
+  border-bottom:1px solid var(--bd);cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;background:var(--cd)}
+.ptable th.num{text-align:right}
+.ptable th:hover{color:var(--fg)}
+.ptable td{padding:.6rem .5rem;border-bottom:1px solid var(--bd2);vertical-align:middle}
+.ptable tr{cursor:pointer;transition:background .12s}
+.ptable tbody tr:hover{background:color-mix(in srgb,var(--teal) 7%,transparent)}
+.ptable tr.sel{background:color-mix(in srgb,var(--teal) 13%,transparent)}
+.ptable tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--teal)}
+.ptable td b{font-weight:600;display:block;line-height:1.2}
+.rsub{font-size:.68rem;color:var(--fgm);display:block;margin-top:.15rem}
+.isl{font-style:normal;color:var(--brass)}
+.var{font-weight:700}
+.v-ok{color:var(--ok)}.v-warn{color:var(--warn)}.v-risk{color:var(--risk)}
+.pill{font-family:var(--mono);font-size:.64rem;font-weight:700;padding:.22rem .5rem;border-radius:5px;letter-spacing:.03em;white-space:nowrap}
+.pill.big{font-size:.72rem;padding:.35rem .7rem}
+.p-risk{color:var(--risk);background:color-mix(in srgb,var(--risk) 16%,transparent);border:1px solid color-mix(in srgb,var(--risk) 40%,transparent)}
+.p-watch{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)}
+.p-ontrack{color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,transparent);border:1px solid color-mix(in srgb,var(--ok) 40%,transparent)}
+.listfoot{margin:.7rem 0 0;font-size:.72rem;color:var(--fgm);font-family:var(--mono)}
+
+/* detail */
+.col-detail{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1.2rem;min-height:520px}
+.d-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1rem}
+.d-head h3{font-family:var(--disp);font-size:1.3rem;letter-spacing:-.01em}
+.d-sub{font-size:.76rem;color:var(--fgm)}
+.d-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:1rem}
+.d-stats>div{background:var(--cd2);border:1px solid var(--bd2);border-radius:9px;padding:.6rem .7rem;display:flex;flex-direction:column;gap:.2rem}
+.ds-k{font-size:.66rem;color:var(--fgm);text-transform:uppercase;letter-spacing:.04em}
+.ds-v{font-size:.92rem;font-weight:600;font-variant-numeric:tabular-nums}
+.rec{display:flex;gap:.7rem;align-items:center;padding:.75rem .9rem;border-radius:10px;margin-bottom:1rem}
+.rec-tag{font-family:var(--mono);font-weight:700;font-size:.74rem;padding:.3rem .55rem;border-radius:6px;flex:none}
+.rec-txt{font-size:.82rem}
+.r-ok{background:color-mix(in srgb,var(--ok) 12%,transparent);border:1px solid color-mix(in srgb,var(--ok) 35%,transparent)}
+.r-ok .rec-tag{background:var(--ok);color:#fff}
+.r-warn{background:color-mix(in srgb,var(--warn) 12%,transparent);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.r-warn .rec-tag{background:var(--warn);color:#fff}
+.r-risk{background:color-mix(in srgb,var(--risk) 12%,transparent);border:1px solid color-mix(in srgb,var(--risk) 35%,transparent)}
+.r-risk .rec-tag{background:var(--risk);color:#fff}
+.d-chart{background:var(--cd2);border:1px solid var(--bd2);border-radius:10px;padding:.8rem;margin-bottom:1rem}
+.dc-head{display:flex;justify-content:space-between;font-size:.76rem;color:var(--fgd);margin-bottom:.3rem}
+.legend{display:flex;align-items:center;gap:.35rem;font-size:.7rem;color:var(--fgm)}
+.lg{width:14px;height:3px;border-radius:2px;display:inline-block}
+.lg-prog{background:var(--ok)}.lg-draw{background:var(--brass)}
+.chart{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--bd2);stroke-width:1}
+.chart .gl{fill:var(--fgm);font-size:9px;font-family:var(--mono);text-anchor:end}
+.chart .ml{fill:var(--fgm);font-size:9px;font-family:var(--mono);text-anchor:middle}
+.chart .ln{fill:none;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.chart .ln-prog{stroke:var(--ok)}
+.d-cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.d-cols h4,.d-alerts h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--fgm);margin-bottom:.5rem}
+.mlist,.clist{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.4rem;font-size:.8rem}
+.mlist li{display:flex;align-items:center;gap:.5rem;color:var(--fgd)}
+.mk{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--fgm);flex:none}
+.m-done{color:var(--fg)}.m-done .mk{background:var(--ok);border-color:var(--ok)}
+.m-now{color:var(--fg);font-weight:600}.m-now .mk{background:var(--warn);border-color:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 25%,transparent)}
+.clist li{display:flex;flex-direction:column;background:var(--cd2);border:1px solid var(--bd2);border-radius:7px;padding:.4rem .55rem}
+.clist b{font-size:.8rem;font-weight:600}
+.clist span{font-size:.68rem;color:var(--fgm)}
+.d-alerts h4{margin-top:0}
+.al{font-size:.79rem;padding:.55rem .7rem;border-radius:8px;margin-bottom:.45rem;background:var(--cd2);border-left:3px solid var(--fgm);color:var(--fgd)}
+.al-risk{border-color:var(--risk)}.al-watch{border-color:var(--warn)}.al-ontrack{border-color:var(--ok)}
+.al-t{display:block;font-family:var(--mono);font-size:.64rem;color:var(--fgm);margin-bottom:.15rem}
+.noal{font-size:.8rem;color:var(--fgm)}
+
+/* section intro */
+.sec-intro{margin-bottom:1.4rem;max-width:80ch}
+.sec-intro h2{font-family:var(--disp);font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.6rem}
+.sec-intro p{color:var(--fgd);font-size:.98rem}
+
+/* Track A modules */
+.mods{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}
+.mod{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1.3rem}
+.mod header{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.9rem}
+.mcode{font-family:var(--mono);font-weight:700;font-size:.9rem;color:#fff;background:var(--teal);padding:.2rem .5rem;border-radius:6px;flex:none}
+.mod h3{font-family:var(--disp);font-size:1.15rem}
+.mrow{margin-bottom:.7rem}
+.mk2{display:block;font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;color:var(--fgm);margin-bottom:.15rem}
+.mrow p{font-size:.85rem;color:var(--fgd)}
+.meas{font-family:var(--mono);font-size:.76rem;color:var(--teal)}
+.mbands{margin:.9rem 0 .8rem;padding-top:.8rem;border-top:1px solid var(--bd2)}
+.bands{display:flex;flex-direction:column;gap:.35rem;margin-top:.4rem}
+.bl{display:flex;align-items:center;gap:.5rem;height:16px}
+.bl-w{height:9px;border-radius:5px;display:block;min-width:6px}
+.bl-low{background:color-mix(in srgb,var(--brass) 45%,transparent)}
+.bl-base{background:var(--brass)}
+.bl-high{background:color-mix(in srgb,var(--brass) 70%,var(--ok))}
+.bl-v{font-family:var(--mono);font-size:.72rem;color:var(--fgd);font-weight:600}
+.blabels{display:flex;gap:1.1rem;margin-top:.35rem}
+.blabels i{font-style:normal;font-family:var(--mono);font-size:.62rem;color:var(--fgm)}
+.mpov{margin-top:.6rem;font-size:.82rem;color:var(--fg);background:color-mix(in srgb,var(--teal) 8%,transparent);border:1px solid color-mix(in srgb,var(--teal) 22%,transparent);border-radius:9px;padding:.6rem .75rem}
+.povk{display:block;font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--teal);margin-bottom:.2rem;font-weight:700}
+.mods-foot{margin-top:1.1rem;font-size:.8rem;color:var(--fgm)}
+
+/* Bank View */
+.roles{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1.8rem}
+.role{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1.3rem}
+.role header{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem}
+.rtag{font-family:var(--mono);font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brass);
+  border:1px solid color-mix(in srgb,var(--brass) 40%,transparent);background:color-mix(in srgb,var(--brass) 12%,transparent);padding:.2rem .45rem;border-radius:5px}
+.role h3{font-family:var(--disp);font-size:1.12rem}
+.rq{font-family:Georgia,serif;font-style:italic;font-size:1.02rem;color:var(--fg);margin-bottom:.6rem}
+.ra{font-size:.87rem;color:var(--fgd);margin-bottom:.8rem}
+.rw{font-size:.78rem;color:var(--fgd);background:var(--cd2);border:1px solid var(--bd2);border-radius:8px;padding:.55rem .7rem}
+.rwk{display:block;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;color:var(--fgm);margin-bottom:.2rem}
+.objwrap,.protect{margin-bottom:1.8rem}
+.objwrap h3,.protect h3{font-family:var(--disp);font-size:1.3rem;font-weight:700;margin-bottom:.9rem}
+.objtable{width:100%;border-collapse:collapse;font-size:.87rem;min-width:640px}
+.objtable th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--fgm);padding:.6rem .8rem;border-bottom:1px solid var(--bd);background:var(--cd2)}
+.objtable td{padding:.75rem .8rem;border-bottom:1px solid var(--bd2);vertical-align:top;color:var(--fgd)}
+.objtable tr td:first-child{width:34%}
+.obj-q{font-family:Georgia,serif;font-style:italic;color:var(--fg)}
+.objtable tbody tr:hover{background:color-mix(in srgb,var(--teal) 5%,transparent)}
+.protect-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.pcard{background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:1.1rem}
+.pdot{width:10px;height:10px;border-radius:50%;display:block;margin-bottom:.6rem}
+.d-ok{background:var(--ok)}.d-teal{background:var(--teal)}.d-brass{background:var(--brass)}
+.pcard h4{font-size:.98rem;margin-bottom:.4rem}
+.pcard p{font-size:.8rem;color:var(--fgd)}
+
+.foot{max-width:1360px;margin:0 auto;padding:1.4rem 1.3rem 2.4rem;display:flex;flex-wrap:wrap;gap:.6rem 1.5rem;align-items:baseline;
+  border-top:1px solid var(--bd2);margin-top:1rem;font-family:var(--mono);font-size:.72rem;color:var(--fgm)}
+.foot-note{flex:1;min-width:260px;font-family:var(--body);font-size:.76rem;line-height:1.5}
+
+@media(max-width:1080px){.kpis{grid-template-columns:1fr 1fr}.board{grid-template-columns:1fr}.mods,.roles{grid-template-columns:1fr}
+  .protect-grid{grid-template-columns:1fr 1fr}.tabs{order:3;width:100%;margin:.4rem 0 0;overflow-x:auto}.top{flex-wrap:wrap}}
+@media(max-width:560px){.kpis{grid-template-columns:1fr}.d-stats{grid-template-columns:1fr 1fr}.d-cols{grid-template-columns:1fr}.protect-grid{grid-template-columns:1fr}}
+</style>
