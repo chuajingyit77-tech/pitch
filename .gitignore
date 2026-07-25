@@ -2,5 +2,7 @@ node_modules/
 *.log
 _*.html
 _*.js
-dist/*.png
 final.js
+dist/slides/
+dist/*.png
+dist/deck-geometry.json
