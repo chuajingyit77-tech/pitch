@@ -655,9 +655,16 @@ h1,h2,h3,h4{margin:0;letter-spacing:-.03em;text-wrap:balance}p{margin:0}img{max-
 /* ── mobile ── */
 @media(max-width:680px){
  #app{font-size:16px}
- .hero{min-height:auto;padding:4rem 1.2rem 4.5rem}
- .hscrim{background:linear-gradient(180deg,rgba(6,9,15,.7),rgba(6,9,15,.5) 30%,rgba(6,9,15,.95))}
- .hsub{max-width:none}.hcue{display:none}
+ /* full-screen hero on phone: image visible at the top, type anchored bottom */
+ .hero{min-height:100svh;padding:5.5rem 1.2rem 2.2rem;align-items:flex-end}
+ .hbg img{object-position:64% center}
+ .hscrim{background:
+   linear-gradient(180deg,rgba(6,9,15,.42) 0%,rgba(6,9,15,.12) 26%,rgba(6,9,15,.72) 58%,rgba(6,9,15,.97) 82%)}
+ .kicker{font-size:.6rem;letter-spacing:.18em;margin-bottom:1rem}
+ .hin h1{font-size:clamp(2.35rem,11vw,3.4rem);line-height:.97;letter-spacing:-.045em}
+ .hsub{max-width:none;margin-top:.95rem;font-size:.95rem;line-height:1.45}
+ .hsub-b{margin-top:.75rem;font-size:1.02rem;max-width:none}
+ .hcue{bottom:1rem}.hcue i{height:26px}
  .stop,.ask{padding:4.5rem 1.2rem}
  .sec{padding:4rem 1.2rem}
  .sh{margin-bottom:1.8rem}.sh h2{max-width:none}
@@ -670,6 +677,12 @@ h1,h2,h3,h4{margin:0;letter-spacing:-.03em;text-wrap:balance}p{margin:0}img{max-
  .whorow{gap:1.4rem 2rem}
  .gr-l{width:6.5rem;font-size:.8rem}
  .closer{max-width:none}
+ /* thumb-sized controls */
+ .lang button{padding:.55rem .85rem;font-size:.78rem;min-height:40px}
+ .ct{min-height:46px}
+ .cin-grid input,.shl input[type=number]{min-height:44px;font-size:16px}
+ .ac summary,.more summary{min-height:48px;display:flex;align-items:center}
+ .shl input[type=range]{height:34px}
 }
 
 </style>
