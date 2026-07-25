@@ -128,6 +128,7 @@ const T={
 "a.t":["Approve the diagnostic.<br>That is the whole ask.","批准诊断阶段。<br>就这一件事。"],
 "a.c":["The only thing AFFIN risks by starting is finding out how much it has been overpaying.","AFFIN开始这件事唯一的风险，是发现自己一直多付了多少钱。"],
 "ft.d":["Reduction bands and external case results are the delivery partner's model and partner-provided data, pending independent verification, shown for planning and capability reference only. All ringgit figures are generated from inputs entered by the reader — no result is presented as achieved until measured and confirmed by AFFIN. Commercial terms are indicative and subject to written agreement.","降幅区间与外部案例成效为交付方模型及合作方提供数据，待独立核验，仅用于规划与能力参考。所有令吉数字均由阅读者输入生成 —— 在AFFIN测算并确认之前，任何成效都不作为已实现列示。商业条款为指示性，以书面协议为准。"],
+"ft.date":["July 2026","2026年7月"],
 "lbl.now":["Now","现在"],"lbl.after":["After","之后"],
 };
 

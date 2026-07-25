@@ -158,7 +158,7 @@
 
 <footer class="foot">
   <p data-t="ft.d"></p>
-  <div class="fm"><span>Prospek Cerah Inovasi IT Sdn. Bhd. × 云星宇 873806</span><span>July 2026</span></div>
+  <div class="fm"><span>Prospek Cerah Inovasi IT Sdn. Bhd. × 云星宇 873806</span><span data-t="ft.date">July 2026</span></div>
 </footer>
 </div>
 
@@ -293,6 +293,7 @@ const T={
 "a.t":["Approve the diagnostic.<br>That is the whole ask.","批准诊断阶段。<br>就这一件事。"],
 "a.c":["The only thing AFFIN risks by starting is finding out how much it has been overpaying.","AFFIN开始这件事唯一的风险，是发现自己一直多付了多少钱。"],
 "ft.d":["Reduction bands and external case results are the delivery partner's model and partner-provided data, pending independent verification, shown for planning and capability reference only. All ringgit figures are generated from inputs entered by the reader — no result is presented as achieved until measured and confirmed by AFFIN. Commercial terms are indicative and subject to written agreement.","降幅区间与外部案例成效为交付方模型及合作方提供数据，待独立核验，仅用于规划与能力参考。所有令吉数字均由阅读者输入生成 —— 在AFFIN测算并确认之前，任何成效都不作为已实现列示。商业条款为指示性，以书面协议为准。"],
+"ft.date":["July 2026","2026年7月"],
 "lbl.now":["Now","现在"],"lbl.after":["After","之后"],
 };
 
@@ -403,7 +404,7 @@ const g=document.querySelector('.gauge'); if(g) gio.observe(g);
  --fg:#ECF1F7;--fgd:#93A1B2;--fgm:#63707F;--cy:#1BC0CC;--gold:#DFAE55;--ok:#43A877;--wn:#E0942A;--rk:#E1543F;}
 *{box-sizing:border-box}
 #app{background:var(--bg);color:var(--fg);font-family:var(--bo);font-size:17px;line-height:1.55;
- -webkit-font-smoothing:antialiased;overflow-x:hidden}
+ -webkit-font-smoothing:antialiased;overflow-x:clip}
 #app :focus-visible{outline:2px solid var(--cy);outline-offset:3px}
 h1,h2,h3,h4{margin:0;letter-spacing:-.03em;text-wrap:balance}p{margin:0}img{max-width:100%;display:block}
 #app.zh{--dp:"PingFang SC","Microsoft YaHei",var(--bo)}
@@ -414,7 +415,7 @@ h1,h2,h3,h4{margin:0;letter-spacing:-.03em;text-wrap:balance}p{margin:0}img{max-
 
 /* ── top ── */
 .top{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:1.2rem;padding:.6rem 1.4rem;
- background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--bd2)}
+ background:color-mix(in srgb,var(--bg) 97%,transparent);backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--bd2)}
 .brand{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--fg);font-family:var(--dp);letter-spacing:.05em;font-size:.95rem}
 .bmark{width:18px;height:18px;border-radius:4px;background:conic-gradient(from 200deg,var(--cy),var(--gold),var(--cy))}
 .nav{display:flex;gap:1.15rem;margin-left:auto;font-family:var(--mo);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em}

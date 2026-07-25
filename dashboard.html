@@ -32,6 +32,7 @@
         <input id="search" class="search" placeholder="Search project, code, region…" aria-label="Search">
         <div class="chips" id="chips">
           <button class="chip on" data-f="all">All</button>
+          <button class="chip" data-f="flagged">Flagged</button>
           <button class="chip" data-f="risk">Risk</button>
           <button class="chip" data-f="watch">Watch</button>
           <button class="chip" data-f="ontrack">On-track</button>
@@ -42,7 +43,7 @@
         <table class="ptable">
           <thead><tr>
             <th data-s="name">Project</th>
-            <th data-s="exposure" class="num">Exposure</th>
+            <th data-s="limit" class="num">Exposure</th>
             <th data-s="progress" class="num">Progress</th>
             <th data-s="drawdown" class="num">Drawdown</th>
             <th data-s="variance" class="num">Δ</th>
@@ -205,9 +206,14 @@ function kpis(){
     <span class="kpi-v">${v}</span><span class="kpi-d">${d}</span>
     ${F[i]?'<span class="kpi-go">Filter →</span>':''}</div>`).join('');
   $$('.kpi-act').forEach(el=>el.onclick=()=>{
-    state.filter=el.dataset.kf;
-    $$('#chips .chip').forEach(c=>c.classList.toggle('on',c.dataset.f===(el.dataset.kf==='flagged'?'risk':'all')));
-    rows();});
+    const f=el.dataset.kf;
+    const wasFiltered = state.filter!=='all' || state.q;
+    state.filter=f;
+    if(f==='all'){ state.q=''; const s=document.getElementById('search'); if(s) s.value=''; }
+    $$('#chips .chip').forEach(c=>c.classList.toggle('on',c.dataset.f===f));
+    rows();
+    toast(f==='all' ? (wasFiltered?'Filters cleared · showing all '+P.length+' projects':'Showing all '+P.length+' projects')
+                    : 'Filtered to '+filtered().length+' flagged projects');});
 }
 
 /* ================= TABLE ================= */
@@ -224,6 +230,14 @@ function filtered(){
 }
 function rows(){
   const a=filtered();
+  if(!a.length){ $('#rows').innerHTML=`<tr class="emptyrow"><td colspan="6"><div class="empty">
+      <b>No projects match</b><span>${state.q?`Nothing matches “${state.q}”.`:'No projects in this filter.'} Clear the search or pick a different filter.</span>
+      <button class="tbtn" id="clearAll">Clear search &amp; filters</button></div></td></tr>`;
+    $('#listfoot').textContent='0 of '+P.length+' projects';
+    const c=document.getElementById('clearAll'); if(c) c.onclick=()=>{state.q='';state.filter='all';
+      const s=document.getElementById('search'); if(s)s.value='';
+      $$('#chips .chip').forEach(x=>x.classList.toggle('on',x.dataset.f==='all')); rows();};
+    return; }
   $('#rows').innerHTML=a.map(p=>`<tr class="${p.id===state.sel?'sel':''}" data-id="${p.id}">
     <td><b>${p.name}</b><span class="rsub">${p.code} · ${p.type} · ${p.seg==='Islamic'?'<i class="isl">Islamic</i>':'Conv.'}</span></td>
     <td class="num">${rm(p.limit)}</td>
@@ -236,6 +250,7 @@ function rows(){
 }
 
 /* ================= CHART ================= */
+function gapColour(p){return p.variance>20?'var(--risk)':p.variance>=6?'var(--warn)':'var(--brass)';}
 function chart(p){
   const W=440,H=170,pad=28,n=p.prog.length, xw=(W-pad*2)/(n-1);
   const X=i=>pad+i*xw, Y=v=>H-pad-(v/100)*(H-pad*2);
@@ -243,7 +258,7 @@ function chart(p){
   const gapPts=p.prog.map((v,i)=>X(i)+','+Y(v)).concat(p.draw.map((v,i)=>X(i)+','+Y(v)).reverse()).join(' ');
   const grid=[0,25,50,75,100].map(g=>`<line x1="${pad}" y1="${Y(g)}" x2="${W-pad}" y2="${Y(g)}" class="grid"/><text x="${pad-6}" y="${Y(g)+3}" class="gl">${g}</text>`).join('');
   const labs=MON.map((m,i)=> i%2? '' : `<text x="${X(i)}" y="${H-8}" class="ml">${m}</text>`).join('');
-  const gapCol = p.variance>20?'var(--risk)':p.variance>=6?'var(--warn)':'var(--ok)';
+  const gapCol = gapColour(p);
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Drawdown versus physical progress over time">
     ${grid}
     <polygon points="${gapPts}" fill="${gapCol}" opacity="0.12"/>
@@ -290,7 +305,7 @@ function detail(){
    </div>
    <div class="d-chart">
      <div class="dc-head"><span>Drawdown vs physical progress</span>
-       <span class="legend"><i class="lg lg-prog"></i>Progress <i class="lg lg-draw"></i>Drawdown</span></div>
+       <span class="legend"><i class="lg lg-prog"></i>Progress <i class="lg" style="background:${gapColour(p)}"></i>Drawdown</span></div>
      ${chart(p)}
    </div>
    <div class="d-cols">
@@ -339,7 +354,8 @@ function resetDemo(){P.forEach(p=>p.decision=null);ALERTS.forEach(a=>a.ackd=fals
 function tracka(){
   $('#mods').innerHTML=MODULES.map(m=>{
     const[code,name,cost,how,eff,meas,pov,band]=m;
-    const bar=(v,cls)=>`<div class="bl"><span class="bl-w bl-${cls}" style="width:${v*3.6}%"></span><span class="bl-v">${v}%</span></div>`;
+    const LB=['Low','Base','High'];
+    const bar=(v,cls,i)=>`<div class="bl"><span class="bl-k">${LB[i]}</span><span class="bl-t"><i class="bl-w bl-${cls}" style="width:${v*3.6}%"></i></span><span class="bl-v">${v}%</span></div>`;
     return `<article class="mod">
       <header><span class="mcode">${code}</span><h3>${name}</h3></header>
       <div class="mrow"><span class="mk2">Costs AFFIN now</span><p>${cost}</p></div>
@@ -347,8 +363,7 @@ function tracka(){
       <div class="mrow"><span class="mk2">Efficiency gained</span><p>${eff}</p></div>
       <div class="mrow mrow-2"><div><span class="mk2">Measured by</span><p class="meas">${meas}</p></div></div>
       <div class="mbands"><span class="mk2">Illustrative reduction band</span>
-        <div class="bands">${bar(band[0],'low')}${bar(band[1],'base')}${bar(band[2],'high')}</div>
-        <span class="blabels"><i>Low</i><i>Base</i><i>High</i></span></div>
+        <div class="bands">${bar(band[0],'low',0)}${bar(band[1],'base',1)}${bar(band[2],'high',2)}</div></div>
       <div class="mpov"><span class="povk">Bank POV</span>${pov}</div>
     </article>`;}).join('');
 }
@@ -415,7 +430,7 @@ h2,h3,h4{margin:0}
 
 /* top bar */
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:1.2rem;padding:.7rem 1.3rem;
-  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd2)}
+  background:color-mix(in srgb,var(--bg) 98%,transparent);backdrop-filter:blur(16px) saturate(1.4);border-bottom:1px solid var(--bd)}
 .top-l{display:flex;align-items:center;gap:.6rem}
 .logo{width:26px;height:26px;border-radius:6px;background:conic-gradient(from 210deg,var(--teal),var(--brass),var(--teal));box-shadow:0 0 0 1px var(--bd) inset}
 .ttl{display:flex;flex-direction:column;line-height:1.15}
@@ -445,8 +460,8 @@ h2,h3,h4{margin:0}
 .kpi-d{font-size:.76rem;color:var(--fgd)}
 
 /* board */
-.board{display:grid;grid-template-columns:1.05fr 1fr;gap:1.1rem;min-width:0}
-.col-list{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1rem;display:flex;flex-direction:column;min-height:520px;min-width:0}
+.board{display:grid;grid-template-columns:1.05fr 1fr;gap:1.1rem;min-width:0;align-items:start}
+.col-list{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1rem;display:flex;flex-direction:column;min-width:0}
 .ctrls{display:flex;flex-direction:column;gap:.7rem;margin-bottom:.8rem}
 .toolrow{display:flex;gap:.5rem}
 .tbtn{flex:1;background:var(--cd2);border:1px solid var(--bd);color:var(--fgd);border-radius:8px;
@@ -499,7 +514,26 @@ h2,h3,h4{margin:0}
  box-shadow:0 12px 40px -12px rgba(0,0,0,.5);transition:transform .32s cubic-bezier(.2,.8,.2,1);pointer-events:none;max-width:88vw}
 .toast.show{transform:translate(-50%,0)}
 @media(max-width:560px){.actbar{grid-template-columns:1fr}}
+/* aligned reduction bands */
+.bl{display:grid;grid-template-columns:2.6rem 1fr 2.6rem;align-items:center;gap:.5rem;height:20px}
+.bl-k{font-family:var(--mono);font-size:.64rem;color:var(--fgm);text-transform:uppercase}
+.bl-t{display:block;height:9px;background:var(--cd2);border-radius:5px;overflow:hidden}
+.bl-w{display:block;height:100%;border-radius:5px;min-width:4px}
+.bl-v{font-family:var(--mono);font-size:.72rem;color:var(--fgd);font-weight:600;text-align:right}
+/* empty state */
+.empty{display:flex;flex-direction:column;align-items:center;gap:.5rem;padding:2.4rem 1rem;text-align:center}
+.empty b{font-size:1rem}
+.empty span{font-size:.85rem;color:var(--fgm);max-width:34ch}
+.empty .tbtn{flex:none;margin-top:.4rem;padding:.5rem 1rem}
+.emptyrow td{border-bottom:none}
 @media(max-width:680px){
+ /* compact header: one row for identity, one for tabs — all three tabs visible */
+ .top{padding:.5rem .8rem;gap:.5rem}
+ .ttl span{display:none}
+ .ttl b{font-size:.92rem}
+ .demo-badge{font-size:.55rem;padding:.22rem .38rem}
+ .tabs{order:3;width:100%;margin:.1rem 0 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;overflow:visible}
+ .tab{font-size:.72rem;padding:.5rem .3rem;text-align:center;min-height:38px;white-space:normal;line-height:1.15}
  .chip{padding:.55rem .95rem;font-size:.82rem;min-height:38px;display:inline-flex;align-items:center}
  .tbtn{min-height:40px}
  .tab{min-height:40px;padding:.55rem 1rem}
@@ -540,7 +574,7 @@ h2,h3,h4{margin:0}
 .listfoot{margin:.7rem 0 0;font-size:.72rem;color:var(--fgm);font-family:var(--mono)}
 
 /* detail */
-.col-detail{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1.2rem;min-height:520px;min-width:0}
+.col-detail{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:1.2rem;min-width:0}
 .d-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1rem}
 .d-head h3{font-family:var(--disp);font-size:1.3rem;letter-spacing:-.01em}
 .d-sub{font-size:.76rem;color:var(--fgm)}
