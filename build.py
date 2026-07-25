@@ -1,0 +1,5 @@
+body=open('parts/body.html').read()
+js=open('parts/app.js').read()
+css=open('parts/style.css').read()
+open('offer.html','w').write(body+"\n<script>\n"+js+"\n</script>\n\n<style>\n"+css+"\n</style>\n")
+print('built offer.html')

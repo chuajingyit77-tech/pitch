@@ -1,0 +1,163 @@
+<div id="app">
+
+<header class="top">
+  <a class="brand" href="#top"><span class="bmark"></span><b>AFFIN</b></a>
+  <nav class="nav">
+    <a href="#money" data-t="n.money">The money</a>
+    <a href="#offer" data-t="n.offer">The offer</a>
+    <a href="#calc" data-t="n.calc">Your numbers</a>
+    <a href="#b1" data-t="n.b1">B1</a>
+    <a href="#who" data-t="n.who">Who we are</a>
+    <a href="#ask" data-t="n.ask">The ask</a>
+  </nav>
+  <div class="lang"><button data-l="en" class="on">EN</button><button data-l="zh">中文</button></div>
+  <i class="prog"><b id="prog"></b></i>
+</header>
+
+<!-- ░░ 1 · HERO ░░ -->
+<section id="top" class="hero">
+  <div class="hbg"><img src="assets/img/hero_b1.webp" alt=""><span class="hscrim"></span></div>
+  <div class="hin">
+    <div class="kicker" data-t="h.k">FOR AFFIN BANK BERHAD · CONFIDENTIAL</div>
+    <h1 data-t="h.t">You are already<br>paying for this.</h1>
+    <p class="hsub" data-t="h.s">Inspections. Emergency repairs. Wasted power. Guarding hours. ATM call-outs. Valuation trips. An insurance premium you have no data to argue with.</p>
+    <p class="hsub hsub-b" data-t="h.s2">We take that money back — and you pay us nothing until it is back.</p>
+  </div>
+  <a class="hcue" href="#zero"><i></i></a>
+</section>
+
+<!-- ░░ 2 · STOP: RM 0 ░░ -->
+<section id="zero" class="stop stop-zero">
+  <span class="stop-k" data-t="z.k">WHAT THIS COSTS AFFIN TO FIND OUT</span>
+  <div class="giant giant-gold">RM&nbsp;0</div>
+  <p class="stop-p" data-t="z.p">The diagnostic is at our cost. The pilot fee is capped and credited back. After that we are paid only from savings your own finance team has verified.</p>
+  <p class="stop-x" data-t="z.x">No verified saving. No fee. Ever.</p>
+</section>
+
+<!-- ░░ 3 · THE MONEY ░░ -->
+<section id="money" class="sec">
+  <div class="sh"><span class="sn">01</span><h2 data-t="m.t">Eight bills. Every one of them too big.</h2>
+    <p class="ss" data-t="m.s">These are lines already on AFFIN's P&amp;L. The percentages are the reduction bands our delivery partner achieves on comparable estates — applied to your baseline, not ours.</p></div>
+  <ol class="ledger" id="ledger"></ol>
+  <div class="ledger-foot">
+    <span data-t="m.f1">Partner reference model, whole programme</span>
+    <b>RMB 57.4m – 84.7m<i data-t="m.f2">per year, sized for that bank's estate — not AFFIN's</i></b>
+  </div>
+</section>
+
+<!-- ░░ 4 · STOP: full-bleed, one flight ░░ -->
+<section class="band">
+  <img src="assets/img/digital_twin.webp" alt="">
+  <div class="band-in">
+    <div class="giant giant-sm">13</div>
+    <h2 data-t="e.t">One flight.<br>Thirteen returns.</h2>
+    <p data-t="e.s">The drone that inspects a building for A1 also revalues collateral for A7, verifies progress for B1 and feeds monitoring for B3. Same flight. Four outputs. The thirteenth module costs a fraction of the first.</p>
+  </div>
+</section>
+
+<!-- ░░ 5 · COMPOUNDING ░░ -->
+<section id="engine" class="sec sec-tint">
+  <div class="sh"><span class="sn">02</span><h2 data-t="c.t">Why it cannot be bought piece by piece</h2></div>
+  <div class="cgrid">
+    <div class="cflow" id="cflow"></div>
+    <aside class="cbase">
+      <span class="cb-k" data-t="c.bk">ONE TECHNOLOGY BASE</span>
+      <ul id="cbase"></ul>
+    </aside>
+  </div>
+</section>
+
+<!-- ░░ 6 · THE OFFER ░░ -->
+<section id="offer" class="sec">
+  <div class="sh"><span class="sn">03</span><h2 data-t="o.t">Where your money sits, phase by phase</h2>
+    <p class="ss" data-t="o.s">Your cash exposure, drawn honestly. It stays at zero until the bank itself confirms the savings are real.</p></div>
+  <div class="expose" id="expose"></div>
+  <div class="promise">
+    <h4 data-t="o.gh">And if Day 90 falls short</h4>
+    <p data-t="o.gp">If your own measurement shows verified savings below the pilot cost, <b>we absorb the shortfall</b>. The pilot fee is credited or waived. Your downside is written down before a single sensor is installed.</p>
+  </div>
+</section>
+
+<!-- ░░ 7 · CALCULATOR ░░ -->
+<section id="calc" class="sec sec-tint">
+  <div class="sh"><span class="sn">04</span><h2 data-t="k.t">Put your own numbers in</h2>
+    <p class="ss" data-t="k.s">Every field starts empty. Drag the share to see exactly what AFFIN keeps.</p></div>
+  <div class="calc">
+    <div class="ctabs"><button class="ct on" data-c="a" data-t="k.ta">Track A · Hard savings</button><button class="ct" data-c="b" data-t="k.tb">Track B · Avoided loss</button></div>
+    <div class="cpanel on" data-c="a"><div class="cin-grid" id="inA"></div></div>
+    <div class="cpanel" data-c="b"><div class="cin-grid" id="inB"></div><p class="csrc" data-t="k.src"></p></div>
+    <div class="cshare">
+      <label class="shl"><span data-t="k.share">Our share of verified savings</span>
+        <input type="range" id="share" min="0" max="50" value="30" step="5"><output id="shareOut">30%</output></label>
+      <label class="shl"><span data-t="k.impl">Year-1 implementation cost borne by AFFIN (RM)</span>
+        <input type="number" id="impl" value="" placeholder="0" min="0"></label>
+    </div>
+    <div class="cout">
+      <div class="oc"><span class="oc-k" data-t="k.o1">Gross annual benefit</span><span class="oc-v" id="oGross">RM 0</span><span class="oc-d" id="oGrossR">—</span></div>
+      <div class="oc oc-gold"><span class="oc-k" data-t="k.o2">AFFIN keeps</span><span class="oc-v" id="oBank">RM 0</span><span class="oc-d" data-t="k.o2d">after our share &amp; cost</span></div>
+      <div class="oc"><span class="oc-k" data-t="k.o3">Our share</span><span class="oc-v" id="oUs">RM 0</span><span class="oc-d" data-t="k.o3d">only on verified savings</span></div>
+      <div class="oc"><span class="oc-k" data-t="k.o4">Benefit-to-Cost</span><span class="oc-v" id="oBcr">—</span><span class="oc-d" data-t="k.o4d">base case</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ 8 · B1 ░░ -->
+<section id="b1" class="sec">
+  <div class="sh"><span class="sn">05</span><h2 data-t="f.t">B1 — the one with the biggest loss behind it</h2>
+    <p class="ss" data-t="f.s">Drawdown runs ahead of the concrete. You find out months later. This closes that gap.</p></div>
+  <div class="b1top">
+    <div class="gauge">
+      <span class="gt" data-t="f.gt">Drawdown vs verified physical progress</span>
+      <div class="gr"><span class="gr-l" data-t="f.g1">Physical progress</span><span class="gb"><i class="gb-ok" data-w="62"></i></span><b class="gr-v">62%</b></div>
+      <div class="gr"><span class="gr-l" data-t="f.g2">Cumulative drawdown</span><span class="gb"><i class="gb-rk" data-w="81"></i></span><b class="gr-v">81%</b></div>
+      <div class="gflag"><span class="st">HOLD</span><span data-t="f.gf">19-point gap. Release held pending an exception visit. Your committee still decides — it just decides on better evidence.</span></div>
+    </div>
+    <ul class="pills" id="pills"></ul>
+  </div>
+  <details class="more">
+    <summary data-t="f.more">The risk model scales with building size</summary>
+    <div class="tw"><table class="mtable" id="mtable"></table></div>
+  </details>
+  <p class="limit"><b data-t="f.bh">Stated limit.</b> <span data-t="f.bp">Aerial capture cannot measure interior M&amp;E or fit-out. Those stages need milestone imagery, documents, fixed cameras and QS certification. We augment human judgement; we never replace it.</span></p>
+</section>
+
+<!-- ░░ 9 · STOP: WHO ░░ -->
+<section id="who" class="stop stop-who">
+  <span class="stop-k" data-t="w.k">THE TECHNOLOGY IS BUILT BY A LISTED COMPANY</span>
+  <div class="giant giant-cy">873806</div>
+  <p class="stop-p" data-t="w.p">北京云星宇交通科技股份有限公司 · Beijing Stock Exchange. Twenty-eight years, 400+ registered IP rights, RMB 3.0bn of contracts across 30 provinces. A listed company's capability claims carry legal consequence.</p>
+  <div class="whorow" id="whorow"></div>
+  <details class="more more-dark">
+    <summary data-t="w.more">External results — graded, not asserted</summary>
+    <div class="tw"><table class="evtable" id="evtable"></table></div>
+    <p class="evfoot" data-t="w.ef">The pilot exists precisely so AFFIN never has to rely on any of these.</p>
+  </details>
+</section>
+
+<!-- ░░ 10 · 90 DAYS ░░ -->
+<section id="pilot" class="sec sec-tint">
+  <div class="sh"><span class="sn">06</span><h2 data-t="d.t">Ninety days, then you decide</h2></div>
+  <div class="tline" id="tline"></div>
+</section>
+
+<!-- ░░ 11 · OBJECTIONS ░░ -->
+<section id="obj" class="sec">
+  <div class="sh"><span class="sn">07</span><h2 data-t="v.t">The questions you are about to ask</h2></div>
+  <div class="acc" id="acc"></div>
+</section>
+
+<!-- ░░ 12 · ASK ░░ -->
+<section id="ask" class="ask">
+  <div class="ask-in">
+    <span class="stop-k" data-t="a.k">WHAT WE ARE ASKING FOR TODAY</span>
+    <h2 data-t="a.t">Approve the diagnostic.<br>That is the whole ask.</h2>
+    <ol class="asks" id="asks"></ol>
+    <p class="closer" data-t="a.c">The only thing AFFIN risks by starting is finding out how much it has been overpaying.</p>
+  </div>
+</section>
+
+<footer class="foot">
+  <p data-t="ft.d"></p>
+  <div class="fm"><span>Prospek Cerah Inovasi IT Sdn. Bhd. × 云星宇 873806</span><span>July 2026</span></div>
+</footer>
+</div>
