@@ -1,0 +1,4 @@
+deck/node_modules/
+deck/slide-*.jpg
+deck/package.json
+deck/package-lock.json
