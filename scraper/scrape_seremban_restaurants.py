@@ -37,11 +37,24 @@ import time
 import urllib.parse
 import urllib.request
 
-# 芙蓉市区 + Seremban 2 + Rasah 一带的经纬度范围
-SEREMBAN_BBOX = (2.65, 101.87, 2.78, 102.00)  # (south, west, north, east)
-SEREMBAN_CENTER = (2.7297, 101.9381)
-
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "seremban_restaurants.csv")
+# 支持的城市：经纬度范围 (south, west, north, east) + 中心点
+CITIES = {
+    # 芙蓉市区 + Seremban 2 + Rasah 一带
+    "seremban": {
+        "bbox": (2.65, 101.87, 2.78, 102.00),
+        "center": (2.7297, 101.9381),
+        "keyword": "Seremban",
+    },
+    # Cheras（KL段 + Selangor段：Taman Connaught/Midah/Segar,
+    # Bandar Mahkota Cheras, Balakong 一带）
+    "cheras": {
+        "bbox": (2.98, 101.70, 3.13, 101.80),
+        "center": (3.0603, 101.7450),
+        "keyword": "Cheras",
+    },
+}
+SEREMBAN_BBOX = CITIES["seremban"]["bbox"]
+SEREMBAN_CENTER = CITIES["seremban"]["center"]
 
 FIELDS = [
     "name", "category", "address", "phone", "website",
@@ -58,9 +71,9 @@ def http_get_json(url, data=None, headers=None, timeout=60):
 
 # ---------------------------------------------------------------- OSM Overpass
 
-def scrape_osm():
-    """从 OpenStreetMap 抓芙蓉范围内所有 restaurant / cafe / fast_food。"""
-    s, w, n, e = SEREMBAN_BBOX
+def scrape_osm(bbox=SEREMBAN_BBOX):
+    """从 OpenStreetMap 抓指定范围内所有 restaurant / cafe / fast_food。"""
+    s, w, n, e = bbox
     query = f"""
     [out:json][timeout:90];
     (
@@ -105,21 +118,26 @@ def scrape_osm():
 
 # ---------------------------------------------------------- Google Places API
 
-GOOGLE_QUERIES = [
-    "restaurants in Seremban",
-    "kopitiam in Seremban",
-    "cafe in Seremban",
-    "seafood restaurant in Seremban",
-    "restoran in Seremban 2",
-    "mamak in Seremban",
-    "chinese restaurant in Seremban",
-    "malay restaurant in Seremban",
-    "western food in Seremban",
-    "bak kut teh in Seremban",
+GOOGLE_QUERY_TEMPLATES = [
+    "restaurants in {kw}",
+    "kopitiam in {kw}",
+    "cafe in {kw}",
+    "seafood restaurant in {kw}",
+    "mamak in {kw}",
+    "chinese restaurant in {kw}",
+    "malay restaurant in {kw}",
+    "western food in {kw}",
+    "bak kut teh in {kw}",
+    "steamboat in {kw}",
+    # B2B：会用到进出货/报表系统的食品公司
+    "frozen food supplier in {kw}",
+    "catering company in {kw}",
+    "central kitchen in {kw}",
+    "bakery supplier in {kw}",
 ]
 
 
-def scrape_google(api_key):
+def scrape_google(api_key, center=SEREMBAN_CENTER, keyword="Seremban"):
     """用 Places API (New) Text Search，多个关键词扫一遍再去重。"""
     url = "https://places.googleapis.com/v1/places:searchText"
     field_mask = ",".join([
@@ -130,14 +148,14 @@ def scrape_google(api_key):
         "nextPageToken",
     ])
     seen = {}
-    for q in GOOGLE_QUERIES:
+    for q in [t.format(kw=keyword) for t in GOOGLE_QUERY_TEMPLATES]:
         page_token = None
         for page in range(3):  # 每个关键词最多 3 页（60 家）
             body = {
                 "textQuery": q,
                 "locationBias": {"circle": {
-                    "center": {"latitude": SEREMBAN_CENTER[0],
-                               "longitude": SEREMBAN_CENTER[1]},
+                    "center": {"latitude": center[0],
+                               "longitude": center[1]},
                     "radius": 15000.0,
                 }},
                 "pageSize": 20,
@@ -239,17 +257,23 @@ def dedupe(rows):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", choices=["osm", "google", "both"], default="osm")
-    ap.add_argument("--out", default=OUTPUT_PATH)
+    ap.add_argument("--city", choices=sorted(CITIES), default="seremban")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
+
+    city = CITIES[args.city]
+    if args.out is None:
+        args.out = os.path.join(os.path.dirname(__file__), "..", "data",
+                                f"{args.city}_restaurants.csv")
 
     rows = []
     if args.source in ("osm", "both"):
-        rows += scrape_osm()
+        rows += scrape_osm(city["bbox"])
     if args.source in ("google", "both"):
         key = os.environ.get("GOOGLE_MAPS_API_KEY")
         if not key:
             sys.exit("请先 export GOOGLE_MAPS_API_KEY=你的key")
-        rows += scrape_google(key)
+        rows += scrape_google(key, city["center"], city["keyword"])
 
     rows = score_leads(dedupe(rows))
 
