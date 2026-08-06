@@ -1,437 +1,502 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Prospek Cerah CRM</title>
+<title>Prospek Cerah · 指挥中心</title>
 </head>
 <body>
 <!-- ARTIFACT-BODY-START -->
 <style>
   :root {
-    --bg: #FBF9F6;
-    --surface: #FFFFFF;
-    --surface-2: #F4EFE7;
-    --ink: #211B12;
-    --ink-soft: #6E6355;
-    --line: #E6DFD3;
-    --accent: #D97A08;
-    --accent-soft: #FBEBD5;
-    --accent-ink: #8A4D03;
-    --good: #1A7F4E;
-    --good-soft: #DCF0E5;
-    --warn: #B45309;
-    --warn-soft: #FCEED8;
-    --bad: #C03434;
-    --bad-soft: #F9E2E2;
-    --info: #2B6CB0;
-    --info-soft: #E0EBF7;
-    --violet: #6B4FA3;
-    --violet-soft: #EBE4F6;
-    --shadow: 0 1px 2px rgba(60, 42, 10, 0.06), 0 4px 14px rgba(60, 42, 10, 0.05);
-    --radius: 10px;
-    --font-display: "Gill Sans", "Gill Sans MT", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
-    --font-ui: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --bg: #05080F;
+    --panel: #0C1322;
+    --panel-2: #101a2e;
+    --line: rgba(90, 140, 220, 0.16);
+    --line-bright: rgba(34, 211, 238, 0.5);
+    --ink: #E8F1FF;
+    --dim: #8DA2C0;
+    --faint: #5A6B85;
+    --cyan: #22D3EE;
+    --cyan-soft: rgba(34, 211, 238, 0.12);
+    --amber: #FFB454;
+    --amber-soft: rgba(255, 180, 84, 0.12);
+    --red: #FF6B6B;
+    --red-soft: rgba(255, 107, 107, 0.13);
+    --green: #3DDC97;
+    --green-soft: rgba(61, 220, 151, 0.12);
+    --violet: #A78BFA;
+    --violet-soft: rgba(167, 139, 250, 0.14);
+    --blue: #5EA7FF;
+    --blue-soft: rgba(94, 167, 255, 0.13);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    --sans: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --r: 12px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #17130D;
-      --surface: #211C13;
-      --surface-2: #2B2418;
-      --ink: #EFE8DC;
-      --ink-soft: #A79A87;
-      --line: #3A3223;
-      --accent: #F0A030;
-      --accent-soft: #3B2C12;
-      --accent-ink: #F6C377;
-      --good: #4CC08A;
-      --good-soft: #17301F;
-      --warn: #E8A04C;
-      --warn-soft: #33240E;
-      --bad: #E06A6A;
-      --bad-soft: #3A1A1A;
-      --info: #6BA5DD;
-      --info-soft: #182739;
-      --violet: #A88FD6;
-      --violet-soft: #292036;
-      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 4px 14px rgba(0,0,0,0.25);
-    }
-  }
-  :root[data-theme="light"] {
-    --bg: #FBF9F6; --surface: #FFFFFF; --surface-2: #F4EFE7; --ink: #211B12;
-    --ink-soft: #6E6355; --line: #E6DFD3; --accent: #D97A08; --accent-soft: #FBEBD5;
-    --accent-ink: #8A4D03; --good: #1A7F4E; --good-soft: #DCF0E5; --warn: #B45309;
-    --warn-soft: #FCEED8; --bad: #C03434; --bad-soft: #F9E2E2; --info: #2B6CB0;
-    --info-soft: #E0EBF7; --violet: #6B4FA3; --violet-soft: #EBE4F6;
-    --shadow: 0 1px 2px rgba(60, 42, 10, 0.06), 0 4px 14px rgba(60, 42, 10, 0.05);
-  }
-  :root[data-theme="dark"] {
-    --bg: #17130D; --surface: #211C13; --surface-2: #2B2418; --ink: #EFE8DC;
-    --ink-soft: #A79A87; --line: #3A3223; --accent: #F0A030; --accent-soft: #3B2C12;
-    --accent-ink: #F6C377; --good: #4CC08A; --good-soft: #17301F; --warn: #E8A04C;
-    --warn-soft: #33240E; --bad: #E06A6A; --bad-soft: #3A1A1A; --info: #6BA5DD;
-    --info-soft: #182739; --violet: #A88FD6; --violet-soft: #292036;
-    --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 4px 14px rgba(0,0,0,0.25);
-  }
-
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    background: var(--bg);
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(255, 180, 84, 0.07), transparent 60%),
+      radial-gradient(1000px 700px at -10% 0%, rgba(34, 211, 238, 0.08), transparent 55%),
+      var(--bg);
     color: var(--ink);
-    font-family: var(--font-ui);
+    font-family: var(--sans);
     font-size: 15px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
+    min-height: 100vh;
   }
-  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(120, 160, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120, 160, 255, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,.9), rgba(0,0,0,.25) 60%, transparent);
+  }
+  .app { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 18px 90px; }
+  h1, h2, h3 { margin: 0; font-weight: 650; }
 
-  .app { max-width: 1080px; margin: 0 auto; padding: 0 16px 80px; }
-
-  /* Header */
+  /* ---------- top bar ---------- */
   header.top {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 18px 0 14px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 16px 0 10px;
   }
-  .brand { display: flex; align-items: center; gap: 10px; }
-  .brand-sun {
-    width: 34px; height: 34px; border-radius: 50%;
-    background: radial-gradient(circle at 38% 35%, #FFD98A, var(--accent) 70%);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-    flex: none;
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-core {
+    position: relative; width: 38px; height: 38px; flex: none;
   }
-  .brand h1 { font-size: 20px; letter-spacing: 0.2px; }
-  .brand .sub {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px;
-    color: var(--ink-soft); display: block; margin-top: -2px;
+  .brand-core .sun {
+    position: absolute; inset: 7px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #FFE9BF, var(--amber) 65%);
+    box-shadow: 0 0 18px rgba(255, 180, 84, 0.55);
   }
-  header.top nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  .brand-core .orbit {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid var(--line-bright);
+    border-top-color: transparent; border-left-color: transparent;
+    animation: spin 6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .brand h1 { font-size: 17px; letter-spacing: 0.06em; }
+  .brand .tag {
+    display: block; font: 600 10px var(--mono); letter-spacing: 0.28em;
+    color: var(--cyan); text-transform: uppercase; margin-top: 1px;
+  }
+  .sys {
+    margin-left: auto; display: flex; align-items: center; gap: 14px;
+    font: 500 12px var(--mono); color: var(--dim);
+  }
+  .sys .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 8px var(--green); animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .sys .clock { font-variant-numeric: tabular-nums; letter-spacing: 0.08em; color: var(--ink); }
+  nav.tabs { display: flex; gap: 4px; width: 100%; border-bottom: 1px solid var(--line); padding-bottom: 0; }
   .navbtn {
-    border: none; background: transparent; color: var(--ink-soft);
-    font: 600 14px var(--font-ui); padding: 8px 14px; border-radius: 999px;
-    cursor: pointer;
+    border: none; background: transparent; color: var(--dim); cursor: pointer;
+    font: 600 13.5px var(--sans); letter-spacing: 0.04em;
+    padding: 10px 16px; border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
-  .navbtn:hover { background: var(--surface-2); color: var(--ink); }
-  .navbtn.active { background: var(--accent-soft); color: var(--accent-ink); }
-  .navbtn:focus-visible, button:focus-visible, a:focus-visible,
-  input:focus-visible, select:focus-visible, textarea:focus-visible {
-    outline: 2px solid var(--accent); outline-offset: 2px;
+  .navbtn:hover { color: var(--ink); }
+  .navbtn.active { color: var(--cyan); border-bottom-color: var(--cyan); text-shadow: 0 0 12px rgba(34,211,238,.5); }
+  .navbtn .n {
+    display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 6px;
+    background: var(--red); color: #fff; border-radius: 999px;
+    font: 700 11px var(--mono); text-align: center;
   }
+  @media (max-width: 620px) { .sys .clock-date { display: none; } }
 
-  /* Buttons */
+  /* ---------- shared ---------- */
+  .panel {
+    background: linear-gradient(180deg, rgba(120,170,255,0.045), rgba(120,170,255,0) 40%), var(--panel);
+    border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 16px 0;
+  }
+  .eyebrow {
+    font: 700 10px var(--mono); letter-spacing: 0.26em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .panel-head h3 { font-size: 15px; letter-spacing: 0.02em; }
+  .panel-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .count { font: 600 12px var(--mono); color: var(--faint); }
+
   .btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-    font: 600 14px var(--font-ui); padding: 8px 14px; border-radius: 8px;
-    cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel-2); color: var(--ink);
+    font: 600 13px var(--sans); padding: 8px 14px; text-decoration: none;
   }
-  .btn:hover { border-color: var(--accent); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #FFF8EE; }
-  .btn.primary:hover { filter: brightness(1.06); }
-  .btn.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
-  .btn.small { padding: 5px 10px; font-size: 13px; }
-  .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-soft); }
-  .btn.ghost:hover { background: var(--surface-2); color: var(--ink); }
-
-  /* Cards & tiles */
-  .card {
-    background: var(--surface); border: 1px solid var(--line);
-    border-radius: var(--radius); box-shadow: var(--shadow);
+  .btn:hover { border-color: var(--line-bright); box-shadow: 0 0 14px rgba(34,211,238,0.15); }
+  .btn.primary {
+    background: linear-gradient(135deg, rgba(34,211,238,0.22), rgba(34,211,238,0.08));
+    border-color: var(--line-bright); color: var(--cyan);
   }
-  .greeting { margin: 6px 0 16px; }
-  .greeting h2 { font-size: 24px; }
-  .greeting p { margin: 2px 0 0; color: var(--ink-soft); }
-
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  @media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
-  .tile { padding: 14px 16px; }
-  .tile .label {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px;
-    color: var(--ink-soft); font-weight: 700;
+  .btn.warm { background: linear-gradient(135deg, rgba(255,180,84,0.22), rgba(255,180,84,0.06)); border-color: rgba(255,180,84,0.5); color: var(--amber); }
+  .btn.danger { color: var(--red); border-color: rgba(255,107,107,0.4); background: transparent; }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--dim); }
+  .btn.ghost:hover { color: var(--ink); box-shadow: none; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--cyan); outline-offset: 2px;
   }
-  .tile .value {
-    font-family: var(--font-display); font-size: 26px; font-weight: 600;
-    font-variant-numeric: tabular-nums; margin-top: 2px;
+
+  /* ---------- briefing strip ---------- */
+  .brief {
+    margin-top: 16px; padding: 12px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    border-left: 3px solid var(--cyan);
+    background: linear-gradient(90deg, var(--cyan-soft), transparent 70%);
+    border-radius: 0 var(--r) var(--r) 0;
   }
-  .tile .hint { font-size: 12px; color: var(--ink-soft); }
-  .tile.alert .value { color: var(--bad); }
+  .brief .b-title { font: 700 11px var(--mono); letter-spacing: 0.22em; color: var(--cyan); }
+  .brief .b-item { font-size: 13.5px; color: var(--dim); }
+  .brief .b-item b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .brief .b-item.alert b { color: var(--red); }
 
-  .cols { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 16px; align-items: start; }
-  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
-  .cols > *, .tiles > *, .detail-grid > * { min-width: 0; }
-  .todo .due { white-space: nowrap; }
-
-  .section-head {
-    display: flex; align-items: baseline; gap: 10px;
-    padding: 14px 16px 0;
+  /* ---------- KPI ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+  @media (max-width: 800px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi { padding: 14px 16px; position: relative; overflow: hidden; min-width: 0; }
+  .kpi .label { font: 700 10px var(--mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); }
+  .kpi .value { font: 600 26px var(--mono); font-variant-numeric: tabular-nums; margin-top: 4px; letter-spacing: -0.01em; }
+  .kpi .hint { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .kpi.cy .value { color: var(--cyan); text-shadow: 0 0 18px rgba(34,211,238,0.35); }
+  .kpi.am .value { color: var(--amber); text-shadow: 0 0 18px rgba(255,180,84,0.3); }
+  .kpi.rd .value { color: var(--red); text-shadow: 0 0 18px rgba(255,107,107,0.35); }
+  .kpi.gn .value { color: var(--green); text-shadow: 0 0 18px rgba(61,220,151,0.3); }
+  .kpi::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line-bright), transparent);
+    opacity: 0.6;
   }
-  .section-head h3 { font-size: 16px; }
-  .section-head .count { color: var(--ink-soft); font-size: 13px; }
-  .section-head .right { margin-left: auto; }
 
-  /* Todo list */
-  .todo-list, .feed { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
-  .todo {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 10px 10px; border-radius: 8px; cursor: pointer;
+  .cols { display: grid; grid-template-columns: 7fr 5fr; gap: 14px; margin-top: 14px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  .cols > * { min-width: 0; }
+  .stackcol { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+  /* ---------- focus list ---------- */
+  .focus-list { list-style: none; margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .focus {
+    position: relative; border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px 12px 16px; cursor: pointer; background: var(--panel-2);
+    overflow: hidden;
   }
-  .todo:hover { background: var(--surface-2); }
-  .todo .stripe { width: 4px; align-self: stretch; border-radius: 2px; flex: none; }
-  .todo.overdue .stripe { background: var(--bad); }
-  .todo.today .stripe { background: var(--warn); }
-  .todo.soon .stripe { background: var(--info); }
-  .todo.nudge .stripe { background: var(--line); }
-  .todo .body { flex: 1; min-width: 0; }
-  .todo .what { font-weight: 600; }
-  .todo .who { color: var(--ink-soft); font-size: 13px; }
-  .todo .due { margin-left: auto; flex: none; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-  .todo.overdue .due { color: var(--bad); background: var(--bad-soft); }
-  .todo.today .due { color: var(--warn); background: var(--warn-soft); }
-  .todo.soon .due { color: var(--info); background: var(--info-soft); }
-  .todo.nudge .due { color: var(--ink-soft); background: var(--surface-2); }
-
-  .feed li { display: flex; gap: 10px; padding: 9px 10px; border-radius: 8px; }
-  .feed li:hover { background: var(--surface-2); cursor: pointer; }
-  .feed .ico {
-    flex: none; width: 28px; height: 28px; border-radius: 8px;
-    display: grid; place-items: center; font-size: 14px;
-    background: var(--surface-2);
+  .focus:hover { border-color: var(--line-bright); }
+  .focus::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+  .focus.p-crit::before { background: var(--red); box-shadow: 0 0 12px var(--red); }
+  .focus.p-high::before { background: var(--amber); box-shadow: 0 0 10px rgba(255,180,84,.6); }
+  .focus.p-med::before { background: var(--cyan); }
+  .focus.p-low::before { background: var(--faint); }
+  .focus .f-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .focus .f-rank { font: 700 12px var(--mono); color: var(--faint); }
+  .focus .f-name { font-weight: 700; font-size: 15px; }
+  .focus .f-co { color: var(--faint); font-size: 12.5px; }
+  .focus .f-score {
+    margin-left: auto; font: 700 12px var(--mono); font-variant-numeric: tabular-nums;
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line);
+    color: var(--dim);
   }
-  .feed .txt { min-width: 0; }
-  .feed .txt .line1 { display: block; font-weight: 600; font-size: 14px; }
-  .feed .txt .line2 { display: block; color: var(--ink-soft); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .feed .when { margin-left: auto; flex: none; color: var(--ink-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
-
-  .empty {
-    padding: 28px 20px; text-align: center; color: var(--ink-soft);
+  .focus.p-crit .f-score { color: var(--red); border-color: rgba(255,107,107,.45); }
+  .focus.p-high .f-score { color: var(--amber); border-color: rgba(255,180,84,.45); }
+  .focus .f-action { margin-top: 6px; font-size: 14px; }
+  .focus .f-action .arr { color: var(--cyan); font-family: var(--mono); }
+  .focus .f-reasons { margin-top: 7px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .rtag {
+    font: 600 11px var(--sans); padding: 2px 9px; border-radius: 999px;
+    background: rgba(120, 160, 255, 0.08); color: var(--dim); border: 1px solid var(--line);
   }
-  .empty .big { font-size: 30px; }
-  .empty p { margin: 6px 0 14px; }
+  .rtag.bad { background: var(--red-soft); color: var(--red); border-color: rgba(255,107,107,.3); }
+  .rtag.warm { background: var(--amber-soft); color: var(--amber); border-color: rgba(255,180,84,.3); }
+  .rtag.good { background: var(--green-soft); color: var(--green); border-color: rgba(61,220,151,.3); }
+  .focus .f-quick { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
 
-  /* Pipeline strip */
-  .pipes { display: flex; gap: 6px; padding: 8px 16px 16px; flex-wrap: wrap; }
-  .pipe {
-    flex: 1; min-width: 90px; background: var(--surface-2); border-radius: 8px;
-    padding: 8px 10px; cursor: pointer; border: 1px solid transparent;
+  .allclear { padding: 34px 20px; text-align: center; color: var(--dim); }
+  .allclear .glyph { font-size: 30px; }
+  .allclear p { margin: 8px 0 14px; }
+
+  /* ---------- charts ---------- */
+  .chart-wrap { padding: 6px 16px 16px; }
+  .funnel-row { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
+  .funnel-row .fl { flex: none; width: 62px; font-size: 12px; color: var(--dim); text-align: right; }
+  .funnel-row .bar-track { display: block; flex: 1; height: 18px; background: rgba(120,160,255,0.06); border-radius: 4px; overflow: hidden; }
+  .funnel-row .bar {
+    display: block; height: 100%; border-radius: 4px; min-width: 2px;
+    background: linear-gradient(90deg, rgba(34,211,238,0.85), rgba(94,167,255,0.55));
+    box-shadow: 0 0 10px rgba(34,211,238,0.25);
   }
-  .pipe:hover { border-color: var(--accent); }
-  .pipe .n { font-family: var(--font-display); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .pipe .s { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
+  .funnel-row.won .bar { background: linear-gradient(90deg, rgba(61,220,151,0.9), rgba(61,220,151,0.45)); box-shadow: 0 0 10px rgba(61,220,151,0.3); }
+  .funnel-row .fn { flex: none; min-width: 96px; text-align: right; white-space: nowrap; font: 600 11px var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .spark { display: block; width: 100%; height: 64px; }
+  .spark-cap { display: flex; justify-content: space-between; font: 500 10.5px var(--mono); color: var(--faint); padding: 2px 2px 0; }
 
-  /* Leads table */
-  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 14px 0; }
+  /* ---------- feed ---------- */
+  .feed { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; }
+  .feed li { display: flex; gap: 10px; padding: 9px 8px; border-radius: 8px; cursor: pointer; align-items: flex-start; }
+  .feed li:hover { background: rgba(120,160,255,0.06); }
+  .feed .ico { flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font-size: 13px; background: rgba(120,160,255,0.08); border: 1px solid var(--line); }
+  .feed .txt { min-width: 0; flex: 1; }
+  .feed .line1 { display: block; font-weight: 600; font-size: 13.5px; }
+  .feed .line2 { display: block; color: var(--dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .feed .when { flex: none; font: 500 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; padding-top: 2px; }
+
+  /* ---------- leads ---------- */
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 16px 0 10px; }
   .toolbar input[type="search"] {
-    flex: 1; min-width: 180px;
-    padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--surface); color: var(--ink); font: 14px var(--font-ui);
+    flex: 1; min-width: 170px; padding: 9px 13px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink); font: 14px var(--sans);
   }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .chip {
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
-    font: 600 12px var(--font-ui); padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--dim);
+    font: 600 12px var(--sans); padding: 5px 12px; border-radius: 999px; cursor: pointer;
   }
-  .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+  .chip.active { border-color: var(--line-bright); color: var(--cyan); background: var(--cyan-soft); }
 
-  .lead-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; }
+  .lead-list { list-style: none; margin: 0; padding: 6px; }
   .lead-row {
-    display: grid; grid-template-columns: 2fr 1fr auto; gap: 8px 14px; align-items: center;
-    padding: 12px 12px; border-radius: 8px; cursor: pointer;
+    display: grid; grid-template-columns: 1fr auto auto; gap: 4px 14px; align-items: center;
+    padding: 12px; border-radius: 8px; cursor: pointer;
   }
-  .lead-row:hover { background: var(--surface-2); }
+  .lead-row:hover { background: rgba(120,160,255,0.06); }
   .lead-row + .lead-row { border-top: 1px solid var(--line); border-radius: 0; }
   .lead-row .nm { font-weight: 700; }
-  .lead-row .co { color: var(--ink-soft); font-size: 13px; }
-  .lead-row .nx { font-size: 13px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lead-row .nx.overdue { color: var(--bad); font-weight: 600; }
-  .lead-row .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .lead-row .co { color: var(--faint); font-size: 12.5px; }
+  .lead-row .nx { font-size: 12.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-row .nx.overdue { color: var(--red); font-weight: 600; }
+  .lead-row .val { text-align: right; font: 600 13.5px var(--mono); font-variant-numeric: tabular-nums; }
+  .lead-row .meta { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
   @media (max-width: 640px) {
     .lead-row { grid-template-columns: 1fr auto; }
-    .lead-row .mid { grid-column: 1 / -1; }
+    .lead-row .meta { grid-column: 1 / -1; justify-content: flex-start; }
   }
 
   .pill {
-    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
-    padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+    display: inline-block; font: 700 10.5px var(--mono); letter-spacing: 0.08em;
+    padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line);
+    text-transform: uppercase; color: var(--dim); white-space: nowrap;
   }
-  .pill.new { background: var(--surface-2); color: var(--ink-soft); }
-  .pill.contacted { background: var(--info-soft); color: var(--info); }
-  .pill.meeting { background: var(--violet-soft); color: var(--violet); }
-  .pill.proposal { background: var(--accent-soft); color: var(--accent-ink); }
-  .pill.negotiation { background: var(--warn-soft); color: var(--warn); }
-  .pill.won { background: var(--good-soft); color: var(--good); }
-  .pill.lost { background: var(--bad-soft); color: var(--bad); }
+  .pill.new { color: var(--ink); border-color: rgba(232,241,255,0.3); }
+  .pill.contacted { color: var(--blue); border-color: rgba(94,167,255,0.4); background: var(--blue-soft); }
+  .pill.meeting { color: var(--violet); border-color: rgba(167,139,250,0.4); background: var(--violet-soft); }
+  .pill.proposal { color: var(--cyan); border-color: rgba(34,211,238,0.4); background: var(--cyan-soft); }
+  .pill.negotiation { color: var(--amber); border-color: rgba(255,180,84,0.4); background: var(--amber-soft); }
+  .pill.won { color: var(--green); border-color: rgba(61,220,151,0.4); background: var(--green-soft); }
+  .pill.lost { color: var(--red); border-color: rgba(255,107,107,0.35); background: var(--red-soft); }
 
-  /* Lead detail */
-  .detail-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin: 14px 0; }
-  .detail-head h2 { font-size: 24px; }
+  /* ---------- lead detail ---------- */
+  .backlink { display: inline-flex; gap: 6px; margin-top: 14px; background: none; border: none; color: var(--dim); font: 600 13px var(--sans); cursor: pointer; padding: 0; }
+  .backlink:hover { color: var(--cyan); }
+  .detail-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin: 12px 0 14px; }
+  .detail-head h2 { font-size: 23px; }
   .detail-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-  .detail-grid { display: grid; grid-template-columns: 2fr 3fr; gap: 16px; align-items: start; }
-  @media (max-width: 860px) { .detail-grid { grid-template-columns: 1fr; } }
-  .kv { padding: 6px 16px 14px; }
+  .detail-grid { display: grid; grid-template-columns: 2fr 3fr; gap: 14px; align-items: start; }
+  @media (max-width: 880px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-grid > * { min-width: 0; }
+  .kv { padding: 8px 16px 14px; }
   .kv dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; }
-  .kv dt { color: var(--ink-soft); font-size: 13px; }
-  .kv dd { margin: 0; font-size: 14px; word-break: break-word; }
-  .kv a { color: var(--accent-ink); }
-  .next-box { margin: 8px 16px 16px; padding: 12px 14px; border-radius: 8px; background: var(--accent-soft); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .next-box.overdue { background: var(--bad-soft); }
+  .kv dt { color: var(--faint); font-size: 12.5px; }
+  .kv dd { margin: 0; font-size: 13.5px; word-break: break-word; }
+  .kv a { color: var(--cyan); }
+  .scorebox { margin: 4px 16px 14px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: rgba(120,160,255,0.05); }
+  .scorebox .sb-top { display: flex; align-items: baseline; gap: 8px; }
+  .scorebox .sb-num { font: 700 20px var(--mono); color: var(--cyan); }
+  .scorebox .sb-lbl { font: 700 10px var(--mono); letter-spacing: 0.2em; color: var(--faint); }
+  .scorebox .sb-touch { margin-left: auto; font-size: 12px; color: var(--dim); }
+  .next-box {
+    margin: 0 16px 16px; padding: 12px 14px; border-radius: 9px;
+    border: 1px solid rgba(34,211,238,0.35); background: var(--cyan-soft);
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .next-box.overdue { border-color: rgba(255,107,107,0.45); background: var(--red-soft); }
   .next-box .what { font-weight: 700; }
-  .next-box .due { font-size: 13px; color: var(--ink-soft); }
-  .next-box.overdue .due { color: var(--bad); font-weight: 700; }
+  .next-box .due { display: block; font-size: 12.5px; color: var(--dim); }
+  .next-box.overdue .due { color: var(--red); font-weight: 600; }
+  .suggest {
+    margin: 0 16px 16px; padding: 11px 14px; border-radius: 9px;
+    border: 1px dashed rgba(255,180,84,0.45); background: var(--amber-soft);
+    font-size: 13.5px;
+  }
+  .suggest .s-lbl { font: 700 10px var(--mono); letter-spacing: 0.2em; color: var(--amber); display: block; margin-bottom: 3px; }
 
-  .timeline { list-style: none; margin: 0; padding: 8px 16px 16px; }
+  .timeline { list-style: none; margin: 0; padding: 8px 16px 14px; }
   .timeline li { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
   .timeline li:first-child { border-top: none; }
-  .timeline .t-ico { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); font-size: 14px; }
+  .timeline .t-ico { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: rgba(120,160,255,0.08); border: 1px solid var(--line); font-size: 13px; }
   .timeline .t-body { min-width: 0; flex: 1; }
   .timeline .t-top { display: flex; gap: 8px; align-items: baseline; }
   .timeline .t-type { font-weight: 700; font-size: 13px; }
-  .timeline .t-when { color: var(--ink-soft); font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
-  .timeline .t-notes { font-size: 14px; white-space: pre-wrap; margin-top: 2px; }
-  .timeline .t-del { border: none; background: none; color: var(--ink-soft); cursor: pointer; font-size: 12px; padding: 2px 4px; }
-  .timeline .t-del:hover { color: var(--bad); }
+  .timeline .t-when { margin-left: auto; font: 500 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+  .timeline .t-notes { font-size: 13.5px; color: var(--dim); white-space: pre-wrap; margin-top: 2px; }
+  .timeline .t-del { border: none; background: none; color: var(--faint); cursor: pointer; font-size: 12px; padding: 2px 4px; }
+  .timeline .t-del:hover { color: var(--red); }
 
-  /* Forms & dialogs */
+  /* ---------- settings ---------- */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  @media (max-width: 700px) { .settings-grid { grid-template-columns: 1fr; } }
+  .settings-grid .panel { padding: 18px; }
+  .settings-grid h3 { font-size: 15px; margin-bottom: 4px; }
+  .settings-grid p { color: var(--dim); font-size: 13.5px; margin: 0 0 14px; }
+  .greeting { margin: 18px 0 4px; }
+  .greeting h2 { font-size: 22px; }
+  .greeting p { margin: 3px 0 0; color: var(--dim); font-size: 13.5px; }
+
+  /* ---------- dialogs ---------- */
   dialog {
-    border: 1px solid var(--line); border-radius: 14px; padding: 0;
-    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line-bright); border-radius: 14px; padding: 0;
+    background: var(--panel); color: var(--ink);
     width: min(560px, calc(100vw - 32px));
-    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    box-shadow: 0 0 0 1px rgba(34,211,238,0.08), 0 18px 60px rgba(0,0,0,0.6), 0 0 40px rgba(34,211,238,0.08);
   }
-  dialog::backdrop { background: rgba(20, 14, 5, 0.45); }
+  dialog::backdrop { background: rgba(3, 6, 12, 0.7); backdrop-filter: blur(3px); }
   .dlg-head { display: flex; align-items: center; padding: 16px 20px 0; }
-  .dlg-head h3 { font-size: 18px; }
-  .dlg-head .x { margin-left: auto; border: none; background: none; font-size: 18px; cursor: pointer; color: var(--ink-soft); padding: 4px 8px; }
+  .dlg-head h3 { font-size: 17px; }
+  .dlg-head .x { margin-left: auto; border: none; background: none; font-size: 17px; cursor: pointer; color: var(--faint); padding: 4px 8px; }
+  .dlg-head .x:hover { color: var(--ink); }
   form.stack { display: flex; flex-direction: column; gap: 12px; padding: 14px 20px 20px; }
   .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 520px) { .frow { grid-template-columns: 1fr; } }
-  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+  label.f { display: flex; flex-direction: column; gap: 4px; font: 600 12px var(--sans); color: var(--dim); }
   label.f input, label.f select, label.f textarea {
     padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--bg); color: var(--ink); font: 14px var(--font-ui);
+    background: var(--bg); color: var(--ink); font: 14px var(--sans);
+    color-scheme: dark;
   }
   label.f textarea { resize: vertical; min-height: 70px; }
   .dlg-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
-
-  .seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
   .seg button {
-    flex: 1; border: none; background: var(--surface); color: var(--ink-soft);
-    font: 600 13px var(--font-ui); padding: 8px 6px; cursor: pointer; min-width: 72px;
+    flex: 1; border: none; background: transparent; color: var(--dim);
+    font: 600 12.5px var(--sans); padding: 8px 4px; cursor: pointer; min-width: 70px;
   }
-  .seg button.active { background: var(--accent-soft); color: var(--accent-ink); }
+  .seg button.active { background: var(--cyan-soft); color: var(--cyan); }
 
-  /* Backup view */
-  .backup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
-  @media (max-width: 700px) { .backup-grid { grid-template-columns: 1fr; } }
-  .backup-grid .card { padding: 18px; }
-  .backup-grid h3 { font-size: 16px; margin-bottom: 6px; }
-  .backup-grid p { color: var(--ink-soft); font-size: 14px; margin: 0 0 14px; }
+  /* briefing dialog */
+  #dlg-brief .b-body { padding: 6px 20px 20px; }
+  #dlg-brief .b-row { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  #dlg-brief .b-row:last-child { border-bottom: none; }
+  #dlg-brief .b-num { font: 700 18px var(--mono); min-width: 34px; text-align: right; }
+  #dlg-brief .b-num.rd { color: var(--red); } #dlg-brief .b-num.am { color: var(--amber); }
+  #dlg-brief .b-num.cy { color: var(--cyan); } #dlg-brief .b-num.gn { color: var(--green); }
 
   .toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-    background: var(--ink); color: var(--bg); font-weight: 600; font-size: 14px;
-    padding: 10px 18px; border-radius: 999px; box-shadow: var(--shadow);
-    opacity: 0; pointer-events: none; transition: opacity 0.25s;
-    z-index: 50;
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-bright);
+    font: 600 13.5px var(--sans); padding: 10px 18px; border-radius: 999px;
+    box-shadow: 0 0 24px rgba(34,211,238,0.2), 0 8px 30px rgba(0,0,0,0.5);
+    opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 60;
   }
   .toast.show { opacity: 1; }
-  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
-
-  .backlink { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 12px; background: none; border: none; cursor: pointer; padding: 0; }
-  .backlink:hover { color: var(--ink); }
+  @media (prefers-reduced-motion: reduce) {
+    .toast { transition: none; }
+    .brand-core .orbit, .sys .dot { animation: none; }
+  }
 </style>
 
 <div class="app">
   <header class="top">
     <div class="brand">
-      <div class="brand-sun" aria-hidden="true"></div>
+      <div class="brand-core" aria-hidden="true"><span class="orbit"></span><span class="sun"></span></div>
       <div>
         <h1>Prospek Cerah</h1>
-        <span class="sub">Customer relationship manager</span>
+        <span class="tag">Command Center</span>
       </div>
     </div>
-    <nav aria-label="Main">
-      <button class="navbtn" data-nav="dashboard">Dashboard</button>
-      <button class="navbtn" data-nav="leads">Leads</button>
-      <button class="navbtn" data-nav="backup">Backup</button>
+    <div class="sys">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="sys-status">SYSTEM ONLINE</span>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+    <nav class="tabs" aria-label="主导航">
+      <button class="navbtn" data-nav="dashboard">指挥台<span class="n" id="nav-badge" hidden>0</span></button>
+      <button class="navbtn" data-nav="leads">线索</button>
+      <button class="navbtn" data-nav="settings">设置 · 备份</button>
     </nav>
   </header>
   <main id="view"></main>
 </div>
 
 <dialog id="dlg-lead">
-  <div class="dlg-head"><h3 id="dlg-lead-title">Add lead</h3><button class="x" data-close aria-label="Close">✕</button></div>
+  <div class="dlg-head"><h3 id="dlg-lead-title">新增线索</h3><button class="x" data-close aria-label="关闭">✕</button></div>
   <form class="stack" id="form-lead">
     <input type="hidden" name="id">
     <div class="frow">
-      <label class="f">Name *<input name="name" required autocomplete="off" placeholder="e.g. Ahmad Faizal"></label>
-      <label class="f">Company<input name="company" autocomplete="off" placeholder="e.g. Faizal Trading"></label>
+      <label class="f">姓名 *<input name="name" required autocomplete="off" placeholder="例：Ahmad Faizal"></label>
+      <label class="f">公司<input name="company" autocomplete="off" placeholder="例：Faizal Trading"></label>
     </div>
     <div class="frow">
-      <label class="f">Phone<input name="phone" autocomplete="off" placeholder="e.g. 012-345 6789"></label>
-      <label class="f">Email<input name="email" type="email" autocomplete="off" placeholder="name@email.com"></label>
+      <label class="f">电话<input name="phone" autocomplete="off" placeholder="例：012-345 6789"></label>
+      <label class="f">邮箱<input name="email" type="email" autocomplete="off" placeholder="name@email.com"></label>
     </div>
     <div class="frow">
-      <label class="f">Source
+      <label class="f">来源
         <select name="source">
-          <option>Referral</option><option>Walk-in</option><option>WhatsApp</option>
-          <option>Facebook / Instagram</option><option>Website</option><option>Cold call</option><option>Other</option>
+          <option value="Referral">转介绍</option><option value="Walk-in">上门</option><option value="WhatsApp">WhatsApp</option>
+          <option value="Facebook / Instagram">Facebook / Instagram</option><option value="Website">网站</option>
+          <option value="Cold call">陌生拜访</option><option value="Other">其他</option>
         </select>
       </label>
-      <label class="f">Deal value (RM)<input name="value" type="number" min="0" step="any" placeholder="0"></label>
+      <label class="f">生意价值 (RM)<input name="value" type="number" min="0" step="any" placeholder="0"></label>
     </div>
-    <label class="f">Stage
-      <select name="stage"></select>
-    </label>
-    <label class="f">Notes<textarea name="notes" placeholder="Anything worth remembering about this lead"></textarea></label>
+    <label class="f">阶段<select name="stage"></select></label>
+    <label class="f">备注<textarea name="notes" placeholder="关于这个客户值得记住的事"></textarea></label>
     <div class="dlg-foot">
-      <button type="button" class="btn" data-close>Cancel</button>
-      <button type="submit" class="btn primary">Save lead</button>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="submit" class="btn primary">保存</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="dlg-activity">
-  <div class="dlg-head"><h3>Log an update</h3><button class="x" data-close aria-label="Close">✕</button></div>
+  <div class="dlg-head"><h3>记录跟进</h3><button class="x" data-close aria-label="关闭">✕</button></div>
   <form class="stack" id="form-activity">
     <input type="hidden" name="leadId">
-    <label class="f">Type
+    <label class="f">类型
       <div class="seg" id="act-type">
-        <button type="button" data-t="Meeting" class="active">🤝 Meeting</button>
-        <button type="button" data-t="Call">📞 Call</button>
+        <button type="button" data-t="Meeting" class="active">🤝 会面</button>
+        <button type="button" data-t="Call">📞 电话</button>
         <button type="button" data-t="WhatsApp">💬 WhatsApp</button>
-        <button type="button" data-t="Email">✉️ Email</button>
-        <button type="button" data-t="Note">📝 Note</button>
+        <button type="button" data-t="Email">✉️ 邮件</button>
+        <button type="button" data-t="Note">📝 笔记</button>
       </div>
     </label>
     <div class="frow">
-      <label class="f">Date<input name="when" type="date" required></label>
-      <label class="f">Move stage to
-        <select name="stage"></select>
-      </label>
+      <label class="f">日期<input name="when" type="date" required></label>
+      <label class="f">阶段变更为<select name="stage"></select></label>
     </div>
-    <label class="f">What happened? *<textarea name="notes" required placeholder="e.g. Met at their office. Interested in the premium package, needs to check budget with partner."></textarea></label>
+    <label class="f">发生了什么？*<textarea name="notes" required placeholder="例：在他店里见面，对高级配套有兴趣，要和合伙人确认预算。"></textarea></label>
     <div class="frow">
-      <label class="f">Next action<input name="nextWhat" placeholder="e.g. Send quotation"></label>
-      <label class="f">Next action due<input name="nextDue" type="date"></label>
+      <label class="f">下一步行动<input name="nextWhat" placeholder="例：发送报价单"></label>
+      <label class="f">下一步期限<input name="nextDue" type="date"></label>
     </div>
     <div class="dlg-foot">
-      <button type="button" class="btn" data-close>Cancel</button>
-      <button type="submit" class="btn primary">Save update</button>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="submit" class="btn primary">保存跟进</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="dlg-next">
-  <div class="dlg-head"><h3>Set next action</h3><button class="x" data-close aria-label="Close">✕</button></div>
+  <div class="dlg-head"><h3>设定下一步</h3><button class="x" data-close aria-label="关闭">✕</button></div>
   <form class="stack" id="form-next">
     <input type="hidden" name="leadId">
-    <label class="f">What to do *<input name="what" required placeholder="e.g. Follow up on quotation"></label>
-    <label class="f">Due date *<input name="due" type="date" required></label>
+    <label class="f">要做什么 *<input name="what" required placeholder="例：跟进报价单"></label>
+    <label class="f">期限 *<input name="due" type="date" required></label>
     <div class="dlg-foot">
-      <button type="button" class="btn" data-close>Cancel</button>
-      <button type="submit" class="btn primary">Save</button>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="submit" class="btn primary">保存</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlg-brief">
+  <div class="dlg-head"><h3>☀️ 今日简报</h3><button class="x" data-close aria-label="关闭">✕</button></div>
+  <div class="b-body" id="brief-body"></div>
 </dialog>
 
 <div class="toast" id="toast" role="status"></div>
@@ -443,8 +508,23 @@
   var STORE_KEY = "prospek_cerah_crm_v1";
   var STAGES = ["New", "Contacted", "Meeting", "Proposal", "Negotiation", "Won", "Lost"];
   var ACTIVE_STAGES = ["New", "Contacted", "Meeting", "Proposal", "Negotiation"];
+  var STAGE_ZH = { New: "新线索", Contacted: "已联系", Meeting: "会面中", Proposal: "已报价", Negotiation: "谈判中", Won: "成交", Lost: "流失" };
   var ACT_ICONS = { Meeting: "🤝", Call: "📞", WhatsApp: "💬", Email: "✉️", Note: "📝", System: "✅" };
-  var STALE_DAYS = 14;
+  var ACT_ZH = { Meeting: "会面", Call: "电话", WhatsApp: "WhatsApp", Email: "邮件", Note: "笔记", System: "完成" };
+
+  // ===== Intelligence engine config =====
+  // Win probability per stage (weighted forecast, Pipedrive-style)
+  var STAGE_PROB = { New: 0.10, Contacted: 0.25, Meeting: 0.40, Proposal: 0.60, Negotiation: 0.80 };
+  // Max quiet days per stage before a lead starts "rotting" (deal rotting)
+  var ROT_DAYS = { New: 1, Contacted: 4, Meeting: 4, Proposal: 5, Negotiation: 3 };
+  // Suggested next action per stage when none is planned
+  var SUGGEST = {
+    New: "首次联系 — 24 小时内响应，成交率高 21 倍",
+    Contacted: "推进约见 — 约一次会面或演示",
+    Meeting: "会后 48 小时内跟进 — 发总结或报价",
+    Proposal: "跟进报价 — 80% 的成交需要 5 次以上跟进",
+    Negotiation: "推动成交 — 处理最后的顾虑，给出期限"
+  };
 
   var db = load();
   var state = { view: "dashboard", leadId: null, search: "", stageFilter: "Active", actType: "Meeting" };
@@ -459,29 +539,30 @@
   function save() { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
-  // ---------- date helpers ----------
+  // ===== date & format helpers =====
   function todayStr() {
     var d = new Date();
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
+  function shiftStr(base, days) {
+    var d = new Date(base + "T00:00:00"); d.setDate(d.getDate() + days);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
   function daysFromToday(dateStr) {
-    var t = new Date(todayStr() + "T00:00:00");
-    var d = new Date(dateStr + "T00:00:00");
-    return Math.round((d - t) / 86400000);
+    return Math.round((new Date(dateStr + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000);
   }
   function fmtDate(dateStr) {
     if (!dateStr) return "";
     var d = new Date(dateStr + "T00:00:00");
     if (isNaN(d)) return dateStr;
-    return d.toLocaleDateString("en-MY", { day: "numeric", month: "short", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日";
   }
   function relDue(dateStr) {
     var n = daysFromToday(dateStr);
-    if (n < -1) return Math.abs(n) + " days late";
-    if (n === -1) return "1 day late";
-    if (n === 0) return "Today";
-    if (n === 1) return "Tomorrow";
-    if (n <= 7) return "In " + n + " days";
+    if (n < 0) return "逾期 " + Math.abs(n) + " 天";
+    if (n === 0) return "今天";
+    if (n === 1) return "明天";
+    if (n <= 7) return n + " 天后";
     return fmtDate(dateStr);
   }
   function fmtRM(n) {
@@ -493,12 +574,21 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function waLink(l) {
+    if (!l.phone) return null;
+    var num = l.phone.replace(/\D/g, "").replace(/^0/, "60");
+    var msg = "Hi " + (l.name.split(" ")[0] || "") + "! ";
+    return "https://wa.me/" + num + "?text=" + encodeURIComponent(msg);
+  }
 
-  // ---------- data helpers ----------
+  // ===== data helpers =====
   function lead(id) { return db.leads.find(function (l) { return l.id === id; }); }
   function leadActivities(id) {
     return db.activities.filter(function (a) { return a.leadId === id; })
       .sort(function (a, b) { return b.when.localeCompare(a.when) || b.createdAt - a.createdAt; });
+  }
+  function touchCount(id) {
+    return db.activities.filter(function (a) { return a.leadId === id && a.type !== "System" && a.type !== "Note"; }).length;
   }
   function lastTouch(l) {
     var acts = leadActivities(l.id);
@@ -506,128 +596,236 @@
   }
   function isActive(l) { return ACTIVE_STAGES.indexOf(l.stage) >= 0; }
 
-  // "What to do next" engine
-  function buildTodos() {
-    var todos = [];
-    db.leads.filter(isActive).forEach(function (l) {
-      if (l.next && l.next.what && l.next.due) {
-        var n = daysFromToday(l.next.due);
-        if (n < 0) todos.push({ cls: "overdue", sort: n, lead: l, what: l.next.what, due: relDue(l.next.due) });
-        else if (n === 0) todos.push({ cls: "today", sort: 0, lead: l, what: l.next.what, due: "Today" });
-        else if (n <= 7) todos.push({ cls: "soon", sort: n, lead: l, what: l.next.what, due: relDue(l.next.due) });
-      } else {
-        var idle = -daysFromToday(lastTouch(l) || todayStr());
-        if (idle >= STALE_DAYS) {
-          todos.push({ cls: "nudge", sort: 100 + idle, lead: l, what: "No next step planned — quiet for " + idle + " days", due: "Plan it" });
-        } else {
-          todos.push({ cls: "nudge", sort: 200, lead: l, what: "No next step planned", due: "Plan it" });
-        }
-      }
-    });
-    todos.sort(function (a, b) { return a.sort - b.sort; });
-    return todos;
+  // ===== priority engine =====
+  // Score 0-100: urgency (overdue / rotting) + deal value + stage progress
+  function analyse(l) {
+    var idle = Math.max(0, -daysFromToday(lastTouch(l) || todayStr()));
+    var rotLimit = ROT_DAYS[l.stage] || 5;
+    var rotting = idle > rotLimit;
+    var reasons = [];
+    var urgency = 0;
+
+    if (l.next && l.next.what && l.next.due) {
+      var n = daysFromToday(l.next.due);
+      if (n < 0) { urgency = Math.min(70, 45 + Math.abs(n) * 5); reasons.push({ t: "跟进逾期 " + Math.abs(n) + " 天", c: "bad" }); }
+      else if (n === 0) { urgency = 40; reasons.push({ t: "今天到期", c: "warm" }); }
+      else if (n <= 2) { urgency = 15; reasons.push({ t: n + " 天后到期", c: "" }); }
+    } else {
+      urgency = 25;
+      reasons.push({ t: "没有安排下一步", c: "warm" });
+    }
+    if (l.stage === "New" && idle >= 1) {
+      urgency = Math.max(urgency, 55);
+      reasons.push({ t: "新线索已 " + idle + " 天未联系", c: "bad" });
+    } else if (rotting) {
+      urgency = Math.max(urgency, Math.min(60, 30 + (idle - rotLimit) * 4));
+      reasons.push({ t: "静默 " + idle + " 天（" + STAGE_ZH[l.stage] + "阶段上限 " + rotLimit + " 天）", c: "bad" });
+    }
+
+    var maxVal = db.leads.filter(isActive).reduce(function (m, x) { return Math.max(m, Number(x.value) || 0); }, 0);
+    var valuePts = maxVal ? Math.round((Number(l.value) || 0) / maxVal * 18) : 0;
+    if (valuePts >= 14 && Number(l.value) > 0) reasons.push({ t: "高价值 " + fmtRM(l.value), c: "good" });
+    var stagePts = Math.round((STAGE_PROB[l.stage] || 0) * 15);
+    var tc = touchCount(l.id);
+    if (tc > 0 && tc < 5 && (l.stage === "Proposal" || l.stage === "Negotiation")) {
+      reasons.push({ t: "已跟进 " + tc + " 次 · 80% 成交需 5 次以上", c: "" });
+    }
+
+    var score = Math.min(99, urgency + valuePts + stagePts);
+    var action = (l.next && l.next.what) ? l.next.what : (SUGGEST[l.stage] || "跟进");
+    var suggested = !(l.next && l.next.what);
+    return { lead: l, score: score, urgency: urgency, reasons: reasons, action: action, suggested: suggested, idle: idle, rotting: rotting };
+  }
+  function focusList() {
+    return db.leads.filter(isActive).map(analyse)
+      .sort(function (a, b) { return b.score - a.score; });
+  }
+  function urgentCount() {
+    return focusList().filter(function (f) { return f.urgency >= 40; }).length;
+  }
+  function prioClass(f) {
+    if (f.urgency >= 45) return "p-crit";
+    if (f.urgency >= 35) return "p-high";
+    if (f.score >= 30) return "p-med";
+    return "p-low";
   }
 
-  // ---------- rendering ----------
+  // ===== render =====
   var $view = document.getElementById("view");
 
   function render() {
     document.querySelectorAll(".navbtn").forEach(function (b) {
       b.classList.toggle("active", b.dataset.nav === state.view || (state.view === "lead" && b.dataset.nav === "leads"));
     });
+    var badge = document.getElementById("nav-badge");
+    var uc = urgentCount();
+    badge.hidden = uc === 0;
+    badge.textContent = uc;
+    document.title = (uc ? "(" + uc + ") " : "") + "Prospek Cerah · 指挥中心";
+
     if (state.view === "dashboard") renderDashboard();
     else if (state.view === "leads") renderLeads();
     else if (state.view === "lead") renderLeadDetail();
-    else if (state.view === "backup") renderBackup();
+    else if (state.view === "settings") renderSettings();
     window.scrollTo(0, 0);
-  }
-
-  function greeting() {
-    var h = new Date().getHours();
-    if (h < 12) return "Selamat pagi";
-    if (h < 19) return "Selamat petang";
-    return "Selamat malam";
   }
 
   function renderDashboard() {
     var active = db.leads.filter(isActive);
+    var focus = focusList();
     var pipelineValue = active.reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0);
+    var forecast = active.reduce(function (s, l) { return s + (Number(l.value) || 0) * (STAGE_PROB[l.stage] || 0); }, 0);
     var monthPrefix = todayStr().slice(0, 7);
     var wonThisMonth = db.leads.filter(function (l) {
       return l.stage === "Won" && (l.wonAt || "").slice(0, 7) === monthPrefix;
     }).reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0);
-    var todos = buildTodos();
-    var urgent = todos.filter(function (t) { return t.cls === "overdue" || t.cls === "today"; }).length;
-
-    var recent = db.activities.slice()
-      .sort(function (a, b) { return b.when.localeCompare(a.when) || b.createdAt - a.createdAt; })
-      .slice(0, 8);
+    var overdue = focus.filter(function (f) { return f.lead.next && f.lead.next.due && daysFromToday(f.lead.next.due) < 0; }).length;
+    var dueToday = focus.filter(function (f) { return f.lead.next && f.lead.next.due && daysFromToday(f.lead.next.due) === 0; }).length;
+    var coldNew = focus.filter(function (f) { return f.lead.stage === "New" && f.idle >= 1; }).length;
+    var weekTouches = db.activities.filter(function (a) {
+      return a.type !== "System" && daysFromToday(a.when) > -7;
+    }).length;
 
     var html = "";
-    html += '<div class="greeting"><h2>' + greeting() + ' ☀️</h2>' +
-      '<p>' + new Date().toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) + "</p></div>";
 
-    html += '<div class="tiles">' +
-      tile("Pipeline value", fmtRM(pipelineValue), active.length + " active lead" + (active.length === 1 ? "" : "s")) +
-      tile("Active leads", String(active.length), "") +
-      tile("Won this month", fmtRM(wonThisMonth), "") +
-      tile("Needs attention", String(urgent), urgent ? "overdue or due today" : "all clear", urgent > 0) +
+    // briefing strip
+    html += '<div class="brief"><span class="b-title">今日简报 // BRIEFING</span>' +
+      '<span class="b-item' + (overdue ? " alert" : "") + '"><b>' + overdue + '</b> 项逾期</span>' +
+      '<span class="b-item"><b>' + dueToday + '</b> 项今天到期</span>' +
+      (coldNew ? '<span class="b-item alert"><b>' + coldNew + '</b> 个新线索未联系</span>' : "") +
+      '<span class="b-item">本周已跟进 <b>' + weekTouches + '</b> 次</span>' +
+      '<button class="btn small ghost" data-action="brief" style="margin-left:auto">查看简报 →</button></div>';
+
+    // KPIs
+    html += '<div class="kpis">' +
+      kpi("cy", "PIPELINE · 管道总值", fmtRM(pipelineValue), active.length + " 个活跃线索") +
+      kpi("am", "FORECAST · 加权预测", fmtRM(Math.round(forecast)), "按阶段成交率折算") +
+      kpi("gn", "WON · 本月成交", fmtRM(wonThisMonth), "") +
+      kpi(overdue + coldNew > 0 ? "rd" : "gn", "ALERT · 需要行动", String(overdue + dueToday + coldNew), overdue + coldNew > 0 ? "逾期 / 今天 / 冷却新线索" : "全部在掌控中") +
       "</div>";
 
     html += '<div class="cols">';
 
-    // Do next
-    html += '<div class="card"><div class="section-head"><h3>Do next</h3><span class="count">' + todos.length + '</span>' +
-      '<span class="right"><button class="btn small primary" data-action="add-lead">+ Add lead</button></span></div>';
-    if (!todos.length && !db.leads.length) {
-      html += '<div class="empty"><div class="big">🌅</div><p>Your day starts clear. Add your first lead to get going.</p>' +
-        '<button class="btn primary" data-action="add-lead">+ Add your first lead</button>' +
-        '<p style="margin-top:14px"><button class="btn small ghost" data-action="sample">…or load sample data to explore</button></p></div>';
-    } else if (!todos.length) {
-      html += '<div class="empty"><div class="big">✨</div><p>Nothing pending. Every active lead has a next step scheduled for later.</p></div>';
+    // FOCUS
+    html += '<div class="panel"><div class="panel-head"><span class="eyebrow">FOCUS</span><h3>今天最该做的事</h3>' +
+      '<span class="count">' + focus.length + '</span>' +
+      '<span class="right"><button class="btn small primary" data-action="add-lead">+ 新增线索</button></span></div>';
+    if (!db.leads.length) {
+      html += '<div class="allclear"><div class="glyph">🛰️</div><p>系统就绪。加入第一个线索，引擎就会开始为你排优先级。</p>' +
+        '<button class="btn primary" data-action="add-lead">+ 新增第一个线索</button>' +
+        '<p style="margin-top:12px"><button class="btn small ghost" data-action="sample">…或载入示范数据看看效果</button></p></div>';
+    } else if (!focus.length) {
+      html += '<div class="allclear"><div class="glyph">✨</div><p>没有活跃线索。去成交下一单吧。</p></div>';
     } else {
-      html += '<ul class="todo-list">' + todos.slice(0, 12).map(function (t) {
-        return '<li class="todo ' + t.cls + '" data-open-lead="' + t.lead.id + '">' +
-          '<span class="stripe"></span>' +
-          '<span class="body"><span class="what">' + esc(t.what) + '</span><br><span class="who">' + esc(t.lead.name) + (t.lead.company ? " · " + esc(t.lead.company) : "") + '</span></span>' +
-          '<span class="due">' + esc(t.due) + '</span></li>';
+      html += '<ul class="focus-list">' + focus.slice(0, 8).map(function (f, i) {
+        var l = f.lead;
+        var wa = waLink(l);
+        return '<li class="focus ' + prioClass(f) + '" data-open-lead="' + l.id + '">' +
+          '<div class="f-top"><span class="f-rank">#' + (i + 1) + '</span>' +
+          '<span class="f-name">' + esc(l.name) + '</span>' +
+          (l.company ? '<span class="f-co">' + esc(l.company) + '</span>' : "") +
+          '<span class="pill ' + l.stage.toLowerCase() + '">' + STAGE_ZH[l.stage] + '</span>' +
+          '<span class="f-score">P·' + f.score + '</span></div>' +
+          '<div class="f-action"><span class="arr">»</span> ' + esc(f.action) + (f.suggested ? ' <span style="color:var(--amber);font-size:11.5px">（系统建议）</span>' : "") + '</div>' +
+          '<div class="f-reasons">' + f.reasons.map(function (r) { return '<span class="rtag ' + r.c + '">' + esc(r.t) + "</span>"; }).join("") + '</div>' +
+          '<div class="f-quick">' +
+          (wa ? '<a class="btn small" href="' + wa + '" target="_blank" rel="noopener" data-stop>💬 WhatsApp</a>' : "") +
+          (l.phone ? '<a class="btn small" href="tel:' + esc(l.phone.replace(/\s/g, "")) + '" data-stop>📞 拨打</a>' : "") +
+          '<button class="btn small warm" data-log-lead="' + l.id + '" data-stop>✍️ 记录跟进</button>' +
+          '</div></li>';
       }).join("") + "</ul>";
     }
     html += "</div>";
 
-    // Recent activity
-    html += '<div class="card"><div class="section-head"><h3>Recent activity</h3></div>';
+    // right column
+    html += '<div class="stackcol">';
+
+    // funnel
+    if (db.leads.length) {
+      var maxCount = Math.max.apply(null, STAGES.map(function (s) { return db.leads.filter(function (l) { return l.stage === s; }).length; }).concat([1]));
+      html += '<div class="panel"><div class="panel-head"><span class="eyebrow">FUNNEL</span><h3>销售漏斗</h3></div><div class="chart-wrap">' +
+        STAGES.filter(function (s) { return s !== "Lost"; }).map(function (s) {
+          var ls = db.leads.filter(function (l) { return l.stage === s; });
+          var v = ls.reduce(function (sum, l) { return sum + (Number(l.value) || 0); }, 0);
+          return '<div class="funnel-row' + (s === "Won" ? " won" : "") + '" data-stage-jump="' + s + '" style="cursor:pointer">' +
+            '<span class="fl">' + STAGE_ZH[s] + '</span>' +
+            '<span class="bar-track"><span class="bar" style="width:' + Math.round(ls.length / maxCount * 100) + '%"></span></span>' +
+            '<span class="fn">' + ls.length + ' · ' + (v ? fmtRM(v) : "—") + '</span></div>';
+        }).join("") + "</div></div>";
+    }
+
+    // activity sparkline (14 days)
+    html += '<div class="panel"><div class="panel-head"><span class="eyebrow">MOMENTUM</span><h3>近 14 天跟进节奏</h3></div><div class="chart-wrap">' +
+      sparkline() + '<div class="spark-cap"><span>' + fmtDate(shiftStr(todayStr(), -13)) + '</span><span>今天</span></div></div></div>';
+
+    // recent feed
+    var recent = db.activities.slice()
+      .sort(function (a, b) { return b.when.localeCompare(a.when) || b.createdAt - a.createdAt; })
+      .slice(0, 6);
+    html += '<div class="panel"><div class="panel-head"><span class="eyebrow">LOG</span><h3>最近动态</h3></div>';
     if (!recent.length) {
-      html += '<div class="empty"><p>No updates yet. After a meeting or call, open the lead and log what happened.</p></div>';
+      html += '<div class="allclear" style="padding:20px"><p style="margin:0">还没有记录。见完客户后，打开线索按「记录跟进」。</p></div>';
     } else {
       html += '<ul class="feed">' + recent.map(function (a) {
         var l = lead(a.leadId);
         return '<li data-open-lead="' + a.leadId + '">' +
           '<span class="ico">' + (ACT_ICONS[a.type] || "📝") + '</span>' +
-          '<span class="txt"><span class="line1">' + esc(a.type) + ' — ' + esc(l ? l.name : "Deleted lead") + '</span>' +
+          '<span class="txt"><span class="line1">' + (ACT_ZH[a.type] || a.type) + ' · ' + esc(l ? l.name : "已删除") + '</span>' +
           '<span class="line2">' + esc(a.notes) + '</span></span>' +
           '<span class="when">' + fmtDate(a.when) + '</span></li>';
       }).join("") + "</ul>";
     }
-    html += "</div></div>";
-
-    // Pipeline strip
-    if (db.leads.length) {
-      html += '<div class="card" style="margin-top:16px"><div class="section-head"><h3>Pipeline</h3></div><div class="pipes">' +
-        STAGES.map(function (s) {
-          var n = db.leads.filter(function (l) { return l.stage === s; }).length;
-          return '<div class="pipe" data-stage-jump="' + s + '"><div class="n">' + n + '</div><div class="s">' + s + "</div></div>";
-        }).join("") + "</div></div>";
-    }
+    html += "</div></div></div>";
 
     $view.innerHTML = html;
+    animateNumbers();
   }
 
-  function tile(label, value, hint, alert) {
-    return '<div class="card tile' + (alert ? " alert" : "") + '"><div class="label">' + label + '</div><div class="value">' + value + '</div>' +
+  function kpi(cls, label, value, hint) {
+    return '<div class="panel kpi ' + cls + '"><div class="label">' + label + '</div>' +
+      '<div class="value" data-animate>' + value + '</div>' +
       (hint ? '<div class="hint">' + hint + "</div>" : "") + "</div>";
   }
 
+  function sparkline() {
+    var days = [];
+    for (var i = 13; i >= 0; i--) {
+      var d = shiftStr(todayStr(), -i);
+      days.push(db.activities.filter(function (a) { return a.when === d && a.type !== "System"; }).length);
+    }
+    var max = Math.max.apply(null, days.concat([1]));
+    var W = 300, H = 60, step = W / 13;
+    var pts = days.map(function (v, i) { return [i * step, H - 6 - (v / max) * (H - 14)]; });
+    var line = pts.map(function (p, i) { return (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" ");
+    var area = line + " L" + W + " " + H + " L0 " + H + " Z";
+    var last = pts[pts.length - 1];
+    return '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" aria-label="近14天跟进次数">' +
+      '<path d="' + area + '" fill="rgba(34,211,238,0.12)"/>' +
+      '<path d="' + line + '" fill="none" stroke="var(--cyan)" stroke-width="1.6"/>' +
+      '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3" fill="var(--cyan)"/></svg>';
+  }
+
+  function animateNumbers() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    document.querySelectorAll("[data-animate]").forEach(function (el) {
+      var text = el.textContent;
+      var m = text.match(/([\d,]+)/);
+      if (!m) return;
+      var target = Number(m[1].replace(/,/g, ""));
+      if (!target || target > 10000000) return;
+      var start = performance.now(), dur = 600;
+      function tick(now) {
+        var p = Math.min(1, (now - start) / dur);
+        var eased = 1 - Math.pow(1 - p, 3);
+        var cur = Math.round(target * eased);
+        el.textContent = text.replace(m[1], cur.toLocaleString("en-MY"));
+        if (p < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  // ===== leads view =====
   function renderLeads() {
     var q = state.search.trim().toLowerCase();
     var rows = db.leads.filter(function (l) {
@@ -635,36 +833,36 @@
       if (state.stageFilter !== "All" && state.stageFilter !== "Active" && l.stage !== state.stageFilter) return false;
       if (q && (l.name + " " + (l.company || "") + " " + (l.phone || "") + " " + (l.email || "")).toLowerCase().indexOf(q) < 0) return false;
       return true;
-    }).sort(function (a, b) {
-      var ad = a.next && a.next.due ? a.next.due : "9999";
-      var bd = b.next && b.next.due ? b.next.due : "9999";
-      return ad.localeCompare(bd) || a.name.localeCompare(b.name);
     });
+    var scored = {};
+    rows.forEach(function (l) { scored[l.id] = isActive(l) ? analyse(l).score : -1; });
+    rows.sort(function (a, b) { return scored[b.id] - scored[a.id] || a.name.localeCompare(b.name); });
 
-    var chips = ["Active", "All"].concat(STAGES);
+    var chips = [["Active", "活跃"], ["All", "全部"]].concat(STAGES.map(function (s) { return [s, STAGE_ZH[s]]; }));
     var html = '<div class="toolbar">' +
-      '<input type="search" id="lead-search" placeholder="Search name, company, phone…" value="' + esc(state.search) + '">' +
-      '<button class="btn primary" data-action="add-lead">+ Add lead</button></div>' +
-      '<div class="chips" style="margin-bottom:12px">' + chips.map(function (c) {
-        return '<button class="chip' + (state.stageFilter === c ? " active" : "") + '" data-chip="' + c + '">' + c + "</button>";
+      '<input type="search" id="lead-search" placeholder="搜索姓名、公司、电话…" value="' + esc(state.search) + '">' +
+      '<button class="btn primary" data-action="add-lead">+ 新增线索</button></div>' +
+      '<div class="chips">' + chips.map(function (c) {
+        return '<button class="chip' + (state.stageFilter === c[0] ? " active" : "") + '" data-chip="' + c[0] + '">' + c[1] + "</button>";
       }).join("") + "</div>";
 
-    html += '<div class="card">';
+    html += '<div class="panel">';
     if (!rows.length) {
-      html += '<div class="empty"><div class="big">🔍</div><p>' + (db.leads.length ? "No leads match this filter." : "No leads yet.") + '</p>' +
-        '<button class="btn primary" data-action="add-lead">+ Add lead</button></div>';
+      html += '<div class="allclear"><div class="glyph">🔍</div><p>' + (db.leads.length ? "这个筛选下没有线索。" : "还没有线索。") + '</p>' +
+        '<button class="btn primary" data-action="add-lead">+ 新增线索</button></div>';
     } else {
       html += '<ul class="lead-list">' + rows.map(function (l) {
         var nx = "";
         if (l.next && l.next.what && l.next.due) {
           var od = daysFromToday(l.next.due) < 0;
-          nx = '<span class="nx' + (od ? " overdue" : "") + '">→ ' + esc(l.next.what) + " · " + relDue(l.next.due) + "</span>";
+          nx = '<span class="nx' + (od ? " overdue" : "") + '">» ' + esc(l.next.what) + " · " + relDue(l.next.due) + "</span>";
         } else if (isActive(l)) {
-          nx = '<span class="nx">No next step</span>';
+          nx = '<span class="nx" style="color:var(--amber)">» 没有下一步 — 系统建议：' + esc((SUGGEST[l.stage] || "").split(" — ")[0]) + "</span>";
         }
         return '<li class="lead-row" data-open-lead="' + l.id + '">' +
-          '<span><span class="nm">' + esc(l.name) + '</span>' + (l.company ? ' <span class="co">· ' + esc(l.company) + "</span>" : "") + "<br>" + nx + "</span>" +
-          '<span class="mid"><span class="pill ' + l.stage.toLowerCase() + '">' + l.stage + "</span></span>" +
+          '<span style="min-width:0"><span class="nm">' + esc(l.name) + '</span>' + (l.company ? ' <span class="co">· ' + esc(l.company) + "</span>" : "") + "<br>" + nx + "</span>" +
+          '<span class="meta"><span class="pill ' + l.stage.toLowerCase() + '">' + STAGE_ZH[l.stage] + "</span>" +
+          (scored[l.id] >= 0 ? '<span class="f-score" style="font:700 11px var(--mono);color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:2px 7px">P·' + scored[l.id] + "</span>" : "") + "</span>" +
           '<span class="val">' + (Number(l.value) ? fmtRM(l.value) : "") + "</span></li>";
       }).join("") + "</ul>";
     }
@@ -672,68 +870,78 @@
     $view.innerHTML = html;
 
     var s = document.getElementById("lead-search");
-    s.addEventListener("input", function () { state.search = s.value; renderLeadsListOnly(); });
-  }
-  function renderLeadsListOnly() {
-    // re-render but keep focus in the search box
-    var pos = document.getElementById("lead-search").selectionStart;
-    renderLeads();
-    var s = document.getElementById("lead-search");
-    s.focus(); s.setSelectionRange(pos, pos);
+    s.addEventListener("input", function () {
+      state.search = s.value;
+      var pos = s.selectionStart;
+      renderLeads();
+      var s2 = document.getElementById("lead-search");
+      s2.focus(); s2.setSelectionRange(pos, pos);
+    });
   }
 
+  // ===== lead detail =====
   function renderLeadDetail() {
     var l = lead(state.leadId);
     if (!l) { state.view = "leads"; return render(); }
     var acts = leadActivities(l.id);
+    var f = isActive(l) ? analyse(l) : null;
+    var wa = waLink(l);
 
-    var html = '<button class="backlink" data-nav-view="leads">← All leads</button>';
+    var html = '<button class="backlink" data-nav-view="leads">← 所有线索</button>';
     html += '<div class="detail-head"><div><h2>' + esc(l.name) + "</h2>" +
-      (l.company ? '<div style="color:var(--ink-soft)">' + esc(l.company) + "</div>" : "") + "</div>" +
-      '<span class="pill ' + l.stage.toLowerCase() + '" style="align-self:center">' + l.stage + "</span>" +
+      (l.company ? '<div style="color:var(--dim);font-size:13.5px">' + esc(l.company) + "</div>" : "") + "</div>" +
+      '<span class="pill ' + l.stage.toLowerCase() + '" style="align-self:center">' + STAGE_ZH[l.stage] + "</span>" +
       '<div class="actions">' +
-      '<button class="btn primary" data-action="log-activity">+ Log update</button>' +
-      '<button class="btn" data-action="edit-lead">Edit</button>' +
-      '<button class="btn danger small" data-action="delete-lead">Delete</button>' +
+      '<button class="btn primary" data-action="log-activity">✍️ 记录跟进</button>' +
+      (wa ? '<a class="btn" href="' + wa + '" target="_blank" rel="noopener">💬 WhatsApp</a>' : "") +
+      '<button class="btn" data-action="edit-lead">编辑</button>' +
+      '<button class="btn danger small" data-action="delete-lead">删除</button>' +
       "</div></div>";
 
     html += '<div class="detail-grid">';
 
-    // Left column: info + next action
-    html += '<div><div class="card"><div class="section-head"><h3>Details</h3></div><div class="kv"><dl>';
-    if (l.phone) html += "<dt>Phone</dt><dd><a href=\"tel:" + esc(l.phone.replace(/\s/g, "")) + '">' + esc(l.phone) + "</a> · <a href=\"https://wa.me/" + esc(l.phone.replace(/\D/g, "").replace(/^0/, "60")) + '" target="_blank" rel="noopener">WhatsApp</a></dd>';
-    if (l.email) html += "<dt>Email</dt><dd><a href=\"mailto:" + esc(l.email) + '">' + esc(l.email) + "</a></dd>";
-    html += "<dt>Source</dt><dd>" + esc(l.source || "—") + "</dd>";
-    html += "<dt>Deal value</dt><dd>" + (Number(l.value) ? fmtRM(l.value) : "—") + "</dd>";
-    html += "<dt>Added</dt><dd>" + fmtDate((l.createdAt || "").slice(0, 10)) + "</dd>";
-    if (l.notes) html += "<dt>Notes</dt><dd style=\"white-space:pre-wrap\">" + esc(l.notes) + "</dd>";
+    // left
+    html += '<div><div class="panel"><div class="panel-head"><span class="eyebrow">PROFILE</span><h3>客户资料</h3></div>';
+    if (f) {
+      html += '<div class="scorebox"><div class="sb-top"><span class="sb-lbl">PRIORITY</span><span class="sb-num">P·' + f.score + '</span>' +
+        '<span class="sb-touch">已跟进 <b>' + touchCount(l.id) + '</b> 次 · 静默 ' + f.idle + ' 天</span></div></div>';
+    }
+    html += '<div class="kv"><dl>';
+    if (l.phone) html += "<dt>电话</dt><dd><a href=\"tel:" + esc(l.phone.replace(/\s/g, "")) + '">' + esc(l.phone) + "</a></dd>";
+    if (l.email) html += "<dt>邮箱</dt><dd><a href=\"mailto:" + esc(l.email) + '">' + esc(l.email) + "</a></dd>";
+    html += "<dt>来源</dt><dd>" + esc(l.source || "—") + "</dd>";
+    html += "<dt>价值</dt><dd>" + (Number(l.value) ? fmtRM(l.value) : "—") + "</dd>";
+    html += "<dt>加入</dt><dd>" + fmtDate((l.createdAt || "").slice(0, 10)) + "</dd>";
+    if (l.notes) html += "<dt>备注</dt><dd style=\"white-space:pre-wrap\">" + esc(l.notes) + "</dd>";
     html += "</dl></div>";
 
     if (isActive(l)) {
       if (l.next && l.next.what && l.next.due) {
         var od = daysFromToday(l.next.due) < 0;
         html += '<div class="next-box' + (od ? " overdue" : "") + '">' +
-          '<span>➡️ <span class="what">' + esc(l.next.what) + '</span><br><span class="due">Due ' + fmtDate(l.next.due) + (daysFromToday(l.next.due) === 0 ? " — today" : daysFromToday(l.next.due) < 0 ? " — " + relDue(l.next.due).toLowerCase() : " (" + relDue(l.next.due).toLowerCase() + ")") + '</span></span>' +
+          '<span>» <span class="what">' + esc(l.next.what) + '</span><span class="due">' +
+          fmtDate(l.next.due) + " · " + relDue(l.next.due) + '</span></span>' +
           '<span style="margin-left:auto;display:flex;gap:6px">' +
-          '<button class="btn small" data-action="done-next">✓ Done</button>' +
-          '<button class="btn small ghost" data-action="set-next">Change</button></span></div>';
+          '<button class="btn small" data-action="done-next">✓ 完成</button>' +
+          '<button class="btn small ghost" data-action="set-next">修改</button></span></div>';
       } else {
-        html += '<div class="next-box"><span>No next step planned for this lead.</span>' +
-          '<button class="btn small primary" style="margin-left:auto" data-action="set-next">+ Set next action</button></div>';
+        html += '<div class="suggest"><span class="s-lbl">系统建议 // NEXT BEST ACTION</span>' +
+          esc(SUGGEST[l.stage] || "安排下一步") +
+          '<div style="margin-top:9px"><button class="btn small warm" data-action="set-next">+ 设定下一步</button></div></div>';
       }
     }
     html += "</div></div>";
 
-    // Right column: timeline
-    html += '<div class="card"><div class="section-head"><h3>History</h3><span class="count">' + acts.length + '</span>' +
-      '<span class="right"><button class="btn small" data-action="log-activity">+ Log update</button></span></div>';
+    // right: timeline
+    html += '<div class="panel"><div class="panel-head"><span class="eyebrow">TIMELINE</span><h3>跟进历史</h3><span class="count">' + acts.length + '</span>' +
+      '<span class="right"><button class="btn small" data-action="log-activity">+ 记录</button></span></div>';
     if (!acts.length) {
-      html += '<div class="empty"><p>Nothing logged yet. After you meet or talk to ' + esc(l.name.split(" ")[0]) + ', log what happened here.</p></div>';
+      html += '<div class="allclear" style="padding:22px"><p style="margin:0">还没有记录。跟 ' + esc(l.name.split(" ")[0]) + ' 联系后，回来记一笔。</p></div>';
     } else {
       html += '<ul class="timeline">' + acts.map(function (a) {
         return "<li><span class=\"t-ico\">" + (ACT_ICONS[a.type] || "📝") + '</span><div class="t-body">' +
-          '<div class="t-top"><span class="t-type">' + esc(a.type) + '</span><span class="t-when">' + fmtDate(a.when) + '</span>' +
-          '<button class="t-del" data-del-activity="' + a.id + '" title="Delete this entry">✕</button></div>' +
+          '<div class="t-top"><span class="t-type">' + (ACT_ZH[a.type] || a.type) + '</span><span class="t-when">' + fmtDate(a.when) + '</span>' +
+          '<button class="t-del" data-del-activity="' + a.id + '" title="删除这条记录">✕</button></div>' +
           '<div class="t-notes">' + esc(a.notes) + "</div></div></li>";
       }).join("") + "</ul>";
     }
@@ -742,34 +950,123 @@
     $view.innerHTML = html;
   }
 
-  function renderBackup() {
-    var html = '<div class="greeting"><h2>Backup &amp; data</h2>' +
-      '<p>Your CRM data lives in this browser only. Export a backup regularly — especially before clearing browser data or switching devices.</p></div>';
-    html += '<div class="backup-grid">' +
-      '<div class="card"><h3>📤 Export backup</h3><p>Downloads a JSON file with all ' + db.leads.length + " leads and " + db.activities.length + " logged updates. Keep it somewhere safe (e.g. Google Drive).</p><button class=\"btn primary\" data-action=\"export\">Download backup</button></div>" +
-      '<div class="card"><h3>📥 Restore backup</h3><p>Load a backup file. This replaces everything currently in the CRM.</p><button class="btn" data-action="import">Choose backup file…</button><input type="file" id="import-file" accept="application/json,.json" style="display:none"></div>' +
-      '<div class="card"><h3>🎨 Theme</h3><p>Follows your device by default.</p><div style="display:flex;gap:8px"><button class="btn small" data-theme-set="light">Light</button><button class="btn small" data-theme-set="dark">Dark</button><button class="btn small" data-theme-set="">Auto</button></div></div>' +
-      '<div class="card"><h3>🗑️ Start over</h3><p>Deletes all leads and history from this browser. Cannot be undone — export a backup first.</p><button class="btn danger" data-action="wipe">Delete everything</button></div>' +
+  // ===== settings =====
+  function renderSettings() {
+    var notifState = !("Notification" in window) ? "unsupported" : Notification.permission;
+    var html = '<div class="greeting"><h2>设置 · 备份</h2>' +
+      '<p>数据保存在这台设备的浏览器里。定期导出备份，换设备或清浏览器前一定要先备份。</p></div>';
+    html += '<div class="settings-grid">' +
+      '<div class="panel"><h3>🔔 主动提醒</h3><p>开启后，只要这个页面开着（或固定在手机主屏幕），有逾期跟进、今天到期、新线索冷却时，系统会直接弹通知给你。</p>' +
+      (notifState === "unsupported" ? '<p style="color:var(--amber)">这个浏览器不支持通知。</p>'
+        : notifState === "granted" ? '<p style="color:var(--green)">✓ 通知已开启 — 系统会主动提醒你。</p><button class="btn small" data-action="test-notif">发一条测试通知</button>'
+        : notifState === "denied" ? '<p style="color:var(--red)">通知被浏览器拦截了。请在浏览器设置里允许本站通知。</p>'
+        : '<button class="btn primary" data-action="enable-notif">开启浏览器通知</button>') +
+      '</div>' +
+      '<div class="panel"><h3>📤 导出备份</h3><p>下载一个 JSON 文件，包含全部 ' + db.leads.length + " 个线索和 " + db.activities.length + ' 条跟进记录。存去 Google Drive 最稳。</p><button class="btn primary" data-action="export">下载备份</button></div>' +
+      '<div class="panel"><h3>📥 恢复备份</h3><p>载入备份文件，会覆盖当前所有数据。</p><button class="btn" data-action="import">选择备份文件…</button><input type="file" id="import-file" accept="application/json,.json" style="display:none"></div>' +
+      '<div class="panel"><h3>🗑️ 全部清空</h3><p>删除这个浏览器里的所有线索和记录，无法恢复 — 请先导出备份。</p><button class="btn danger" data-action="wipe">全部删除</button></div>' +
       "</div>";
     $view.innerHTML = html;
   }
 
-  // ---------- dialogs ----------
+  // ===== briefing =====
+  function showBriefing() {
+    var focus = focusList();
+    var overdue = focus.filter(function (f) { return f.lead.next && f.lead.next.due && daysFromToday(f.lead.next.due) < 0; });
+    var dueToday = focus.filter(function (f) { return f.lead.next && f.lead.next.due && daysFromToday(f.lead.next.due) === 0; });
+    var coldNew = focus.filter(function (f) { return f.lead.stage === "New" && f.idle >= 1; });
+    var rotting = focus.filter(function (f) { return f.rotting && f.lead.stage !== "New"; });
+    var forecast = db.leads.filter(isActive).reduce(function (s, l) { return s + (Number(l.value) || 0) * (STAGE_PROB[l.stage] || 0); }, 0);
+
+    var b = "";
+    b += '<div class="b-row"><span class="b-num rd">' + overdue.length + '</span><span>项跟进<b style="color:var(--red)">逾期</b>' +
+      (overdue.length ? " — " + overdue.slice(0, 3).map(function (f) { return esc(f.lead.name); }).join("、") : "") + "</span></div>";
+    b += '<div class="b-row"><span class="b-num am">' + dueToday.length + '</span><span>项<b style="color:var(--amber)">今天到期</b>' +
+      (dueToday.length ? " — " + dueToday.slice(0, 3).map(function (f) { return esc(f.lead.name); }).join("、") : "") + "</span></div>";
+    if (coldNew.length) b += '<div class="b-row"><span class="b-num rd">' + coldNew.length + '</span><span>个新线索还没首次联系 — 速度就是成交率</span></div>';
+    if (rotting.length) b += '<div class="b-row"><span class="b-num am">' + rotting.length + '</span><span>个线索静默太久，快发臭了 — ' + rotting.slice(0, 3).map(function (f) { return esc(f.lead.name); }).join("、") + "</span></div>";
+    b += '<div class="b-row"><span class="b-num cy">' + (focus.length ? "P·" + focus[0].score : "—") + '</span><span>今日头号目标：' +
+      (focus.length ? "<b>" + esc(focus[0].lead.name) + "</b> — " + esc(focus[0].action) : "暂无") + "</span></div>";
+    b += '<div class="b-row"><span class="b-num gn">' + fmtRM(Math.round(forecast)).replace("RM ", "") + '</span><span>加权预测成交额（RM）</span></div>';
+    b += '<div style="padding-top:14px;text-align:right"><button class="btn primary" data-close>开工 →</button></div>';
+    document.getElementById("brief-body").innerHTML = b;
+    document.getElementById("dlg-brief").showModal();
+  }
+  function maybeAutoBrief() {
+    if (!db.leads.length) return;
+    var key = STORE_KEY + "_briefed";
+    if (localStorage.getItem(key) !== todayStr()) {
+      localStorage.setItem(key, todayStr());
+      setTimeout(showBriefing, 700);
+    }
+  }
+
+  // ===== notifications =====
+  function notify(title, body, tag) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    try { new Notification(title, { body: body, tag: tag }); } catch (e) {}
+  }
+  function runNotifier() {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    var logKey = STORE_KEY + "_notified";
+    var log = {};
+    try { log = JSON.parse(localStorage.getItem(logKey) || "{}"); } catch (e) {}
+    var today = todayStr();
+    var focus = focusList();
+    focus.forEach(function (f) {
+      var l = f.lead;
+      var key = null, title = null, body = null;
+      if (l.next && l.next.due && daysFromToday(l.next.due) < 0) {
+        key = "od_" + l.id + "_" + l.next.due;
+        title = "⚠️ 跟进逾期：" + l.name;
+        body = l.next.what + "（" + relDue(l.next.due) + "）";
+      } else if (l.next && l.next.due && daysFromToday(l.next.due) === 0) {
+        key = "dt_" + l.id + "_" + l.next.due;
+        title = "⏰ 今天到期：" + l.name;
+        body = l.next.what;
+      } else if (l.stage === "New" && f.idle >= 1) {
+        key = "nw_" + l.id;
+        title = "🚨 新线索冷却中：" + l.name;
+        body = "已 " + f.idle + " 天未联系 — 越快联系成交率越高";
+      }
+      if (key && log[key] !== today) {
+        notify(title, body, key);
+        log[key] = today;
+      }
+    });
+    localStorage.setItem(logKey, JSON.stringify(log));
+  }
+
+  // ===== clock =====
+  function tickClock() {
+    var d = new Date();
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    document.getElementById("clock").textContent =
+      pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+    var st = document.getElementById("sys-status");
+    var uc = urgentCount();
+    st.textContent = uc > 0 ? uc + " 项待处理" : "SYSTEM ONLINE";
+    st.style.color = uc > 0 ? "var(--amber)" : "";
+  }
+  setInterval(tickClock, 1000);
+  setInterval(runNotifier, 60000);
+
+  // ===== dialogs =====
   var dlgLead = document.getElementById("dlg-lead");
   var dlgAct = document.getElementById("dlg-activity");
   var dlgNext = document.getElementById("dlg-next");
+  var dlgBrief = document.getElementById("dlg-brief");
   var formLead = document.getElementById("form-lead");
   var formAct = document.getElementById("form-activity");
   var formNext = document.getElementById("form-next");
 
-  // populate stage selects
   document.querySelectorAll('select[name="stage"]').forEach(function (sel) {
-    sel.innerHTML = STAGES.map(function (s) { return "<option>" + s + "</option>"; }).join("");
+    sel.innerHTML = STAGES.map(function (s) { return '<option value="' + s + '">' + STAGE_ZH[s] + "</option>"; }).join("");
   });
 
   function openLeadDialog(existing) {
     formLead.reset();
-    document.getElementById("dlg-lead-title").textContent = existing ? "Edit lead" : "Add lead";
+    document.getElementById("dlg-lead-title").textContent = existing ? "编辑线索" : "新增线索";
     if (existing) {
       formLead.id.value = existing.id;
       formLead.name.value = existing.name;
@@ -811,7 +1108,7 @@
     dlgLead.close();
     if (!id) { state.view = "lead"; state.leadId = l.id; }
     render();
-    toast(id ? "Lead updated" : "Lead added ☀️");
+    toast(id ? "已更新" : "线索已加入 · 引擎已重新排序 ⚡");
   });
 
   function openActivityDialog(leadId) {
@@ -850,14 +1147,18 @@
     }
     var nw = formAct.nextWhat.value.trim();
     var nd = formAct.nextDue.value;
-    if (nw && nd) l.next = { what: nw, due: nd };
-    else if (nw && !nd) l.next = { what: nw, due: todayStr() };
+    if (nw) l.next = { what: nw, due: nd || todayStr() };
     if (!isActive(l)) l.next = null;
     l.updatedAt = new Date().toISOString();
     save();
     dlgAct.close();
     render();
-    toast("Update logged ✓");
+    if (isActive(l) && !(l.next && l.next.what)) {
+      toast("已记录 ✓ 建议顺手设一个下一步");
+      setTimeout(function () { openNextDialog(l.id); }, 500);
+    } else {
+      toast(l.stage === "Won" ? "🎉 恭喜成交！" : "已记录 ✓");
+    }
   });
 
   function openNextDialog(leadId) {
@@ -877,35 +1178,35 @@
     save();
     dlgNext.close();
     render();
-    toast("Next action set");
+    toast("下一步已锁定 »");
   });
 
-  [dlgLead, dlgAct, dlgNext].forEach(function (d) {
+  [dlgLead, dlgAct, dlgNext, dlgBrief].forEach(function (d) {
     d.addEventListener("click", function (e) {
       if (e.target.closest("[data-close]")) d.close();
       else if (e.target === d) d.close();
     });
   });
 
-  // ---------- toast ----------
+  // ===== toast =====
   var toastTimer;
   function toast(msg) {
     var t = document.getElementById("toast");
     t.textContent = msg;
     t.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2200);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2400);
   }
 
-  // ---------- backup ----------
+  // ===== backup =====
   function doExport() {
-    var blob = new Blob([JSON.stringify({ app: "prospek-cerah-crm", version: 1, exportedAt: new Date().toISOString(), data: db }, null, 2)], { type: "application/json" });
+    var blob = new Blob([JSON.stringify({ app: "prospek-cerah-crm", version: 2, exportedAt: new Date().toISOString(), data: db }, null, 2)], { type: "application/json" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "prospek-cerah-backup-" + todayStr() + ".json";
     a.click();
     URL.revokeObjectURL(a.href);
-    toast("Backup downloaded");
+    toast("备份已下载");
   }
   function doImport(file) {
     var r = new FileReader();
@@ -914,55 +1215,49 @@
         var parsed = JSON.parse(r.result);
         var data = parsed.data && parsed.data.leads ? parsed.data : (parsed.leads ? parsed : null);
         if (!data) throw new Error("bad format");
-        if (!confirm("Replace everything in the CRM with this backup?\n(" + data.leads.length + " leads, " + (data.activities || []).length + " updates)")) return;
+        if (!confirm("用这个备份覆盖当前全部数据？\n（" + data.leads.length + " 个线索，" + (data.activities || []).length + " 条记录）")) return;
         db = { leads: data.leads, activities: data.activities || [] };
         save(); render();
-        toast("Backup restored ✓");
+        toast("备份已恢复 ✓");
       } catch (err) {
-        alert("That file doesn't look like a Prospek Cerah backup. Nothing was changed.");
+        alert("这个文件不像是 Prospek Cerah 的备份，没有做任何更改。");
       }
     };
     r.readAsText(file);
   }
 
-  // ---------- sample data ----------
+  // ===== sample data =====
   function loadSample() {
     var t = todayStr();
-    function shift(days) {
-      var d = new Date(t + "T00:00:00"); d.setDate(d.getDate() + days);
-      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-    }
-    var s1 = { id: uid(), name: "Ahmad Faizal", company: "Faizal Trading", phone: "012-345 6789", email: "faizal@example.com", source: "Referral", stage: "Proposal", value: 12000, notes: "Referred by Pak Samad. Prefers WhatsApp.", next: { what: "Follow up on quotation", due: shift(-2) }, createdAt: new Date().toISOString() };
-    var s2 = { id: uid(), name: "Siti Nurhaliza", company: "SN Boutique", phone: "019-876 5432", email: "", source: "Walk-in", stage: "Meeting", value: 5500, notes: "", next: { what: "Prepare demo for second meeting", due: shift(0) }, createdAt: new Date().toISOString() };
-    var s3 = { id: uid(), name: "Lim Wei Sheng", company: "WS Logistics", phone: "016-222 1100", email: "ws@example.com", source: "Facebook / Instagram", stage: "Contacted", value: 30000, notes: "Big potential — expanding to Padang Besar warehouse.", next: { what: "Call to arrange site visit", due: shift(3) }, createdAt: new Date().toISOString() };
-    var s4 = { id: uid(), name: "Nurul Ain", company: "", phone: "013-555 0101", email: "", source: "WhatsApp", stage: "New", value: 2000, notes: "", next: null, createdAt: new Date().toISOString() };
+    var s1 = { id: uid(), name: "Ahmad Faizal", company: "Faizal Trading", phone: "012-345 6789", email: "faizal@example.com", source: "Referral", stage: "Proposal", value: 12000, notes: "Pak Samad 介绍的，喜欢用 WhatsApp。", next: { what: "跟进报价单", due: shiftStr(t, -2) }, createdAt: new Date().toISOString() };
+    var s2 = { id: uid(), name: "Siti Nurhaliza", company: "SN Boutique", phone: "019-876 5432", email: "", source: "Walk-in", stage: "Meeting", value: 5500, notes: "", next: { what: "准备第二次会面的演示", due: t }, createdAt: new Date().toISOString() };
+    var s3 = { id: uid(), name: "Lim Wei Sheng", company: "WS Logistics", phone: "016-222 1100", email: "ws@example.com", source: "Facebook / Instagram", stage: "Contacted", value: 30000, notes: "潜力很大 — 要在 Padang Besar 扩仓库。", next: { what: "打电话约实地考察", due: shiftStr(t, 3) }, createdAt: new Date().toISOString() };
+    var s4 = { id: uid(), name: "Nurul Ain", company: "", phone: "013-555 0101", email: "", source: "WhatsApp", stage: "New", value: 2000, notes: "", next: null, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() };
     db.leads.push(s1, s2, s3, s4);
     db.activities.push(
-      { id: uid(), leadId: s1.id, type: "Meeting", when: shift(-6), notes: "Met at his shop. Wants full package, asked for quotation.", createdAt: Date.now() - 3 },
-      { id: uid(), leadId: s1.id, type: "Email", when: shift(-4), notes: "Sent quotation RM12,000.", createdAt: Date.now() - 2 },
-      { id: uid(), leadId: s2.id, type: "Meeting", when: shift(-1), notes: "First meeting went well. She wants to see a demo.", createdAt: Date.now() - 1 }
+      { id: uid(), leadId: s1.id, type: "Meeting", when: shiftStr(t, -6), notes: "在他店里见面，要完整配套，请我们报价。", createdAt: Date.now() - 3 },
+      { id: uid(), leadId: s1.id, type: "Email", when: shiftStr(t, -4), notes: "已发报价 RM12,000。", createdAt: Date.now() - 2 },
+      { id: uid(), leadId: s2.id, type: "Meeting", when: shiftStr(t, -1), notes: "第一次会面很顺利，她想看演示。", createdAt: Date.now() - 1 }
     );
     save(); render();
-    toast("Sample data loaded — delete it anytime in Backup");
+    toast("示范数据已载入 — 随时可在设置里清空");
   }
 
-  // ---------- global click handling ----------
+  // ===== global events =====
   document.addEventListener("click", function (e) {
     var t;
-
+    if (e.target.closest("[data-stop]")) {
+      // quick-action buttons inside clickable cards: don't open the lead
+      if ((t = e.target.closest("[data-log-lead]"))) { e.stopPropagation(); openActivityDialog(t.dataset.logLead); return; }
+      return; // links (tel/wa) proceed normally
+    }
     if ((t = e.target.closest("[data-nav]"))) { state.view = t.dataset.nav; render(); return; }
     if ((t = e.target.closest("[data-nav-view]"))) { state.view = t.dataset.navView; render(); return; }
     if ((t = e.target.closest("[data-open-lead]"))) { state.view = "lead"; state.leadId = t.dataset.openLead; render(); return; }
     if ((t = e.target.closest("[data-chip]"))) { state.stageFilter = t.dataset.chip; renderLeads(); return; }
     if ((t = e.target.closest("[data-stage-jump]"))) { state.view = "leads"; state.stageFilter = t.dataset.stageJump; render(); return; }
-    if ((t = e.target.closest("[data-theme-set]"))) {
-      var v = t.dataset.themeSet;
-      if (v) { document.documentElement.dataset.theme = v; localStorage.setItem(STORE_KEY + "_theme", v); }
-      else { delete document.documentElement.dataset.theme; localStorage.removeItem(STORE_KEY + "_theme"); }
-      return;
-    }
     if ((t = e.target.closest("[data-del-activity]"))) {
-      if (confirm("Delete this history entry?")) {
+      if (confirm("删除这条记录？")) {
         db.activities = db.activities.filter(function (a) { return a.id !== t.dataset.delActivity; });
         save(); render();
       }
@@ -976,11 +1271,11 @@
     else if (act === "edit-lead") openLeadDialog(lead(state.leadId));
     else if (act === "delete-lead") {
       var l = lead(state.leadId);
-      if (l && confirm("Delete " + l.name + " and all their history? This cannot be undone.")) {
+      if (l && confirm("删除 " + l.name + " 和全部跟进历史？无法恢复。")) {
         db.leads = db.leads.filter(function (x) { return x.id !== l.id; });
         db.activities = db.activities.filter(function (a) { return a.leadId !== l.id; });
         save(); state.view = "leads"; render();
-        toast("Lead deleted");
+        toast("已删除");
       }
     }
     else if (act === "log-activity") openActivityDialog(state.leadId);
@@ -988,24 +1283,31 @@
     else if (act === "done-next") {
       var ld = lead(state.leadId);
       if (ld && ld.next) {
-        db.activities.push({ id: uid(), leadId: ld.id, type: "System", when: todayStr(), notes: "Completed: " + ld.next.what, createdAt: Date.now() });
+        db.activities.push({ id: uid(), leadId: ld.id, type: "System", when: todayStr(), notes: "完成：" + ld.next.what, createdAt: Date.now() });
         ld.next = null;
         save(); render();
-        toast("Nice — done ✓ Now set the next step.");
+        toast("漂亮 ✓ 顺手锁定下一步");
         openNextDialog(ld.id);
       }
     }
+    else if (act === "brief") showBriefing();
     else if (act === "export") doExport();
     else if (act === "import") document.getElementById("import-file").click();
     else if (act === "wipe") {
-      if (confirm("Delete ALL leads and history from this browser? Export a backup first if unsure.") &&
-          confirm("Really delete everything? This cannot be undone.")) {
+      if (confirm("删除这个浏览器里的全部数据？建议先导出备份。") && confirm("真的全部删除？无法恢复。")) {
         db = { leads: [], activities: [] };
         save(); render();
-        toast("All data deleted");
+        toast("已清空");
       }
     }
     else if (act === "sample") loadSample();
+    else if (act === "enable-notif") {
+      Notification.requestPermission().then(function (p) {
+        render();
+        if (p === "granted") { notify("🔔 Prospek Cerah 提醒已开启", "有需要跟进的事，系统会主动叫你。", "welcome"); runNotifier(); }
+      });
+    }
+    else if (act === "test-notif") notify("🛰️ 测试通知", "收到了？系统运作正常。", "test");
   });
 
   document.addEventListener("change", function (e) {
@@ -1015,11 +1317,10 @@
     }
   });
 
-  // restore theme preference
-  var savedTheme = localStorage.getItem(STORE_KEY + "_theme");
-  if (savedTheme) document.documentElement.dataset.theme = savedTheme;
-
+  tickClock();
   render();
+  maybeAutoBrief();
+  runNotifier();
 })();
 </script>
 <!-- ARTIFACT-BODY-END -->
