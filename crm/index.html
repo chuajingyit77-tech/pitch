@@ -1311,7 +1311,7 @@
   // ===== cloud sync (Supabase) =====
   var CLOUD_DEFAULT = {
     url: "https://snmooeroilxegvtzuloc.supabase.co",
-    key: "" // filled in once the cloud project is provisioned
+    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNubW9vZXJvaWx4ZWd2dHp1bG9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MTYwMTYsImV4cCI6MjEwMTA5MjAxNn0.CxqSTKg--8u5a2qiGkn8LpDsz2IawYWFgiSm0VZff98" // public anon key — safe to ship, RLS protects data
   };
   var cloud = { cfg: null, session: null, lastEmail: "", lastSyncAt: null, pushTimer: null };
   var cloudRev = localStorage.getItem(STORE_KEY + "_rev") || "";
