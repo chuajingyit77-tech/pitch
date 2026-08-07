@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Prospek Cerah · 指挥中心</title>
+<meta name="theme-color" content="#05080F">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Prospek Cerah">
 </head>
 <body>
 <!-- ARTIFACT-BODY-START -->
@@ -93,6 +100,21 @@
   }
   @keyframes pulse { 50% { opacity: 0.35; } }
   .sys .clock { font-variant-numeric: tabular-nums; letter-spacing: 0.08em; color: var(--ink); }
+  .cloud-chip {
+    border: 1px solid var(--line); background: transparent; color: var(--dim);
+    font: 600 11px var(--mono); padding: 4px 10px; border-radius: 999px; cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  .cloud-chip:hover { border-color: var(--line-bright); color: var(--ink); }
+  .cloud-chip.ok { color: var(--green); border-color: rgba(61,220,151,0.4); }
+  .cloud-chip.busy { color: var(--amber); border-color: rgba(255,180,84,0.4); }
+  .cloud-chip.err { color: var(--red); border-color: rgba(255,107,107,0.4); }
+  .cloud-form { display: flex; flex-direction: column; gap: 8px; }
+  .cloud-form input {
+    padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink); font: 14px var(--sans); color-scheme: dark;
+  }
+  .cloud-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   nav.tabs { display: flex; gap: 4px; width: 100%; border-bottom: 1px solid var(--line); padding-bottom: 0; }
   .navbtn {
     border: none; background: transparent; color: var(--dim); cursor: pointer;
@@ -408,6 +430,7 @@
       </div>
     </div>
     <div class="sys">
+      <button class="cloud-chip" id="cloud-chip" data-nav="settings" title="云同步状态">☁️ <span id="cloud-status">本机模式</span></button>
       <span class="dot" aria-hidden="true"></span>
       <span id="sys-status">SYSTEM ONLINE</span>
       <span class="clock" id="clock">--:--:--</span>
@@ -536,7 +559,14 @@
     } catch (e) {}
     return { leads: [], activities: [] };
   }
-  function save() { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
+  function save(fromCloud) {
+    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    if (!fromCloud) {
+      cloudRev = new Date().toISOString();
+      localStorage.setItem(STORE_KEY + "_rev", cloudRev);
+      schedulePush();
+    }
+  }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
   // ===== date & format helpers =====
@@ -921,8 +951,9 @@
         html += '<div class="next-box' + (od ? " overdue" : "") + '">' +
           '<span>» <span class="what">' + esc(l.next.what) + '</span><span class="due">' +
           fmtDate(l.next.due) + " · " + relDue(l.next.due) + '</span></span>' +
-          '<span style="margin-left:auto;display:flex;gap:6px">' +
+          '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">' +
           '<button class="btn small" data-action="done-next">✓ 完成</button>' +
+          '<button class="btn small" data-action="ics" title="下载日历提醒，手机日历会在到期时叫你">📅 加日历</button>' +
           '<button class="btn small ghost" data-action="set-next">修改</button></span></div>';
       } else {
         html += '<div class="suggest"><span class="s-lbl">系统建议 // NEXT BEST ACTION</span>' +
@@ -954,18 +985,52 @@
   function renderSettings() {
     var notifState = !("Notification" in window) ? "unsupported" : Notification.permission;
     var html = '<div class="greeting"><h2>设置 · 备份</h2>' +
-      '<p>数据保存在这台设备的浏览器里。定期导出备份，换设备或清浏览器前一定要先备份。</p></div>';
-    html += '<div class="settings-grid">' +
-      '<div class="panel"><h3>🔔 主动提醒</h3><p>开启后，只要这个页面开着（或固定在手机主屏幕），有逾期跟进、今天到期、新线索冷却时，系统会直接弹通知给你。</p>' +
+      '<p>本机数据实时保存；开启云同步后自动备份到云端，换设备登录即可取回。</p></div>';
+    html += '<div class="settings-grid">';
+
+    // cloud sync
+    html += '<div class="panel"><h3>☁️ 云同步</h3>';
+    if (!cloudConfigured()) {
+      html += '<p>云端项目（Supabase）还没接通。接通后：每次改动自动上传，手机和电脑数据保持一致。</p>' +
+        '<p style="color:var(--amber)">状态：等待云端项目唤醒。</p>';
+    } else if (!cloud.session) {
+      html += '<p>输入邮箱和密码登录（第一次会自动注册），登录后数据自动同步。</p>' +
+        '<div class="cloud-form">' +
+        '<input id="cl-email" type="email" placeholder="邮箱" autocomplete="username" value="' + esc(cloud.lastEmail || "") + '">' +
+        '<input id="cl-pass" type="password" placeholder="密码（至少 8 位）" autocomplete="current-password">' +
+        '<div class="cloud-row"><button class="btn primary" data-action="cloud-login">登录 / 注册</button>' +
+        '<span id="cl-msg" style="font-size:12.5px;color:var(--dim)"></span></div></div>';
+    } else {
+      html += '<p style="color:var(--green)">✓ 已登录：' + esc(cloud.session.email || "") + '</p>' +
+        '<p id="cl-msg" style="font-size:12.5px">' + (cloud.lastSyncAt ? "上次同步：" + cloud.lastSyncAt : "尚未同步") + '</p>' +
+        '<div class="cloud-row"><button class="btn primary" data-action="cloud-sync-now">立即同步</button>' +
+        '<button class="btn ghost small" data-action="cloud-logout">退出登录</button></div>';
+    }
+    html += '</div>';
+
+    // install
+    html += '<div class="panel"><h3>📱 安装到手机</h3><p>用手机浏览器打开本系统的网址：<br>' +
+      '<b>Android (Chrome)</b>：右上角菜单 → 「安装应用 / 加到主屏幕」<br>' +
+      '<b>iPhone (Safari)</b>：分享按钮 → 「加入主画面」<br>' +
+      '装好后有独立图标、全屏运行、断网也能开。</p></div>';
+
+    // notifications
+    html += '<div class="panel"><h3>🔔 主动提醒</h3><p>开启后，只要这个页面开着（或已安装到主屏幕），有逾期跟进、今天到期、新线索冷却时，系统会直接弹通知。</p>' +
       (notifState === "unsupported" ? '<p style="color:var(--amber)">这个浏览器不支持通知。</p>'
         : notifState === "granted" ? '<p style="color:var(--green)">✓ 通知已开启 — 系统会主动提醒你。</p><button class="btn small" data-action="test-notif">发一条测试通知</button>'
         : notifState === "denied" ? '<p style="color:var(--red)">通知被浏览器拦截了。请在浏览器设置里允许本站通知。</p>'
         : '<button class="btn primary" data-action="enable-notif">开启浏览器通知</button>') +
-      '</div>' +
-      '<div class="panel"><h3>📤 导出备份</h3><p>下载一个 JSON 文件，包含全部 ' + db.leads.length + " 个线索和 " + db.activities.length + ' 条跟进记录。存去 Google Drive 最稳。</p><button class="btn primary" data-action="export">下载备份</button></div>' +
+      '</div>';
+
+    // csv import
+    html += '<div class="panel"><h3>📇 批量导入客户 (CSV)</h3><p>把现有客户名单（Excel 里另存为 CSV）一次导入。识别列名：name/姓名、company/公司、phone/电话、email、value/价值、source/来源。</p>' +
+      '<button class="btn" data-action="csv-import">选择 CSV 文件…</button><input type="file" id="csv-file" accept=".csv,text/csv" style="display:none"></div>';
+
+    // backup
+    html += '<div class="panel"><h3>📤 导出备份</h3><p>下载 JSON 文件，含全部 ' + db.leads.length + " 个线索和 " + db.activities.length + ' 条记录。存去 Google Drive 最稳。</p><button class="btn primary" data-action="export">下载备份</button></div>' +
       '<div class="panel"><h3>📥 恢复备份</h3><p>载入备份文件，会覆盖当前所有数据。</p><button class="btn" data-action="import">选择备份文件…</button><input type="file" id="import-file" accept="application/json,.json" style="display:none"></div>' +
-      '<div class="panel"><h3>🗑️ 全部清空</h3><p>删除这个浏览器里的所有线索和记录，无法恢复 — 请先导出备份。</p><button class="btn danger" data-action="wipe">全部删除</button></div>' +
-      "</div>";
+      '<div class="panel"><h3>🗑️ 全部清空</h3><p>删除这个浏览器里的所有线索和记录，无法恢复 — 请先导出备份。</p><button class="btn danger" data-action="wipe">全部删除</button></div>';
+    html += "</div>";
     $view.innerHTML = html;
   }
 
@@ -1243,6 +1308,235 @@
     toast("示范数据已载入 — 随时可在设置里清空");
   }
 
+  // ===== cloud sync (Supabase) =====
+  var CLOUD_DEFAULT = {
+    url: "https://snmooeroilxegvtzuloc.supabase.co",
+    key: "" // filled in once the cloud project is provisioned
+  };
+  var cloud = { cfg: null, session: null, lastEmail: "", lastSyncAt: null, pushTimer: null };
+  var cloudRev = localStorage.getItem(STORE_KEY + "_rev") || "";
+  (function initCloud() {
+    try { cloud.cfg = Object.assign({}, CLOUD_DEFAULT, JSON.parse(localStorage.getItem(STORE_KEY + "_cloudcfg") || "{}")); }
+    catch (e) { cloud.cfg = Object.assign({}, CLOUD_DEFAULT); }
+    try { cloud.session = JSON.parse(localStorage.getItem(STORE_KEY + "_session") || "null"); } catch (e) { cloud.session = null; }
+    cloud.lastEmail = localStorage.getItem(STORE_KEY + "_email") || "";
+  })();
+  function cloudConfigured() { return !!(cloud.cfg && cloud.cfg.url && cloud.cfg.key); }
+  function saveSession() {
+    if (cloud.session) localStorage.setItem(STORE_KEY + "_session", JSON.stringify(cloud.session));
+    else localStorage.removeItem(STORE_KEY + "_session");
+  }
+  function setChip(cls, txt) {
+    var chip = document.getElementById("cloud-chip");
+    var st = document.getElementById("cloud-status");
+    if (!chip || !st) return;
+    chip.className = "cloud-chip" + (cls ? " " + cls : "");
+    st.textContent = txt;
+  }
+  function updateChip() {
+    if (!cloudConfigured()) setChip("", "本机模式");
+    else if (!cloud.session) setChip("err", "云端未登录");
+    else if (cloud.lastSyncAt) setChip("ok", "已同步 " + cloud.lastSyncAt);
+    else setChip("busy", "已登录");
+  }
+  function authHeaders() {
+    return { "apikey": cloud.cfg.key, "Authorization": "Bearer " + cloud.session.access_token, "Content-Type": "application/json" };
+  }
+  function refreshIfNeeded() {
+    if (!cloud.session) return Promise.reject(new Error("no session"));
+    if (Date.now() < (cloud.session.expires_at || 0) - 60000) return Promise.resolve();
+    return fetch(cloud.cfg.url + "/auth/v1/token?grant_type=refresh_token", {
+      method: "POST", headers: { "apikey": cloud.cfg.key, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: cloud.session.refresh_token })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.access_token) { cloud.session = null; saveSession(); updateChip(); throw new Error("session expired"); }
+      adoptTokens(j);
+    });
+  }
+  function adoptTokens(j) {
+    var uid = "";
+    try { uid = JSON.parse(atob(j.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).sub || ""; } catch (e) {}
+    cloud.session = {
+      access_token: j.access_token, refresh_token: j.refresh_token,
+      expires_at: Date.now() + (j.expires_in || 3600) * 1000,
+      email: (j.user && j.user.email) || (cloud.session && cloud.session.email) || "",
+      uid: uid || (j.user && j.user.id) || (cloud.session && cloud.session.uid) || ""
+    };
+    saveSession();
+  }
+  function cloudLogin(email, password, msgEl) {
+    function say(t, c) { if (msgEl) { msgEl.textContent = t; msgEl.style.color = c || "var(--dim)"; } }
+    say("连接云端中…");
+    return fetch(cloud.cfg.url + "/auth/v1/token?grant_type=password", {
+      method: "POST", headers: { "apikey": cloud.cfg.key, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email, password: password })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.j.access_token) {
+          adoptTokens(res.j);
+          localStorage.setItem(STORE_KEY + "_email", email);
+          toast("云同步已连接 ☁️");
+          return syncNow().then(function () { render(); });
+        }
+        // no account yet -> try sign up
+        return fetch(cloud.cfg.url + "/auth/v1/signup", {
+          method: "POST", headers: { "apikey": cloud.cfg.key, "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email, password: password })
+        }).then(function (r2) { return r2.json().then(function (j2) { return { ok: r2.ok, j: j2 }; }); })
+          .then(function (res2) {
+            if (res2.ok && res2.j.access_token) {
+              adoptTokens(res2.j);
+              localStorage.setItem(STORE_KEY + "_email", email);
+              toast("账号已创建，云同步已连接 ☁️");
+              return syncNow().then(function () { render(); });
+            }
+            if (res2.ok && res2.j.user) { say("账号已创建 — 去邮箱点确认信，然后回来再按一次登录。", "var(--amber)"); return; }
+            var m = (res2.j && (res2.j.msg || res2.j.message || res2.j.error_description)) || (res.j && (res.j.msg || res.j.message || res.j.error_description)) || "登录失败";
+            say(m, "var(--red)");
+          });
+      }).catch(function () { say("连不上云端 — 检查网络，或云端项目还在唤醒中。", "var(--red)"); });
+  }
+  function pullCloud() {
+    return refreshIfNeeded().then(function () {
+      return fetch(cloud.cfg.url + "/rest/v1/crm_state?select=data,updated_at", { headers: authHeaders() });
+    }).then(function (r) {
+      if (!r.ok) throw new Error("pull " + r.status);
+      return r.json();
+    }).then(function (rows) {
+      var row = rows && rows[0];
+      if (row && row.updated_at && (!cloudRev || row.updated_at > cloudRev)) {
+        if (row.data && row.data.leads) {
+          db = { leads: row.data.leads, activities: row.data.activities || [] };
+          cloudRev = row.updated_at;
+          localStorage.setItem(STORE_KEY + "_rev", cloudRev);
+          save(true);
+          render();
+        }
+      } else if (cloudRev && (!row || row.updated_at < cloudRev)) {
+        return pushCloud();
+      }
+    });
+  }
+  function pushCloud() {
+    return refreshIfNeeded().then(function () {
+      var h = authHeaders();
+      h["Prefer"] = "resolution=merge-duplicates,return=minimal";
+      return fetch(cloud.cfg.url + "/rest/v1/crm_state", {
+        method: "POST", headers: h,
+        body: JSON.stringify([{ user_id: cloud.session.uid, data: db, updated_at: cloudRev || new Date().toISOString() }])
+      });
+    }).then(function (r) { if (!r.ok) throw new Error("push " + r.status); });
+  }
+  function syncNow() {
+    if (!cloudConfigured() || !cloud.session) { updateChip(); return Promise.resolve(); }
+    setChip("busy", "同步中…");
+    return pullCloud().then(function () {
+      var d = new Date();
+      cloud.lastSyncAt = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+      updateChip();
+      var m = document.getElementById("cl-msg");
+      if (m) m.textContent = "上次同步：" + cloud.lastSyncAt;
+    }).catch(function () { setChip("err", "同步失败"); });
+  }
+  function schedulePush() {
+    if (!cloudConfigured() || !cloud.session) return;
+    clearTimeout(cloud.pushTimer);
+    setChip("busy", "同步中…");
+    cloud.pushTimer = setTimeout(function () {
+      pushCloud().then(function () {
+        var d = new Date();
+        cloud.lastSyncAt = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+        updateChip();
+      }).catch(function () { setChip("err", "同步失败"); });
+    }, 1500);
+  }
+
+  // ===== CSV import =====
+  function parseCSV(text) {
+    var rows = [], row = [], cell = "", inQ = false;
+    text = text.replace(/^﻿/, "");
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (inQ) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+        else cell += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ",") { row.push(cell); cell = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell); cell = "";
+        if (row.some(function (c) { return c.trim() !== ""; })) rows.push(row);
+        row = [];
+      } else cell += ch;
+    }
+    row.push(cell);
+    if (row.some(function (c) { return c.trim() !== ""; })) rows.push(row);
+    return rows;
+  }
+  function importCSV(file) {
+    var r = new FileReader();
+    r.onload = function () {
+      var rows = parseCSV(String(r.result));
+      if (rows.length < 2) { alert("CSV 里没有数据行。第一行要是列名，如：name,phone,company"); return; }
+      var head = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+      function col(keys) {
+        for (var i = 0; i < head.length; i++) {
+          for (var k = 0; k < keys.length; k++) if (head[i].indexOf(keys[k]) >= 0) return i;
+        }
+        return -1;
+      }
+      var ci = {
+        name: col(["name", "姓名", "客户"]), company: col(["company", "公司"]),
+        phone: col(["phone", "电话", "手机", "tel", "whatsapp"]), email: col(["email", "邮箱", "mail"]),
+        value: col(["value", "价值", "金额", "amount"]), source: col(["source", "来源"])
+      };
+      if (ci.name < 0) { alert("找不到姓名列 — 第一行需要有 name 或 姓名。"); return; }
+      var added = 0;
+      var newLeads = [];
+      rows.slice(1).forEach(function (row) {
+        var nm = (row[ci.name] || "").trim();
+        if (!nm) return;
+        newLeads.push({
+          id: uid(), name: nm,
+          company: ci.company >= 0 ? (row[ci.company] || "").trim() : "",
+          phone: ci.phone >= 0 ? (row[ci.phone] || "").trim() : "",
+          email: ci.email >= 0 ? (row[ci.email] || "").trim() : "",
+          value: ci.value >= 0 ? (Number(String(row[ci.value]).replace(/[^\d.]/g, "")) || 0) : 0,
+          source: ci.source >= 0 ? (row[ci.source] || "Other").trim() : "Other",
+          stage: "New", notes: "", next: null, createdAt: new Date().toISOString()
+        });
+        added++;
+      });
+      if (!added) { alert("没有可导入的行。"); return; }
+      if (!confirm("导入 " + added + " 个客户为「新线索」？")) return;
+      db.leads = db.leads.concat(newLeads);
+      save(); render();
+      toast("已导入 " + added + " 个客户 ⚡");
+    };
+    r.readAsText(file);
+  }
+
+  // ===== calendar (.ics) export =====
+  function downloadICS(l) {
+    if (!l.next || !l.next.due) return;
+    var d = l.next.due.replace(/-/g, "");
+    var summary = "跟进 " + l.name + (l.next.what ? " — " + l.next.what : "");
+    var ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Prospek Cerah CRM//ZH",
+      "BEGIN:VEVENT", "UID:" + l.id + "-" + d + "@prospekcerah",
+      "DTSTART:" + d + "T090000", "DTEND:" + d + "T093000",
+      "SUMMARY:" + summary.replace(/([,;])/g, "\\$1"),
+      "DESCRIPTION:" + ("Prospek Cerah CRM" + (l.phone ? " · " + l.phone : "")).replace(/([,;])/g, "\\$1"),
+      "BEGIN:VALARM", "TRIGGER:-PT0M", "ACTION:DISPLAY", "DESCRIPTION:" + summary.replace(/([,;])/g, "\\$1"), "END:VALARM",
+      "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    var blob = new Blob([ics], { type: "text/calendar" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "followup-" + l.name.replace(/\s+/g, "-") + ".ics";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast("已下载日历提醒 — 打开它加入手机日历");
+  }
+
   // ===== global events =====
   document.addEventListener("click", function (e) {
     var t;
@@ -1301,6 +1595,20 @@
       }
     }
     else if (act === "sample") loadSample();
+    else if (act === "ics") { var li = lead(state.leadId); if (li) downloadICS(li); }
+    else if (act === "csv-import") document.getElementById("csv-file").click();
+    else if (act === "cloud-login") {
+      var em = (document.getElementById("cl-email") || {}).value || "";
+      var pw = (document.getElementById("cl-pass") || {}).value || "";
+      var msgEl = document.getElementById("cl-msg");
+      if (!em || !pw) { if (msgEl) { msgEl.textContent = "邮箱和密码都要填。"; msgEl.style.color = "var(--red)"; } return; }
+      cloudLogin(em.trim(), pw, msgEl);
+    }
+    else if (act === "cloud-sync-now") syncNow();
+    else if (act === "cloud-logout") {
+      cloud.session = null; saveSession(); updateChip(); render();
+      toast("已退出云同步（本机数据保留）");
+    }
     else if (act === "enable-notif") {
       Notification.requestPermission().then(function (p) {
         render();
@@ -1315,12 +1623,23 @@
       doImport(e.target.files[0]);
       e.target.value = "";
     }
+    if (e.target && e.target.id === "csv-file" && e.target.files[0]) {
+      importCSV(e.target.files[0]);
+      e.target.value = "";
+    }
   });
+
+  // offline support (works when served over https, e.g. the installed app)
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    try { navigator.serviceWorker.register("sw.js").catch(function () {}); } catch (e) {}
+  }
 
   tickClock();
   render();
+  updateChip();
   maybeAutoBrief();
   runNotifier();
+  if (cloudConfigured() && cloud.session) syncNow();
 })();
 </script>
 <!-- ARTIFACT-BODY-END -->
