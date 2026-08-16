@@ -1,0 +1,355 @@
+<title>Physical Verification Layer</title>
+<style>
+/* ============================================================
+   Two-page executive brief — the leave-behind.
+   Designed for A4 print first, screen second. Ink on paper:
+   the palette is the command centre's, inverted for print.
+   ============================================================ */
+:root {
+  color-scheme: light;
+  --paper:    #FFFFFF;
+  --wash:     #F4F7F6;
+  --ink:      #0C1A1D;
+  --ink-2:    #3E5457;
+  --ink-3:    #74898B;
+  --hair:     #D6E0DF;
+  --accent:   #12484F;   /* deep ink-teal, the brand */
+  --blue:     #205FA8;
+  --good:     #0A7A18;
+  --alarm:    #B3302F;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--wash);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.sheet {
+  background: var(--paper);
+  width: 210mm;
+  min-height: 297mm;
+  margin: 12mm auto;
+  padding: 16mm 18mm 12mm;
+  box-shadow: 0 2px 18px rgba(12, 26, 29, .10);
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+}
+.sheet:last-child { page-break-after: auto; }
+
+h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -0.012em; text-wrap: balance; }
+h1 { font-size: 20pt; line-height: 1.15; color: var(--accent); }
+h2 {
+  font-size: 8pt; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); padding-bottom: 5px; border-bottom: 1px solid var(--hair);
+  margin: 0 0 10px;
+}
+h3 { font-size: 11pt; margin-bottom: 3px; }
+p { margin: 0 0 9px; }
+.lede { font-size: 11.5pt; line-height: 1.5; color: var(--ink-2); }
+
+header.masthead {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding-bottom: 11px; border-bottom: 2px solid var(--accent); margin-bottom: 16px;
+}
+header.masthead .who { margin-left: auto; text-align: right; font-size: 7.5pt; color: var(--ink-3); line-height: 1.55; }
+.kicker { font-size: 8pt; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue); margin-bottom: 5px; }
+
+section { margin-bottom: 15px; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 22px; }
+.cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px 18px; }
+
+.pull {
+  border-left: 3px solid var(--alarm);
+  padding: 8px 0 8px 13px;
+  margin: 12px 0;
+  font-size: 11.5pt; line-height: 1.45;
+}
+.pull b { color: var(--alarm); }
+.pull.calm { border-left-color: var(--accent); }
+.pull.calm b { color: var(--accent); }
+
+table { border-collapse: collapse; width: 100%; font-size: 9pt; }
+th {
+  text-align: left; font-size: 7.5pt; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+  padding: 0 8px 5px 0; border-bottom: 1px solid var(--hair); white-space: nowrap;
+}
+td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 0; padding-left: 10px; }
+th.n { padding-right: 0; padding-left: 10px; }
+.tot td { font-weight: 700; border-top: 1.5px solid var(--ink); border-bottom: 0; }
+
+ul, ol { margin: 0 0 9px; padding-left: 16px; }
+li { margin-bottom: 3px; }
+
+.stat { border-top: 2px solid var(--accent); padding-top: 7px; }
+.stat .v { font-size: 19pt; font-weight: 650; line-height: 1; letter-spacing: -0.03em; }
+.stat .v small { font-size: 10pt; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
+.stat .l { font-size: 8pt; color: var(--ink-2); margin-top: 3px; line-height: 1.35; }
+
+.mods { font-size: 9pt; }
+.mods div { display: grid; grid-template-columns: 26px 1fr; gap: 7px; padding: 3px 0; border-bottom: 1px solid var(--hair); }
+.mods span.c { font-weight: 700; color: var(--blue); font-variant-numeric: tabular-nums; }
+
+.phase { border-top: 1px solid var(--hair); padding-top: 7px; }
+.phase .w { font-size: 7.5pt; font-weight: 700; letter-spacing: 0.1em; color: var(--blue); }
+.phase p { font-size: 8.5pt; color: var(--ink-2); margin: 3px 0 0; }
+
+.ask { background: var(--wash); border-left: 3px solid var(--accent); padding: 11px 14px; }
+.ask ol { margin: 6px 0 0; padding-left: 17px; font-size: 10pt; }
+
+footer.note {
+  margin-top: auto; padding-top: 7px;
+  border-top: 1px solid var(--hair);
+  font-size: 7pt; color: var(--ink-3); display: flex; gap: 14px;
+}
+footer.note .r { margin-left: auto; }
+section:last-of-type, .ask { margin-bottom: 14px; }
+
+@media print {
+  body { background: #fff; font-size: 9.3pt; }
+  @page { size: A4; margin: 0; }
+  .sheet { margin: 0; box-shadow: none; width: auto; min-height: 285mm; padding: 13mm 15mm 9mm; }
+  section { margin-bottom: 11px; }
+  p { margin-bottom: 7px; }
+  li { margin-bottom: 2px; }
+  .lede { font-size: 10.5pt; }
+  .pull { font-size: 10.5pt; margin: 10px 0; }
+  h2 { margin-bottom: 8px; padding-bottom: 4px; }
+  td { padding-top: 4px; padding-bottom: 4px; }
+  .ask { padding: 9px 13px; }
+}
+@media (max-width: 230mm) {
+  .sheet { width: auto; margin: 0; padding: 20px; box-shadow: none; min-height: 0; }
+}
+</style>
+
+<!-- ══════════════════════ PAGE 1 ══════════════════════ -->
+<div class="sheet">
+  <header class="masthead">
+    <div>
+      <div class="kicker">Executive brief · Concept summary</div>
+      <h1>A physical verification layer<br>for the credit book</h1>
+    </div>
+    <div class="who">
+      Prepared for<br><b>AFFIN Bank Berhad</b><br>
+      August 2026<br>
+      Commercial in confidence
+    </div>
+  </header>
+
+  <p class="lede">
+    A bank can see every ringgit it has released. It cannot see the building that ringgit was
+    supposed to become. This proposal closes that gap — continuously, at portfolio scale, without
+    a site visit — and then points the same infrastructure at the bank's own property costs.
+  </p>
+
+  <div class="pull">
+    <b>The problem in one sentence:</b> on a typical construction facility, money is released
+    against a progress claim that nobody independently measures. Drawdown runs ahead of the
+    structure that secures it, and the bank finds out when the borrower stops paying.
+  </div>
+
+  <section>
+    <h2>What is missing today</h2>
+    <div class="cols3">
+      <div class="stat">
+        <div class="v">8<small>%</small></div>
+        <div class="l">Typical share of the secured book physically inspected in a given year — the rest is sampled or self-reported.</div>
+      </div>
+      <div class="stat">
+        <div class="v">3–5<small> days</small></div>
+        <div class="l">Turnaround for a single valuation site visit, at RM 3,000–5,000 per instruction.</div>
+      </div>
+      <div class="stat">
+        <div class="v">T+1<small> quarter</small></div>
+        <div class="l">Typical lag between a physical change on a site and the credit file reflecting it.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What we propose to build</h2>
+    <p>
+      One platform, thirteen modules, delivered in phases. Group B modules protect the credit book.
+      Group A modules take cost out of the bank's own premises using the same drones, sensors,
+      GIS and computer-vision infrastructure — which is why the operating savings can fund the
+      risk platform rather than competing with it for budget.
+    </p>
+    <div class="cols" style="gap:6px 22px">
+      <div class="mods">
+        <div><span class="c">B1</span><span>Construction loan early warning — drawdown vs verified progress</span></div>
+        <div><span class="c">B2</span><span>Distressed and abandoned project disposal</span></div>
+        <div><span class="c">B3</span><span>Continuous collateral monitoring and revaluation</span></div>
+        <div><span class="c">B4</span><span>Risk capital measurement and RWA optimisation</span></div>
+        <div><span class="c">B5</span><span>Fraud and anomalous behaviour detection</span></div>
+      </div>
+      <div class="mods">
+        <div><span class="c">A1</span><span>Building inspection by drone and AI defect classification</span></div>
+        <div><span class="c">A2</span><span>Property energy management</span></div>
+        <div><span class="c">A3</span><span>Predictive maintenance of critical plant</span></div>
+        <div><span class="c">A4</span><span>Branch network optimisation on GIS catchments</span></div>
+        <div><span class="c">A5</span><span>Physical security and surveillance</span></div>
+        <div><span class="c">A6</span><span>ATM anti-tamper monitoring</span></div>
+        <div><span class="c">A7</span><span>Collateral revaluation by aerial survey</span></div>
+        <div><span class="c">A8</span><span>Property insurance premium negotiation</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The single example worth remembering</h2>
+    <p>
+      A RM 240 m development facility. Cumulative drawdown stands at <b>61.7%</b>. An aerial survey
+      registered against the BIM model measures the structure at <b>47.3%</b> complete, to ±1.8
+      percentage points. The bank has advanced <b>RM 34.6 m</b> against work that does not yet exist.
+      The gap opened six months earlier and widened every month — invisible in every report the
+      bank currently receives, and unambiguous the moment it is measured.
+    </p>
+    <p style="margin-bottom:0">
+      Detecting one such position a year, on one facility, pays for the entire programme.
+    </p>
+  </section>
+
+  <footer class="note">
+    <span>Executive brief · A physical verification layer for the credit book</span>
+    <span class="r">Page 1 of 2 · Commercial in confidence</span>
+  </footer>
+</div>
+
+<!-- ══════════════════════ PAGE 2 ══════════════════════ -->
+<div class="sheet">
+  <section>
+    <h2>What it is worth</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Value pool</th>
+          <th>Where it comes from</th>
+          <th class="n">RM m / year</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>Operating cost saved</b></td>
+          <td>Modules A1–A8 against RM 268 m of addressable property, facilities, security and valuation spend across 150 branches</td>
+          <td class="n">45 – 63</td>
+        </tr>
+        <tr>
+          <td><b>Credit loss avoided</b></td>
+          <td>Modules B1–B3 and B5, at a 25–35% reduction in impairment on an RM 8.2 b construction and development book</td>
+          <td class="n">13 – 19</td>
+        </tr>
+        <tr>
+          <td><b>Capital efficiency</b></td>
+          <td>Module B4 — faster, evidence-backed re-rating releases risk-weighted assets</td>
+          <td class="n">6 – 9</td>
+        </tr>
+        <tr class="tot">
+          <td>Total annual value at steady state</td>
+          <td></td>
+          <td class="n">64 – 91</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:8pt;color:var(--ink-3);margin-top:7px">
+      Modelled on public benchmarks and delivered reference projects, then scaled to a bank of AFFIN's
+      branch count and book composition. Every line is re-based on the bank's own general ledger during
+      discovery and re-issued before anything is signed. Indicative three-year investment RM 34 m;
+      payback under 11 months.
+    </p>
+  </section>
+
+  <section>
+    <h2>How it starts — a 90-day pilot, not a platform purchase</h2>
+    <div class="cols3">
+      <div class="phase">
+        <div class="w">WEEK 1 – 4 · DISCOVERY</div>
+        <h3>Prove the numbers</h3>
+        <p>Workshops with Credit Risk, Property and IT Security. The savings model is re-based on the
+           bank's actuals. The RMiT third-party assessment pack is submitted before any integration begins.</p>
+        <p><b>Gate:</b> a baseline both sides have signed.</p>
+      </div>
+      <div class="phase">
+        <div class="w">WEEK 5 – 9 · LIVE PILOT</div>
+        <h3>One district, one portfolio</h3>
+        <p>Eight construction facilities under B1 monitoring; twelve branches instrumented for A1, A2
+           and A5. Read-only integration — no change to core banking.</p>
+        <p><b>Gate:</b> at least one finding the bank did not already have.</p>
+      </div>
+      <div class="phase">
+        <div class="w">WEEK 10 – 13 · VALIDATION</div>
+        <h3>Measured, then decided</h3>
+        <p>Results against the week-4 baseline. Audit and Compliance walk the evidence trail. Rollout
+           plan, total cost of ownership and exit plan tabled together.</p>
+        <p><b>Gate:</b> the bank decides. No lock-in; the data remains the bank's.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why this is deliverable in Malaysia</h2>
+    <div class="cols">
+      <div>
+        <h3>Regulatory and data</h3>
+        <ul>
+          <li>Deployed in-country. The bank retains ownership and control of all data and cryptographic
+              keys, consistent with BNM's Risk Management in Technology policy for cloud and third-party
+              arrangements.</li>
+          <li>Third-party due diligence, business continuity and a documented exit plan are submitted in
+              week 1, ahead of integration work.</li>
+          <li>No personal data leaves the bank's environment; site imagery is redacted for faces and
+              vehicle plates at the point of capture, consistent with the PDPA 2010.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Operations and law</h3>
+        <ul>
+          <li>Flights are conducted by a Malaysian operator holding CAAM ATF permits with RCoC-B rated
+              pilots and JUPEM approval for aerial data capture. Permits are filed at least 14 working
+              days ahead and tracked in the platform.</li>
+          <li>Digital signing is issued through a Malaysian licensed Certification Authority under the
+              Digital Signature Act 1997 — not a foreign CA.</li>
+          <li>Implementation and first-line support are delivered by a Malaysian entity, with source
+              escrow and documented handover.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Who delivers it</h2>
+    <p style="font-size:9.5pt">
+      The technology is supplied by a consortium of three Chinese technology groups — two publicly
+      listed and one state-owned — with a combined track record in intelligent transport, digital twin
+      and large-scale infrastructure monitoring. The lead technology partner is a Beijing Stock
+      Exchange listed company (873806) with 28 years in the field, more than 400 registered
+      intellectual property rights, and deployments across 30 provinces. Implementation in Malaysia is
+      through a local delivery entity.
+    </p>
+    <p style="font-size:8pt;color:var(--ink-3);margin-bottom:0">
+      Full corporate profiles, audited financials, reference project dossiers and client references are
+      available on request and are provided in full as part of the vendor due-diligence pack.
+    </p>
+  </section>
+
+  <div class="ask">
+    <h2 style="border:0;margin-bottom:2px">What we are asking for today</h2>
+    <ol>
+      <li>A named sponsor in Credit Risk, and one in Property / Administration.</li>
+      <li>Four weeks of discovery access — read-only, under NDA.</li>
+      <li>One district and one construction portfolio nominated for the pilot.</li>
+    </ol>
+  </div>
+
+  <footer class="note">
+    <span>Executive brief · A physical verification layer for the credit book</span>
+    <span class="r">Page 2 of 2 · Commercial in confidence</span>
+  </footer>
+</div>

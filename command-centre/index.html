@@ -1,0 +1,1509 @@
+<title>Risk &amp; Operations Command Centre</title>
+<style>
+/* ============================================================
+   Risk & Operations Command Centre — concept demonstration
+   Single visual world: a darkened control room. Deliberate
+   single-theme; every colour painted explicitly.
+   Colour doctrine: chrome is bone on ink-teal; DATA is blue /
+   orange / aqua; the only saturated warm colour on screen is
+   RISK (good / warning / critical).
+   ============================================================ */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --ground:      #0A1416;
+  --panel:       #0F1D20;
+  --raised:      #14282B;
+  --hairline:    #1E383C;
+  --hairline-sm: #182D31;
+
+  /* ink */
+  --ink:      #EDF3F1;
+  --ink-2:    #9CB3B2;
+  --ink-3:    #6C8482;
+
+  /* chrome accent (never a data colour) */
+  --bone:     #E6D9BC;
+  --bone-dim: rgba(230, 217, 188, 0.14);
+
+  /* data series — validated on #0F1D20 (all checks pass) */
+  --s1: #3987e5;   /* blue   */
+  --s2: #d95926;   /* orange */
+  --s3: #199e70;   /* aqua   */
+
+  /* sequential blue ramp */
+  --b250: #86b6ef; --b300: #6da7ec; --b350: #5598e7;
+  --b400: #3987e5; --b450: #2a78d6; --b500: #256abf;
+
+  /* status — reserved, never a series */
+  --good:     #0ca30c;
+  --warning:  #fab219;
+  --critical: #d03b3b;
+
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --r: 3px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- shared type roles ---------- */
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+
+/* ============================ CHROME ============================ */
+.topbar {
+  display: flex; align-items: center; gap: 18px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(180deg, #0D1B1E, var(--panel));
+  position: sticky; top: 0; z-index: 40;
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand svg { flex: none; }
+.brand h1 { font-size: 15px; line-height: 1.2; }
+.brand .sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+.badge-demo {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em;
+  padding: 4px 8px; border-radius: 2px;
+  color: #14282B; background: var(--bone);
+  white-space: nowrap;
+}
+.spacer { flex: 1 1 auto; }
+
+.clock { text-align: right; line-height: 1.25; }
+.clock .t { font-family: var(--mono); font-size: 16px; letter-spacing: 0.02em; }
+.clock .d { font-size: 10px; color: var(--ink-3); }
+
+.langtoggle { display: flex; border: 1px solid var(--hairline); border-radius: var(--r); overflow: hidden; }
+.langtoggle button {
+  font: inherit; font-size: 11px; font-weight: 600;
+  padding: 6px 11px; border: 0; cursor: pointer;
+  background: transparent; color: var(--ink-2);
+}
+.langtoggle button[aria-pressed="true"] { background: var(--bone); color: #14282B; }
+.langtoggle button:not([aria-pressed="true"]):hover { background: var(--bone-dim); color: var(--ink); }
+
+/* ---------- view switcher ---------- */
+.views {
+  display: flex; gap: 2px; padding: 0 22px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel);
+  overflow-x: auto; scrollbar-width: none;
+  position: sticky; top: 61px; z-index: 39;
+}
+.views::-webkit-scrollbar { display: none; }
+.views button {
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink-2); background: transparent;
+  border: 0; border-bottom: 2px solid transparent;
+  padding: 12px 15px; cursor: pointer; white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+}
+.views button:hover { color: var(--ink); background: rgba(230,217,188,0.05); }
+.views button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--bone); }
+.views button .num {
+  font-family: var(--mono); font-size: 10px; color: var(--ink-3);
+}
+.views button[aria-selected="true"] .num { color: var(--bone); }
+
+/* ============================ LAYOUT ============================ */
+main { padding: 18px 22px 40px; max-width: 1680px; margin: 0 auto; }
+.view { display: none; }
+.view.active { display: block; animation: fade .28s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.viewhead { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.viewhead h2 { font-size: 19px; }
+.viewhead p { margin: 0; font-size: 12.5px; color: var(--ink-2); max-width: 74ch; }
+
+.grid { display: grid; gap: 12px; }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.split-map { grid-template-columns: minmax(0, 2.15fr) minmax(280px, 1fr); }
+.split-hero { grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); }
+
+/* ---------- panel ---------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  padding: 14px 16px 16px;
+  min-width: 0;
+}
+.panel > header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.panel > header .eyebrow { flex: 1 1 auto; }
+.panel > header .note { font-size: 10.5px; color: var(--ink-3); }
+
+/* ---------- stat tile ---------- */
+.stat { display: flex; flex-direction: column; gap: 6px; }
+.stat .val { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+.stat .val .u { font-size: 15px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
+.stat .lbl { font-size: 12px; color: var(--ink-2); }
+.stat .sub { font-size: 11px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
+
+/* ---------- status chips ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em;
+  padding: 3px 8px; border-radius: 2px;
+  border: 1px solid currentColor;
+}
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.chip.good     { color: var(--good); }
+.chip.warning  { color: var(--warning); }
+.chip.critical { color: var(--critical); }
+.chip.idle     { color: var(--ink-3); }
+
+/* ---------- module strip ---------- */
+.modstrip { display: flex; flex-wrap: wrap; gap: 6px; }
+.mod {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--hairline); border-radius: var(--r);
+  padding: 7px 10px; font-size: 11.5px; color: var(--ink-2);
+  background: var(--panel);
+}
+.mod .code { font-family: var(--mono); font-size: 10px; color: var(--bone); }
+.mod .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+
+/* ---------- alert feed ---------- */
+.feed { display: flex; flex-direction: column; gap: 1px; max-height: 452px; overflow-y: auto; }
+.alert {
+  display: grid; grid-template-columns: 3px 1fr; gap: 10px;
+  padding: 9px 2px 9px 0; cursor: default;
+  border-bottom: 1px solid var(--hairline-sm);
+}
+.alert:hover, .alert:focus-visible { background: rgba(230,217,188,0.05); outline: none; }
+.alert .bar { border-radius: 2px; }
+.alert.critical .bar { background: var(--critical); }
+.alert.warning  .bar { background: var(--warning); }
+.alert.good     .bar { background: var(--good); }
+.alert .top { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.alert .code { font-family: var(--mono); font-size: 9.5px; color: var(--bone); letter-spacing: 0.04em; }
+.alert .time { font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); margin-left: auto; }
+.alert .sev { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; }
+.alert.critical .sev { color: var(--critical); }
+.alert.warning  .sev { color: var(--warning); }
+.alert.good     .sev { color: var(--good); }
+.alert .txt { font-size: 12px; line-height: 1.4; }
+.alert .loc { font-size: 10.5px; color: var(--ink-3); margin-top: 2px; }
+.alert.enter { animation: slidein .45s ease; }
+@keyframes slidein { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- tables ---------- */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th {
+  text-align: left; font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink-3);
+  padding: 0 12px 8px 0; border-bottom: 1px solid var(--hairline); white-space: nowrap;
+}
+td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hairline-sm); vertical-align: middle; }
+tbody tr:hover td { background: rgba(230,217,188,0.04); }
+.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+th.num, td.num { padding-left: 18px; }
+
+/* ---------- misc ---------- */
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font-size: 12px; }
+.kv dt { color: var(--ink-3); white-space: nowrap; }
+.kv dd { margin: 0; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.btn {
+  font: inherit; font-size: 12px; font-weight: 600;
+  padding: 8px 13px; border-radius: var(--r); cursor: pointer;
+  border: 1px solid var(--hairline); background: var(--raised); color: var(--ink);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.btn:hover { border-color: var(--bone); }
+.btn.primary { background: var(--bone); color: #12262A; border-color: var(--bone); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }
+.legend i.dash { background: none; border-top: 2px dashed var(--ink-3); height: 0; }
+
+.rule { height: 1px; background: var(--hairline); margin: 14px 0; }
+
+.callout {
+  border-left: 2px solid var(--critical);
+  padding: 10px 0 10px 13px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.callout.good { border-left-color: var(--good); }
+.callout b { color: var(--ink); }
+
+.bignum { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+.bignum .u { font-size: 15px; color: var(--ink-2); font-weight: 500; letter-spacing: 0; }
+
+footer.page {
+  border-top: 1px solid var(--hairline);
+  padding: 16px 22px 30px;
+  display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
+  font-size: 10.5px; color: var(--ink-3);
+  max-width: 1680px; margin: 0 auto;
+}
+
+/* toast */
+#toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--raised); border: 1px solid var(--bone);
+  color: var(--ink); padding: 11px 18px; border-radius: var(--r);
+  font-size: 12.5px; z-index: 90; opacity: 0; pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+  box-shadow: 0 12px 30px rgba(0,0,0,.5);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* map */
+.mapwrap { position: relative; }
+.pin { cursor: default; }
+.pin circle.core { transition: r .18s ease; }
+.pin.hot circle.core { r: 8; }
+.maplabel { font-family: var(--mono); font-size: 9px; fill: var(--ink-3); letter-spacing: .06em; }
+
+/* progress meters */
+.meter { height: 6px; background: var(--raised); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 3px; transition: width .9s cubic-bezier(.4,0,.2,1); }
+
+.evidence { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.evcard { border: 1px solid var(--hairline); border-radius: var(--r); padding: 10px; background: var(--raised); }
+.evcard .t { font-size: 11.5px; font-weight: 600; margin-bottom: 3px; }
+.evcard .m { font-family: var(--mono); font-size: 10px; color: var(--ink-3); line-height: 1.5; }
+
+.beforeafter { display: grid; grid-template-columns: 1fr auto 1fr; gap: 4px 14px; align-items: center; font-size: 12px; }
+.beforeafter .b { color: var(--ink-3); text-align: right; font-family: var(--mono); }
+.beforeafter .a { color: var(--ink); font-family: var(--mono); }
+.beforeafter .arrow { color: var(--bone); font-size: 11px; }
+.beforeafter .lab { grid-column: 1 / -1; color: var(--ink-2); font-size: 11px; margin-top: 8px; }
+
+.phase { border: 1px solid var(--hairline); border-radius: var(--r); padding: 12px; background: var(--panel); }
+.phase .wk { font-family: var(--mono); font-size: 10px; color: var(--bone); letter-spacing: .08em; }
+.phase h3 { font-size: 13px; margin: 5px 0 6px; }
+.phase ul { margin: 0; padding-left: 15px; font-size: 11.5px; color: var(--ink-2); line-height: 1.6; }
+.phase .gate { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--hairline-sm); font-size: 11px; }
+.phase .gate b { color: var(--bone); font-weight: 600; }
+
+.complist { display: grid; gap: 9px; }
+.comp { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 11.5px; }
+.comp .tick { color: var(--good); font-family: var(--mono); font-weight: 700; }
+.comp b { display: block; font-size: 12px; color: var(--ink); font-weight: 600; }
+.comp span { color: var(--ink-2); }
+
+@media (max-width: 1180px) {
+  .g4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .split-map, .split-hero, .g3 { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 720px) {
+  .g4, .g2 { grid-template-columns: minmax(0,1fr); }
+  main { padding: 14px 14px 30px; }
+  .topbar { flex-wrap: wrap; gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+</style>
+
+<div class="topbar">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+      <rect x="1" y="1" width="24" height="24" rx="2" fill="none" stroke="#E6D9BC" stroke-opacity=".45"/>
+      <path d="M13 4.5 L19.5 21 L13 17.5 L6.5 21 Z" fill="none" stroke="#E6D9BC" stroke-width="1.3" stroke-linejoin="round"/>
+      <circle cx="13" cy="11" r="1.8" fill="#d03b3b"/>
+    </svg>
+    <div>
+      <h1 data-en="Risk &amp; Operations Command Centre" data-zh="风险与运营指挥中心">Risk &amp; Operations Command Centre</h1>
+      <div class="sub" data-en="13 modules · one screen · continuous verification" data-zh="13 个模块 · 一屏总览 · 持续核验">13 modules · one screen · continuous verification</div>
+    </div>
+  </div>
+  <span class="badge-demo" data-en="CONCEPT DEMO · ILLUSTRATIVE DATA" data-zh="概念演示 · 示意数据">CONCEPT DEMO · ILLUSTRATIVE DATA</span>
+  <div class="spacer"></div>
+  <div class="clock">
+    <div class="t" id="clock">--:--:--</div>
+    <div class="d" id="clockdate">MYT (UTC+8)</div>
+  </div>
+  <div class="langtoggle" role="group" aria-label="Language">
+    <button id="btn-en" aria-pressed="true" onclick="setLang('en')">EN</button>
+    <button id="btn-zh" aria-pressed="false" onclick="setLang('zh')">中文</button>
+  </div>
+</div>
+
+<nav class="views" role="tablist" aria-label="Views">
+  <button role="tab" aria-selected="true"  onclick="setView(0)"><span class="num">01</span><span data-en="Portfolio Overview" data-zh="全局态势">Portfolio Overview</span></button>
+  <button role="tab" aria-selected="false" onclick="setView(1)"><span class="num">02</span><span data-en="Construction Loans" data-zh="建筑贷款监控">Construction Loans</span></button>
+  <button role="tab" aria-selected="false" onclick="setView(2)"><span class="num">03</span><span data-en="Collateral" data-zh="抵押品监测">Collateral</span></button>
+  <button role="tab" aria-selected="false" onclick="setView(3)"><span class="num">04</span><span data-en="Operating Cost" data-zh="运营成本">Operating Cost</span></button>
+  <button role="tab" aria-selected="false" onclick="setView(4)"><span class="num">05</span><span data-en="The Business Case" data-zh="价值与落地">The Business Case</span></button>
+</nav>
+
+<main>
+
+<!-- ═══════════════════ VIEW 01 — OVERVIEW ═══════════════════ -->
+<section class="view active" role="tabpanel">
+  <div class="viewhead">
+    <h2 data-en="Everything the bank lends against, on one screen" data-zh="银行所有放款标的，一屏尽览">Everything the bank lends against, on one screen</h2>
+    <p data-en="Today this picture is assembled by hand, quarterly, from 9 systems and a spreadsheet. Here it is continuous, verified against physical reality, and it tells you where to look first."
+       data-zh="今天这张图要靠人工每季度从 9 个系统加一张 Excel 拼出来。在这里它是持续的、与物理世界实时核验的，并且直接告诉你先看哪里。">Today this picture is assembled by hand, quarterly, from 9 systems and a spreadsheet.</p>
+  </div>
+
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Exposure under continuous watch" data-zh="持续监控下的敞口">Exposure under continuous watch</div>
+      <div class="val">RM 78.4<span class="u"> b</span></div>
+      <div class="lbl" data-en="94% of the secured loan book" data-zh="占有抵押贷款账簿 94%">94% of the secured loan book</div>
+      <div class="meter" style="margin-top:2px"><i style="width:94%;background:var(--s1)"></i></div>
+    </div>
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Open risk signals" data-zh="未处置风险信号">Open risk signals</div>
+      <div class="val">37</div>
+      <div class="lbl">
+        <span class="chip critical"><span class="dot"></span>8</span>
+        <span class="chip warning" style="margin-left:4px"><span class="dot"></span>14</span>
+        <span class="chip idle" style="margin-left:4px"><span class="dot"></span>15</span>
+      </div>
+      <div class="sub" data-en="Critical · Warning · Watch" data-zh="严重 · 预警 · 观察">Critical · Warning · Watch</div>
+    </div>
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Average early-warning lead time" data-zh="平均风险提前预警时间">Average early-warning lead time</div>
+      <div class="val">94<span class="u"> days</span></div>
+      <div class="lbl" data-en="before the borrower reports it" data-zh="早于借款人自行申报">before the borrower reports it</div>
+      <div class="sub"><span class="chip good"><span class="dot"></span><span data-en="vs 0 days today" data-zh="现状为 0 天">vs 0 days today</span></span></div>
+    </div>
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Annualised value created" data-zh="年化价值创造">Annualised value created</div>
+      <div class="val">RM 64–91<span class="u"> m</span></div>
+      <div class="lbl" data-en="Opex saved + credit loss avoided" data-zh="运营降本 + 减少的信用损失">Opex saved + credit loss avoided</div>
+      <div class="sub" data-en="Modelled at 150 branches, RM 8.2b construction book" data-zh="按 150 家网点、82 亿令吉建筑贷款测算">Modelled at 150 branches</div>
+    </div>
+  </div>
+
+  <div class="grid split-map" style="margin-bottom:12px">
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="Asset &amp; collateral map — Malaysia" data-zh="全国资产与抵押品地图">Asset &amp; collateral map — Malaysia</span>
+        <span class="note" data-en="Circle area = exposure · colour = current signal" data-zh="圆面积＝敞口 · 颜色＝当前信号">Circle area = exposure · colour = signal</span>
+      </header>
+      <div class="mapwrap"><svg id="map" viewBox="0 0 1000 430" style="width:100%;height:auto;display:block" role="img"
+        aria-label="Map of Malaysia showing monitored assets by state, sized by exposure and coloured by risk signal"></svg></div>
+      <div class="legend" style="margin-top:10px">
+        <span><i style="background:var(--critical);height:8px;width:8px;border-radius:50%"></i><span data-en="Critical signal" data-zh="严重信号">Critical signal</span></span>
+        <span><i style="background:var(--warning);height:8px;width:8px;border-radius:50%"></i><span data-en="Warning" data-zh="预警">Warning</span></span>
+        <span><i style="background:var(--s1);height:8px;width:8px;border-radius:50%"></i><span data-en="Normal" data-zh="正常">Normal</span></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="Live signal feed" data-zh="实时信号流">Live signal feed</span>
+        <span class="note mono" id="feedcount">37</span>
+      </header>
+      <div class="feed" id="feed"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <header>
+      <span class="eyebrow" data-en="Module status — 13 capabilities on one platform" data-zh="模块状态 — 同一平台上的 13 项能力">Module status</span>
+      <span class="note" data-en="B = credit risk · A = operating cost" data-zh="B＝信贷风控 · A＝运营降本">B = credit risk · A = operating cost</span>
+    </header>
+    <div class="modstrip" id="modstrip"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ VIEW 02 — CONSTRUCTION ═══════════════════ -->
+<section class="view" role="tabpanel">
+  <div class="viewhead">
+    <h2 data-en="You have paid for 62% of a building that is 47% built" data-zh="你已经为一栋只盖了 47% 的楼付了 62% 的钱">You have paid for 62% of a building that is 47% built</h2>
+    <p data-en="Construction lending is the one place where a bank's collateral is literally under construction. The gap between money released and structure verified is the single most valuable number in the portfolio — and today nobody measures it continuously."
+       data-zh="建筑贷款是银行抵押物「还在施工中」的唯一场景。放出去的钱与核实到的实体进度之间的差额，是整个组合里最有价值的一个数字——而今天没有人在持续测量它。">Construction lending is the one place where a bank's collateral is literally under construction.</p>
+  </div>
+
+  <div class="grid split-hero" style="margin-bottom:12px">
+    <div class="panel">
+      <header>
+        <span class="eyebrow">B1 · <span data-en="Drawdown vs verified physical progress" data-zh="资金拨付 vs 核实实体进度">Drawdown vs verified physical progress</span></span>
+        <span class="note mono">SERI DAMAI PH.2 · SELANGOR</span>
+      </header>
+      <svg id="chart-progress" viewBox="0 0 760 300" style="width:100%;height:auto;display:block" role="img"
+        aria-label="Line chart comparing cumulative loan drawdown against independently verified construction progress over 12 months"></svg>
+      <div class="legend" style="margin-top:8px">
+        <span><i style="background:var(--s2)"></i><span data-en="Cumulative drawdown" data-zh="累计放款">Cumulative drawdown</span></span>
+        <span><i style="background:var(--s1)"></i><span data-en="Verified physical progress (drone + BIM)" data-zh="核实实体进度（无人机+BIM）">Verified physical progress</span></span>
+        <span><i class="dash"></i><span data-en="Contracted plan" data-zh="合同计划进度">Contracted plan</span></span>
+      </div>
+      <div class="rule"></div>
+      <div class="callout">
+        <b data-en="Over-advanced against physical collateral: RM 34.6 m." data-zh="超实体抵押物价值放款：3,460 万令吉。">Over-advanced against physical collateral: RM 34.6 m.</b>
+        <span data-en=" The gap opened in month 6 and has widened every month since. Under the facility agreement, clause 8.3 permits the bank to withhold the next tranche pending QS re-certification."
+              data-zh=" 该差额自第 6 个月出现，此后逐月扩大。依据授信协议第 8.3 条，银行有权在工料测量师重新认证前暂缓下一笔拨付。"> The gap opened in month 6 and has widened every month since.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div class="panel">
+        <header><span class="eyebrow" data-en="Facility" data-zh="授信情况">Facility</span></header>
+        <dl class="kv">
+          <dt data-en="Borrower" data-zh="借款人">Borrower</dt><dd>Damai Bina Sdn Bhd</dd>
+          <dt data-en="Facility limit" data-zh="授信额度">Facility limit</dt><dd>RM 240.0 m</dd>
+          <dt data-en="Drawn to date" data-zh="已提用">Drawn to date</dt><dd id="kv-drawn">RM 148.1 m</dd>
+          <dt data-en="Verified progress" data-zh="核实进度">Verified progress</dt><dd id="kv-prog">47.3%</dd>
+          <dt data-en="Next tranche" data-zh="下一笔拨付">Next tranche</dt><dd>RM 12.4 m</dd>
+          <dt data-en="Last site verification" data-zh="最近一次现场核验">Last verification</dt><dd id="kv-survey">14 Aug 2026</dd>
+        </dl>
+      </div>
+
+      <div class="panel">
+        <header><span class="eyebrow" data-en="Recommended action" data-zh="系统建议动作">Recommended action</span></header>
+        <div id="action-body">
+          <div class="chip critical" style="margin-bottom:9px"><span class="dot"></span><span data-en="HOLD DRAWDOWN" data-zh="暂缓拨付">HOLD DRAWDOWN</span></div>
+          <p style="margin:0 0 12px;font-size:12.5px;line-height:1.5" data-en="Withhold the RM 12.4 m tranche. Require independent QS certification of structural works and a reconciliation of the RM 34.6 m variance before release."
+             data-zh="暂缓 1,240 万令吉拨付。要求独立工料测量师出具结构工程认证，并就 3,460 万令吉差额提交对账说明后再行放款。">Withhold the RM 12.4 m tranche.</p>
+        </div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button class="btn primary" onclick="act('escalate')" data-en="Escalate to Credit Committee" data-zh="上报信贷委员会">Escalate to Credit Committee</button>
+          <button class="btn" onclick="act('pack')" data-en="Evidence pack" data-zh="证据包">Evidence pack</button>
+        </div>
+        <div class="sub eyebrow" style="margin-top:10px" data-en="12 files · hash-sealed · audit trail retained 7 years" data-zh="12 份文件 · 哈希封存 · 审计留痕保存 7 年">12 files · hash-sealed</div>
+      </div>
+
+      <div class="panel">
+        <header><span class="eyebrow" data-en="Counterparty signals" data-zh="交易对手信号">Counterparty signals</span></header>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:12px">
+          <div style="display:flex;gap:9px;align-items:baseline">
+            <span class="chip critical"><span class="dot"></span>SSM</span>
+            <span data-en="Winding-up petition filed against a Tier-1 subcontractor, 29 Jul 2026" data-zh="一级分包商于 2026-07-29 被提起清盘呈请">Winding-up petition filed against a Tier-1 subcontractor</span>
+          </div>
+          <div style="display:flex;gap:9px;align-items:baseline">
+            <span class="chip warning"><span class="dot"></span>CTOS</span>
+            <span data-en="Main contractor score down 84 points over 2 quarters" data-zh="总承包商评分两个季度内下降 84 分">Main contractor score down 84 points over 2 quarters</span>
+          </div>
+          <div style="display:flex;gap:9px;align-items:baseline">
+            <span class="chip warning"><span class="dot"></span>IoT</span>
+            <span data-en="Tower-crane duty cycle down 71% month-on-month" data-zh="塔吊作业时长环比下降 71%">Tower-crane duty cycle down 71% month-on-month</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="How the 47.3% was measured" data-zh="47.3% 是怎么测出来的">How the 47.3% was measured</span>
+        <span class="note" data-en="No site visit required" data-zh="无需人工到场">No site visit required</span>
+      </header>
+      <div class="evidence">
+        <div class="evcard">
+          <div class="t" data-en="1 · Drone survey" data-zh="1 · 无人机航测">1 · Drone survey</div>
+          <div class="m" id="ev-survey">14 Aug 2026<br>4.2 cm GSD<br>412 images<br>CAAM ATF-2026-8871</div>
+        </div>
+        <div class="evcard">
+          <div class="t" data-en="2 · BIM comparison" data-zh="2 · BIM 模型比对">2 · BIM comparison</div>
+          <div class="m">IFC4 model v7<br>Element-level match<br>2,914 / 6,160 elements<br>σ ±1.8 pp</div>
+        </div>
+        <div class="evcard">
+          <div class="t" data-en="3 · Money reconciliation" data-zh="3 · 资金对账">3 · Money reconciliation</div>
+          <div class="m">148 invoices<br>LHDN e-Invoice matched<br>RM 34.6 m unmatched<br>flagged 06:12 MYT</div>
+        </div>
+      </div>
+      <div class="rule"></div>
+      <div class="beforeafter">
+        <div class="b" data-en="Quarterly, by a person" data-zh="每季度，靠人工">Quarterly, by a person</div><div class="arrow">→</div><div class="a" data-en="Every 14 days, automatic" data-zh="每 14 天，自动">Every 14 days, automatic</div>
+        <div class="b" data-en="Photos in an email" data-zh="邮件里的照片">Photos in an email</div><div class="arrow">→</div><div class="a" data-en="Measured, to ±1.8 pp" data-zh="可量测，误差 ±1.8pp">Measured, to ±1.8 pp</div>
+        <div class="b" data-en="RM 4,800 per inspection" data-zh="每次巡检 4,800 令吉">RM 4,800 per inspection</div><div class="arrow">→</div><div class="a" data-en="RM 620 per survey" data-zh="每次航测 620 令吉">RM 620 per survey</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="Run it live" data-zh="现场演示">Run it live</span>
+        <span class="note" data-en="Simulated cycle" data-zh="模拟一次核验周期">Simulated cycle</span>
+      </header>
+      <p style="margin:0 0 12px;font-size:12.5px;color:var(--ink-2);line-height:1.55"
+         data-en="Press the button. A survey is tasked, imagery is processed against the BIM model, the progress figure is restated, and — if the gap crosses policy — the drawdown is held and Credit Risk is notified. Nobody has to remember to do any of it."
+         data-zh="按下按钮：系统派发航测任务 → 影像与 BIM 模型比对 → 重算进度 → 若差额突破政策阈值，自动暂缓拨付并通知信贷风险部。全程无需任何人记得去做这件事。">Press the button.</p>
+      <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:14px" id="pipeline"></div>
+      <button class="btn primary" id="runbtn" onclick="runSurvey()" data-en="Task drone survey" data-zh="派发无人机航测任务">Task drone survey</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ VIEW 03 — COLLATERAL ═══════════════════ -->
+<section class="view" role="tabpanel">
+  <div class="viewhead">
+    <h2 data-en="Collateral that revalues itself" data-zh="会自己重估的抵押品">Collateral that revalues itself</h2>
+    <p data-en="A valuation report is a photograph of a single day. Between reports, the bank is flying blind — and the reports it does have cover a sample, not the book."
+       data-zh="一份估值报告只是某一天的快照。两份报告之间银行是盲飞的——而且现有报告覆盖的只是抽样，不是整个账簿。">A valuation report is a photograph of a single day.</p>
+  </div>
+
+  <div class="grid g4" style="margin-bottom:12px">
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Collateral revalued in last 90 days" data-zh="近 90 天内完成重估">Revalued in last 90 days</div>
+      <div class="val">96<span class="u">%</span></div>
+      <div class="sub"><span class="chip good"><span class="dot"></span><span data-en="baseline 31%" data-zh="现状基线 31%">baseline 31%</span></span></div>
+    </div>
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Facilities breaching LTV policy" data-zh="突破 LTV 政策的授信">Facilities breaching LTV policy</div>
+      <div class="val" style="color:var(--critical)">12</div>
+      <div class="sub" data-en="RM 1.34 b exposure · 9 found this quarter" data-zh="涉及敞口 13.4 亿令吉 · 本季度新发现 9 笔">RM 1.34 b exposure</div>
+    </div>
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Cost per revaluation" data-zh="单笔重估成本">Cost per revaluation</div>
+      <div class="val">RM 780</div>
+      <div class="sub" data-en="from RM 3,200 · turnaround 1 day, from 5" data-zh="原 3,200 令吉 · 周期由 5 天缩短至 1 天">from RM 3,200 · 1 day, from 5</div>
+    </div>
+    <div class="panel stat">
+      <div class="eyebrow" data-en="Assets under physical monitoring" data-zh="纳入物理监测的资产">Assets under physical monitoring</div>
+      <div class="val">1,240</div>
+      <div class="sub" data-en="Satellite 1,240 · Drone 318 · IoT 96" data-zh="卫星 1,240 · 无人机 318 · 物联网 96">Satellite 1,240 · Drone 318 · IoT 96</div>
+    </div>
+  </div>
+
+  <div class="grid split-hero" style="margin-bottom:12px">
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="Loan-to-value distribution — secured property book" data-zh="有抵押房地产账簿 LTV 分布">Loan-to-value distribution</span>
+        <span class="note" data-en="Recomputed daily from market + physical data" data-zh="每日基于市场与实体数据重算">Recomputed daily</span>
+      </header>
+      <svg id="chart-ltv" viewBox="0 0 700 280" style="width:100%;height:auto;display:block" role="img"
+        aria-label="Histogram of facilities by loan-to-value band, with a policy threshold at 80 percent"></svg>
+      <div class="legend" style="margin-top:8px">
+        <span><i style="background:var(--s1)"></i><span data-en="Within policy" data-zh="政策内">Within policy</span></span>
+        <span><i style="background:var(--critical)"></i><span data-en="Above 80% LTV — action required" data-zh="LTV 高于 80% — 需处置">Above 80% LTV — action required</span></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><span class="eyebrow" data-en="Monitoring mix &amp; data freshness" data-zh="监测手段与数据新鲜度">Monitoring mix &amp; freshness</span></header>
+      <div id="freshness" style="display:flex;flex-direction:column;gap:13px"></div>
+      <div class="rule"></div>
+      <div class="callout good">
+        <b data-en="Every number on this screen carries its source and its age." data-zh="本屏每一个数字都带着它的来源和时效。">Every number carries its source and its age.</b>
+        <span data-en=" That is what makes it usable in a credit paper — and auditable under BNM RMiT."
+              data-zh=" 这正是它能写进信贷报告、并满足 BNM RMiT 可审计要求的原因。"> That is what makes it usable in a credit paper.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <header>
+      <span class="eyebrow" data-en="Largest exposures requiring attention" data-zh="需关注的最大敞口">Largest exposures requiring attention</span>
+      <span class="note" data-en="Ranked by exposure at risk" data-zh="按风险敞口排序">Ranked by exposure at risk</span>
+    </header>
+    <div class="tablewrap"><table id="tbl-collateral"></table></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ VIEW 04 — OPERATIONS ═══════════════════ -->
+<section class="view" role="tabpanel">
+  <div class="viewhead">
+    <h2 data-en="The same sensors, pointed at your own buildings" data-zh="同一套传感器，对准银行自己的楼">The same sensors, pointed at your own buildings</h2>
+    <p data-en="The credit-risk modules need drones, IoT, GIS and computer vision anyway. Once that infrastructure exists, the bank's own property portfolio is the cheapest place to prove the return — and it pays for the risk platform."
+       data-zh="信贷风控模块本来就需要无人机、物联网、GIS 与计算机视觉。这套基础设施一旦建成，银行自有物业组合就是验证回报最便宜的场景——而且它的节省足以支付整个风控平台。">The credit-risk modules need drones, IoT, GIS and computer vision anyway.</p>
+  </div>
+
+  <div class="grid split-hero" style="margin-bottom:12px;align-items:start">
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="Annual saving by module — A1 to A8" data-zh="各模块年度节省 — A1 至 A8">Annual saving by module</span>
+        <span class="note" data-en="Mid-point of modelled range, RM million / year" data-zh="测算区间中值，百万令吉/年">RM million / year</span>
+      </header>
+      <svg id="chart-ops" viewBox="0 0 700 340" style="width:100%;height:auto;display:block" role="img"
+        aria-label="Horizontal bar chart of annual savings by operating module"></svg>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div class="panel stat">
+        <div class="eyebrow" data-en="Total addressable operating spend" data-zh="可优化的运营支出总额">Total addressable operating spend</div>
+        <div class="bignum">RM 268<span class="u"> m / yr</span></div>
+        <div class="sub" data-en="Property, facilities, security and valuation, 150 branches" data-zh="物业、设施、安保与估值，按 150 家网点计">Property, facilities, security and valuation</div>
+        <div class="rule"></div>
+        <div class="eyebrow" data-en="Modelled saving" data-zh="测算节省">Modelled saving</div>
+        <div class="bignum" style="color:var(--good)">RM 45–63<span class="u"> m / yr</span></div>
+        <div class="sub" data-en="17–24% of addressable spend" data-zh="占可优化支出的 17–24%">17–24% of addressable spend</div>
+      </div>
+      <div class="panel">
+        <header><span class="eyebrow" data-en="Where the number comes from" data-zh="这个数字怎么来的">Where the number comes from</span></header>
+        <p style="margin:0;font-size:12px;color:var(--ink-2);line-height:1.6"
+           data-en="Each percentage is taken from a delivered reference project, not a brochure. In the discovery phase we re-base every line against your general ledger and re-issue this table with your own numbers before anything is signed."
+           data-zh="每一个百分比都来自已交付的参考项目，不是宣传册。在需求调研阶段，我们会用贵行总账数据重新校准每一行，并在签约前把这张表换成贵行自己的数字。">Each percentage is taken from a delivered reference project, not a brochure.</p>
+      </div>
+      <div class="panel">
+        <header>
+          <span class="eyebrow">A4 · <span data-en="Where the largest saving hides" data-zh="最大一笔节省藏在哪里">Where the largest saving hides</span></span>
+        </header>
+        <svg id="chart-branch" viewBox="0 0 340 170" style="width:100%;height:auto;display:block" role="img"
+          aria-label="Illustration of branch catchment areas, showing which service radii overlap"></svg>
+        <p style="margin:10px 0 0;font-size:11.5px;color:var(--ink-2);line-height:1.55"
+           data-en="Branch catchments, drawn from transaction origin rather than postcode. Four pairs overlap by more than 60% of their served population — the candidates for consolidation into one full branch plus a self-service point."
+           data-zh="以交易发生地（而非邮编）绘制的网点服务圈。其中 4 对网点的服务人口重叠超过 60%——正是「一家全功能网点 + 一个自助点」整合方案的候选对象。">Branch catchments, drawn from transaction origin rather than postcode.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <header>
+      <span class="eyebrow" data-en="Module detail" data-zh="模块明细">Module detail</span>
+      <span class="note" data-en="Illustrative baseline — to be re-based on actuals in discovery" data-zh="示意基线 — 调研阶段以实际数据重算">Illustrative baseline</span>
+    </header>
+    <div class="tablewrap"><table id="tbl-ops"></table></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ VIEW 05 — BUSINESS CASE ═══════════════════ -->
+<section class="view" role="tabpanel">
+  <div class="viewhead">
+    <h2 data-en="What changes, what it is worth, and how it starts" data-zh="改变了什么、值多少钱、怎么开始">What changes, what it is worth, and how it starts</h2>
+    <p data-en="Not a platform purchase. A 90-day pilot on one district and one construction portfolio, with a measurable gate at the end of each phase."
+       data-zh="这不是一次平台采购，而是一个 90 天试点：一个区域、一个建筑贷款组合，每个阶段结束都有可量化的验收关口。">Not a platform purchase. A 90-day pilot with measurable gates.</p>
+  </div>
+
+  <div class="grid split-hero" style="margin-bottom:12px">
+    <div class="panel">
+      <header>
+        <span class="eyebrow" data-en="Annual value bridge" data-zh="年度价值构成">Annual value bridge</span>
+        <span class="note" data-en="RM million per year, at steady state" data-zh="稳定运行后，百万令吉/年">RM million per year</span>
+      </header>
+      <svg id="chart-bridge" viewBox="0 0 700 140" style="width:100%;height:auto;display:block" role="img"
+        aria-label="Stacked bar showing annual value split between operating savings, credit loss avoided and capital efficiency"></svg>
+      <div class="legend" style="margin-top:10px">
+        <span><i style="background:var(--s1)"></i><span data-en="Operating cost saved (A1–A8)" data-zh="运营成本节省（A1–A8）">Operating cost saved (A1–A8)</span></span>
+        <span><i style="background:var(--s2)"></i><span data-en="Credit loss avoided (B1–B3, B5)" data-zh="减少的信用损失（B1–B3, B5）">Credit loss avoided (B1–B3, B5)</span></span>
+        <span><i style="background:var(--s3)"></i><span data-en="Capital efficiency (B4)" data-zh="资本效率提升（B4）">Capital efficiency (B4)</span></span>
+      </div>
+      <div class="rule"></div>
+      <div class="grid g3" style="gap:16px">
+        <div class="stat">
+          <div class="eyebrow" data-en="3-year investment" data-zh="三年投入">3-year investment</div>
+          <div class="bignum" style="font-size:24px">RM 34<span class="u"> m</span></div>
+        </div>
+        <div class="stat">
+          <div class="eyebrow" data-en="Payback" data-zh="回本周期">Payback</div>
+          <div class="bignum" style="font-size:24px">&lt; 11<span class="u"> months</span></div>
+        </div>
+        <div class="stat">
+          <div class="eyebrow" data-en="3-year net" data-zh="三年净收益">3-year net</div>
+          <div class="bignum" style="font-size:24px;color:var(--good)">RM 158<span class="u"> m</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><span class="eyebrow" data-en="What actually changes on Monday morning" data-zh="周一早上究竟有什么不一样">What actually changes</span></header>
+      <div class="beforeafter" id="beforeafter"></div>
+      <div class="rule"></div>
+      <div class="callout good">
+        <b data-en="The one-sentence version:" data-zh="一句话总结：">The one-sentence version:</b>
+        <span data-en=" the bank stops finding out about a problem from the borrower, and starts finding out from the building."
+              data-zh=" 银行不再从借款人口中得知问题，而是直接从那栋楼本身得知。"> the bank stops finding out about a problem from the borrower, and starts finding out from the building.</span>
+      </div>
+      <div class="rule"></div>
+      <div class="eyebrow" style="margin-bottom:8px" data-en="What we ask for at this meeting" data-zh="本次会议我们的请求">What we ask for at this meeting</div>
+      <ol style="margin:0;padding-left:17px;font-size:12px;color:var(--ink-2);line-height:1.7">
+        <li data-en="A named sponsor in Credit Risk and one in Property/Admin" data-zh="信贷风险条线与物业/行政条线各指定一位对接负责人">A named sponsor in Credit Risk and one in Property/Admin</li>
+        <li data-en="Four weeks of discovery access — read-only, under NDA" data-zh="四周的调研访问权限 — 只读，签署保密协议">Four weeks of discovery access — read-only, under NDA</li>
+        <li data-en="One district and one construction portfolio nominated for the pilot" data-zh="指定一个区域与一个建筑贷款组合作为试点">One district and one construction portfolio nominated for the pilot</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="grid g3" style="margin-bottom:12px">
+    <div class="phase">
+      <div class="wk" data-en="WEEK 1 – 4" data-zh="第 1 – 4 周">WEEK 1 – 4</div>
+      <h3 data-en="Discovery &amp; data readiness" data-zh="调研与数据就绪">Discovery &amp; data readiness</h3>
+      <ul>
+        <li data-en="Workshops with Credit Risk, Property, IT Security" data-zh="与信贷风险、物业、IT 安全部门开工作坊">Workshops with Credit Risk, Property, IT Security</li>
+        <li data-en="Re-base the savings model on your general ledger" data-zh="用贵行总账重算节省模型">Re-base the savings model on your GL</li>
+        <li data-en="RMiT third-party assessment pack submitted" data-zh="提交 RMiT 第三方风险评估材料">RMiT third-party assessment pack submitted</li>
+      </ul>
+      <div class="gate"><b data-en="Gate: " data-zh="验收关口：">Gate: </b><span data-en="signed-off baseline and target list" data-zh="签署确认的基线与目标清单">signed-off baseline and target list</span></div>
+    </div>
+    <div class="phase">
+      <div class="wk" data-en="WEEK 5 – 9" data-zh="第 5 – 9 周">WEEK 5 – 9</div>
+      <h3 data-en="Live pilot — one district, one portfolio" data-zh="实景试点 — 一个区域、一个组合">Live pilot</h3>
+      <ul>
+        <li data-en="8 construction facilities under B1 monitoring" data-zh="8 笔建筑贷款纳入 B1 监控">8 construction facilities under B1 monitoring</li>
+        <li data-en="12 branches instrumented for A1/A2/A5" data-zh="12 家网点部署 A1/A2/A5">12 branches instrumented for A1/A2/A5</li>
+        <li data-en="Read-only integration; no core banking change" data-zh="只读对接，不改动核心系统">Read-only integration; no core banking change</li>
+      </ul>
+      <div class="gate"><b data-en="Gate: " data-zh="验收关口：">Gate: </b><span data-en="at least one finding the bank did not already have" data-zh="至少发现一条银行原本不知道的风险">at least one finding the bank did not already have</span></div>
+    </div>
+    <div class="phase">
+      <div class="wk" data-en="WEEK 10 – 13" data-zh="第 10 – 13 周">WEEK 10 – 13</div>
+      <h3 data-en="Validation &amp; scale decision" data-zh="验证与规模化决策">Validation &amp; scale decision</h3>
+      <ul>
+        <li data-en="Measured results vs the week-4 baseline" data-zh="实测结果与第 4 周基线对比">Measured results vs the week-4 baseline</li>
+        <li data-en="Audit &amp; Compliance walkthrough of the evidence trail" data-zh="审计与合规部门走查证据链">Audit &amp; Compliance walkthrough</li>
+        <li data-en="Rollout plan, TCO and exit plan tabled" data-zh="提交推广计划、TCO 与退出方案">Rollout plan, TCO and exit plan tabled</li>
+      </ul>
+      <div class="gate"><b data-en="Gate: " data-zh="验收关口：">Gate: </b><span data-en="the bank decides — no lock-in, data stays yours" data-zh="由银行决定是否继续 — 无锁定，数据归贵行所有">the bank decides — no lock-in</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <header>
+      <span class="eyebrow" data-en="Malaysian delivery — the things that usually kill a foreign technology proposal" data-zh="马来西亚本地落地 — 通常让境外技术方案夭折的那几件事">Malaysian delivery</span>
+    </header>
+    <div class="grid g2" style="gap:14px 34px">
+      <div class="complist" id="comp-a"></div>
+      <div class="complist" id="comp-b"></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="page">
+  <span data-en="Concept demonstration prepared for AFFIN Bank Berhad · August 2026" data-zh="为 AFFIN Bank Berhad 准备的概念演示 · 2026 年 8 月">Concept demonstration prepared for AFFIN Bank Berhad · August 2026</span>
+  <span class="spacer"></span>
+  <span data-en="All figures are illustrative and modelled — not client data, not a forecast. To be re-based on actuals during discovery."
+        data-zh="页面所有数字均为示意与测算，非客户真实数据，亦非业绩承诺；将在调研阶段以实际数据重算。">All figures are illustrative and modelled — not client data.</span>
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+/* ============================ i18n ============================ */
+let LANG = "en";
+function setLang(l) {
+  LANG = l;
+  document.getElementById("btn-en").setAttribute("aria-pressed", String(l === "en"));
+  document.getElementById("btn-zh").setAttribute("aria-pressed", String(l === "zh"));
+  document.documentElement.lang = (l === "zh" ? "zh-Hans" : "en");
+  applyLang(document);
+}
+function applyLang(root) {
+  root.querySelectorAll("[data-en]").forEach(function (el) {
+    const v = el.getAttribute("data-" + LANG);
+    if (v !== null) el.textContent = v;
+  });
+}
+function T(en, zh) { return LANG === "zh" ? zh : en; }
+
+/* ============================ views ============================ */
+function setView(i) {
+  const tabs = document.querySelectorAll(".views button");
+  const views = document.querySelectorAll(".view");
+  tabs.forEach(function (t, n) { t.setAttribute("aria-selected", String(n === i)); });
+  views.forEach(function (v, n) { v.classList.toggle("active", n === i); });
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+/* ============================ clock ============================ */
+function tick() {
+  const now = new Date();
+  const my = new Date(now.getTime() + (now.getTimezoneOffset() + 480) * 60000);
+  const p = function (n) { return String(n).padStart(2, "0"); };
+  document.getElementById("clock").textContent = p(my.getHours()) + ":" + p(my.getMinutes()) + ":" + p(my.getSeconds());
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  document.getElementById("clockdate").textContent = p(my.getDate()) + " " + months[my.getMonth()] + " " + my.getFullYear() + " · MYT";
+}
+setInterval(tick, 1000); tick();
+
+/* ============================ toast ============================ */
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove("show"); }, 3200);
+}
+function act(kind) {
+  if (kind === "escalate") toast(T("Escalated to Credit Committee · case CR-2026-0814 created",
+                                   "已上报信贷委员会 · 已建立案卷 CR-2026-0814"));
+  else toast(T("Evidence pack exported · 12 files, SHA-256 sealed", "证据包已导出 · 12 份文件，SHA-256 封存"));
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function mk(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function txt(x, y, s, attrs) {
+  const t = mk("text", Object.assign({ x: x, y: y }, attrs || {}));
+  t.textContent = s;
+  return t;
+}
+
+/* ═══════════════════ MAP ═══════════════════ */
+/* Points are plotted at real coordinates — the country draws itself. */
+const SITES = [
+  ["kl","Kuala Lumpur",3.14,101.69,4200,"warning"],
+  ["pj","Petaling Jaya",3.10,101.64,1900,"normal"],
+  ["sa","Shah Alam",3.07,101.52,2400,"normal"],
+  ["kg","Klang",3.04,101.44,1500,"normal"],
+  ["kj","Kajang",2.99,101.79,900,"normal"],
+  ["rw","Rawang",3.32,101.58,700,"critical"],
+  ["se","Seremban",2.72,101.94,800,"normal"],
+  ["ni","Nilai",2.81,101.80,600,"normal"],
+  ["pd","Port Dickson",2.52,101.80,400,"normal"],
+  ["ml","Melaka",2.19,102.25,900,"normal"],
+  ["mu","Muar",2.05,102.57,400,"normal"],
+  ["bp","Batu Pahat",1.85,102.93,500,"warning"],
+  ["kl2","Kluang",2.03,103.32,300,"normal"],
+  ["jb","Johor Bahru",1.49,103.74,3100,"critical"],
+  ["ip","Iskandar Puteri",1.42,103.63,1700,"warning"],
+  ["ku","Kulai",1.66,103.60,400,"normal"],
+  ["kn","Kuantan",3.81,103.33,900,"normal"],
+  ["kt","Kuala Terengganu",5.33,103.14,600,"normal"],
+  ["kb","Kota Bharu",6.13,102.24,700,"normal"],
+  ["pg","George Town",5.41,100.33,2600,"warning"],
+  ["bw","Butterworth",5.39,100.42,1100,"normal"],
+  ["sp","Sungai Petani",5.65,100.49,500,"normal"],
+  ["as","Alor Setar",6.12,100.37,600,"normal"],
+  ["ka","Kangar",6.44,100.20,300,"normal"],
+  ["tp","Taiping",4.85,100.74,400,"normal"],
+  ["ih","Ipoh",4.60,101.09,1400,"normal"],
+  ["lm","Lumut",4.23,100.63,300,"normal"],
+  ["kc","Kuching",1.55,110.34,1800,"warning"],
+  ["sb","Sibu",2.29,111.83,600,"normal"],
+  ["bt","Bintulu",3.17,113.03,700,"normal"],
+  ["mi","Miri",4.40,114.00,900,"critical"],
+  ["lb","Labuan",5.28,115.24,300,"normal"],
+  ["kk","Kota Kinabalu",5.98,116.07,1600,"normal"],
+  ["kg2","Keningau",5.34,116.16,200,"normal"],
+  ["sd","Sandakan",5.84,118.12,600,"warning"],
+  ["ld","Lahad Datu",5.03,118.33,300,"normal"],
+  ["tw","Tawau",4.24,117.89,500,"normal"]
+];
+const STATUS_COLOR = { critical: "var(--critical)", warning: "var(--warning)", normal: "var(--s1)" };
+
+function projX(lon) { return 24 + (lon - 99.2) / (119.8 - 99.2) * 952; }
+function projY(lat) { return 402 - (lat - 0.6) / (7.6 - 0.6) * 372; }
+
+function drawMap() {
+  const svg = document.getElementById("map");
+  svg.textContent = "";
+
+  /* recessive graticule */
+  const g = mk("g", {});
+  for (let lon = 100; lon <= 119; lon += 5) {
+    g.appendChild(mk("line", { x1: projX(lon), y1: 14, x2: projX(lon), y2: 408,
+      stroke: "var(--hairline-sm)", "stroke-width": 1 }));
+    g.appendChild(txt(projX(lon) + 4, 404, lon + "°E", { class: "maplabel" }));
+  }
+  for (let lat = 1; lat <= 7; lat += 2) {
+    g.appendChild(mk("line", { x1: 24, y1: projY(lat), x2: 976, y2: projY(lat),
+      stroke: "var(--hairline-sm)", "stroke-width": 1 }));
+    g.appendChild(txt(26, projY(lat) - 5, lat + "°N", { class: "maplabel" }));
+  }
+  svg.appendChild(g);
+
+  /* region captions */
+  [["PENINSULAR MALAYSIA", 101.6, 7.25], ["SARAWAK", 112.0, 1.15], ["SABAH", 116.9, 7.0]]
+    .forEach(function (r) {
+      svg.appendChild(txt(projX(r[1]), projY(r[2]), r[0],
+        { class: "maplabel", "text-anchor": "middle", "letter-spacing": ".18em" }));
+    });
+
+  SITES.forEach(function (s) {
+    const x = projX(s[3]), y = projY(s[2]);
+    const r = Math.max(3.2, Math.sqrt(s[4]) / 11);
+    const col = STATUS_COLOR[s[5]];
+    const grp = mk("g", { class: "pin", id: "pin-" + s[0] });
+    if (s[5] !== "normal") {
+      grp.appendChild(mk("circle", { cx: x, cy: y, r: r + 5, fill: col, "fill-opacity": ".13" }));
+    }
+    grp.appendChild(mk("circle", { class: "halo", cx: x, cy: y, r: r + 2.2,
+      fill: "none", stroke: "var(--panel)", "stroke-width": 2 }));
+    grp.appendChild(mk("circle", { class: "core", cx: x, cy: y, r: r, fill: col, "fill-opacity": ".85" }));
+    const ttl = mk("title", {});
+    ttl.textContent = s[1] + " — RM " + (s[4] / 1000).toFixed(1) + " b exposure";
+    grp.appendChild(ttl);
+    svg.appendChild(grp);
+  });
+
+  /* label only the anchors, never every point */
+  [["kl", "KUALA LUMPUR", 14, 4, "start"], ["jb", "JOHOR BAHRU", 12, 12, "start"],
+   ["pg", "PENANG", -14, -1, "end"], ["kc", "KUCHING", -13, 3, "end"],
+   ["kk", "KOTA KINABALU", 13, -9, "start"], ["mi", "MIRI", -12, -2, "end"]]
+    .forEach(function (l) {
+      const s = SITES.find(function (v) { return v[0] === l[0]; });
+      svg.appendChild(txt(projX(s[3]) + l[2], projY(s[2]) + l[3], l[1],
+        { class: "maplabel", fill: "var(--ink-2)", "text-anchor": l[4] }));
+    });
+}
+
+/* ═══════════════════ SIGNAL FEED ═══════════════════ */
+const SIGNALS = [
+  ["B1","critical","06:12","Drawdown 61.7% against 47.3% verified progress — RM 34.6 m over-advanced","Seri Damai Ph.2, Selangor","Seri Damai 二期，雪兰莪","放款 61.7% 对应核实进度仅 47.3% — 超放 3,460 万令吉","rw"],
+  ["B3","critical","05:48","LTV recomputed to 91.4% after neighbouring plot transacted 18% below valuation","Menara Sentral, Johor Bahru","Menara Sentral，新山","邻地成交价低于估值 18%，LTV 重算至 91.4%","jb"],
+  ["B1","warning","05:31","No construction activity detected for 21 consecutive days","Riverfront Phase 1, Miri","Riverfront 一期，美里","连续 21 天未检测到施工活动","mi"],
+  ["B5","warning","04:57","142 account-opening attempts from 6 devices — suspected mule ring","Digital channel, nationwide","数字渠道，全国","6 台设备发起 142 次开户尝试 — 疑似养卡团伙","kl"],
+  ["A6","critical","04:20","Card-reader geometry deviation detected at ATM — service disabled automatically","Branch 0412, Bukit Bintang","0412 网点，武吉免登","ATM 读卡口几何形变告警 — 已自动停用","kl"],
+  ["B3","warning","03:44","Tenant covering 34% of rent roll filed for judicial management","Prima Retail Park, Penang","Prima Retail Park，槟城","占租金收入 34% 的租户申请司法管理","pg"],
+  ["A3","warning","03:02","Chiller no.2 vibration signature predicts bearing failure in 5–7 weeks","Regional office, Kuching","区域办公楼，古晋","2 号冷水机振动特征预测轴承 5–7 周内失效","kc"],
+  ["A2","good","02:15","Night-mode HVAC schedule saved 2,180 kWh across 12 branches last week","Klang Valley cluster","巴生谷片区","上周 12 家网点夜间空调策略节省 2,180 度电","sa"],
+  ["B1","warning","01:38","Invoiced quantities exceed measured works by 19% on structural package","Bandar Impian, Batu Pahat","Bandar Impian，峇株巴辖","结构分包开票工程量超实测 19%","bp"],
+  ["A5","warning","00:52","After-hours loitering detected at rear entrance — patrol unit dispatched","Branch 0177, Sandakan","0177 网点，山打根","后门检测到非营业时间徘徊 — 已派出巡逻","sd"],
+  ["B3","warning","00:24","Satellite imagery shows construction halted on collateral site","Taman Sri Alam, Iskandar Puteri","Taman Sri Alam，依斯干达","卫星影像显示抵押地块已停工","ip"],
+  ["B4","good","00:05","RWA re-run complete — RM 214 m of capital released by re-rating 38 facilities","Group-wide","全行","风险加权资产重算完成 — 38 笔授信重评级释放资本 2.14 亿令吉","kl"]
+];
+
+function renderFeed() {
+  const feed = document.getElementById("feed");
+  feed.textContent = "";
+  SIGNALS.forEach(function (s) { feed.appendChild(alertNode(s, false)); });
+}
+function alertNode(s, isNew) {
+  const el = document.createElement("div");
+  el.className = "alert " + s[1] + (isNew ? " enter" : "");
+  el.tabIndex = 0;
+  const sev = { critical: ["CRITICAL", "严重"], warning: ["WARNING", "预警"], good: ["RESOLVED", "已闭环"] }[s[1]];
+  el.innerHTML =
+    '<div class="bar"></div><div>' +
+      '<div class="top"><span class="code">' + s[0] + '</span>' +
+      '<span class="sev" data-en="' + sev[0] + '" data-zh="' + sev[1] + '">' + sev[0] + '</span>' +
+      '<span class="time">' + s[2] + '</span></div>' +
+      '<div class="txt" data-en="' + s[3].replace(/"/g, "&quot;") + '" data-zh="' + s[6] + '">' + s[3] + '</div>' +
+      '<div class="loc" data-en="' + s[4] + '" data-zh="' + s[5] + '">' + s[4] + '</div>' +
+    '</div>';
+  const pinId = s[7];
+  el.addEventListener("mouseenter", function () { hotPin(pinId, true); });
+  el.addEventListener("mouseleave", function () { hotPin(pinId, false); });
+  el.addEventListener("focus", function () { hotPin(pinId, true); });
+  el.addEventListener("blur", function () { hotPin(pinId, false); });
+  applyLang(el);
+  return el;
+}
+function hotPin(id, on) {
+  const p = document.getElementById("pin-" + id);
+  if (p) p.classList.toggle("hot", on);
+}
+
+/* ═══════════════════ MODULE STRIP ═══════════════════ */
+const MODULES = [
+  ["B1","Construction loan early warning","建筑贷款风险预警","critical"],
+  ["B2","Distressed asset disposal","不良资产处置","good"],
+  ["B3","Continuous collateral monitoring","抵押品持续监测","critical"],
+  ["B4","Risk capital optimisation","风险资本优化","good"],
+  ["B5","Fraud &amp; anomaly detection","反欺诈与异常识别","warning"],
+  ["A1","Building inspection","楼宇检查","good"],
+  ["A2","Energy management","物业能耗管理","good"],
+  ["A3","Predictive maintenance","预测性维护","warning"],
+  ["A4","Branch network optimisation","分行网络优化","good"],
+  ["A5","Physical security","实体安保与监控","warning"],
+  ["A6","ATM anti-tamper","ATM 防篡改","critical"],
+  ["A7","Collateral revaluation","抵押品重估","good"],
+  ["A8","Property insurance leverage","物业保险议价","good"]
+];
+function renderModules() {
+  const wrap = document.getElementById("modstrip");
+  wrap.textContent = "";
+  MODULES.forEach(function (m) {
+    const d = document.createElement("div");
+    d.className = "mod";
+    d.innerHTML = '<span class="dot" style="background:' +
+      (m[3] === "good" ? "var(--good)" : m[3] === "warning" ? "var(--warning)" : "var(--critical)") +
+      '"></span><span class="code">' + m[0] + '</span><span data-en="' + m[1] + '" data-zh="' + m[2] + '">' + m[1] + '</span>';
+    applyLang(d);
+    wrap.appendChild(d);
+  });
+}
+
+/* ═══════════════════ CHART — drawdown vs progress ═══════════════════ */
+const MONTHS = ["Sep","Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug"];
+const DRAWN  = [8, 15, 22, 28, 34, 39, 45, 50, 54, 57, 60, 61.7];
+const PLAN   = [7, 14, 22, 30, 37, 44, 51, 58, 64, 70, 75, 79];
+let PROGRESS = [6, 13, 20, 26, 31, 34, 37, 39, 41, 43, 45.5, 47.3];
+
+function drawProgress() {
+  const svg = document.getElementById("chart-progress");
+  svg.textContent = "";
+  const L = 44, R = 116, Tp = 16, B = 40;
+  const W = 760, H = 300, pw = W - L - R, ph = H - Tp - B;
+  const x = function (i) { return L + i * pw / (MONTHS.length - 1); };
+  const y = function (v) { return Tp + ph - v / 100 * ph; };
+
+  for (let v = 0; v <= 100; v += 25) {
+    svg.appendChild(mk("line", { x1: L, y1: y(v), x2: L + pw, y2: y(v),
+      stroke: v === 0 ? "var(--hairline)" : "var(--hairline-sm)", "stroke-width": 1 }));
+    svg.appendChild(txt(L - 9, y(v) + 4, v + "%",
+      { "text-anchor": "end", fill: "var(--ink-3)", "font-size": 10, "font-family": "var(--mono)" }));
+  }
+  MONTHS.forEach(function (m, i) {
+    if (i % 2 === 0 || i === MONTHS.length - 1) {
+      svg.appendChild(txt(x(i), H - 18, m,
+        { "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 10, "font-family": "var(--mono)" }));
+    }
+  });
+
+  /* the gap — the whole point of the chart */
+  let d = "";
+  for (let i = 0; i < MONTHS.length; i++) d += (i ? "L" : "M") + x(i) + " " + y(DRAWN[i]);
+  for (let i = MONTHS.length - 1; i >= 0; i--) d += "L" + x(i) + " " + y(PROGRESS[i]);
+  svg.appendChild(mk("path", { d: d + "Z", fill: "var(--critical)", "fill-opacity": ".16" }));
+
+  function line(arr, colour, width, dash) {
+    let p = "";
+    arr.forEach(function (v, i) { p += (i ? "L" : "M") + x(i) + " " + y(v); });
+    const a = { d: p, fill: "none", stroke: colour, "stroke-width": width,
+      "stroke-linejoin": "round", "stroke-linecap": "round" };
+    if (dash) a["stroke-dasharray"] = "4 4";
+    svg.appendChild(mk("path", a));
+  }
+  line(PLAN, "var(--ink-3)", 1.5, true);
+  line(DRAWN, "var(--s2)", 2);
+  line(PROGRESS, "var(--s1)", 2);
+
+  [[DRAWN, "var(--s2)"], [PROGRESS, "var(--s1)"]].forEach(function (s) {
+    const i = s[0].length - 1;
+    svg.appendChild(mk("circle", { cx: x(i), cy: y(s[0][i]), r: 5.5, fill: "var(--panel)" }));
+    svg.appendChild(mk("circle", { cx: x(i), cy: y(s[0][i]), r: 3.5, fill: s[1] }));
+  });
+
+  /* endpoint labels — selective, never on every point */
+  svg.appendChild(txt(x(11) + 12, y(DRAWN[11]) - 4, DRAWN[11].toFixed(1) + "%",
+    { fill: "var(--s2)", "font-size": 15, "font-weight": 600, "font-family": "var(--mono)" }));
+  svg.appendChild(txt(x(11) + 12, y(DRAWN[11]) + 11, T("drawn", "已放款"),
+    { fill: "var(--ink-3)", "font-size": 10 }));
+  svg.appendChild(txt(x(11) + 12, y(PROGRESS[11]) + 1, PROGRESS[11].toFixed(1) + "%",
+    { fill: "var(--s1)", "font-size": 15, "font-weight": 600, "font-family": "var(--mono)" }));
+  svg.appendChild(txt(x(11) + 12, y(PROGRESS[11]) + 16, T("built", "已建成"),
+    { fill: "var(--ink-3)", "font-size": 10 }));
+
+  /* gap annotation */
+  const midY = (y(DRAWN[9]) + y(PROGRESS[9])) / 2;
+  svg.appendChild(mk("line", { x1: x(9), y1: y(DRAWN[9]) + 3, x2: x(9), y2: y(PROGRESS[9]) - 3,
+    stroke: "var(--critical)", "stroke-width": 1 }));
+  svg.appendChild(txt(x(9) - 8, midY + 4,
+    (DRAWN[9] - PROGRESS[9]).toFixed(1) + " pp",
+    { "text-anchor": "end", fill: "var(--critical)", "font-size": 11, "font-weight": 600, "font-family": "var(--mono)" }));
+}
+
+/* ═══════════════════ CHART — LTV distribution ═══════════════════ */
+const LTV = [["<50%", 412], ["50–60%", 688], ["60–70%", 934], ["70–80%", 507], ["80–90%", 9], [">90%", 3]];
+function drawLTV() {
+  const svg = document.getElementById("chart-ltv");
+  svg.textContent = "";
+  const L = 46, R = 22, Tp = 22, B = 46;
+  const W = 700, H = 280, pw = W - L - R, ph = H - Tp - B;
+  const max = 1000;
+  const bw = pw / LTV.length;
+  const y = function (v) { return Tp + ph - v / max * ph; };
+
+  for (let v = 0; v <= 1000; v += 250) {
+    svg.appendChild(mk("line", { x1: L, y1: y(v), x2: L + pw, y2: y(v),
+      stroke: v === 0 ? "var(--hairline)" : "var(--hairline-sm)", "stroke-width": 1 }));
+    svg.appendChild(txt(L - 9, y(v) + 4, v,
+      { "text-anchor": "end", fill: "var(--ink-3)", "font-size": 10, "font-family": "var(--mono)" }));
+  }
+
+  LTV.forEach(function (b, i) {
+    const breach = i >= 4;
+    const bx = L + i * bw + 7, w = bw - 14;
+    const h = Math.max(2, ph - (y(b[1]) - Tp));
+    svg.appendChild(mk("rect", { x: bx, y: y(b[1]), width: w, height: h,
+      rx: 4, fill: breach ? "var(--critical)" : "var(--s1)", "fill-opacity": breach ? "1" : ".9" }));
+    svg.appendChild(txt(bx + w / 2, y(b[1]) - 7, b[1],
+      { "text-anchor": "middle", fill: breach ? "var(--critical)" : "var(--ink-2)",
+        "font-size": 11, "font-weight": 600, "font-family": "var(--mono)" }));
+    svg.appendChild(txt(bx + w / 2, H - 26, b[0],
+      { "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 10.5, "font-family": "var(--mono)" }));
+  });
+
+  const tx = L + 4 * bw;
+  svg.appendChild(mk("line", { x1: tx, y1: Tp - 8, x2: tx, y2: Tp + ph,
+    stroke: "var(--critical)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }));
+  svg.appendChild(txt(tx - 8, Tp - 10, T("POLICY LIMIT 80%", "政策上限 80%"),
+    { "text-anchor": "end", fill: "var(--critical)", "font-size": 10, "font-weight": 700, "letter-spacing": ".08em" }));
+  svg.appendChild(txt(L + pw, H - 6, T("12 facilities · RM 1.34 b exposure above policy", "12 笔授信 · 13.4 亿令吉敞口突破政策"),
+    { "text-anchor": "end", fill: "var(--ink-3)", "font-size": 10.5 }));
+}
+
+/* ═══════════════════ freshness meters ═══════════════════ */
+const FRESH = [
+  ["Satellite imagery", "卫星影像", 1240, "≤ 5 days", "≤ 5 天", 96],
+  ["Drone survey", "无人机航测", 318, "≤ 14 days", "≤ 14 天", 88],
+  ["On-site IoT sensors", "现场物联网传感器", 96, "real time", "实时", 99],
+  ["Market &amp; transaction data", "市场与成交数据", 1240, "daily", "每日", 100],
+  ["Tenant &amp; payment behaviour", "租户与付款行为", 214, "daily", "每日", 92]
+];
+function renderFreshness() {
+  const wrap = document.getElementById("freshness");
+  wrap.textContent = "";
+  FRESH.forEach(function (f) {
+    const d = document.createElement("div");
+    d.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">' +
+        '<span style="font-size:12px" data-en="' + f[0] + '" data-zh="' + f[1] + '">' + f[0] + '</span>' +
+        '<span class="mono" style="font-size:10.5px;color:var(--ink-3)">' + f[2] +
+          ' · <span data-en="' + f[3] + '" data-zh="' + f[4] + '">' + f[3] + '</span></span>' +
+      '</div>' +
+      '<div class="meter"><i style="width:' + f[5] + '%;background:var(--s1)"></i></div>';
+    applyLang(d);
+    wrap.appendChild(d);
+  });
+}
+
+/* ═══════════════════ collateral table ═══════════════════ */
+const COLLATERAL = [
+  ["Menara Sentral","Office","Johor Bahru",412,91.4,"2 d","critical","Adjacent plot transacted 18% below book","邻地成交价低于账面 18%"],
+  ["Seri Damai Ph.2","Development","Selangor",240,"n/a","0 d","critical","Drawdown 14.4 pp ahead of verified works","放款进度超实体进度 14.4pp"],
+  ["Prima Retail Park","Retail","Penang",286,84.2,"1 d","critical","Anchor tenant in judicial management","主力租户进入司法管理"],
+  ["Riverfront Ph.1","Development","Miri",178,88.7,"3 d","critical","No site activity for 21 days","连续 21 天无施工活动"],
+  ["Kilang Teknik 3","Industrial","Shah Alam",96,79.1,"1 d","warning","Utility draw down 62% — output likely halted","水电用量下降 62% — 疑似停产"],
+  ["Taman Sri Alam","Development","Iskandar",134,81.9,"4 d","warning","Construction halted per satellite imagery","卫星影像显示停工"],
+  ["Wisma Antara","Office","Kuala Lumpur",208,73.4,"1 d","warning","31% of leases expire within 9 months","31% 租约 9 个月内到期"],
+  ["Bandar Impian","Development","Batu Pahat",112,76.8,"2 d","warning","Invoiced quantities exceed measured works 19%","开票工程量超实测 19%"]
+];
+function renderCollateral() {
+  const t = document.getElementById("tbl-collateral");
+  const head = [["Asset","资产"],["Type","类型"],["Location","位置"],["Exposure RM m","敞口 百万令吉"],
+                ["LTV","LTV"],["Verified","核验时效"],["Signal","风险信号"]];
+  let h = "<thead><tr>";
+  head.forEach(function (c, i) {
+    h += '<th' + (i === 3 || i === 4 ? ' class="num"' : '') + ' data-en="' + c[0] + '" data-zh="' + c[1] + '">' + c[0] + "</th>";
+  });
+  h += "</tr></thead><tbody>";
+  COLLATERAL.forEach(function (r) {
+    const ltv = (typeof r[4] === "number");
+    h += "<tr>" +
+      '<td style="font-weight:600">' + r[0] + "</td>" +
+      "<td>" + r[1] + "</td><td>" + r[2] + "</td>" +
+      '<td class="num">' + r[3] + "</td>" +
+      '<td class="num" style="color:' + (ltv && r[4] > 80 ? "var(--critical)" : "var(--ink)") + '">' +
+        (ltv ? r[4].toFixed(1) + "%" : "—") + "</td>" +
+      '<td class="num" style="color:var(--ink-3)">' + r[5] + "</td>" +
+      '<td><span class="chip ' + r[6] + '" style="margin-right:8px"><span class="dot"></span>' +
+        '<span data-en="' + (r[6] === "critical" ? "ACT" : "WATCH") + '" data-zh="' +
+        (r[6] === "critical" ? "处置" : "观察") + '">' + (r[6] === "critical" ? "ACT" : "WATCH") + "</span></span>" +
+        '<span data-en="' + r[7] + '" data-zh="' + r[8] + '">' + r[7] + "</span></td>" +
+      "</tr>";
+  });
+  t.innerHTML = h + "</tbody>";
+  applyLang(t);
+}
+
+/* ═══════════════════ operations ═══════════════════ */
+const OPS = [
+  ["A4","Branch network optimisation","分行网络优化",96.0,10,15],
+  ["A5","Physical security &amp; surveillance","实体安保与监控",42.0,20,30],
+  ["A2","Property energy management","物业能耗管理",38.0,18,25],
+  ["A3","Predictive maintenance","设施预测性维护",31.0,20,25],
+  ["A1","Building inspection","楼宇检查",12.0,50,60],
+  ["A7","Collateral revaluation","抵押品重估",14.0,30,40],
+  ["A8","Property insurance premium","物业保险费",26.0,8,15],
+  ["A6","ATM security &amp; anti-tamper","ATM 安全与防篡改",9.0,20,27]
+];
+function mid(o) { return o[3] * (o[4] + o[5]) / 200; }
+
+function drawOps() {
+  const svg = document.getElementById("chart-ops");
+  svg.textContent = "";
+  const rows = OPS.slice().sort(function (a, b) { return mid(b) - mid(a); });
+  const L = 225, R = 66, Tp = 8, B = 30;
+  const W = 700, H = 340, pw = W - L - R;
+  const rh = (H - Tp - B) / rows.length;
+  const max = 14;
+
+  for (let v = 0; v <= 12; v += 4) {
+    const gx = L + v / max * pw;
+    svg.appendChild(mk("line", { x1: gx, y1: Tp, x2: gx, y2: H - B,
+      stroke: v === 0 ? "var(--hairline)" : "var(--hairline-sm)", "stroke-width": 1 }));
+    svg.appendChild(txt(gx, H - B + 16, v,
+      { "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 10, "font-family": "var(--mono)" }));
+  }
+  svg.appendChild(txt(L + pw / 2, H - B + 30, T("RM million saved per year", "每年节省（百万令吉）"),
+    { "text-anchor": "middle", fill: "var(--ink-3)", "font-size": 10 }));
+
+  rows.forEach(function (o, i) {
+    const v = mid(o);
+    const yy = Tp + i * rh + 5;
+    const h = rh - 12;
+    svg.appendChild(txt(L - 14, yy + h / 2 + 4, T(o[1].replace(/&amp;/g, "&"), o[2]),
+      { "text-anchor": "end", fill: "var(--ink-2)", "font-size": 11.5 }));
+    svg.appendChild(txt(6, yy + h / 2 + 4, o[0],
+      { fill: "var(--bone)", "font-size": 10, "font-family": "var(--mono)", "letter-spacing": ".06em" }));
+    svg.appendChild(mk("rect", { x: L, y: yy, width: Math.max(2, v / max * pw), height: h,
+      rx: 4, fill: "var(--s1)", "fill-opacity": i === 0 ? "1" : ".75" }));
+    svg.appendChild(txt(L + v / max * pw + 10, yy + h / 2 + 4, v.toFixed(1),
+      { fill: "var(--ink)", "font-size": 11.5, "font-weight": 600, "font-family": "var(--mono)" }));
+  });
+}
+
+function renderOpsTable() {
+  const t = document.getElementById("tbl-ops");
+  const head = [["","" ],["Module","模块"],["Lever","降本手段"],["Addressable spend RM m","可优化支出 百万令吉"],
+                ["Saving","节省比例"],["RM m / yr","百万令吉/年"]];
+  let h = "<thead><tr>";
+  head.forEach(function (c, i) {
+    h += '<th' + (i >= 3 ? ' class="num"' : '') + ' data-en="' + c[0] + '" data-zh="' + c[1] + '">' + c[0] + "</th>";
+  });
+  h += "</tr></thead><tbody>";
+  const LEVER = {
+    A1: ["Drone capture + AI defect classification", "无人机采集 + AI 缺陷识别"],
+    A2: ["Digital twin + IoT setpoint control", "数字孪生 + 物联网设定点控制"],
+    A3: ["Vibration/thermal sensing + failure prediction", "振动/温度传感 + 故障预测"],
+    A4: ["GIS catchment overlap &amp; site scoring", "GIS 服务半径重叠与选址评分"],
+    A5: ["AI video analytics + robotic patrol", "AI 视频分析 + 机器人巡更"],
+    A6: ["Multi-sensor tamper detection", "多传感器防篡改检测"],
+    A7: ["Aerial survey + remote valuation", "航测 + 远程估值"],
+    A8: ["Risk evidence pack for premium negotiation", "风险数据包用于保费谈判"]
+  };
+  let base = 0, lo = 0, hi = 0;
+  OPS.slice().sort(function (a, b) { return mid(b) - mid(a); }).forEach(function (o) {
+    base += o[3]; lo += o[3] * o[4] / 100; hi += o[3] * o[5] / 100;
+    h += "<tr>" +
+      '<td class="mono" style="color:var(--bone);width:34px">' + o[0] + "</td>" +
+      '<td style="font-weight:600" data-en="' + o[1] + '" data-zh="' + o[2] + '">' + o[1] + "</td>" +
+      '<td style="color:var(--ink-2)" data-en="' + LEVER[o[0]][0] + '" data-zh="' + LEVER[o[0]][1] + '">' + LEVER[o[0]][0] + "</td>" +
+      '<td class="num">' + o[3].toFixed(1) + "</td>" +
+      '<td class="num" style="color:var(--ink-2)">' + o[4] + "–" + o[5] + "%</td>" +
+      '<td class="num" style="color:var(--good);font-weight:600">' +
+        (o[3] * o[4] / 100).toFixed(1) + "–" + (o[3] * o[5] / 100).toFixed(1) + "</td></tr>";
+  });
+  h += '<tr style="border-top:1px solid var(--hairline)">' +
+       '<td></td><td style="font-weight:600" data-en="Total" data-zh="合计">Total</td><td></td>' +
+       '<td class="num" style="font-weight:600">' + base.toFixed(1) + "</td>" +
+       '<td class="num" style="color:var(--ink-2)">' + Math.round(lo / base * 100) + "–" + Math.round(hi / base * 100) + "%</td>" +
+       '<td class="num" style="color:var(--good);font-weight:600">' + lo.toFixed(1) + "–" + hi.toFixed(1) + "</td></tr>";
+  t.innerHTML = h + "</tbody>";
+  applyLang(t);
+}
+
+/* ═══════════════════ branch catchment overlap (A4) ═══════════════════ */
+/* x, y, catchment radius, overlapping? */
+const BRANCHES = [
+  [46, 40, 30, 0], [92, 52, 34, 1], [118, 44, 30, 1], [176, 34, 28, 0],
+  [232, 46, 32, 0], [292, 38, 26, 0], [60, 108, 28, 0], [104, 122, 30, 1],
+  [130, 116, 28, 1], [186, 108, 32, 0], [238, 124, 28, 1], [262, 116, 26, 1],
+  [300, 104, 24, 0], [156, 74, 26, 0], [214, 82, 24, 0], [72, 74, 22, 0]
+];
+function drawBranch() {
+  const svg = document.getElementById("chart-branch");
+  if (!svg) return;
+  svg.textContent = "";
+  BRANCHES.forEach(function (b) {
+    const col = b[3] ? "var(--critical)" : "var(--s1)";
+    svg.appendChild(mk("circle", { cx: b[0], cy: b[1], r: b[2], fill: col,
+      "fill-opacity": b[3] ? ".17" : ".08", stroke: col, "stroke-opacity": b[3] ? ".55" : ".28" }));
+  });
+  BRANCHES.forEach(function (b) {
+    const col = b[3] ? "var(--critical)" : "var(--s1)";
+    svg.appendChild(mk("circle", { cx: b[0], cy: b[1], r: 2.6, fill: col }));
+  });
+  svg.appendChild(txt(4, 162, T("16 branches · 4 overlapping pairs", "16 家网点 · 4 对服务圈重叠"),
+    { fill: "var(--ink-3)", "font-size": 10, "font-family": "var(--mono)" }));
+  svg.appendChild(txt(336, 162, T("RM 9.6–14.4 m / yr", "960–1,440 万令吉/年"),
+    { "text-anchor": "end", fill: "var(--critical)", "font-size": 10, "font-weight": 700, "font-family": "var(--mono)" }));
+}
+
+/* ═══════════════════ value bridge ═══════════════════ */
+const BRIDGE = [
+  ["Operating cost saved", "运营成本节省", 54, "var(--s1)"],
+  ["Credit loss avoided", "减少的信用损失", 16, "var(--s2)"],
+  ["Capital efficiency", "资本效率提升", 7.5, "var(--s3)"]
+];
+function drawBridge() {
+  const svg = document.getElementById("chart-bridge");
+  svg.textContent = "";
+  const L = 20, R = 20, W = 700, pw = W - L - R;
+  const total = BRIDGE.reduce(function (a, b) { return a + b[2]; }, 0);
+  const barY = 60, barH = 46;
+  let x = L;
+  BRIDGE.forEach(function (b, i) {
+    const seg = b[2] / total * pw;
+    const last = i === BRIDGE.length - 1;
+    svg.appendChild(mk("rect", { x: x, y: barY, width: seg - (last ? 0 : 2), height: barH, rx: 4, fill: b[3] }));
+    /* value sits below the bar — a narrow segment can never crop its own label.
+       Series names are carried by the legend, so they are not repeated here. */
+    svg.appendChild(txt(last ? L + pw : x, barY + barH + 21, "RM " + b[2] + " m",
+      { "text-anchor": last ? "end" : "start", fill: b[3],
+        "font-size": 13, "font-weight": 700, "font-family": "var(--mono)" }));
+    x += seg;
+  });
+  svg.appendChild(txt(L, 22, T("TOTAL ANNUAL VALUE AT STEADY STATE", "稳定运行后年度总价值"),
+    { fill: "var(--ink-3)", "font-size": 10, "letter-spacing": ".12em" }));
+  svg.appendChild(txt(L + pw, 40, "RM " + total.toFixed(1) + " m / yr",
+    { "text-anchor": "end", fill: "var(--ink)", "font-size": 26, "font-weight": 700 }));
+}
+
+/* ═══════════════════ before / after ═══════════════════ */
+const BA = [
+  ["Quarterly site visit", "每季度人工现场巡查", "Verified every 14 days", "每 14 天自动核验"],
+  ["8% of the book sampled", "抽样覆盖账簿 8%", "100% under watch", "100% 持续监控"],
+  ["Risk data at T+1 month", "风险数据 T+1 个月", "T+0, on one screen", "T+0，一屏可见"],
+  ["Borrower tells you", "由借款人告知", "94 days before they do", "早于借款人 94 天"],
+  ["A judgement in a memo", "备忘录里的主观判断", "A measurement with a hash", "带哈希封存的可量测证据"],
+  ["Losses recognised", "损失事后确认", "Losses avoided", "损失事前规避"]
+];
+function renderBA() {
+  const w = document.getElementById("beforeafter");
+  w.textContent = "";
+  BA.forEach(function (r) {
+    const b = document.createElement("div"); b.className = "b";
+    b.setAttribute("data-en", r[0]); b.setAttribute("data-zh", r[1]); b.textContent = r[0];
+    const a2 = document.createElement("div"); a2.className = "arrow"; a2.textContent = "→";
+    const a = document.createElement("div"); a.className = "a";
+    a.setAttribute("data-en", r[2]); a.setAttribute("data-zh", r[3]); a.textContent = r[2];
+    w.appendChild(b); w.appendChild(a2); w.appendChild(a);
+  });
+  const note = document.createElement("div");
+  note.className = "lab";
+  note.setAttribute("data-en", "Left: how it works in most banks today. Right: what this platform makes routine.");
+  note.setAttribute("data-zh", "左：今天多数银行的做法。右：这套平台让它变成日常。");
+  note.textContent = "Left: how it works in most banks today. Right: what this platform makes routine.";
+  w.appendChild(note);
+  applyLang(w);
+}
+
+/* ═══════════════════ Malaysian compliance ═══════════════════ */
+const COMPLY_A = [
+  ["Hosted in Malaysia", "数据存放于马来西亚境内",
+   "Deployed in-country. The bank retains ownership and control of all data and cryptographic keys, as BNM RMiT requires for cloud and third-party arrangements.",
+   "境内部署。数据与密钥的所有权和控制权始终在银行手中，符合 BNM RMiT 对云服务与第三方安排的要求。"],
+  ["RMiT third-party pack", "RMiT 第三方风险材料",
+   "Due-diligence, business-continuity and documented exit plan submitted in week 1 — before any integration work begins.",
+   "尽职调查、业务连续性与书面退出方案在第 1 周提交——先于任何对接工作。"],
+  ["PDPA 2010", "《2010 个人资料保护法》",
+   "No personal data leaves the bank's environment. Site imagery is processed with faces and plates redacted at source.",
+   "个人资料不离开银行环境。现场影像在采集端即完成人脸与车牌脱敏。"]
+];
+const COMPLY_B = [
+  ["Licensed drone operations", "持证无人机作业",
+   "Flights are flown by a Malaysian operator holding CAAM ATF permits and RCoC-B pilots, with JUPEM aerial-data approval. Permits are filed 14 working days ahead and tracked in the platform.",
+   "由持有 CAAM ATF 许可、RCoC-B 执照的马来西亚本地运营商执飞，并取得 JUPEM 航空测绘批准。许可提前 14 个工作日申报并在平台内留痕。"],
+  ["Legally valid e-signature", "具法律效力的电子签章",
+   "Digital signing is issued through a Malaysian licensed Certification Authority under the Digital Signature Act 1997, not a foreign CA.",
+   "数字签名通过《1997 数字签名法》下的马来西亚持牌认证机构（CA）签发，而非境外 CA。"],
+  ["Local delivery partner", "本地交付伙伴",
+   "Implementation and level-1 support are delivered by a Malaysian entity, with source escrow and a documented handover so the bank is never dependent on a foreign team.",
+   "实施与一线支持由马来西亚本地实体承担，配套源码托管与交接文档，银行不会依赖境外团队。"]
+];
+function renderComply() {
+  [["comp-a", COMPLY_A], ["comp-b", COMPLY_B]].forEach(function (g) {
+    const w = document.getElementById(g[0]);
+    w.textContent = "";
+    g[1].forEach(function (c) {
+      const d = document.createElement("div");
+      d.className = "comp";
+      d.innerHTML = '<span class="tick">✓</span><span><b data-en="' + c[0] + '" data-zh="' + c[1] + '">' + c[0] +
+        '</b><span data-en="' + c[2] + '" data-zh="' + c[3] + '">' + c[2] + "</span></span>";
+      applyLang(d);
+      w.appendChild(d);
+    });
+  });
+}
+
+/* ═══════════════════ live survey simulation ═══════════════════ */
+const STEPS = [
+  ["Filing CAAM flight permit reference", "报送 CAAM 飞行许可编号"],
+  ["Capturing 412 images at 4.2 cm GSD", "采集 412 张影像，地面分辨率 4.2cm"],
+  ["Reconstructing mesh, registering to BIM", "三维重建并与 BIM 模型配准"],
+  ["Matching 6,160 model elements", "比对 6,160 个模型构件"],
+  ["Reconciling against payment records", "与付款记录对账"],
+  ["Applying credit policy 8.3", "适用信贷政策第 8.3 条"]
+];
+let running = false;
+function renderPipeline(active) {
+  const w = document.getElementById("pipeline");
+  w.textContent = "";
+  STEPS.forEach(function (s, i) {
+    const done = active > i, now = active === i;
+    const d = document.createElement("div");
+    d.style.cssText = "display:flex;align-items:center;gap:10px;font-size:12px;color:" +
+      (done ? "var(--ink)" : now ? "var(--bone)" : "var(--ink-3)");
+    d.innerHTML =
+      '<span class="mono" style="font-size:10px;width:16px;color:' +
+        (done ? "var(--good)" : "var(--ink-3)") + '">' + (done ? "✓" : String(i + 1).padStart(2, "0")) + "</span>" +
+      '<span data-en="' + s[0] + '" data-zh="' + s[1] + '">' + s[0] + "</span>";
+    applyLang(d);
+    w.appendChild(d);
+  });
+}
+function runSurvey() {
+  if (running) return;
+  running = true;
+  const btn = document.getElementById("runbtn");
+  btn.disabled = true;
+  btn.textContent = T("Survey in progress…", "航测执行中…");
+  let i = 0;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const gap = reduce ? 60 : 620;
+  renderPipeline(0);
+  const iv = setInterval(function () {
+    i++;
+    renderPipeline(i);
+    if (i >= STEPS.length) {
+      clearInterval(iv);
+      finishSurvey();
+    }
+  }, gap);
+}
+function finishSurvey() {
+  PROGRESS[11] = 48.6;
+  drawProgress();
+  document.getElementById("kv-prog").textContent = "48.6%";
+  document.getElementById("kv-survey").textContent = "28 Aug 2026";
+  document.getElementById("ev-survey").innerHTML = "28 Aug 2026<br>4.2 cm GSD<br>438 images<br>CAAM ATF-2026-9104";
+  const nb = document.getElementById("action-body");
+  nb.innerHTML =
+    '<div class="chip critical" style="margin-bottom:9px"><span class="dot"></span>' +
+      T("HOLD CONFIRMED", "确认暂缓拨付") + "</div>" +
+    '<p style="margin:0 0 12px;font-size:12.5px;line-height:1.5">' +
+      T("Re-verified at 48.6%. The gap narrowed by 1.3 pp but remains 13.1 pp — RM 31.4 m over-advanced. Hold stands; Credit Committee notified automatically.",
+        "重新核实进度 48.6%。差额收窄 1.3pp，但仍达 13.1pp——超放 3,140 万令吉。暂缓决定维持，已自动通知信贷委员会。") + "</p>";
+  const feed = document.getElementById("feed");
+  const s = ["B1","critical", new Date().toTimeString().slice(0,5),
+    "Re-verification complete — 48.6% built vs 61.7% drawn, hold maintained",
+    "Seri Damai Ph.2, Selangor","Seri Damai 二期，雪兰莪",
+    "复核完成 — 实体进度 48.6% vs 放款 61.7%，维持暂缓","rw"];
+  feed.insertBefore(alertNode(s, true), feed.firstChild);
+  toast(T("Survey complete · progress restated to 48.6% · drawdown hold maintained",
+          "航测完成 · 进度重算为 48.6% · 维持暂缓拨付"));
+  const btn = document.getElementById("runbtn");
+  btn.textContent = T("Survey complete", "本轮航测已完成");
+  running = false;
+  btn.disabled = false;
+  setTimeout(function () {
+    if (!running) btn.textContent = T("Task drone survey", "派发无人机航测任务");
+  }, 4000);
+}
+
+/* ═══════════════════ boot ═══════════════════ */
+function drawAll() {
+  drawMap(); drawProgress(); drawLTV(); drawOps(); drawBranch(); drawBridge();
+}
+drawAll();
+renderFeed();
+renderModules();
+renderFreshness();
+renderCollateral();
+renderOpsTable();
+renderBA();
+renderComply();
+renderPipeline(-1);
+applyLang(document);
+
+/* language changes re-render the SVG text */
+const _setLang = setLang;
+setLang = function (l) { _setLang(l); drawAll(); renderOpsTable(); renderCollateral(); };
+</script>
