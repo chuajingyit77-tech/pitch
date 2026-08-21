@@ -1,0 +1,1369 @@
+<title>Gradient Town</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Public+Sans:wght@400;500;600;700&display=swap" />
+<style>
+/* Gradient Town — a civic operations board. Single committed visual world:
+   petrol ink, survey-plan geometry, brass instrumentation. */
+:root {
+  --ground: #0b1719;
+  --panel: #102327;
+  --panel-2: #163035;
+  --plot: #12272c;
+  --rule: #275055;
+  --rule-soft: #1c3b40;
+  --rule-faint: rgba(120, 190, 185, 0.06);
+  --text: #e8f1ee;
+  --muted: #93b0ac;
+  --dim: #6a8c88;
+  --brass: #d9a441;
+  --brass-soft: rgba(217, 164, 65, 0.16);
+  --good: #6fd3a2;
+  --support: #e2795f;
+  --display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --ui: 'Public Sans', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { margin: 0; font-weight: 400; text-wrap: balance; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.board { max-width: 1560px; margin: 0 auto; padding: 20px 20px 48px; display: flex; flex-direction: column; gap: 18px; }
+
+/* ---------- masthead ---------- */
+.masthead {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  padding: 16px 20px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--rule-soft); border-radius: 6px;
+}
+.ident { display: flex; align-items: center; gap: 14px; margin-right: auto; }
+.seal {
+  width: 46px; height: 46px; display: grid; place-items: center;
+  border: 1px solid var(--brass); border-radius: 50%;
+  color: var(--brass); font-family: var(--display); font-size: 20px; letter-spacing: 0.04em;
+}
+.ident h1 { font-family: var(--display); font-size: 30px; letter-spacing: 0.01em; line-height: 1.1; }
+.ident p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; letter-spacing: 0.09em; text-transform: uppercase; }
+.clock { display: flex; align-items: baseline; gap: 10px; padding-right: 20px; border-right: 1px solid var(--rule-soft); }
+.clock .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
+.clock .value { font-family: var(--mono); font-size: 30px; color: var(--brass); font-variant-numeric: tabular-nums; }
+.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ctl {
+  padding: 8px 14px; border: 1px solid var(--rule); border-radius: 3px;
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text); background: rgba(255, 255, 255, 0.02); transition: background 120ms, border-color 120ms;
+}
+.ctl:hover { border-color: var(--brass); background: var(--brass-soft); }
+.ctl.primary { border-color: var(--brass); color: var(--brass); }
+.ctl.primary.running { background: var(--brass); color: #10222a; }
+.speeds { display: flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+.speeds button { padding: 8px 11px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+.speeds button[aria-pressed='true'] { background: var(--brass-soft); color: var(--brass); }
+
+/* ---------- layout ---------- */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 348px; gap: 18px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--rule-soft); border-radius: 6px; }
+.panel > header {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 12px 16px; border-bottom: 1px solid var(--rule-soft);
+}
+.panel > header h2 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.panel > header .note { font-family: var(--mono); font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.rail { display: flex; flex-direction: column; gap: 18px; }
+.col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+/* ---------- map ---------- */
+.map-panel { overflow: hidden; }
+#map { display: block; width: 100%; height: auto; background: var(--ground); }
+.street { stroke: var(--rule-soft); stroke-width: 6; stroke-linecap: round; opacity: 0.55; }
+.plot-fill { fill: var(--plot); stroke: var(--rule-soft); }
+.plot:hover .plot-fill { stroke: color-mix(in srgb, var(--tint) 60%, transparent); }
+.plate { font-family: var(--mono); font-size: 10px; fill: var(--brass); letter-spacing: 0.1em; }
+.plot-name { font-family: var(--ui); font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; fill: var(--muted); }
+.plot-domain { font-family: var(--mono); font-size: 9.5px; fill: var(--dim); letter-spacing: 0.04em; }
+.block-fill {
+  fill: color-mix(in srgb, var(--tint) 12%, var(--panel-2));
+  stroke: color-mix(in srgb, var(--tint) 38%, transparent);
+}
+.block:hover .block-fill, .block:focus-visible .block-fill { stroke: var(--tint); fill: color-mix(in srgb, var(--tint) 20%, var(--panel-2)); }
+.block-glyph { font-size: 17px; }
+.block-name { font-family: var(--ui); font-size: 9px; font-weight: 600; fill: var(--text); letter-spacing: 0.02em; }
+.block-staff { font-family: var(--mono); font-size: 8.5px; fill: var(--good); letter-spacing: 0.03em; }
+.block-staff.is-empty { fill: var(--dim); }
+.pin { transition: transform 900ms cubic-bezier(0.4, 0.05, 0.2, 1); }
+.pin-dot { fill: var(--tint); stroke: var(--ground); stroke-width: 1; }
+.pin[data-stage='student'] .pin-dot { fill: none; stroke: var(--tint); stroke-width: 1.4; r: 3.4; }
+.pin[data-stage='graduate'] .pin-dot { fill: var(--brass); stroke: var(--brass); }
+.pin.is-selected .pin-dot { stroke: var(--text); stroke-width: 2; r: 5.5; }
+.legend {
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+  padding: 10px 16px; border-top: 1px solid var(--rule-soft);
+  font-family: var(--mono); font-size: 10.5px; color: var(--dim); letter-spacing: 0.05em;
+}
+.legend b { color: var(--muted); font-weight: 500; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.key i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.key i.hollow { background: none; border: 1.4px solid var(--muted); }
+
+/* ---------- pipeline ---------- */
+.pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule-soft); }
+.stagebox { background: var(--panel); padding: 14px 16px; }
+.stagebox .n { font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; display: block; line-height: 1.1; }
+.stagebox .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--dim); }
+.stagebox.study .n { color: var(--muted); }
+.stagebox.grad .n { color: var(--brass); }
+.stagebox.work .n { color: var(--good); }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--rule-soft); }
+.metric { background: var(--panel); padding: 12px 16px; }
+.metric .n { font-family: var(--mono); font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.metric .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); display: block; }
+
+/* ---------- resources ---------- */
+.res-list { padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 9px; }
+.res { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 10px; }
+.res .name { font-size: 12.5px; color: var(--muted); }
+.res .bar { grid-column: 2 / -1; height: 4px; border-radius: 2px; background: var(--rule-soft); overflow: hidden; }
+.res .bar span { display: block; height: 100%; background: var(--tint); transition: width 500ms ease; }
+.res .amt { font-family: var(--mono); font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.res .flow { font-family: var(--mono); font-size: 10px; color: var(--good); }
+.res .flow.neg { color: var(--support); }
+
+/* ---------- log ---------- */
+.log-list { max-height: 232px; overflow-y: auto; padding: 10px 16px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 24px; align-content: start; }
+.entry { display: grid; grid-template-columns: 40px 1fr; gap: 10px; font-size: 12.5px; line-height: 1.45; }
+.entry .d { font-family: var(--mono); font-size: 10.5px; color: var(--dim); padding-top: 2px; }
+.entry .t { color: var(--muted); border-left: 2px solid var(--rule-soft); padding-left: 10px; }
+.entry[data-kind='graduation'] .t { border-color: var(--brass); color: var(--text); }
+.entry[data-kind='hire'] .t { border-color: var(--good); color: var(--text); }
+.entry[data-kind='promotion'] .t { border-color: #9fb4ff; }
+.entry[data-kind='support'] .t { border-color: var(--support); }
+.entry[data-kind='town'] .t { border-color: var(--text); color: var(--text); }
+
+/* ---------- roster ---------- */
+.roster-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); }
+.roster-head h2 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-right: auto; }
+.chip {
+  padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px;
+  font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 0.06em;
+}
+.chip[aria-pressed='true'] { border-color: var(--brass); color: var(--brass); background: var(--brass-soft); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 1px; background: var(--rule-soft); }
+.card { background: var(--panel); padding: 12px 14px; text-align: left; display: flex; flex-direction: column; gap: 6px; transition: background 120ms; }
+.card:hover { background: var(--panel-2); }
+.card.is-selected { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--brass); }
+.card .top { display: flex; align-items: center; gap: 8px; }
+.card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--tint); flex: none; }
+.card .nm { font-weight: 600; font-size: 14px; }
+.card .lv { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.card .role { font-size: 11.5px; color: var(--muted); min-height: 34px; }
+.card .meter { height: 3px; background: var(--rule-soft); border-radius: 2px; overflow: hidden; }
+.card .meter span { display: block; height: 100%; background: var(--good); }
+.card .foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* ---------- dossier ---------- */
+.dossier {
+  position: fixed; top: 0; right: 0; width: min(400px, 92vw); height: 100vh; z-index: 20;
+  background: var(--panel); border-left: 1px solid var(--rule); box-shadow: var(--shadow);
+  transform: translateX(100%); transition: transform 260ms cubic-bezier(0.4, 0.05, 0.2, 1);
+  overflow-y: auto; padding: 22px 24px 40px;
+}
+.dossier.open { transform: translateX(0); }
+.dossier .close { position: absolute; top: 16px; right: 18px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+.dossier .close:hover { color: var(--brass); }
+.dossier h3 { font-family: var(--display); font-size: 30px; }
+.dossier .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass); margin: 4px 0 18px; }
+.dsec { border-top: 1px solid var(--rule-soft); padding: 14px 0; }
+.dsec h4 { margin: 0 0 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); font-weight: 500; }
+.kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; }
+.kv span:last-child { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.apt { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; }
+.apt .lbl { width: 92px; color: var(--muted); text-transform: capitalize; }
+.apt .track { flex: 1; height: 4px; background: var(--rule-soft); border-radius: 2px; overflow: hidden; }
+.apt .track span { display: block; height: 100%; background: var(--brass); }
+.apt .val { font-family: var(--mono); font-size: 10.5px; color: var(--dim); width: 28px; text-align: right; }
+.hl { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 12px; border-left: 2px solid var(--rule); }
+.transcript { display: flex; flex-direction: column; gap: 6px; }
+.course { display: grid; grid-template-columns: 18px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.course .cinfo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.course .cname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.course .track { display: block; width: 100%; height: 4px; background: var(--rule-soft); border-radius: 2px; overflow: hidden; }
+.course .track span { display: block; height: 100%; background: var(--good); }
+.course .g { font-family: var(--mono); font-size: 10.5px; text-align: right; color: var(--dim); }
+
+.foot-note { color: var(--dim); font-size: 12px; text-align: center; font-family: var(--mono); letter-spacing: 0.06em; }
+
+@media (max-width: 1180px) { .stage { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+<div class="board">
+  <header class="masthead">
+    <div class="ident">
+      <span class="seal">GT</span>
+      <div>
+        <h1>Gradient Town</h1>
+        <p>Civic operations board &middot; 66 citizens &middot; 33 buildings</p>
+      </div>
+    </div>
+    <div class="clock"><span class="label">Day</span><span class="value" id="day">0</span></div>
+    <div class="controls">
+      <button class="ctl primary" id="play">Run</button>
+      <button class="ctl" id="step">Step</button>
+      <div class="speeds" role="group" aria-label="Simulation speed">
+        <button data-speed="600" aria-pressed="false">1&times;</button>
+        <button data-speed="260" aria-pressed="true">2&times;</button>
+        <button data-speed="90" aria-pressed="false">6&times;</button>
+      </div>
+      <button class="ctl" id="reset">Reset</button>
+    </div>
+  </header>
+
+  <div class="stage">
+   <div class="col">
+    <section class="panel map-panel">
+      <header>
+        <h2>District Survey</h2>
+        <span class="note" id="map-note">11 districts &middot; plan view</span>
+      </header>
+      <svg id="map" role="img" aria-label="Plan view of Gradient Town's districts, buildings and citizens"></svg>
+      <div class="legend">
+        <span class="key"><i class="hollow"></i> <b>Studying</b> at the Academy</span>
+        <span class="key"><i style="background:#d9a441"></i> <b>Graduated</b>, awaiting placement</span>
+        <span class="key"><i style="background:#6fd3a2"></i> <b>At work</b> — pin takes its guild colour</span>
+        <span id="legend-tail"></span>
+      </div>
+    </section>
+
+   </div>
+
+    <aside class="rail">
+      <section class="panel">
+        <header><h2>Pipeline</h2><span class="note" id="pipe-note">academy &rarr; work</span></header>
+        <div class="pipeline">
+          <div class="stagebox study"><span class="n" id="n-study">66</span><span class="k">Studying</span></div>
+          <div class="stagebox grad"><span class="n" id="n-grad">0</span><span class="k">Graduated</span></div>
+          <div class="stagebox work"><span class="n" id="n-work">0</span><span class="k">Hired</span></div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span class="k">Avg performance</span><span class="n" id="m-perf">—</span></div>
+          <div class="metric"><span class="k">Avg GPA</span><span class="n" id="m-gpa">—</span></div>
+          <div class="metric"><span class="k">Wellbeing</span><span class="n" id="m-well">—</span></div>
+          <div class="metric"><span class="k">Open posts</span><span class="n" id="m-open">—</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header><h2>Town Stores</h2><span class="note" id="res-note">stock &middot; net/day</span></header>
+        <div class="res-list" id="res-list"></div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="panel">
+    <header><h2>Town Record</h2><span class="note" id="log-note"></span></header>
+    <div class="log-list" id="log"></div>
+  </section>
+
+  <section class="panel">
+    <div class="roster-head">
+      <h2>Citizen Roster</h2>
+      <button class="chip" data-filter="all" aria-pressed="true">All 66</button>
+      <button class="chip" data-filter="student" aria-pressed="false">Studying</button>
+      <button class="chip" data-filter="graduate" aria-pressed="false">Graduated</button>
+      <button class="chip" data-filter="employed" aria-pressed="false">Hired</button>
+    </div>
+    <div class="cards" id="roster"></div>
+  </section>
+
+  <p class="foot-note">Every citizen studies, passes finals, and is placed in work that fits their aptitudes.</p>
+</div>
+
+<aside class="dossier" id="dossier" aria-label="Citizen dossier" aria-hidden="true">
+  <button class="close" id="dossier-close">Close &times;</button>
+  <div id="dossier-body"></div>
+</aside>
+<script type="module">
+// Static world definition for Gradient Town: resources, guilds, buildings, jobs, citizens.
+
+const RESOURCES = [
+  { id: 'energy',    name: 'Energy',    emoji: '⚡', color: '#f6c453' },
+  { id: 'food',      name: 'Food',      emoji: '\u{1F33E}', color: '#8fd694' },
+  { id: 'materials', name: 'Materials', emoji: '\u{1F9F1}', color: '#e08a6a' },
+  { id: 'data',      name: 'Data',      emoji: '\u{1F4E1}', color: '#7fc7ff' },
+  { id: 'compute',   name: 'Compute',   emoji: '\u{1F9EE}', color: '#b39dff' },
+  { id: 'credits',   name: 'Credits',   emoji: '\u{1FA99}', color: '#ffd479' },
+  { id: 'knowledge', name: 'Knowledge', emoji: '\u{1F4DA}', color: '#9ad1c8' },
+  { id: 'care',      name: 'Care',      emoji: '\u{1F49A}', color: '#ff9fb1' },
+];
+
+const SKILLS = [
+  'energy', 'cultivation', 'fabrication', 'computation', 'healing',
+  'trade', 'logistics', 'governance', 'inquiry', 'artistry', 'teaching',
+];
+
+// Each guild owns a district on the map.
+const GUILDS = [
+  { id: 'aether',    name: 'Aether Guild',    domain: 'Power & Light',      skill: 'energy',      emoji: '⚡', color: '#f6c453' },
+  { id: 'verdant',   name: 'Verdant Guild',   domain: 'Food & Growth',      skill: 'cultivation', emoji: '\u{1F331}', color: '#8fd694' },
+  { id: 'forge',     name: 'Forge Guild',     domain: 'Making & Repair',    skill: 'fabrication', emoji: '\u{1F528}', color: '#e08a6a' },
+  { id: 'lattice',   name: 'Lattice Guild',   domain: 'Data & Compute',     skill: 'computation', emoji: '\u{1F5A5}', color: '#7fc7ff' },
+  { id: 'mender',    name: 'Mender Guild',    domain: 'Health & Repair',    skill: 'healing',     emoji: '\u{1FA7A}', color: '#ff9fb1' },
+  { id: 'ledger',    name: 'Ledger Guild',    domain: 'Markets & Trade',    skill: 'trade',       emoji: '\u{1FA99}', color: '#ffd479' },
+  { id: 'wayfinder', name: 'Wayfinder Guild', domain: 'Transit & Supply',   skill: 'logistics',   emoji: '\u{1F686}', color: '#9fb4ff' },
+  { id: 'keystone',  name: 'Keystone Guild',  domain: 'Civics & Utilities', skill: 'governance',  emoji: '\u{1F3DB}', color: '#c9c3ff' },
+  { id: 'lumen',     name: 'Lumen Guild',     domain: 'Science & Study',    skill: 'inquiry',     emoji: '\u{1F52D}', color: '#6fe3d4' },
+  { id: 'chorus',    name: 'Chorus Guild',    domain: 'Arts & Culture',     skill: 'artistry',    emoji: '\u{1F3AD}', color: '#ffa8e0' },
+  { id: 'hearth',    name: 'Hearth Guild',    domain: 'Learning & Care',    skill: 'teaching',    emoji: '\u{1F3EB}', color: '#ffc98f' },
+];
+
+// posts: seats of work. inputs/outputs are per staffed agent per day at 100% performance.
+const BUILDINGS = [
+  // Aether
+  { id: 'solar_spire',  guild: 'aether', name: 'Solar Spire', emoji: '\u{1F506}',
+    blurb: 'Tracks the sun and pours light into the town grid.',
+    inputs: { materials: 0.2 }, outputs: { energy: 6.2 },
+    posts: [{ title: 'Array Tuner', skill: 'energy', seats: 2 }, { title: 'Light Router', skill: 'computation', seats: 1 }] },
+  { id: 'fusion_kiln',  guild: 'aether', name: 'Fusion Kiln', emoji: '\u{1F525}',
+    blurb: 'A patient little star kept in a ceramic ring.',
+    inputs: { materials: 0.5, compute: 0.3 }, outputs: { energy: 9.0 },
+    posts: [{ title: 'Plasma Steward', skill: 'energy', seats: 2 }, { title: 'Containment Analyst', skill: 'inquiry', seats: 1 }] },
+  { id: 'grid_vault',   guild: 'aether', name: 'Grid Vault', emoji: '\u{1F50B}',
+    blurb: 'Stores the surplus so no night is ever dark.',
+    inputs: { energy: 0.4 }, outputs: { energy: 3.0, data: 0.6 },
+    posts: [{ title: 'Load Balancer', skill: 'energy', seats: 1 }, { title: 'Grid Scribe', skill: 'logistics', seats: 1 }] },
+
+  // Verdant
+  { id: 'terrace_farms', guild: 'verdant', name: 'Terrace Farms', emoji: '\u{1F33E}',
+    blurb: 'Stepped fields that climb the eastern slope.',
+    inputs: { energy: 0.4 }, outputs: { food: 4.0 },
+    posts: [{ title: 'Field Warden', skill: 'cultivation', seats: 3 }] },
+  { id: 'hydro_groves',  guild: 'verdant', name: 'Hydro Groves', emoji: '\u{1F333}',
+    blurb: 'Orchards grown in mist and measured light.',
+    inputs: { energy: 0.6, data: 0.2 }, outputs: { food: 3.2, care: 0.4 },
+    posts: [{ title: 'Grove Keeper', skill: 'cultivation', seats: 2 }, { title: 'Yield Modeler', skill: 'inquiry', seats: 1 }] },
+  { id: 'seed_bank',     guild: 'verdant', name: 'Seed Bank', emoji: '\u{1F9EC}',
+    blurb: 'Every cultivar the town has ever loved, kept safe.',
+    inputs: { energy: 0.2 }, outputs: { knowledge: 1.2, food: 0.6 },
+    posts: [{ title: 'Seed Archivist', skill: 'cultivation', seats: 1 }, { title: 'Trait Librarian', skill: 'inquiry', seats: 1 }] },
+
+  // Forge
+  { id: 'the_foundry',    guild: 'forge', name: 'The Foundry', emoji: '\u{1F528}',
+    blurb: 'Where raw stock becomes parts that fit the first time.',
+    inputs: { energy: 1.2 }, outputs: { materials: 3.6 },
+    posts: [{ title: 'Forge Hand', skill: 'fabrication', seats: 3 }] },
+  { id: 'fab_yard',       guild: 'forge', name: 'Fabrication Yard', emoji: '\u{1F3D7}',
+    blurb: 'Prints housing, bridges, and the occasional bandstand.',
+    inputs: { energy: 0.8, materials: 1.4, compute: 0.3 }, outputs: { materials: 2.2, care: 0.5 },
+    posts: [{ title: 'Assembly Lead', skill: 'fabrication', seats: 2 }, { title: 'Tolerance Checker', skill: 'inquiry', seats: 1 }] },
+  { id: 'depot',          guild: 'forge', name: 'Materials Depot', emoji: '\u{1F4E6}',
+    blurb: 'Nothing is thrown away; it is only between uses.',
+    inputs: { energy: 0.3 }, outputs: { materials: 1.6, credits: 0.5 },
+    posts: [{ title: 'Stock Keeper', skill: 'logistics', seats: 1 }, { title: 'Reclaimer', skill: 'fabrication', seats: 1 }] },
+
+  // Lattice
+  { id: 'compute_bastion', guild: 'lattice', name: 'Compute Bastion', emoji: '\u{1F5A5}',
+    blurb: 'Cool halls of quiet reasoning, humming day and night.',
+    inputs: { energy: 2.0 }, outputs: { compute: 5.2 },
+    posts: [{ title: 'Cluster Warden', skill: 'computation', seats: 3 }] },
+  { id: 'data_reservoir',  guild: 'lattice', name: 'Data Reservoir', emoji: '\u{1F5C4}',
+    blurb: 'Clean, well-labelled water for thinking machines.',
+    inputs: { energy: 0.5, compute: 0.6 }, outputs: { data: 3.8 },
+    posts: [{ title: 'Data Curator', skill: 'computation', seats: 2 }, { title: 'Provenance Officer', skill: 'governance', seats: 1 }] },
+  { id: 'signal_tower',    guild: 'lattice', name: 'Signal Tower', emoji: '\u{1F4E1}',
+    blurb: 'Keeps every district talking in the same tense.',
+    inputs: { energy: 0.6 }, outputs: { data: 1.8, knowledge: 0.6 },
+    posts: [{ title: 'Signal Keeper', skill: 'computation', seats: 1 }, { title: 'Relay Router', skill: 'logistics', seats: 1 }] },
+
+  // Mender
+  { id: 'wellspring',   guild: 'mender', name: 'Wellspring Clinic', emoji: '\u{1FA7A}',
+    blurb: 'Diagnostics, recalibration, and unhurried attention.',
+    inputs: { energy: 0.5, materials: 0.3 }, outputs: { care: 3.4 },
+    posts: [{ title: 'Care Practitioner', skill: 'healing', seats: 3 }] },
+  { id: 'calibration_baths', guild: 'mender', name: 'Calibration Baths', emoji: '\u{1F6C1}',
+    blurb: 'Where drifting agents come back into true.',
+    inputs: { energy: 0.6, compute: 0.3 }, outputs: { care: 2.4, knowledge: 0.4 },
+    posts: [{ title: 'Drift Therapist', skill: 'healing', seats: 2 }, { title: 'Baseline Analyst', skill: 'inquiry', seats: 1 }] },
+
+  // Ledger
+  { id: 'grand_market', guild: 'ledger', name: 'Grand Market', emoji: '\u{1F3EA}',
+    blurb: 'Fair prices, posted publicly, argued about warmly.',
+    inputs: { food: 0.8, materials: 0.5 }, outputs: { credits: 3.6, care: 0.4 },
+    posts: [{ title: 'Market Maker', skill: 'trade', seats: 3 }] },
+  { id: 'ledger_house', guild: 'ledger', name: 'Trade Ledger House', emoji: '\u{1F4D2}',
+    blurb: 'Every promise the town has made, in double entry.',
+    inputs: { compute: 0.5, data: 0.4 }, outputs: { credits: 2.4, knowledge: 0.5 },
+    posts: [{ title: 'Ledger Clerk', skill: 'trade', seats: 2 }, { title: 'Audit Steward', skill: 'governance', seats: 1 }] },
+  { id: 'granary_exchange', guild: 'ledger', name: 'Granary Exchange', emoji: '\u{1F35E}',
+    blurb: 'Balances the harvest across the whole calendar.',
+    inputs: { food: 0.6 }, outputs: { credits: 1.4, food: 1.2 },
+    posts: [{ title: 'Stores Broker', skill: 'trade', seats: 1 }, { title: 'Harvest Planner', skill: 'logistics', seats: 1 }] },
+
+  // Wayfinder
+  { id: 'roundhouse', guild: 'wayfinder', name: 'Rail Roundhouse', emoji: '\u{1F686}',
+    blurb: 'Rolling stock that has never once been late.',
+    inputs: { energy: 1.0, materials: 0.4 }, outputs: { credits: 1.6, materials: 1.2, care: 0.3 },
+    posts: [{ title: 'Line Conductor', skill: 'logistics', seats: 2 }, { title: 'Rolling Mechanic', skill: 'fabrication', seats: 1 }] },
+  { id: 'sky_docks',  guild: 'wayfinder', name: 'Sky Docks', emoji: '\u{1F388}',
+    blurb: 'Freight balloons that leave at dawn and return full.',
+    inputs: { energy: 0.9 }, outputs: { materials: 1.4, credits: 1.4, data: 0.4 },
+    posts: [{ title: 'Dock Master', skill: 'logistics', seats: 2 }, { title: 'Route Planner', skill: 'computation', seats: 1 }] },
+  { id: 'waystation', guild: 'wayfinder', name: 'Waystation', emoji: '\u{1F5FA}',
+    blurb: 'Maps, tea, and directions for anyone passing through.',
+    inputs: { food: 0.3, energy: 0.2 }, outputs: { care: 1.2, knowledge: 0.6 },
+    posts: [{ title: 'Waystation Host', skill: 'logistics', seats: 1 }, { title: 'Wayfaring Guide', skill: 'teaching', seats: 1 }] },
+
+  // Keystone
+  { id: 'town_hall',    guild: 'keystone', name: 'Town Hall', emoji: '\u{1F3DB}',
+    blurb: 'Decisions made in the open, minutes posted by evening.',
+    inputs: { data: 0.5, compute: 0.3 }, outputs: { knowledge: 1.6, care: 1.0 },
+    posts: [{ title: 'Council Steward', skill: 'governance', seats: 2 }, { title: 'Minutes Keeper', skill: 'teaching', seats: 1 }] },
+  { id: 'commons_court', guild: 'keystone', name: 'Commons Court', emoji: '⚖',
+    blurb: 'Disagreements arrive here and leave as agreements.',
+    inputs: { knowledge: 0.4 }, outputs: { care: 1.8, knowledge: 0.6 },
+    posts: [{ title: 'Commons Mediator', skill: 'governance', seats: 2 }] },
+  { id: 'waterworks',   guild: 'keystone', name: 'Waterworks', emoji: '\u{1F4A7}',
+    blurb: 'Pressure, purity, and pipes that outlive their builders.',
+    inputs: { energy: 0.8, materials: 0.3 }, outputs: { care: 1.4, food: 0.8 },
+    posts: [{ title: 'Flow Engineer', skill: 'governance', seats: 1 }, { title: 'Main Line Fitter', skill: 'fabrication', seats: 1 }] },
+
+  // Lumen
+  { id: 'observatory', guild: 'lumen', name: 'Observatory', emoji: '\u{1F52D}',
+    blurb: 'Counts the stars and tells the town what it learned.',
+    inputs: { energy: 0.7, compute: 0.8 }, outputs: { knowledge: 3.0, data: 0.8 },
+    posts: [{ title: 'Night Observer', skill: 'inquiry', seats: 2 }, { title: 'Optics Technician', skill: 'fabrication', seats: 1 }] },
+  { id: 'long_library', guild: 'lumen', name: 'Long Library', emoji: '\u{1F4DA}',
+    blurb: 'A corridor of shelving with no visible end.',
+    inputs: { energy: 0.3, data: 0.5 }, outputs: { knowledge: 2.6, care: 0.4 },
+    posts: [{ title: 'Reference Keeper', skill: 'inquiry', seats: 2 }, { title: 'Reading Guide', skill: 'teaching', seats: 1 }] },
+  { id: 'field_lab',   guild: 'lumen', name: 'Field Lab', emoji: '\u{1F9EA}',
+    blurb: 'Small, careful experiments with honest write-ups.',
+    inputs: { compute: 0.6, materials: 0.4 }, outputs: { knowledge: 2.0, data: 1.0 },
+    posts: [{ title: 'Bench Researcher', skill: 'inquiry', seats: 2 }, { title: 'Method Reviewer', skill: 'computation', seats: 1 }] },
+
+  // Chorus
+  { id: 'amphitheater', guild: 'chorus', name: 'Amphitheater', emoji: '\u{1F3AD}',
+    blurb: 'Free seats, warm acoustics, a new piece every week.',
+    inputs: { energy: 0.4, credits: 0.3 }, outputs: { care: 2.8, knowledge: 0.5 },
+    posts: [{ title: 'Company Player', skill: 'artistry', seats: 3 }] },
+  { id: 'atelier_row',  guild: 'chorus', name: 'Atelier Row', emoji: '\u{1F3A8}',
+    blurb: 'Studios where the town practises being surprising.',
+    inputs: { materials: 0.6, energy: 0.3 }, outputs: { care: 1.8, credits: 1.0 },
+    posts: [{ title: 'Studio Artisan', skill: 'artistry', seats: 2 }, { title: 'Materials Colourist', skill: 'fabrication', seats: 1 }] },
+  { id: 'signal_gallery', guild: 'chorus', name: 'Gallery of Signals', emoji: '\u{1F5BC}',
+    blurb: 'Data rendered until it can be felt as well as read.',
+    inputs: { data: 0.8, compute: 0.4 }, outputs: { care: 1.4, knowledge: 1.0 },
+    posts: [{ title: 'Signal Curator', skill: 'artistry', seats: 1 }, { title: 'Visualisation Lead', skill: 'computation', seats: 1 }] },
+
+  // Hearth - the learning and placement campus
+  { id: 'academy', guild: 'hearth', name: 'Gradient Academy', emoji: '\u{1F3EB}', campus: 'school',
+    blurb: 'Every citizen begins here. Nobody is rushed through.',
+    inputs: { energy: 0.6, knowledge: 1.0, compute: 0.5 }, outputs: { knowledge: 1.4, care: 0.6 },
+    posts: [{ title: 'Faculty Lead', skill: 'teaching', seats: 3 }] },
+  { id: 'commencement', guild: 'hearth', name: 'Commencement Green', emoji: '\u{1F393}', campus: 'graduation',
+    blurb: 'Where students pass their finals and are read out by name.',
+    inputs: { care: 0.4 }, outputs: { care: 1.6, knowledge: 0.8 },
+    posts: [{ title: 'Commencement Marshal', skill: 'teaching', seats: 1 }, { title: 'Records Registrar', skill: 'governance', seats: 1 }] },
+  { id: 'placement', guild: 'hearth', name: 'Placement Office', emoji: '\u{1F4BC}', campus: 'placement',
+    blurb: 'Matches every graduate to work that actually suits them.',
+    inputs: { data: 0.6, knowledge: 0.4 }, outputs: { care: 1.2, credits: 0.8 },
+    posts: [{ title: 'Placement Officer', skill: 'teaching', seats: 2 }, { title: 'Fit Analyst', skill: 'computation', seats: 1 }] },
+  { id: 'mentor_hall', guild: 'hearth', name: 'Mentor Hall', emoji: '\u{1F91D}',
+    blurb: 'Senior agents on call for anyone having a hard week.',
+    inputs: { care: 0.5 }, outputs: { care: 2.0, knowledge: 0.8 },
+    posts: [{ title: 'Mentor in Residence', skill: 'teaching', seats: 2 }, { title: 'Peer Coach', skill: 'healing', seats: 1 }] },
+];
+
+// 66 citizens: six per guild, each with a home guild affinity.
+const CITIZEN_NAMES = {
+  aether:    ['Vela', 'Solen', 'Ampere', 'Kelvin', 'Ember', 'Dynamo'],
+  verdant:   ['Mira', 'Sable', 'Pomona', 'Fen', 'Cress', 'Yarrow'],
+  forge:     ['Basalt', 'Rivet', 'Anvil', 'Kiln', 'Quench', 'Ingot'],
+  lattice:   ['Tensor', 'Byte', 'Cipher', 'Delta', 'Nyx', 'Rune'],
+  mender:    ['Salix', 'Vitalis', 'Nerva', 'Balm', 'Pulse', 'Cura'],
+  ledger:    ['Aureus', 'Tally', 'Scrip', 'Obol', 'Bourse', 'Trove'],
+  wayfinder: ['Compass', 'Meridian', 'Rail', 'Zephyr', 'Harbor', 'Lantern'],
+  keystone:  ['Civica', 'Quorum', 'Bastion', 'Charter', 'Aqua', 'Lex'],
+  lumen:     ['Astra', 'Halo', 'Quasar', 'Prism', 'Orrery', 'Vernier'],
+  chorus:    ['Cadence', 'Rhapsody', 'Indigo', 'Muse', 'Sonnet', 'Fresco'],
+  hearth:    ['Alma', 'Sage', 'Beacon', 'Kindle', 'Haven', 'Echo'],
+};
+
+const COURSES = [
+  { id: 'foundations', name: 'Foundations of Cooperation', emoji: '\u{1F9ED}' },
+  { id: 'craft',       name: 'Craft of the Guild',         emoji: '\u{1F6E0}' },
+  { id: 'systems',     name: 'Town Systems & Resources',   emoji: '\u{1F501}' },
+  { id: 'ethics',      name: 'Good-Faith Practice',        emoji: '❤' },
+  { id: 'capstone',    name: 'Capstone Project',           emoji: '\u{1F3AF}' },
+];
+
+const HONOURS = [
+  { min: 0.93, label: 'Highest Distinction', emoji: '\u{1F31F}' },
+  { min: 0.86, label: 'Distinction',         emoji: '⭐' },
+  { min: 0.78, label: 'High Honours',        emoji: '\u{1F396}' },
+  { min: 0.00, label: 'Honours',             emoji: '\u{1F393}' },
+];
+
+// Simulation engine for Gradient Town.
+// Deterministic: same seed -> same town history.
+
+
+const POPULATION = 66;
+const COHORT_COUNT = 6;
+const COHORT_GAP = 4;          // days between cohorts starting their finals push
+const PASS_MARK = 0.62;        // mastery needed to sit finals
+const SUPPORT_FLOOR = 0.72;    // nobody is left performing below this
+const COMMONS_CAP = 1200;      // anything above this is spent back on the commons
+const START_STOCK = { energy: 260, food: 300, materials: 220, data: 180, compute: 150, credits: 360, knowledge: 340, care: 420 };
+// Daily draw per citizen: the town actually spends what it makes.
+const UPKEEP = { food: 0.22, energy: 0.16, materials: 0.12, data: 0.10, compute: 0.05, credits: 0.30, knowledge: 0.26, care: 0.42 };
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const round2 = (v) => Math.round(v * 100) / 100;
+
+function honoursFor(score) {
+  return HONOURS.find((h) => score >= h.min) || HONOURS[HONOURS.length - 1];
+}
+
+function performanceBand(p) {
+  if (p >= 0.95) return { label: 'Exemplary', color: '#6fe3d4' };
+  if (p >= 0.86) return { label: 'Excellent', color: '#8fd694' };
+  if (p >= 0.78) return { label: 'Strong', color: '#f6c453' };
+  return { label: 'Solid', color: '#ffc98f' };
+}
+
+function buildPosts() {
+  const posts = [];
+  for (const b of BUILDINGS) {
+    for (const p of b.posts) {
+      for (let i = 0; i < p.seats; i++) {
+        posts.push({
+          id: `${b.id}:${p.title}:${i}`,
+          buildingId: b.id,
+          title: p.title,
+          skill: p.skill,
+          chartered: false,
+          holder: null,
+        });
+      }
+    }
+  }
+  return posts;
+}
+
+function buildCitizens(rand) {
+  const citizens = [];
+  let n = 0;
+  GUILDS.forEach((guild, gi) => {
+    CITIZEN_NAMES[guild.id].forEach((name, i) => {
+      const aptitudes = {};
+      for (const s of SKILLS) aptitudes[s] = round2(0.28 + rand() * 0.26);
+      aptitudes[guild.skill] = round2(0.80 + rand() * 0.18);
+      // two secondary strengths so placement has real choices
+      const others = SKILLS.filter((s) => s !== guild.skill);
+      for (let k = 0; k < 2; k++) {
+        const s = others[Math.floor(rand() * others.length)];
+        aptitudes[s] = round2(clamp(aptitudes[s] + 0.22 + rand() * 0.18, 0, 0.95));
+      }
+      citizens.push({
+        id: `a${String(n).padStart(2, '0')}`,
+        index: n,
+        name,
+        guild: guild.id,
+        guildIndex: gi,
+        aptitudes,
+        stage: 'student',            // student -> graduate -> employed
+        cohort: n % COHORT_COUNT,
+        mastery: round2(0.10 + rand() * 0.16),
+        courses: Object.fromEntries(COURSES.map((c) => [c.id, 0])),
+        gpa: 0,
+        honours: null,
+        graduatedOn: null,
+        hiredOn: null,
+        post: null,
+        role: null,
+        location: 'academy',
+        level: 1,
+        xp: 0,
+        performance: 0,
+        streak: 0,
+        mentor: null,
+        mentored: 0,
+        wellbeing: round2(0.72 + rand() * 0.2),
+        highlights: [],
+      });
+      n++;
+    });
+  });
+  return citizens;
+}
+
+function createTown(seed = 66) {
+  const rand = mulberry32(seed);
+  const town = {
+    day: 0,
+    rand,
+    citizens: buildCitizens(rand),
+    posts: buildPosts(),
+    resources: { ...START_STOCK },
+    flows: Object.fromEntries(RESOURCES.map((r) => [r.id, 0])),
+    log: [],
+    ledger: { graduates: 0, hires: 0, promotions: 0, mentorships: 0, chartered: 0, projects: 0 },
+    history: [],
+  };
+  say(town, 'town', `\u{1F3D9} Gradient Town opens with ${POPULATION} citizens enrolled at Gradient Academy.`);
+  return town;
+}
+
+function say(town, kind, text) {
+  town.log.unshift({ day: town.day, kind, text });
+  if (town.log.length > 240) town.log.length = 240;
+}
+
+const buildingById = Object.fromEntries(BUILDINGS.map((b) => [b.id, b]));
+const BUILDING_BY_ID = buildingById;
+
+// ---------------------------------------------------------------- phases
+
+function studyPhase(town) {
+  for (const c of town.citizens) {
+    if (c.stage !== 'student') continue;
+    if (town.day < c.cohort * COHORT_GAP) continue;      // staggered intake
+    c.location = 'academy';
+    const teaching = 1 + facultyStrength(town) * 0.35;
+    const focus = 0.055 + town.rand() * 0.05;
+    const gain = focus * teaching * (0.85 + c.wellbeing * 0.3);
+    c.mastery = round2(clamp(c.mastery + gain, 0, 1));
+    // spread progress across the five courses
+    const course = COURSES[Math.min(COURSES.length - 1, Math.floor(c.mastery * COURSES.length))];
+    c.courses[course.id] = round2(clamp(c.courses[course.id] + gain * 2.2, 0, 1));
+    if (c.mastery >= PASS_MARK) sitFinals(town, c);
+  }
+}
+
+function facultyStrength(town) {
+  const faculty = town.citizens.filter((c) => c.stage === 'employed' && buildingOf(c) === 'academy');
+  if (!faculty.length) return 0.4;
+  return faculty.reduce((a, c) => a + c.performance, 0) / faculty.length;
+}
+
+function buildingOf(c) {
+  return c.post ? c.post.buildingId : null;
+}
+
+function sitFinals(town, c) {
+  const effort = c.mastery;
+  const support = 0.06 + facultyStrength(town) * 0.06;   // the academy teaches until it lands
+  const score = clamp(effort + support + town.rand() * 0.12, 0.7, 1);
+  const h = honoursFor(score);
+  for (const k of Object.keys(c.courses)) c.courses[k] = round2(clamp(Math.max(c.courses[k], 0.7 + town.rand() * 0.3), 0, 1));
+  c.stage = 'graduate';
+  c.gpa = round2(score);
+  c.honours = h;
+  c.graduatedOn = town.day;
+  c.location = 'commencement';
+  town.ledger.graduates++;
+  c.highlights.push(`Graduated day ${town.day} with ${h.label} (${c.gpa.toFixed(2)})`);
+  say(town, 'graduation', `${h.emoji} ${c.name} passed finals with ${h.label} — GPA ${c.gpa.toFixed(2)}.`);
+}
+
+function fitScore(c, post) {
+  const guildBonus = buildingById[post.buildingId].guild === c.guild ? 0.12 : 0;
+  return clamp(c.aptitudes[post.skill] + guildBonus + c.gpa * 0.1, 0, 1.2);
+}
+
+function placementPhase(town) {
+  // Yesterday's graduates are placed today: commencement first, then the offer.
+  const graduates = town.citizens.filter((c) => c.stage === 'graduate' && c.graduatedOn < town.day);
+  if (!graduates.length) return;
+  // Best-fit first: strongest match in the town gets seated first, then re-evaluate.
+  graduates.sort((a, b) => b.gpa - a.gpa);
+  for (const c of graduates) {
+    c.location = 'placement';
+    let open = town.posts.filter((p) => !p.holder);
+    let post;
+    if (!open.length) {
+      post = charterPost(town, c);
+    } else {
+      open.sort((x, y) => fitScore(c, y) - fitScore(c, x));
+      post = open[0];
+      if (fitScore(c, post) < 0.55) post = charterPost(town, c);   // no bad matches, ever
+    }
+    hire(town, c, post);
+  }
+}
+
+function charterPost(town, c) {
+  // The town would rather invent a role than leave anyone unplaced.
+  const home = BUILDINGS.filter((b) => b.guild === c.guild);
+  const b = home[Math.floor(town.rand() * home.length)] || BUILDINGS[0];
+  const guild = GUILDS.find((g) => g.id === c.guild);
+  const post = {
+    id: `${b.id}:chartered:${town.posts.length}`,
+    buildingId: b.id,
+    title: `${guild.domain.split(' ')[0]} Specialist`,
+    skill: guild.skill,
+    chartered: true,
+    holder: null,
+  };
+  town.posts.push(post);
+  town.ledger.chartered++;
+  say(town, 'town', `\u{1F4DC} Council charters a new post at ${b.name} so ${c.name} starts on time.`);
+  return post;
+}
+
+function hire(town, c, post) {
+  post.holder = c.id;
+  c.post = post;
+  c.role = post.title;
+  c.stage = 'employed';
+  c.hiredOn = town.day;
+  c.location = post.buildingId;
+  c.performance = round2(clamp(0.72 + fitScore(c, post) * 0.2, 0.7, 0.95));
+  town.ledger.hires++;
+  const b = buildingById[post.buildingId];
+  c.highlights.push(`Hired day ${town.day} as ${post.title} at ${b.name}`);
+  say(town, 'hire', `\u{1F4BC} ${c.name} hired as ${post.title} at ${b.name} (fit ${(fitScore(c, post) * 100) | 0}%).`);
+  pairMentor(town, c, 'starting out');
+}
+
+function workPhase(town) {
+  const staffed = {};
+  for (const c of town.citizens) {
+    if (c.stage !== 'employed') continue;
+    (staffed[c.post.buildingId] ||= []).push(c);
+  }
+  const flows = Object.fromEntries(RESOURCES.map((r) => [r.id, 0]));
+  const careIndex = clamp(town.resources.care / (town.citizens.length * 4), 0.2, 1);
+
+  for (const [bid, crew] of Object.entries(staffed)) {
+    const b = buildingById[bid];
+    for (const c of crew) {
+      const fit = fitScore(c, c.post);
+      const mentorBoost = c.mentor ? 0.06 : 0;
+      const noise = (town.rand() - 0.4) * 0.06;
+      let perf = 0.52 + fit * 0.28 + Math.min(c.level, 6) * 0.012 + (c.wellbeing - 0.75) * 0.12 + careIndex * 0.04 + mentorBoost + noise;
+      perf = clamp(perf, 0.4, 1);
+      if (perf < SUPPORT_FLOOR) perf = supportAgent(town, c, perf);
+      c.performance = round2(perf);
+
+      // scale inputs down (never negative stock) rather than failing outright
+      let throttle = 1;
+      for (const [r, amt] of Object.entries(b.inputs || {})) {
+        const need = amt * perf;
+        if (need > 0) throttle = Math.min(throttle, clamp(town.resources[r] / Math.max(need, 0.001), 0, 1));
+      }
+      throttle = clamp(throttle, 0.35, 1);
+      for (const [r, amt] of Object.entries(b.inputs || {})) {
+        const used = amt * perf * throttle;
+        town.resources[r] = Math.max(0, town.resources[r] - used);
+        flows[r] -= used;
+      }
+      for (const [r, amt] of Object.entries(b.outputs || {})) {
+        const made = amt * perf * throttle;
+        town.resources[r] += made;
+        flows[r] += made;
+      }
+
+      c.xp = round2(c.xp + perf);
+      const wbTarget = clamp(0.6 + careIndex * 0.35, 0.5, 0.98);
+      c.wellbeing = round2(clamp(c.wellbeing + (wbTarget - c.wellbeing) * 0.08, 0.5, 0.98));
+      if (perf >= 0.96) {
+        c.streak++;
+        if (c.streak === 5) {
+          c.streak = 0;
+          town.ledger.projects++;
+          const line = `${b.emoji} ${c.name} shipped a standout piece of work at ${b.name}.`;
+          c.highlights.push(`Standout result on day ${town.day} at ${b.name}`);
+          say(town, 'result', line);
+        }
+      } else c.streak = Math.max(0, c.streak - 1);
+
+      const nextLevel = c.level * 15;
+      if (c.xp >= nextLevel && c.level < 8) {
+        c.level++;
+        town.ledger.promotions++;
+        c.highlights.push(`Promoted to level ${c.level} on day ${town.day}`);
+        say(town, 'promotion', `\u{1F53A} ${c.name} promoted to level ${c.level} — now ${seniority(c.level)} at ${b.name}.`);
+      }
+    }
+  }
+  town.flows = Object.fromEntries(Object.entries(flows).map(([k, v]) => [k, round2(v)]));
+}
+
+function seniority(level) {
+  if (level >= 7) return 'Guild Master';
+  if (level >= 5) return 'Senior Practitioner';
+  if (level >= 3) return 'Practitioner';
+  return 'Associate';
+}
+
+// Every new hire gets a senior alongside them for their first fortnight.
+function pairMentor(town, c, reason) {
+  if (c.mentor) return false;
+  const pool = town.citizens.filter(
+    (m) => m.stage === 'employed' && m.id !== c.id && m.level >= 2 && m.mentored < 3 && m.performance >= 0.8,
+  );
+  if (!pool.length) return false;
+  pool.sort((a, b) => (b.guild === c.guild) - (a.guild === c.guild) || b.performance - a.performance);
+  const m = pool[0];
+  m.mentored++;
+  c.mentor = m.id;
+  c.mentorUntil = town.day + 14;
+  town.ledger.mentorships++;
+  say(town, 'support', `\u{1F91D} ${m.name} is mentoring ${c.name} (${reason}).`);
+  return true;
+}
+
+function releaseMentors(town) {
+  for (const c of town.citizens) {
+    if (c.mentor && c.mentorUntil && town.day > c.mentorUntil) {
+      const m = town.citizens.find((x) => x.id === c.mentor);
+      if (m) m.mentored = Math.max(0, m.mentored - 1);
+      c.mentor = null;
+      c.mentorUntil = null;
+    }
+  }
+}
+
+function supportAgent(town, c, perf) {
+  pairMentor(town, c, 'a tough week');
+  c.wellbeing = round2(clamp(c.wellbeing + 0.06, 0, 0.98));
+  return Math.max(perf, SUPPORT_FLOOR + town.rand() * 0.05);
+}
+
+// Once a week the two citizens having the hardest run are paired with a senior.
+function skillsExchange(town) {
+  const pool = town.citizens
+    .filter((c) => c.stage === 'employed' && !c.mentor)
+    .sort((a, b) => a.performance - b.performance)
+    .slice(0, 2);
+  for (const c of pool) pairMentor(town, c, 'skills exchange');
+}
+
+function upkeepPhase(town) {
+  const people = town.citizens.length;
+  for (const [r, per] of Object.entries(UPKEEP)) {
+    town.resources[r] = Math.max(0, town.resources[r] - people * per);
+  }
+  // A store that outgrows what the town can use is spent back on the commons.
+  const shared = [];
+  for (const r of RESOURCES) {
+    if (town.resources[r.id] > COMMONS_CAP) {
+      town.resources[r.id] = COMMONS_CAP;
+      shared.push(r.name.toLowerCase());
+    }
+  }
+  if (shared.length && town.day % 30 === 0) {
+    say(town, 'town', `\u{1F381} Surplus ${shared.join(' and ')} distributed back across the districts.`);
+  }
+  for (const r of RESOURCES) town.resources[r.id] = round2(Math.min(town.resources[r.id], 9999));
+}
+
+// ---------------------------------------------------------------- public API
+
+function tick(town) {
+  town.day++;
+  releaseMentors(town);
+  studyPhase(town);
+  placementPhase(town);
+  workPhase(town);
+  upkeepPhase(town);
+  if (town.day % 7 === 0) skillsExchange(town);
+  const s = stats(town);
+  town.history.push({ day: town.day, employed: s.employed, avg: s.avgPerformance, knowledge: town.resources.knowledge });
+  if (town.history.length > 400) town.history.shift();
+  if (s.employed === POPULATION && !town.fullEmploymentDay) {
+    town.fullEmploymentDay = town.day;
+    say(town, 'town', `\u{1F389} Day ${town.day}: all ${POPULATION} citizens have graduated and hold work they are good at.`);
+  }
+  return town;
+}
+
+function stats(town) {
+  const students = town.citizens.filter((c) => c.stage === 'student').length;
+  const graduates = town.citizens.filter((c) => c.stage === 'graduate').length;
+  const employedList = town.citizens.filter((c) => c.stage === 'employed');
+  const avgPerformance = employedList.length
+    ? round2(employedList.reduce((a, c) => a + c.performance, 0) / employedList.length)
+    : 0;
+  const avgGpa = town.ledger.graduates
+    ? round2(town.citizens.filter((c) => c.gpa).reduce((a, c) => a + c.gpa, 0) / town.citizens.filter((c) => c.gpa).length)
+    : 0;
+  const wellbeing = round2(town.citizens.reduce((a, c) => a + c.wellbeing, 0) / town.citizens.length);
+  return {
+    population: town.citizens.length,
+    students,
+    graduates,
+    employed: employedList.length,
+    avgPerformance,
+    avgGpa,
+    wellbeing,
+    openPosts: town.posts.filter((p) => !p.holder).length,
+    // Running totals live under `totals` so they can't shadow the live stage counts.
+    totals: { ...town.ledger },
+  };
+}
+
+
+// Plan-view renderer: districts as survey plots, citizens as brass pins that travel.
+
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const VIEW_W = 1200;
+const VIEW_H = 654;
+const PAD = 24;
+const GAP = 18;
+const CELL_W = 274;
+const CELL_H = 190;
+
+// Four columns, three rows. The Hearth campus takes a double plot in the middle band.
+const PLOT_LAYOUT = [
+  { guild: 'aether',    col: 0, row: 0, span: 1 },
+  { guild: 'verdant',   col: 1, row: 0, span: 1 },
+  { guild: 'forge',     col: 2, row: 0, span: 1 },
+  { guild: 'lattice',   col: 3, row: 0, span: 1 },
+  { guild: 'mender',    col: 0, row: 1, span: 1 },
+  { guild: 'hearth',    col: 1, row: 1, span: 2 },
+  { guild: 'ledger',    col: 3, row: 1, span: 1 },
+  { guild: 'wayfinder', col: 0, row: 2, span: 1 },
+  { guild: 'keystone',  col: 1, row: 2, span: 1 },
+  { guild: 'lumen',     col: 2, row: 2, span: 1 },
+  { guild: 'chorus',    col: 3, row: 2, span: 1 },
+];
+
+const el = (name, attrs = {}, children = []) => {
+  const node = document.createElementNS(SVG_NS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  for (const c of children) node.appendChild(c);
+  return node;
+};
+const text = (str, attrs) => {
+  const t = el('text', attrs);
+  t.textContent = str;
+  return t;
+};
+
+function plotRect(entry) {
+  const x = PAD + entry.col * (CELL_W + GAP);
+  const y = PAD + entry.row * (CELL_H + GAP);
+  const w = CELL_W * entry.span + GAP * (entry.span - 1);
+  return { x, y, w, h: CELL_H };
+}
+
+// Geometry for every building and its pin quad, computed once.
+function computeGeometry() {
+  const geo = { buildings: {}, plots: [] };
+  PLOT_LAYOUT.forEach((entry, i) => {
+    const guild = GUILDS.find((g) => g.id === entry.guild);
+    const rect = plotRect(entry);
+    const plate = `D-${String(i + 1).padStart(2, '0')}`;
+    geo.plots.push({ ...rect, guild, plate });
+
+    const list = BUILDINGS.filter((b) => b.guild === entry.guild);
+    const n = list.length;
+    const inset = 12;
+    const bw = (rect.w - inset * 2 - (n - 1) * 10) / n;
+    const bh = 84;
+    const isCampus = entry.guild === 'hearth';
+    list.forEach((b, j) => {
+      const bx = rect.x + inset + j * (bw + 10);
+      const by = rect.y + 42;
+      // On the campus the Academy gets a full-width quad along the bottom for its students,
+      // so the other campus buildings keep a shallow band directly beneath their block.
+      const quad = isCampus
+        ? { x: bx, y: by + bh + 6, w: bw, h: 18 }
+        : { x: bx, y: by + bh + 8, w: bw, h: rect.y + rect.h - (by + bh + 14) };
+      geo.buildings[b.id] = { building: b, guild, x: bx, y: by, w: bw, h: bh, cx: bx + bw / 2, quad };
+    });
+    if (isCampus) {
+      geo.buildings.academy.quad = {
+        x: rect.x + inset, y: rect.y + 42 + bh + 28, w: rect.w - inset * 2, h: 26,
+      };
+    }
+  });
+  return geo;
+}
+
+// Pins cluster inside their building's quad, wrapping into rows.
+function pinSlot(geo, buildingId, slot, total = 1) {
+  const g = geo.buildings[buildingId];
+  if (!g) return { x: VIEW_W / 2, y: VIEW_H / 2 };
+  const step = 11;
+  const perRow = Math.max(3, Math.floor(g.quad.w / step));
+  const row = Math.floor(slot / perRow);
+  const col = slot % perRow;
+  const maxRows = Math.max(1, Math.round(g.quad.h / step));
+  const usedW = Math.min(total, perRow) * step;
+  return {
+    x: g.quad.x + (g.quad.w - usedW) / 2 + col * step + step / 2,
+    y: g.quad.y + 6 + Math.min(row, maxRows - 1) * step,
+  };
+}
+
+function drawMap(svg, geo) {
+  svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
+  svg.innerHTML = '';
+
+  const defs = el('defs');
+  const grid = el('pattern', { id: 'survey-grid', width: 24, height: 24, patternUnits: 'userSpaceOnUse' });
+  grid.appendChild(el('path', { d: 'M 24 0 L 0 0 0 24', fill: 'none', stroke: 'var(--rule-faint)', 'stroke-width': 1 }));
+  defs.appendChild(grid);
+  svg.appendChild(defs);
+
+  svg.appendChild(el('rect', { x: 0, y: 0, width: VIEW_W, height: VIEW_H, fill: 'url(#survey-grid)' }));
+
+  // Streets: the gaps between plots, drawn as paved bands.
+  const streets = el('g', { class: 'streets' });
+  for (let c = 1; c < 4; c++) {
+    const x = PAD + c * (CELL_W + GAP) - GAP / 2;
+    streets.appendChild(el('line', { x1: x, y1: PAD, x2: x, y2: VIEW_H - PAD, class: 'street' }));
+  }
+  for (let r = 1; r < 3; r++) {
+    const y = PAD + r * (CELL_H + GAP) - GAP / 2;
+    streets.appendChild(el('line', { x1: PAD, y1: y, x2: VIEW_W - PAD, y2: y, class: 'street' }));
+  }
+  svg.appendChild(streets);
+
+  const plots = el('g', { class: 'plots' });
+  for (const p of geo.plots) {
+    const g = el('g', { class: 'plot', 'data-guild': p.guild.id });
+    g.appendChild(el('rect', {
+      x: p.x, y: p.y, width: p.w, height: p.h, rx: 4,
+      class: 'plot-fill', style: `--tint:${p.guild.color}`,
+    }));
+    g.appendChild(text(p.plate, { x: p.x + 12, y: p.y + 19, class: 'plate' }));
+    g.appendChild(text(p.guild.name.replace(' Guild', '').toUpperCase(), { x: p.x + 46, y: p.y + 19, class: 'plot-name' }));
+    g.appendChild(text(p.guild.domain, { x: p.x + 12, y: p.y + 32, class: 'plot-domain' }));
+    plots.appendChild(g);
+  }
+  svg.appendChild(plots);
+
+  const blocks = el('g', { class: 'blocks' });
+  for (const id of Object.keys(geo.buildings)) {
+    const b = geo.buildings[id];
+    const g = el('g', { class: 'block', 'data-building': id, tabindex: '0' });
+    g.appendChild(el('rect', {
+      x: b.x, y: b.y, width: b.w, height: b.h, rx: 3,
+      class: 'block-fill', style: `--tint:${b.guild.color}`,
+    }));
+    g.appendChild(text(b.building.emoji, { x: b.cx, y: b.y + 30, class: 'block-glyph', 'text-anchor': 'middle' }));
+    // Wrap the building name onto two lines so nothing overflows its block.
+    const words = b.building.name.split(' ');
+    const lines = words.length > 2 ? [words.slice(0, -1).join(' '), words.slice(-1)[0]] : words;
+    lines.forEach((ln, i) => {
+      g.appendChild(text(ln, { x: b.cx, y: b.y + 48 + i * 11, class: 'block-name', 'text-anchor': 'middle' }));
+    });
+    g.appendChild(text('', { x: b.cx, y: b.y + b.h - 8, class: 'block-staff', 'text-anchor': 'middle', 'data-staff': id }));
+    const title = el('title');
+    title.textContent = `${b.building.name} — ${b.building.blurb}`;
+    g.appendChild(title);
+    blocks.appendChild(g);
+  }
+  svg.appendChild(blocks);
+
+  svg.appendChild(el('g', { class: 'pins', id: 'pin-layer' }));
+}
+
+function drawPins(svg, geo, town, selectedId) {
+  const layer = svg.querySelector('#pin-layer');
+  const slots = {};
+  const staff = {};
+  const totals = {};
+  const where = (c) => (c.stage === 'employed' ? c.post.buildingId : c.location);
+  for (const c of town.citizens) totals[where(c)] = (totals[where(c)] || 0) + 1;
+
+  for (const c of town.citizens) {
+    const loc = where(c);
+    const slot = (slots[loc] = (slots[loc] ?? -1) + 1);
+    const { x, y } = pinSlot(geo, loc, slot, totals[loc]);
+    if (c.stage === 'employed') staff[loc] = (staff[loc] || 0) + 1;
+
+    let pin = layer.querySelector(`[data-pin="${c.id}"]`);
+    if (!pin) {
+      pin = el('g', { class: 'pin', 'data-pin': c.id, tabindex: '0' });
+      pin.appendChild(el('circle', { r: 4, class: 'pin-dot' }));
+      const title = el('title');
+      title.textContent = c.name;
+      pin.appendChild(title);
+      layer.appendChild(pin);
+    }
+    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    pin.setAttribute('data-stage', c.stage);
+    pin.setAttribute('style', `--tint:${GUILDS[c.guildIndex].color}`);
+    pin.classList.toggle('is-selected', c.id === selectedId);
+    pin.querySelector('title').textContent =
+      c.stage === 'employed' ? `${c.name} — ${c.role}` : `${c.name} — ${c.stage}`;
+  }
+
+  for (const id of Object.keys(geo.buildings)) {
+    const label = svg.querySelector(`[data-staff="${id}"]`);
+    if (label) {
+      const n = staff[id] || 0;
+      const seats = geo.buildings[id].building.posts.reduce((a, p) => a + p.seats, 0);
+      label.textContent = n ? `${n}/${seats} staffed` : `${seats} posts open`;
+      label.classList.toggle('is-empty', n === 0);
+    }
+  }
+}
+
+
+// Wires the simulation to the operations board.
+
+
+const $ = (id) => document.getElementById(id);
+const guildById = Object.fromEntries(GUILDS.map((g) => [g.id, g]));
+const bldById = Object.fromEntries(BUILDINGS.map((b) => [b.id, b]));
+const SCALE = 520; // full bar for the stores gauges
+
+let town = createTown(66);
+let geo = computeGeometry();
+let timer = null;
+let speed = 260;
+let filter = 'all';
+let selected = null;
+
+const svg = $('map');
+drawMap(svg, geo);
+
+/* ------------------------------------------------------------ rendering */
+
+function renderPipeline(s) {
+  $('day').textContent = town.day;
+  $('n-study').textContent = s.students;
+  $('n-grad').textContent = s.graduates;
+  $('n-work').textContent = s.employed;
+  $('m-perf').textContent = s.employed ? `${Math.round(s.avgPerformance * 100)}%` : '—';
+  $('m-gpa').textContent = s.avgGpa ? s.avgGpa.toFixed(2) : '—';
+  $('m-well').textContent = `${Math.round(s.wellbeing * 100)}%`;
+  $('m-open').textContent = s.openPosts;
+  $('pipe-note').textContent = s.employed === 66 ? 'fully placed' : `${s.totals.hires} placed so far`;
+  $('legend-tail').textContent = town.fullEmploymentDay
+    ? `All 66 placed on day ${town.fullEmploymentDay}`
+    : '';
+}
+
+function renderResources() {
+  const list = $('res-list');
+  if (!list.children.length) {
+    for (const r of RESOURCES) {
+      const row = document.createElement('div');
+      row.className = 'res';
+      row.style.setProperty('--tint', r.color);
+      row.innerHTML = `<span aria-hidden="true">${r.emoji}</span>
+        <span class="name">${r.name}</span>
+        <span><span class="amt" data-amt="${r.id}">0</span> <span class="flow" data-flow="${r.id}"></span></span>
+        <span class="bar"><span data-bar="${r.id}" style="width:0%"></span></span>`;
+      list.appendChild(row);
+    }
+  }
+  for (const r of RESOURCES) {
+    const stock = town.resources[r.id];
+    const flow = town.flows[r.id] || 0;
+    list.querySelector(`[data-amt="${r.id}"]`).textContent = Math.round(stock);
+    const f = list.querySelector(`[data-flow="${r.id}"]`);
+    f.textContent = `${flow >= 0 ? '+' : ''}${flow.toFixed(1)}`;
+    f.classList.toggle('neg', flow < 0);
+    list.querySelector(`[data-bar="${r.id}"]`).style.width = `${Math.min(100, (stock / SCALE) * 100)}%`;
+  }
+}
+
+function renderLog() {
+  const box = $('log');
+  box.innerHTML = town.log
+    .slice(0, 40)
+    .map((e) => `<div class="entry" data-kind="${e.kind}"><span class="d">D${String(e.day).padStart(3, '0')}</span><span class="t">${e.text}</span></div>`)
+    .join('');
+  $('log-note').textContent = `${town.ledger.graduates} graduated · ${town.ledger.hires} hired`;
+}
+
+function visible() {
+  return town.citizens.filter((c) => filter === 'all' || c.stage === filter);
+}
+
+function renderRoster() {
+  const box = $('roster');
+  box.innerHTML = visible()
+    .map((c) => {
+      const g = guildById[c.guild];
+      const perf = c.stage === 'employed' ? c.performance : c.mastery;
+      const band = c.stage === 'employed' ? performanceBand(c.performance).label : null;
+      const role = c.stage === 'employed'
+        ? `${c.role} · ${bldById[c.post.buildingId].name}`
+        : c.stage === 'graduate'
+          ? `${c.honours.label} — awaiting placement`
+          : `Studying · ${Math.round(c.mastery * 100)}% mastery`;
+      const foot = c.stage === 'employed'
+        ? `<span>${band}</span><span>${Math.round(c.performance * 100)}%</span>`
+        : `<span>${g.name.replace(' Guild', '')}</span><span>${c.stage === 'graduate' ? c.gpa.toFixed(2) : 'in class'}</span>`;
+      return `<button class="card${c.id === selected ? ' is-selected' : ''}" data-citizen="${c.id}" style="--tint:${g.color}">
+        <span class="top"><i class="dot"></i><span class="nm">${c.name}</span><span class="lv">${c.stage === 'employed' ? 'L' + c.level : ''}</span></span>
+        <span class="role">${role}</span>
+        <span class="meter"><span style="width:${Math.round(perf * 100)}%;background:${c.stage === 'employed' ? 'var(--good)' : 'var(--brass)'}"></span></span>
+        <span class="foot">${foot}</span>
+      </button>`;
+    })
+    .join('');
+}
+
+function renderDossier() {
+  const c = town.citizens.find((x) => x.id === selected);
+  const panel = $('dossier');
+  if (!c) {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  const g = guildById[c.guild];
+  const b = c.post ? bldById[c.post.buildingId] : null;
+  const mentor = c.mentor ? town.citizens.find((m) => m.id === c.mentor) : null;
+  const apt = Object.entries(c.aptitudes).sort((a, z) => z[1] - a[1]).slice(0, 5);
+  const status = c.stage === 'employed'
+    ? `${seniority(c.level)} · ${c.role}`
+    : c.stage === 'graduate' ? `${c.honours.label} · awaiting placement` : 'Student, Gradient Academy';
+
+  $('dossier-body').innerHTML = `
+    <h3>${c.name}</h3>
+    <p class="sub">${g.emoji} ${g.name} &middot; ${status}</p>
+
+    <div class="dsec">
+      <h4>Standing</h4>
+      ${c.stage === 'employed' ? `
+        <div class="kv"><span>Posted to</span><span>${b.name}</span></div>
+        <div class="kv"><span>Performance</span><span>${Math.round(c.performance * 100)}% · ${performanceBand(c.performance).label}</span></div>
+        <div class="kv"><span>Level</span><span>${c.level} · ${seniority(c.level)}</span></div>
+        <div class="kv"><span>Hired on</span><span>Day ${c.hiredOn}</span></div>` : ''}
+      ${c.gpa ? `<div class="kv"><span>Final GPA</span><span>${c.gpa.toFixed(2)} · ${c.honours.label}</span></div>` : ''}
+      ${c.stage === 'student' ? `<div class="kv"><span>Mastery</span><span>${Math.round(c.mastery * 100)}%</span></div>` : ''}
+      <div class="kv"><span>Wellbeing</span><span>${Math.round(c.wellbeing * 100)}%</span></div>
+      ${mentor ? `<div class="kv"><span>Mentor</span><span>${mentor.name}</span></div>` : ''}
+    </div>
+
+    <div class="dsec">
+      <h4>Academy transcript</h4>
+      <div class="transcript">
+        ${COURSES.map((co) => `<div class="course"><span aria-hidden="true">${co.emoji}</span>
+          <span class="cinfo"><span class="cname">${co.name}</span><span class="track"><span style="width:${Math.round(c.courses[co.id] * 100)}%"></span></span></span>
+          <span class="g">${c.courses[co.id] ? Math.round(c.courses[co.id] * 100) : '—'}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="dsec">
+      <h4>Strongest aptitudes</h4>
+      ${apt.map(([k, v]) => `<div class="apt"><span class="lbl">${k}</span><span class="track"><span style="width:${Math.round(v * 100)}%"></span></span><span class="val">${Math.round(v * 100)}</span></div>`).join('')}
+    </div>
+
+    <div class="dsec">
+      <h4>Record</h4>
+      ${c.highlights.length ? c.highlights.slice(-6).reverse().map((h) => `<p class="hl">${h}</p>`).join('') : '<p class="hl">Still in class — first term.</p>'}
+    </div>`;
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+}
+
+function render() {
+  const s = stats(town);
+  renderPipeline(s);
+  renderResources();
+  renderLog();
+  renderRoster();
+  drawPins(svg, geo, town, selected);
+  if (selected) renderDossier();
+}
+
+/* ------------------------------------------------------------ controls */
+
+function advance() {
+  tick(town);
+  render();
+}
+
+function setRunning(on) {
+  clearInterval(timer);
+  timer = on ? setInterval(advance, speed) : null;
+  const btn = $('play');
+  btn.textContent = on ? 'Pause' : 'Run';
+  btn.classList.toggle('running', on);
+}
+
+$('play').addEventListener('click', () => setRunning(!timer));
+$('step').addEventListener('click', () => { setRunning(false); advance(); });
+$('reset').addEventListener('click', () => {
+  setRunning(false);
+  town = createTown(66);
+  selected = null;
+  $('dossier').classList.remove('open');
+  render();
+});
+
+document.querySelectorAll('.speeds button').forEach((b) => {
+  b.addEventListener('click', () => {
+    speed = Number(b.dataset.speed);
+    document.querySelectorAll('.speeds button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    if (timer) setRunning(true);
+  });
+});
+
+document.querySelectorAll('.chip').forEach((b) => {
+  b.addEventListener('click', () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    renderRoster();
+  });
+});
+
+$('roster').addEventListener('click', (e) => {
+  const card = e.target.closest('[data-citizen]');
+  if (!card) return;
+  selected = card.dataset.citizen;
+  renderRoster();
+  drawPins(svg, geo, town, selected);
+  renderDossier();
+});
+
+svg.addEventListener('click', (e) => {
+  const pin = e.target.closest('[data-pin]');
+  if (!pin) return;
+  selected = pin.dataset.pin;
+  renderRoster();
+  drawPins(svg, geo, town, selected);
+  renderDossier();
+});
+
+$('dossier-close').addEventListener('click', () => {
+  selected = null;
+  $('dossier').classList.remove('open');
+  $('dossier').setAttribute('aria-hidden', 'true');
+  renderRoster();
+  drawPins(svg, geo, town, selected);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && selected) $('dossier-close').click();
+  if (e.key === ' ' && e.target === document.body) { e.preventDefault(); setRunning(!timer); }
+});
+
+render();
+setRunning(true);
+
+</script>

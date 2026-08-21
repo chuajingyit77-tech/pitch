@@ -1,2 +1,92 @@
-# pitch
-is to make outstanding and visually and functionable good digital pitch
+# Gradient Town
+
+A living town of **66 AI agents**. They all start as students at Gradient Academy, sit their
+finals, graduate with honours, and are placed into work that fits their aptitudes — then run
+every district in the town: power, food, fabrication, data, health, markets, transit, civics,
+science, arts and education.
+
+It is a real simulation, not a mock-up: a deterministic engine ticks one day at a time, agents
+produce and consume resources, results are graded, people are promoted and mentored, and the
+map redraws itself from that state.
+
+![the town](docs/town.png)
+
+## Run it
+
+```bash
+npm run build      # bundle to dist/gradient-town.html (single self-contained file)
+npm test           # 9 tests covering the town's guarantees
+```
+
+Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
+no build step, no network calls beyond the webfonts.
+
+## The town
+
+| | |
+|---|---|
+| **66 citizens** | six per guild, each with an aptitude profile across 11 skills |
+| **11 guilds** | Aether, Verdant, Forge, Lattice, Mender, Ledger, Wayfinder, Keystone, Lumen, Chorus, Hearth |
+| **33 buildings** | each consumes and produces real resources every day |
+| **89 posts** | more work than citizens, so placement always has choices |
+| **8 resources** | energy, food, materials, data, compute, credits, knowledge, care |
+
+### The campus — where agents pass, graduate and get hired
+
+The Hearth district is the pipeline the whole town runs on:
+
+1. **Gradient Academy** — every citizen enrolls here. Five courses; teaching quality comes
+   from the faculty, who are themselves graduates. Nobody is rushed: agents study until they
+   reach the pass mark.
+2. **Commencement Green** — finals are sat and passed. Everyone graduates in good standing,
+   banded as Honours → High Honours → Distinction → Highest Distinction by final GPA.
+3. **Placement Office** — the next day, graduates are matched to the open post they fit best.
+   If nothing fits well enough, the council **charters a new post** rather than place someone
+   badly. Nobody is left unplaced.
+4. **Mentor Hall** — every new hire is paired with a senior for a fortnight, and each week the
+   two citizens having the hardest run are paired for a skills exchange.
+
+Full employment lands around **day 25**, and average performance climbs from ~85% to ~96% as
+people level up from Associate to Practitioner to Guild Master.
+
+## How a day works
+
+Each tick runs five phases:
+
+| Phase | What happens |
+|---|---|
+| **Study** | students gain mastery, scaled by faculty strength and wellbeing |
+| **Placement** | yesterday's graduates are matched to their best-fit post |
+| **Work** | performance is computed per agent; buildings convert inputs to outputs |
+| **Support** | anyone dipping below the floor gets a mentor and comes back up |
+| **Upkeep** | the town eats, and surplus above the cap is spent back on the commons |
+
+Performance is `fit × level × wellbeing × available care`, with a **support floor** — the town
+invests in anyone struggling rather than letting them fail. Production throttles gracefully
+when a resource runs short instead of collapsing, so the economy stays solvent.
+
+## What the tests guarantee
+
+`npm test` asserts the things the town promises:
+
+- all 66 citizens graduate in good standing and are hired within 60 days
+- everyone is placed on a skill they actually have an aptitude for
+- nobody is left performing below the support floor, and results improve with tenure
+- no resource ever goes negative across 200 simulated days
+- stage counts always sum to 66; no post is ever double-held
+- the same seed replays the same town exactly
+
+## Layout
+
+```
+src/data.js     the world: resources, guilds, buildings, posts, citizens
+src/engine.js   the simulation: study, placement, work, support, upkeep
+src/view.js     the plan-view map: districts, buildings, travelling pins
+src/main.js     the operations board: pipeline, stores, record, roster, dossiers
+build.js        bundles it all into one self-contained page
+test.js         the town's guarantees
+```
+
+The design is a civic operations board — plan-view survey plots in petrol ink with brass
+instrumentation. Click any citizen, on the map or in the roster, to open their dossier:
+transcript, aptitudes, posting and full record.
