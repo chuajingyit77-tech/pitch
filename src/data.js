@@ -1,14 +1,14 @@
 // Static world definition for Gradient Town: resources, guilds, buildings, jobs, citizens.
 
 export const RESOURCES = [
-  { id: 'energy',    name: 'Energy',    emoji: '⚡', color: '#f6c453' },
-  { id: 'food',      name: 'Food',      emoji: '\u{1F33E}', color: '#8fd694' },
-  { id: 'materials', name: 'Materials', emoji: '\u{1F9F1}', color: '#e08a6a' },
-  { id: 'data',      name: 'Data',      emoji: '\u{1F4E1}', color: '#7fc7ff' },
-  { id: 'compute',   name: 'Compute',   emoji: '\u{1F9EE}', color: '#b39dff' },
-  { id: 'credits',   name: 'Credits',   emoji: '\u{1FA99}', color: '#ffd479' },
-  { id: 'knowledge', name: 'Knowledge', emoji: '\u{1F4DA}', color: '#9ad1c8' },
-  { id: 'care',      name: 'Care',      emoji: '\u{1F49A}', color: '#ff9fb1' },
+  { id: 'energy',    name: 'Energy',    emoji: '⚡', color: '#f2b441' },
+  { id: 'food',      name: 'Food',      emoji: '\u{1F33E}', color: '#7fb069' },
+  { id: 'materials', name: 'Materials', emoji: '\u{1F9F1}', color: '#d96c5f' },
+  { id: 'data',      name: 'Data',      emoji: '\u{1F4E1}', color: '#6fa8dc' },
+  { id: 'compute',   name: 'Compute',   emoji: '\u{1F9EE}', color: '#a99bd4' },
+  { id: 'credits',   name: 'Credits',   emoji: '\u{1FA99}', color: '#f0a868' },
+  { id: 'knowledge', name: 'Knowledge', emoji: '\u{1F4DA}', color: '#5fbfae' },
+  { id: 'care',      name: 'Care',      emoji: '\u{1F49A}', color: '#e8879b' },
 ];
 
 export const SKILLS = [
@@ -18,17 +18,17 @@ export const SKILLS = [
 
 // Each guild owns a district on the map.
 export const GUILDS = [
-  { id: 'aether',    name: 'Aether Guild',    domain: 'Power & Light',      skill: 'energy',      emoji: '⚡', color: '#f6c453' },
-  { id: 'verdant',   name: 'Verdant Guild',   domain: 'Food & Growth',      skill: 'cultivation', emoji: '\u{1F331}', color: '#8fd694' },
-  { id: 'forge',     name: 'Forge Guild',     domain: 'Making & Repair',    skill: 'fabrication', emoji: '\u{1F528}', color: '#e08a6a' },
-  { id: 'lattice',   name: 'Lattice Guild',   domain: 'Data & Compute',     skill: 'computation', emoji: '\u{1F5A5}', color: '#7fc7ff' },
-  { id: 'mender',    name: 'Mender Guild',    domain: 'Health & Repair',    skill: 'healing',     emoji: '\u{1FA7A}', color: '#ff9fb1' },
-  { id: 'ledger',    name: 'Ledger Guild',    domain: 'Markets & Trade',    skill: 'trade',       emoji: '\u{1FA99}', color: '#ffd479' },
-  { id: 'wayfinder', name: 'Wayfinder Guild', domain: 'Transit & Supply',   skill: 'logistics',   emoji: '\u{1F686}', color: '#9fb4ff' },
-  { id: 'keystone',  name: 'Keystone Guild',  domain: 'Civics & Utilities', skill: 'governance',  emoji: '\u{1F3DB}', color: '#c9c3ff' },
-  { id: 'lumen',     name: 'Lumen Guild',     domain: 'Science & Study',    skill: 'inquiry',     emoji: '\u{1F52D}', color: '#6fe3d4' },
-  { id: 'chorus',    name: 'Chorus Guild',    domain: 'Arts & Culture',     skill: 'artistry',    emoji: '\u{1F3AD}', color: '#ffa8e0' },
-  { id: 'hearth',    name: 'Hearth Guild',    domain: 'Learning & Care',    skill: 'teaching',    emoji: '\u{1F3EB}', color: '#ffc98f' },
+  { id: 'aether',    name: 'Aether Guild',    domain: 'Power & Light',      skill: 'energy',      emoji: '⚡', color: '#f2b441' },
+  { id: 'verdant',   name: 'Verdant Guild',   domain: 'Food & Growth',      skill: 'cultivation', emoji: '\u{1F331}', color: '#7fb069' },
+  { id: 'forge',     name: 'Forge Guild',     domain: 'Making & Repair',    skill: 'fabrication', emoji: '\u{1F528}', color: '#d96c5f' },
+  { id: 'lattice',   name: 'Lattice Guild',   domain: 'Data & Compute',     skill: 'computation', emoji: '\u{1F5A5}', color: '#6fa8dc' },
+  { id: 'mender',    name: 'Mender Guild',    domain: 'Health & Repair',    skill: 'healing',     emoji: '\u{1FA7A}', color: '#e8879b' },
+  { id: 'ledger',    name: 'Ledger Guild',    domain: 'Markets & Trade',    skill: 'trade',       emoji: '\u{1FA99}', color: '#f0a868' },
+  { id: 'wayfinder', name: 'Wayfinder Guild', domain: 'Transit & Supply',   skill: 'logistics',   emoji: '\u{1F686}', color: '#8e9ad6' },
+  { id: 'keystone',  name: 'Keystone Guild',  domain: 'Civics & Utilities', skill: 'governance',  emoji: '\u{1F3DB}', color: '#a99bd4' },
+  { id: 'lumen',     name: 'Lumen Guild',     domain: 'Science & Study',    skill: 'inquiry',     emoji: '\u{1F52D}', color: '#5fbfae' },
+  { id: 'chorus',    name: 'Chorus Guild',    domain: 'Arts & Culture',     skill: 'artistry',    emoji: '\u{1F3AD}', color: '#d98cc0' },
+  { id: 'hearth',    name: 'Hearth Guild',    domain: 'Learning & Care',    skill: 'teaching',    emoji: '\u{1F3EB}', color: '#ef9f6a' },
 ];
 
 // posts: seats of work. inputs/outputs are per staffed agent per day at 100% performance.

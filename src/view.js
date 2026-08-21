@@ -1,15 +1,17 @@
-// The world: eleven floating isles in a nebula sky, drawn in isometric projection.
-// Buildings are real little structures — spires, domes, tiered pagodas — and every
-// citizen is a small luminous figure standing on the ground.
+// The world, drawn as a storybook: isles of grass floating in a bright sky,
+// cottages with steep coloured roofs and smoking chimneys, and small round
+// people standing on the ground. Everything is drawn with a soft ink line,
+// the way a picture book is.
 
 import { GUILDS, BUILDINGS } from './data.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const VIEW_W = 1440;
 const VIEW_H = 880;
-const CENTER = { x: 720, y: 406 };
+const CENTER = { x: 720, y: 398 };
+const RING = { rx: 505, ry: 188 };
+const INK = '#5b4636';
 
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const el = (name, attrs = {}, kids = []) => {
   const n = document.createElementNS(SVG_NS, name);
   for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
@@ -19,23 +21,20 @@ const el = (name, attrs = {}, kids = []) => {
 const poly = (pts, attrs) => el('polygon', { points: pts.map((p) => p.join(',')).join(' '), ...attrs });
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
-// Each guild builds in its own manner.
+// Every guild builds in its own storybook manner.
 const ARCHITECTURE = {
-  aether:    { roof: 'spire',  wall: '#2b3f63', h: 46 },
-  verdant:   { roof: 'terrace', wall: '#2c4a44', h: 32 },
-  forge:     { roof: 'gable',  wall: '#4a3a3a', h: 34 },
-  lattice:   { roof: 'flat',   wall: '#263a56', h: 40 },
-  mender:    { roof: 'dome',   wall: '#43334a', h: 30 },
-  ledger:    { roof: 'pagoda', wall: '#4a4034', h: 34 },
-  wayfinder: { roof: 'arch',   wall: '#2f3a5c', h: 38 },
-  keystone:  { roof: 'gable',  wall: '#35395e', h: 36 },
-  lumen:     { roof: 'dome',   wall: '#26454e', h: 34 },
-  chorus:    { roof: 'pagoda', wall: '#4a3550', h: 32 },
-  hearth:    { roof: 'pagoda', wall: '#4a4038', h: 40 },
+  aether:    { roof: 'cone',   h: 44, wall: '#fdf3e0', chimney: false, vane: 'star' },
+  verdant:   { roof: 'thatch', h: 30, wall: '#fbf0dc', chimney: true },
+  forge:     { roof: 'gable',  h: 32, wall: '#f6e7d2', chimney: true },
+  lattice:   { roof: 'gable',  h: 36, wall: '#fdf3e0', chimney: false, vane: 'dish' },
+  mender:    { roof: 'dome',   h: 28, wall: '#fdf3e6', chimney: true },
+  ledger:    { roof: 'awning', h: 30, wall: '#fbeed6', chimney: true },
+  wayfinder: { roof: 'mill',   h: 36, wall: '#fdf3e0', chimney: false },
+  keystone:  { roof: 'gable',  h: 34, wall: '#f8eeda', chimney: true, vane: 'bell' },
+  lumen:     { roof: 'dome',   h: 32, wall: '#fdf3e0', chimney: false, vane: 'star' },
+  chorus:    { roof: 'tent',   h: 28, wall: '#fdf0e4', chimney: false },
+  hearth:    { roof: 'tower',  h: 40, wall: '#fdf4e4', chimney: true, vane: 'flag' },
 };
-
-// The campus sits at the centre; the ten guild isles ring it.
-const RING = { rx: 505, ry: 206 };
 
 export function computeGeometry() {
   const isles = [];
@@ -44,43 +43,36 @@ export function computeGeometry() {
     const a = -Math.PI / 2 + (i / others.length) * Math.PI * 2;
     const cx = CENTER.x + Math.cos(a) * RING.rx;
     const cy = CENTER.y + Math.sin(a) * RING.ry;
-    const depth = clamp01((Math.sin(a) + 1) / 2);        // nearer isles sit lower and read larger
-    const s = 0.82 + depth * 0.26;
+    const s = 0.82 + Math.min(1, Math.max(0, (Math.sin(a) + 1) / 2)) * 0.26;
     isles.push({
-      guild, cx, cy,
-      rx: 152 * s, ry: 76 * s, scale: s,
-      plate: `ISLE ${String(i + 1).padStart(2, '0')}`,
+      guild, cx, cy, rx: 152 * s, ry: 76 * s, scale: s,
       yard: { u0: -0.72, u1: 0.72, v0: 0.28, v1: 0.86, cols: 5 },
     });
   });
-  const campus = {
+  isles.push({
     guild: GUILDS.find((g) => g.id === 'hearth'),
     cx: CENTER.x, cy: CENTER.y + 18,
     rx: 272, ry: 136, scale: 1.2, isCampus: true,
-    plate: 'THE CAMPUS',
     yard: { u0: -0.78, u1: 0.78, v0: 0.16, v1: 0.9, cols: 11 },
-  };
-  isles.push(campus);
+  });
 
-  // Buildings stand in a row across the upper half of their isle.
   const buildings = {};
   for (const isle of isles) {
     const list = BUILDINGS.filter((b) => b.guild === isle.guild.id);
     const n = list.length;
     list.forEach((b, j) => {
-      const spread = isle.isCampus ? 0.5 : 0.42;
+      const spread = isle.isCampus ? 0.58 : 0.42;
       const t = n === 1 ? 0 : -spread + (j / (n - 1)) * spread * 2;
       const back = (isle.isCampus ? -0.3 : -0.26) + (j % 2) * 0.07;
-      const u = t + back;
-      const v = -t + back;
       const arch = ARCHITECTURE[isle.guild.id];
       buildings[b.id] = {
-        building: b, isle, u, v,
+        building: b, isle,
+        u: t + back, v: -t + back,
         du: isle.isCampus ? 0.115 : 0.15,
         dv: isle.isCampus ? 0.115 : 0.15,
-        h: (arch.h + (b.id === 'academy' ? 16 : 0)) * isle.scale * 0.82,
+        h: (arch.h + (b.id === 'academy' ? 18 : 0)) * isle.scale * 0.82,
         arch,
-        labelDrop: (j % 2) * 26,
+        labelDrop: (j % 2) * 30,
         tint: isle.guild.color,
       };
     });
@@ -98,31 +90,25 @@ const project = (isle, u, v, lift = 0) => [
 function defs() {
   const d = el('defs');
   d.innerHTML = `
-    <radialGradient id="isleTop" cx="42%" cy="34%" r="72%">
-      <stop offset="0%" stop-color="#2f5e63" />
-      <stop offset="55%" stop-color="#22454f" />
-      <stop offset="100%" stop-color="#152c3b" />
+    <radialGradient id="grassTop" cx="42%" cy="32%" r="74%">
+      <stop offset="0%" stop-color="#b6dd8b" />
+      <stop offset="60%" stop-color="#93c96f" />
+      <stop offset="100%" stop-color="#6fae5b" />
     </radialGradient>
-    <linearGradient id="isleRock" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1b3040" />
-      <stop offset="60%" stop-color="#101d2e" />
-      <stop offset="100%" stop-color="#080e1c" stop-opacity="0.2" />
+    <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a9764c" />
+      <stop offset="45%" stop-color="#8a5c3b" />
+      <stop offset="100%" stop-color="#6d472d" />
     </linearGradient>
-    <linearGradient id="fall" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#8fe9ff" stop-opacity="0.5" />
-      <stop offset="100%" stop-color="#8fe9ff" stop-opacity="0" />
+    <linearGradient id="brook" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bfe6f2" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#bfe6f2" stop-opacity="0" />
     </linearGradient>
-    <linearGradient id="bridge" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#9df3d8" stop-opacity="0.05" />
-      <stop offset="50%" stop-color="#9df3d8" stop-opacity="0.5" />
-      <stop offset="100%" stop-color="#ffd79a" stop-opacity="0.28" />
-    </linearGradient>
-    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="3.4" result="b" />
-      <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+    <filter id="softshadow" x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#5b4636" flood-opacity="0.18" />
     </filter>
-    <filter id="softglow" x="-90%" y="-90%" width="280%" height="280%">
-      <feGaussianBlur stdDeviation="7" />
+    <filter id="lampglow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="3" />
     </filter>`;
   return d;
 }
@@ -132,135 +118,172 @@ function defs() {
 function drawIsle(isle) {
   const g = el('g', { class: 'isle', 'data-guild': isle.guild.id });
   const { cx, cy, rx, ry } = isle;
-  const N = [cx, cy - ry / 2 * 1], E = [cx + rx / 2 * 1, cy], S = [cx, cy + ry / 2], W = [cx - rx / 2, cy];
   const top = [[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]];
+  const depth = ry * (isle.isCampus ? 2.2 : 1.9);
 
-  // aura beneath the isle
-  g.appendChild(el('ellipse', {
-    cx, cy: cy + ry * 0.5, rx: rx * 1.15, ry: ry * 0.95,
-    fill: isle.guild.color, opacity: 0.1, filter: 'url(#softglow)',
+  // the earth underneath, rounded and lumpy rather than jagged
+  g.appendChild(el('path', {
+    d: `M ${cx - rx} ${cy}
+        C ${cx - rx * 0.9} ${cy + ry * 1.1}, ${cx - rx * 0.5} ${cy + depth * 0.7}, ${cx - rx * 0.12} ${cy + depth * 0.92}
+        Q ${cx} ${cy + depth * 1.08} ${cx + rx * 0.16} ${cy + depth * 0.88}
+        C ${cx + rx * 0.55} ${cy + depth * 0.66}, ${cx + rx * 0.92} ${cy + ry * 1.05}, ${cx + rx} ${cy}
+        L ${cx} ${cy + ry} Z`,
+    fill: 'url(#soil)', stroke: INK, 'stroke-opacity': 0.35, 'stroke-width': 1.6,
   }));
 
-  // the rock underside, tapering to a point
-  const depth = ry * (isle.isCampus ? 2.5 : 2.1);
-  const rock = `M ${cx - rx} ${cy} L ${cx - rx * 0.55} ${cy + ry * 0.72}
-    L ${cx - rx * 0.2} ${cy + depth * 0.62} L ${cx} ${cy + depth}
-    L ${cx + rx * 0.26} ${cy + depth * 0.55} L ${cx + rx * 0.6} ${cy + ry * 0.68}
-    L ${cx + rx} ${cy} L ${cx} ${cy + ry} Z`;
-  g.appendChild(el('path', { d: rock, fill: 'url(#isleRock)' }));
+  // grass
+  g.appendChild(poly(top, { fill: 'url(#grassTop)', stroke: INK, 'stroke-opacity': 0.42, 'stroke-width': 1.8 }));
 
-  // ground
-  g.appendChild(poly(top, { fill: 'url(#isleTop)', stroke: isle.guild.color, 'stroke-opacity': 0.32 }));
-  g.appendChild(poly(top, { fill: 'none', stroke: isle.guild.color, 'stroke-opacity': 0.5, 'stroke-width': 1.2, filter: 'url(#glow)', class: 'isle-rim' }));
-
-  // a light stream falling from the underside
+  // a winding path and a few tufts of grass
+  const p0 = project(isle, -0.78, 0.12);
+  const p1 = project(isle, 0, 0.34);
+  const p2 = project(isle, 0.78, 0.12);
   g.appendChild(el('path', {
-    d: `M ${cx - rx * 0.1} ${cy + depth * 0.7} L ${cx + rx * 0.06} ${cy + depth * 0.7} L ${cx + rx * 0.02} ${cy + depth * 2.1} L ${cx - rx * 0.04} ${cy + depth * 2.1} Z`,
-    fill: 'url(#fall)', class: 'fall',
+    d: `M ${p0[0]} ${p0[1]} Q ${p1[0]} ${p1[1] + 8} ${p2[0]} ${p2[1]}`,
+    fill: 'none', stroke: '#e9d7ae', 'stroke-width': 5 * isle.scale, 'stroke-linecap': 'round', opacity: 0.85,
+  }));
+  for (let i = 0; i < 7; i++) {
+    const u = -0.85 + (i / 6) * 1.7;
+    const [tx, ty] = project(isle, u, 0.62 + (i % 3) * 0.09);
+    g.appendChild(el('path', {
+      d: `M ${tx} ${ty} q -3 -6 -1 -9 M ${tx} ${ty} q 3 -7 5 -9`,
+      stroke: '#5f9c4d', 'stroke-width': 1.4, fill: 'none', 'stroke-linecap': 'round', opacity: 0.75,
+    }));
+    if (i % 2 === 0) {
+      g.appendChild(el('circle', { cx: tx + 5, cy: ty - 9, r: 2, fill: i % 4 === 0 ? '#f2b441' : '#e8879b', stroke: INK, 'stroke-opacity': 0.25, 'stroke-width': 0.6 }));
+    }
+  }
+
+  // vines and a little waterfall spilling off the underside
+  for (const side of [-1, 1]) {
+    const vx = cx + side * rx * 0.62;
+    const vy = cy + ry * 0.42;
+    g.appendChild(el('path', {
+      d: `M ${vx} ${vy} q ${side * 6} 16 ${-side * 3} 30`,
+      stroke: '#6fae5b', 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round', opacity: 0.8,
+    }));
+  }
+  g.appendChild(el('path', {
+    d: `M ${cx - rx * 0.035} ${cy + depth * 0.92} L ${cx + rx * 0.03} ${cy + depth * 0.92}
+        Q ${cx + rx * 0.05} ${cy + depth * 1.3} ${cx + rx * 0.012} ${cy + depth * 1.45}
+        L ${cx - rx * 0.016} ${cy + depth * 1.45} Z`,
+    fill: 'url(#brook)', class: 'brook',
   }));
 
   if (isle.isCampus) {
     const [px, py] = project(isle, 0, 0.42);
-    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: '#7ef0c8', opacity: 0.07 }));
-    g.appendChild(el('ellipse', {
-      cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: 'none',
-      stroke: '#ffd79a', 'stroke-opacity': 0.4, 'stroke-dasharray': '4 9', class: 'plaza',
-    }));
-    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.17, ry: ry * 0.17, fill: 'none', stroke: '#7ef0c8', 'stroke-opacity': 0.32 }));
+    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: '#f7e9c4', opacity: 0.55, stroke: INK, 'stroke-opacity': 0.2 }));
+    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.17, ry: ry * 0.17, fill: 'none', stroke: '#c9a86a', 'stroke-opacity': 0.6, 'stroke-dasharray': '5 7' }));
   }
 
-  // ground detailing: a path across the isle and a few stones
-  g.appendChild(el('path', {
-    d: `M ${project(isle, -0.8, 0.1)} L ${project(isle, 0.8, 0.1)}`.replace(/,/g, ' '),
-    stroke: '#7fe3d0', 'stroke-opacity': 0.14, 'stroke-width': 2 * isle.scale, fill: 'none',
-  }));
-
-  g.appendChild(el('text', {
-    x: cx, y: cy + ry + 20 * isle.scale, class: 'isle-label', 'text-anchor': 'middle',
-  })).textContent = isle.guild.name.replace(' Guild', '').toUpperCase();
+  const label = el('text', {
+    x: cx - rx * 0.52, y: cy + ry + 15 * isle.scale, class: 'isle-label', 'text-anchor': 'middle',
+  });
+  label.textContent = isle.guild.name.replace(' Guild', '');
+  g.appendChild(label);
   return g;
 }
 
 /* ------------------------------------------------------------ buildings */
 
-function windowsOn(face, h, cols, tint) {
-  // face = [bottomLeft, bottomRight]; windows are parallelograms lifted off the ground
-  const out = [];
-  for (let i = 0; i < cols; i++) {
-    const t0 = 0.16 + (i * 0.72) / cols;
-    const t1 = t0 + 0.36 / cols;
-    for (const [y0, y1] of [[0.3, 0.56], [0.64, 0.86]]) {
-      const a = lerp(face[0], face[1], t0);
-      const b = lerp(face[0], face[1], t1);
-      out.push(poly(
-        [[a[0], a[1] - h * y0], [b[0], b[1] - h * y0], [b[0], b[1] - h * y1], [a[0], a[1] - h * y1]],
-        { fill: tint, opacity: 0.75, class: 'win' },
-      ));
-    }
-  }
-  return out;
+function arcWindow(face, h, t, lift, w, tint) {
+  const a = lerp(face[0], face[1], t);
+  const b = lerp(face[0], face[1], t + w);
+  const top = 0.34;
+  return el('path', {
+    d: `M ${a[0]} ${a[1] - h * lift} L ${b[0]} ${b[1] - h * lift}
+        L ${b[0]} ${b[1] - h * (lift + top) + 3} Q ${(a[0] + b[0]) / 2} ${(a[1] + b[1]) / 2 - h * (lift + top) - 4} ${a[0]} ${a[1] - h * (lift + top) + 3} Z`,
+    fill: tint, stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9, class: 'win',
+  });
 }
 
-function roofOf(kind, top, cx, cyTop, w, tint, scale) {
+function roofOf(kind, top, cx, cyTop, w, tint, scale, arch) {
   const parts = [];
-  const rh = w * 0.55;
-  const apex = [cx, cyTop - rh];
-  const [a, b, c, d] = top;                        // back, right, front, left
+  const [a, b, c, d] = top;
+  const rh = w * 0.9;
+  const eaves = top.map((p) => [cx + (p[0] - cx) * 1.2, cyTop + (p[1] - cyTop) * 1.2]);
+  const shade = { fill: tint, stroke: INK, 'stroke-opacity': 0.42, 'stroke-width': 1.4, 'stroke-linejoin': 'round' };
 
-  if (kind === 'spire') {
-    parts.push(poly([a, b, apex], { fill: tint, opacity: 0.5 }));
-    parts.push(poly([b, c, apex], { fill: tint, opacity: 0.78 }));
-    parts.push(poly([c, d, apex], { fill: tint, opacity: 0.62 }));
-    parts.push(el('line', { x1: cx, y1: cyTop - rh, x2: cx, y2: cyTop - rh * 2.5, stroke: tint, 'stroke-width': 2 * scale, filter: 'url(#glow)' }));
-    parts.push(el('circle', { cx, cy: cyTop - rh * 2.7, r: 4 * scale, fill: '#ffffff', filter: 'url(#glow)', class: 'beacon' }));
+  if (kind === 'cone' || kind === 'tent' || kind === 'tower') {
+    const height = kind === 'tower' ? rh * 1.5 : rh * 1.25;
+    const apex = [cx, cyTop - height];
+    parts.push(poly([eaves[3], eaves[0], apex], { ...shade, opacity: 0.85 }));
+    parts.push(poly([eaves[0], eaves[1], apex], { ...shade, opacity: 0.72 }));
+    parts.push(poly([eaves[1], eaves[2], apex], shade));
+    parts.push(poly([eaves[2], eaves[3], apex], { ...shade, filter: undefined, opacity: 0.9 }));
+    if (kind === 'tent') {
+      for (let i = 1; i < 4; i++) {
+        const edge = lerp(eaves[2], eaves[1], i / 4);
+        parts.push(el('line', { x1: apex[0], y1: apex[1], x2: edge[0], y2: edge[1], stroke: '#fdf3e0', 'stroke-width': 1.6, opacity: 0.8 }));
+      }
+    }
   } else if (kind === 'dome') {
-    const r = w * 0.62;
+    const r = w * 0.78;
     parts.push(el('path', {
-      d: `M ${cx - r} ${cyTop} A ${r} ${r * 1.15} 0 0 1 ${cx + r} ${cyTop} Z`,
-      fill: tint, opacity: 0.72,
+      d: `M ${cx - r} ${cyTop + 2} A ${r} ${r * 1.05} 0 0 1 ${cx + r} ${cyTop + 2} Z`, ...shade,
     }));
     parts.push(el('path', {
-      d: `M ${cx - r * 0.5} ${cyTop - r * 0.5} A ${r * 0.6} ${r * 0.7} 0 0 1 ${cx + r * 0.1} ${cyTop - r * 0.86}`,
-      stroke: '#ffffff', 'stroke-opacity': 0.35, fill: 'none', 'stroke-width': 1.4,
+      d: `M ${cx - r * 0.52} ${cyTop - r * 0.55} A ${r * 0.62} ${r * 0.66} 0 0 1 ${cx + r * 0.06} ${cyTop - r * 0.9}`,
+      stroke: '#fff8e8', 'stroke-opacity': 0.7, fill: 'none', 'stroke-width': 2,
     }));
-    parts.push(el('circle', { cx, cy: cyTop - r * 1.16, r: 3 * scale, fill: '#fff3d0', filter: 'url(#glow)', class: 'beacon' }));
-  } else if (kind === 'pagoda') {
-    for (let tier = 0; tier < 3; tier++) {
-      const k = 1 - tier * 0.26;
-      const lift = tier * rh * 0.52;
-      const eave = top.map((p) => [cx + (p[0] - cx) * (k + 0.22), cyTop - lift + (p[1] - cyTop) * (k + 0.22)]);
-      const peak = [cx, cyTop - lift - rh * 0.5 * k];
-      parts.push(poly([eave[0], eave[1], peak], { fill: tint, opacity: 0.45 }));
-      parts.push(poly([eave[1], eave[2], peak], { fill: tint, opacity: 0.8 }));
-      parts.push(poly([eave[2], eave[3], peak], { fill: tint, opacity: 0.6 }));
-    }
-    parts.push(el('circle', { cx, cy: cyTop - rh * 1.7, r: 3.4 * scale, fill: '#ffe6ac', filter: 'url(#glow)', class: 'beacon' }));
-  } else if (kind === 'gable') {
-    const ridgeA = [(a[0] + d[0]) / 2, (a[1] + d[1]) / 2 - rh * 0.8];
-    const ridgeB = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2 - rh * 0.8];
-    parts.push(poly([d, c, ridgeB, ridgeA], { fill: tint, opacity: 0.72 }));
-    parts.push(poly([a, b, ridgeB, ridgeA], { fill: tint, opacity: 0.42 }));
-    parts.push(el('line', { x1: ridgeA[0], y1: ridgeA[1], x2: ridgeB[0], y2: ridgeB[1], stroke: '#ffffff', 'stroke-opacity': 0.25 }));
-  } else if (kind === 'terrace') {
-    parts.push(poly(top, { fill: tint, opacity: 0.5 }));
+  } else if (kind === 'thatch') {
+    parts.push(el('path', {
+      d: `M ${eaves[3][0]} ${eaves[3][1]} Q ${cx} ${cyTop - rh * 1.5} ${eaves[1][0]} ${eaves[1][1]}
+          Q ${cx} ${cyTop + rh * 0.25} ${eaves[3][0]} ${eaves[3][1]} Z`, ...shade,
+    }));
     for (let i = 0; i < 3; i++) {
-      const p = lerp(lerp(d, c, 0.2 + i * 0.3), lerp(a, b, 0.2 + i * 0.3), 0.4);
-      parts.push(el('circle', { cx: p[0], cy: p[1] - 4, r: 4.5 * scale, fill: tint, opacity: 0.9 }));
-    }
-  } else if (kind === 'arch') {
-    parts.push(poly(top, { fill: tint, opacity: 0.42 }));
-    for (let i = 0; i < 2; i++) {
-      parts.push(el('ellipse', {
-        cx, cy: cyTop - rh * (0.5 + i * 0.55), rx: w * (0.7 - i * 0.18), ry: w * 0.22,
-        fill: 'none', stroke: tint, 'stroke-width': 1.6, opacity: 0.85, class: 'ring',
+      parts.push(el('path', {
+        d: `M ${cx - w * 0.5 + i * w * 0.5} ${cyTop - rh * 0.2} q 4 -${rh * 0.5} 2 -${rh * 0.85}`,
+        stroke: INK, 'stroke-opacity': 0.16, fill: 'none', 'stroke-width': 1.2,
       }));
     }
+  } else if (kind === 'awning') {
+    parts.push(poly([eaves[3], eaves[2], eaves[1], [cx, cyTop - rh * 0.5]], shade));
+    const stripeW = (eaves[1][0] - eaves[3][0]) / 6;
+    for (let i = 0; i < 3; i++) {
+      const x0 = eaves[3][0] + stripeW * (i * 2 + 0.5);
+      parts.push(poly([[x0, eaves[3][1] + (i * 2 + 0.5) * 0], [x0 + stripeW, eaves[3][1]], [cx, cyTop - rh * 0.5]],
+        { fill: '#fff6e4', opacity: 0.55 }));
+    }
+  } else if (kind === 'mill') {
+    parts.push(poly([eaves[3], eaves[0], eaves[1], eaves[2]], { ...shade, opacity: 0.9 }));
+    const hubY = cyTop - rh * 0.5;
+    const blades = el('g', { class: 'blades', style: `--hx:${cx}px; --hy:${hubY}px` });
+    for (let i = 0; i < 4; i++) {
+      blades.appendChild(el('rect', {
+        x: cx - 1.6, y: hubY - w * 1.15, width: 3.2, height: w * 1.15,
+        fill: '#fdf3e0', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9, rx: 1.4,
+        transform: `rotate(${i * 90} ${cx} ${hubY})`,
+      }));
+    }
+    parts.push(blades);
+    parts.push(el('circle', { cx, cy: hubY, r: 2.6, fill: INK, opacity: 0.7 }));
   } else {
-    // flat roof with a mast
-    parts.push(poly(top, { fill: tint, opacity: 0.34 }));
-    parts.push(poly(top.map((p) => [cx + (p[0] - cx) * 0.62, cyTop + (p[1] - cyTop) * 0.62]), { fill: tint, opacity: 0.5 }));
-    parts.push(el('line', { x1: cx, y1: cyTop, x2: cx, y2: cyTop - rh * 1.5, stroke: tint, 'stroke-width': 1.6, opacity: 0.9 }));
-    parts.push(el('circle', { cx, cy: cyTop - rh * 1.5, r: 2.6 * scale, fill: '#bff6ff', filter: 'url(#glow)', class: 'beacon' }));
+    // gable: a steep pitched roof with a ridge
+    const ridgeA = [(eaves[0][0] + eaves[3][0]) / 2, (eaves[0][1] + eaves[3][1]) / 2 - rh];
+    const ridgeB = [(eaves[1][0] + eaves[2][0]) / 2, (eaves[1][1] + eaves[2][1]) / 2 - rh];
+    parts.push(poly([eaves[0], eaves[1], ridgeB, ridgeA], { ...shade, opacity: 0.78 }));
+    parts.push(poly([eaves[3], eaves[2], ridgeB, ridgeA], shade));
+    parts.push(el('line', {
+      x1: ridgeA[0], y1: ridgeA[1], x2: ridgeB[0], y2: ridgeB[1],
+      stroke: '#fff6e4', 'stroke-opacity': 0.5, 'stroke-width': 1.6,
+    }));
+  }
+
+  // weather vanes, bells and flags
+  const vaneY = kind === 'dome' ? cyTop - w * 0.85 : cyTop - rh * 1.35;
+  if (arch.vane === 'star') {
+    parts.push(el('path', {
+      d: `M ${cx} ${vaneY - 8} l 2.2 4.6 5 .7 -3.6 3.5 .9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z`,
+      fill: '#f7c948', stroke: INK, 'stroke-opacity': 0.35, 'stroke-width': 0.8, class: 'twinkle',
+    }));
+  } else if (arch.vane === 'flag') {
+    parts.push(el('line', { x1: cx, y1: vaneY + 4, x2: cx, y2: vaneY - 14, stroke: INK, 'stroke-width': 1.4, opacity: 0.7 }));
+    parts.push(el('path', { d: `M ${cx} ${vaneY - 14} q 9 3 14 0 l 0 7 q -6 3 -14 0 z`, fill: '#d96c5f', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9, class: 'flag' }));
+  } else if (arch.vane === 'bell') {
+    parts.push(el('path', { d: `M ${cx - 4} ${vaneY} q 0 -7 4 -7 t 4 7 z`, fill: '#e0b64a', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9 }));
+  } else if (arch.vane === 'dish') {
+    parts.push(el('ellipse', { cx, cy: vaneY - 2, rx: 6, ry: 3, fill: '#fdf3e0', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9 }));
   }
   return parts;
 }
@@ -273,38 +296,57 @@ function drawBuilding(id, spec) {
   const top = base.map((p) => [p[0], p[1] - h]);
   const w = (base[1][0] - base[3][0]) * 0.5;
 
-  // shadow on the ground
   g.appendChild(el('ellipse', {
     cx: (base[0][0] + base[2][0]) / 2, cy: (base[0][1] + base[2][1]) / 2 + 3,
-    rx: Math.abs(w) * 1.15, ry: Math.abs(w) * 0.5, fill: '#04070f', opacity: 0.35,
+    rx: Math.abs(w) * 1.2, ry: Math.abs(w) * 0.52, fill: '#4f7a3f', opacity: 0.22,
   }));
 
-  // walls: the two faces that meet at the near corner
-  g.appendChild(poly([base[3], base[2], top[2], top[3]], { fill: arch.wall, class: 'wall-l' }));
-  g.appendChild(poly([base[2], base[1], top[1], top[2]], { fill: arch.wall, class: 'wall-r' }));
-  for (const win of windowsOn([base[3], base[2]], h, 2, tint)) g.appendChild(win);
-  for (const win of windowsOn([base[2], base[1]], h, 2, tint)) g.appendChild(win);
+  const wallStroke = { stroke: INK, 'stroke-opacity': 0.42, 'stroke-width': 1.4, 'stroke-linejoin': 'round' };
+  g.appendChild(poly([base[3], base[2], top[2], top[3]], { fill: arch.wall, class: 'wall-l', ...wallStroke }));
+  g.appendChild(poly([base[2], base[1], top[1], top[2]], { fill: arch.wall, class: 'wall-r', ...wallStroke }));
 
-  // a lit doorway on the near corner
-  const door = lerp(base[3], base[2], 0.5);
-  g.appendChild(poly(
-    [[door[0] - 3, door[1]], [door[0] + 3, door[1] + 1.5], [door[0] + 3, door[1] - h * 0.3], [door[0] - 3, door[1] - h * 0.3 - 1.5]],
-    { fill: '#ffdca6', opacity: 0.9, filter: 'url(#glow)' },
-  ));
+  const glow = '#ffd98a';
+  g.appendChild(arcWindow([base[3], base[2]], h, 0.2, 0.34, 0.22, glow));
+  g.appendChild(arcWindow([base[2], base[1]], h, 0.58, 0.34, 0.22, glow));
+  if (h > 34) {
+    g.appendChild(arcWindow([base[3], base[2]], h, 0.55, 0.62, 0.18, glow));
+    g.appendChild(arcWindow([base[2], base[1]], h, 0.24, 0.62, 0.18, glow));
+  }
+
+  // a rounded door on the near corner, with a lamp beside it
+  const door = lerp(base[3], base[2], 0.52);
+  g.appendChild(el('path', {
+    d: `M ${door[0] - 3.4} ${door[1]} L ${door[0] - 3.4} ${door[1] - h * 0.22}
+        Q ${door[0]} ${door[1] - h * 0.34} ${door[0] + 3.4} ${door[1] - h * 0.22}
+        L ${door[0] + 3.4} ${door[1] + 1.6} Z`,
+    fill: '#9c6b43', stroke: INK, 'stroke-opacity': 0.5, 'stroke-width': 1,
+  }));
+  g.appendChild(el('circle', { cx: door[0] + 7, cy: door[1] - h * 0.3, r: 2.2, fill: '#ffcf6b', class: 'lamp' }));
 
   const cx = (top[1][0] + top[3][0]) / 2;
   const cyTop = (top[0][1] + top[2][1]) / 2;
-  if (id === 'academy') {
-    g.appendChild(el('path', {
-      d: `M ${cx - 14} ${cyTop} L ${cx + 14} ${cyTop} L ${cx + 5} ${cyTop - 190} L ${cx - 5} ${cyTop - 190} Z`,
-      fill: 'url(#fall)', opacity: 0.5, class: 'fall',
-    }));
-  }
-  for (const part of roofOf(arch.roof, top, cx, cyTop, Math.abs(w), tint, isle.scale)) g.appendChild(part);
+  for (const part of roofOf(arch.roof, top, cx, cyTop, Math.abs(w), tint, isle.scale, arch)) g.appendChild(part);
 
-  const APEX = { spire: 1.55, pagoda: 1.0, dome: 0.78, gable: 0.5, flat: 0.9, terrace: 0.25, arch: 0.66 };
-  const apex = cyTop - Math.abs(w) * (APEX[arch.roof] ?? 0.6);
-  spec.labelPos = [cx, apex - 11 - (spec.labelDrop || 0)];
+  // chimney and a curl of smoke
+  if (arch.chimney) {
+    const chx = cx + Math.abs(w) * 0.62;
+    const chy = cyTop - Math.abs(w) * 0.45;
+    g.appendChild(el('rect', {
+      x: chx - 3, y: chy - 12, width: 6, height: 15, rx: 1.5,
+      fill: '#c98a63', stroke: INK, 'stroke-opacity': 0.45, 'stroke-width': 1,
+    }));
+    const smoke = el('g', { class: 'smoke' });
+    for (let i = 0; i < 3; i++) {
+      smoke.appendChild(el('circle', {
+        cx: chx, cy: chy - 14, r: 3 + i * 0.6, fill: '#fffaf0', opacity: 0.75,
+        style: `animation-delay:${i * 1.1}s`,
+      }));
+    }
+    g.appendChild(smoke);
+  }
+
+  const APEX = { cone: 1.5, tower: 1.75, tent: 1.4, dome: 0.95, thatch: 1.6, awning: 0.8, mill: 1.3, gable: 1.1 };
+  spec.labelPos = [cx, cyTop - Math.abs(w) * (APEX[arch.roof] ?? 1.1) - 11 - (spec.labelDrop || 0)];
 
   const t = el('title');
   t.textContent = `${building.name} — ${building.blurb}`;
@@ -319,21 +361,19 @@ export function drawMap(svg, geo) {
   svg.innerHTML = '';
   svg.appendChild(defs());
 
-  // light bridges from the campus out to every isle
   const campus = geo.isles.find((i) => i.isCampus);
   const bridges = el('g', { class: 'bridges' });
   for (const isle of geo.isles) {
     if (isle.isCampus) continue;
     const mx = (campus.cx + isle.cx) / 2;
-    const my = (campus.cy + isle.cy) / 2 - 70;
+    const my = (campus.cy + isle.cy) / 2 - 62;
     bridges.appendChild(el('path', {
       d: `M ${campus.cx} ${campus.cy} Q ${mx} ${my} ${isle.cx} ${isle.cy}`,
-      class: 'bridge', stroke: 'url(#bridge)', fill: 'none',
+      class: 'bridge', fill: 'none',
     }));
   }
   svg.appendChild(bridges);
 
-  // painter's algorithm: far isles first
   const order = [...geo.isles].sort((a, b) => a.cy - b.cy);
   for (const isle of order) {
     const g = el('g', { class: 'isle-group' });
@@ -345,7 +385,6 @@ export function drawMap(svg, geo) {
     svg.appendChild(g);
   }
 
-  // name plates last, so no roof can cover them
   const plates = el('g', { class: 'plates' });
   for (const [id, spec] of Object.entries(geo.buildings)) {
     const [lx, ly] = spec.labelPos;
@@ -353,15 +392,14 @@ export function drawMap(svg, geo) {
     name.textContent = spec.building.short;
     plates.appendChild(name);
     plates.appendChild(el('text', {
-      x: lx, y: ly + 9.5, class: 'build-staff', 'text-anchor': 'middle', 'data-staff': id,
+      x: lx, y: ly + 10.5, class: 'build-staff', 'text-anchor': 'middle', 'data-staff': id,
     }));
   }
   svg.appendChild(plates);
-
   svg.appendChild(el('g', { class: 'pins', id: 'pin-layer' }));
 }
 
-/* ---------------------------------------------------------------- pins */
+/* ---------------------------------------------------------------- folk */
 
 function yardSlot(isle, i, total) {
   const y = isle.yard;
@@ -376,11 +414,14 @@ function yardSlot(isle, i, total) {
 
 function makePin(c) {
   const g = el('g', { class: 'pin', 'data-pin': c.id, tabindex: '0' });
-  g.appendChild(el('ellipse', { cx: 0, cy: 1, rx: 4.5, ry: 2, fill: '#04060e', opacity: 0.4 }));
-  g.appendChild(el('circle', { cx: 0, cy: -7, r: 7.5, class: 'aura', filter: 'url(#softglow)' }));
-  g.appendChild(el('path', { d: 'M -3.1 0 L -2.1 -6.4 Q 0 -8.2 2.1 -6.4 L 3.1 0 Z', class: 'robe' }));
-  g.appendChild(el('circle', { cx: 0, cy: -9.2, r: 2.1, class: 'head' }));
-  g.appendChild(el('circle', { cx: 0, cy: -13.5, r: 1.6, class: 'halo' }));
+  g.appendChild(el('ellipse', { cx: 0, cy: 1.5, rx: 4.6, ry: 2, fill: '#4f7a3f', opacity: 0.3 }));
+  g.appendChild(el('path', {
+    d: 'M -4 0.5 Q -4.4 -6 -1.9 -7.6 L 1.9 -7.6 Q 4.4 -6 4 0.5 Z',
+    class: 'robe', stroke: INK, 'stroke-opacity': 0.45, 'stroke-width': 1,
+  }));
+  g.appendChild(el('circle', { cx: 0, cy: -9.6, r: 2.9, class: 'head', stroke: INK, 'stroke-opacity': 0.45, 'stroke-width': 1 }));
+  g.appendChild(el('path', { d: 'M -2.9 -10.6 Q 0 -13.6 2.9 -10.6 Q 0 -12 -2.9 -10.6 Z', class: 'hair' }));
+  g.appendChild(el('circle', { cx: 0, cy: -14.4, r: 2.4, class: 'halo' }));
   g.appendChild(el('title'));
   return g;
 }
@@ -401,17 +442,15 @@ export function drawPins(svg, geo, town, selectedId) {
     const i = (slots[loc] = (slots[loc] ?? -1) + 1);
     if (c.stage === 'employed') staff[loc] = (staff[loc] || 0) + 1;
 
-    // citizens gather in their building's yard; the campus yard holds the whole student body
     const isle = spec.isle;
-    const total = totals[loc];
     const [u, v] = isle.isCampus && loc === 'academy'
-      ? yardSlot(isle, i, total)
-      : yardSlot({ ...isle, yard: { ...isle.yard, u0: spec.u - 0.3, u1: spec.u + 0.3, cols: 3 } }, i, total);
+      ? yardSlot(isle, i, totals[loc])
+      : yardSlot({ ...isle, yard: { ...isle.yard, u0: spec.u - 0.3, u1: spec.u + 0.3, cols: 3 } }, i, totals[loc]);
     const [x, y] = project(isle, u, v);
 
     let pin = layer.querySelector(`[data-pin="${c.id}"]`);
     if (!pin) { pin = makePin(c); layer.appendChild(pin); }
-    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(isle.scale * 1.22).toFixed(2)})`);
+    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(isle.scale * 1.15).toFixed(2)})`);
     pin.setAttribute('data-stage', c.stage);
     pin.setAttribute('style', `--tint:${GUILDS[c.guildIndex].color}`);
     pin.classList.toggle('is-selected', c.id === selectedId);
@@ -419,7 +458,6 @@ export function drawPins(svg, geo, town, selectedId) {
       c.stage === 'employed' ? `${c.name} — ${c.role}` : `${c.name} — ${c.stage}`;
     placed.push({ pin, y });
   }
-  // keep nearer citizens in front
   placed.sort((a, b) => a.y - b.y).forEach(({ pin }) => layer.appendChild(pin));
 
   for (const [id, spec] of Object.entries(geo.buildings)) {
@@ -437,7 +475,7 @@ export function drawPins(svg, geo, town, selectedId) {
 export function startSky(canvas) {
   const ctx = canvas.getContext('2d');
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let W = 0, H = 0, stars = [], motes = [], clouds = [];
+  let W = 0, H = 0, clouds = [], birds = [], petals = [];
 
   const seedRand = (() => { let a = 20260821; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296); })();
 
@@ -447,65 +485,82 @@ export function startSky(canvas) {
     W = Math.max(1, r.width); H = Math.max(1, r.height);
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    stars = Array.from({ length: 220 }, () => ({
-      x: seedRand() * W, y: seedRand() * H * 0.92,
-      r: seedRand() * 1.3 + 0.25, p: seedRand() * Math.PI * 2, s: 0.4 + seedRand(),
+    clouds = Array.from({ length: 9 }, () => ({
+      x: seedRand() * W, y: H * (0.05 + seedRand() * 0.66),
+      s: 0.5 + seedRand() * 0.9, v: 0.05 + seedRand() * 0.11,
     }));
-    motes = Array.from({ length: 46 }, () => ({
+    birds = Array.from({ length: 5 }, () => ({
+      x: seedRand() * W, y: H * (0.08 + seedRand() * 0.3),
+      s: 0.7 + seedRand() * 0.6, v: 0.18 + seedRand() * 0.2, p: seedRand() * 6,
+    }));
+    petals = Array.from({ length: 26 }, () => ({
       x: seedRand() * W, y: seedRand() * H,
-      r: seedRand() * 1.8 + 0.6, v: 0.08 + seedRand() * 0.22, drift: (seedRand() - 0.5) * 0.16,
-      hue: seedRand() > 0.5 ? '#ffd9a0' : '#9ff0dd',
+      r: 1.6 + seedRand() * 2.2, v: 0.16 + seedRand() * 0.3,
+      drift: (seedRand() - 0.5) * 0.5, p: seedRand() * 6,
+      hue: ['#ffd6e0', '#fff0c2', '#e6f2c8'][Math.floor(seedRand() * 3)],
     }));
-    clouds = Array.from({ length: 7 }, (_, i) => ({
-      x: seedRand() * W, y: H * (0.18 + seedRand() * 0.7),
-      rx: 190 + seedRand() * 320, ry: 34 + seedRand() * 54,
-      v: 0.04 + seedRand() * 0.09, o: 0.05 + seedRand() * 0.07,
-      hue: i % 3 === 0 ? '155, 120, 255' : i % 3 === 1 ? '80, 190, 220' : '255, 170, 190',
-    }));
+  }
+
+  function puff(x, y, s) {
+    ctx.beginPath();
+    ctx.ellipse(x, y, 44 * s, 26 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x - 34 * s, y + 6 * s, 28 * s, 18 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 32 * s, y + 7 * s, 30 * s, 19 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 4 * s, y - 15 * s, 26 * s, 18 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function frame(t) {
     ctx.clearRect(0, 0, W, H);
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#05060f');
-    sky.addColorStop(0.42, '#0b1030');
-    sky.addColorStop(0.74, '#132043');
-    sky.addColorStop(1, '#0d2b3f');
+    sky.addColorStop(0, '#8fd0ea');
+    sky.addColorStop(0.42, '#bfe4f0');
+    sky.addColorStop(0.72, '#f6e2c0');
+    sky.addColorStop(1, '#f7cfa4');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
+    // a low sun with a warm halo
+    const sunX = W * 0.78, sunY = H * 0.2;
+    const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, H * 0.42);
+    halo.addColorStop(0, 'rgba(255, 234, 178, 0.9)');
+    halo.addColorStop(1, 'rgba(255, 234, 178, 0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff3cd';
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 30, 0, Math.PI * 2);
+    ctx.fill();
+
     for (const c of clouds) {
       if (!still) c.x += c.v;
-      if (c.x - c.rx > W) c.x = -c.rx;
-      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.rx);
-      g.addColorStop(0, `rgba(${c.hue}, ${c.o})`);
-      g.addColorStop(1, `rgba(${c.hue}, 0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2);
-      ctx.fill();
+      if (c.x - 90 * c.s > W) c.x = -90 * c.s;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      puff(c.x, c.y + 7 * c.s, c.s);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      puff(c.x, c.y, c.s);
     }
 
-    for (const s of stars) {
-      const tw = still ? 0.75 : 0.55 + Math.sin(t / 900 * s.s + s.p) * 0.35;
-      ctx.globalAlpha = tw;
-      ctx.fillStyle = '#dbe8ff';
+    ctx.strokeStyle = 'rgba(91, 70, 54, 0.45)';
+    ctx.lineWidth = 1.4;
+    for (const b of birds) {
+      if (!still) b.x += b.v;
+      if (b.x > W + 20) b.x = -20;
+      const flap = Math.sin(t / 260 + b.p) * 2.4;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(b.x - 6 * b.s, b.y);
+      ctx.quadraticCurveTo(b.x - 3 * b.s, b.y - 3 * b.s - flap, b.x, b.y);
+      ctx.quadraticCurveTo(b.x + 3 * b.s, b.y - 3 * b.s - flap, b.x + 6 * b.s, b.y);
+      ctx.stroke();
     }
-    ctx.globalAlpha = 1;
 
-    for (const m of motes) {
-      if (!still) { m.y -= m.v; m.x += m.drift; }
-      if (m.y < -6) { m.y = H + 6; m.x = seedRand() * W; }
-      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 6);
-      g.addColorStop(0, m.hue);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = g;
+    for (const p of petals) {
+      if (!still) { p.y += p.v; p.x += Math.sin(t / 1400 + p.p) * 0.4 + p.drift * 0.2; }
+      if (p.y > H + 6) { p.y = -6; p.x = seedRand() * W; }
+      ctx.fillStyle = p.hue;
+      ctx.globalAlpha = 0.85;
       ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r * 6, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y, p.r, p.r * 0.62, Math.sin(t / 900 + p.p), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;

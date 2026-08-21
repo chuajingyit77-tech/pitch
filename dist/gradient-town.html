@@ -1,288 +1,284 @@
 <title>Gradient Town</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=Nunito:wght@400;600;700;800&display=swap" />
 <style>
-/* Gradient Town — eleven isles adrift in a nebula. One committed visual world:
-   night sky, jade and lantern light, celestial architecture. */
+/* Gradient Town — a storybook. Warm paper, soft ink lines, cottages with
+   coloured roofs. One committed daylight world; every colour is explicit. */
 :root {
-  --void: #05060f;
-  --deep: #0a1026;
-  --glass: rgba(14, 24, 48, 0.72);
-  --glass-2: rgba(20, 34, 64, 0.66);
-  --edge: rgba(126, 240, 200, 0.18);
-  --edge-2: rgba(126, 240, 200, 0.32);
-  --text: #eaf2ff;
-  --muted: #9db3d4;
-  --dim: #6b82a8;
-  --jade: #7ef0c8;
-  --cyan: #6fd8ff;
-  --gold: #ffcf7a;
-  --rose: #ff9ec4;
-  --violet: #b58cff;
-  --display: 'Cormorant Garamond', 'Songti SC', Georgia, serif;
-  --ui: 'Rajdhani', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --paper: #fbf1dd;
+  --paper-2: #fffaf0;
+  --card: #fffdf7;
+  --ink: #4a3728;
+  --ink-soft: #83705c;
+  --ink-faint: #ab947c;
+  --line: #e9d8ba;
+  --line-soft: #f2e6cf;
+  --sun: #f2b441;
+  --berry: #d96c5f;
+  --leaf: #7fb069;
+  --sky: #8fd0ea;
+  --rose: #e8879b;
+  --plum: #a99bd4;
+  --display: 'Fraunces', 'Songti SC', Georgia, serif;
+  --ui: 'Nunito', 'PingFang SC', 'Helvetica Neue', sans-serif;
   --mono: 'IBM Plex Mono', Menlo, monospace;
+  --lift: 0 3px 0 #ecdcc0, 0 14px 26px rgba(103, 78, 52, 0.13);
+  --lift-sm: 0 2px 0 #ecdcc0, 0 6px 14px rgba(103, 78, 52, 0.1);
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--void);
-  color: var(--text);
+  background: var(--paper);
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.7), transparent 42%),
+    radial-gradient(circle at 88% 0%, rgba(255, 236, 199, 0.8), transparent 46%);
+  color: var(--ink);
   font-family: var(--ui);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3 { margin: 0; font-weight: 500; text-wrap: balance; }
+h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
-:focus-visible { outline: 1px solid var(--jade); outline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 
-.board { max-width: 1620px; margin: 0 auto; padding: 0 16px 44px; display: flex; flex-direction: column; gap: 16px; }
+.board { max-width: 1620px; margin: 0 auto; padding: 18px 18px 46px; display: flex; flex-direction: column; gap: 16px; }
 
 /* ---------------- the world ---------------- */
 .world {
-  position: relative; width: 100%; border-radius: 14px; overflow: hidden;
-  border: 1px solid var(--edge); background: var(--deep);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), inset 0 0 120px rgba(80, 160, 255, 0.06);
+  position: relative; width: 100%; border-radius: 24px; overflow: hidden;
+  border: 2px solid #e7d3ae; background: var(--sky); box-shadow: var(--lift);
 }
 #sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #map { position: relative; display: block; width: 100%; height: auto; }
 
-/* isles + architecture */
-.isle-rim { animation: rimPulse 7s ease-in-out infinite; }
-@keyframes rimPulse { 0%, 100% { stroke-opacity: 0.34; } 50% { stroke-opacity: 0.72; } }
 .isle-label {
-  font-family: var(--ui); font-size: 11px; font-weight: 600; letter-spacing: 0.22em;
-  fill: var(--muted); opacity: 0.75;
+  font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: 0.04em;
+  fill: #6b563f; opacity: 0.75;
+  paint-order: stroke; stroke: rgba(255, 250, 240, 0.9); stroke-width: 3px;
 }
 .build { cursor: default; }
-.build:hover .wall-l, .build:focus-visible .wall-l { filter: brightness(1.35); }
-.build:hover .wall-r, .build:focus-visible .wall-r { filter: brightness(1.35); }
-.wall-l { filter: brightness(0.82); }
-.wall-r { filter: brightness(1.12); }
+.build:hover .wall-l, .build:focus-visible .wall-l,
+.build:hover .wall-r, .build:focus-visible .wall-r { filter: brightness(1.06); }
+.wall-l { filter: brightness(0.93); }
 .win { animation: lamp 5s ease-in-out infinite; }
-.win:nth-of-type(even) { animation-delay: 1.7s; }
-@keyframes lamp { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
-.beacon { animation: beacon 3.4s ease-in-out infinite; }
-@keyframes beacon { 0%, 100% { opacity: 0.55; r: 3; } 50% { opacity: 1; r: 4.6; } }
-.ring { animation: spin 9s linear infinite; transform-origin: center; transform-box: fill-box; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.build-name {
-  font-family: var(--ui); font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
-  fill: #cfe2ff; opacity: 0.92; paint-order: stroke; stroke: rgba(5, 8, 20, 0.85); stroke-width: 2.4px;
+.win:nth-of-type(even) { animation-delay: 1.6s; }
+@keyframes lamp { 0%, 100% { opacity: 0.82; } 50% { opacity: 1; } }
+.lamp { animation: lamp 3s ease-in-out infinite; }
+.smoke circle { animation: smoke 4.4s ease-out infinite; opacity: 0; }
+@keyframes smoke {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  25% { opacity: 0.8; }
+  100% { opacity: 0; transform: translate(-7px, -34px) scale(1.5); }
 }
-.build-staff { font-family: var(--mono); font-size: 8px; fill: var(--jade); opacity: 0.9; }
-.build-staff.is-empty { fill: var(--dim); }
-.bridge { stroke-width: 1.6; stroke-dasharray: 5 12; animation: flow 4.5s linear infinite; opacity: 0.75; }
-@keyframes flow { to { stroke-dashoffset: -34; } }
-.fall { animation: shimmer 5.5s ease-in-out infinite; }
-@keyframes shimmer { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
+.blades { animation: turn 11s linear infinite; transform-origin: var(--hx) var(--hy); }
+@keyframes turn { to { transform: rotate(360deg); } }
+.twinkle { animation: twinkle 4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes twinkle { 0%, 100% { opacity: 0.75; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.12); } }
+.flag { animation: wave 3.2s ease-in-out infinite; transform-origin: left center; transform-box: fill-box; }
+@keyframes wave { 0%, 100% { transform: skewY(0deg); } 50% { transform: skewY(-6deg); } }
+.brook { animation: brook 5s ease-in-out infinite; }
+@keyframes brook { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+.build-name {
+  font-family: var(--ui); font-size: 11px; font-weight: 800; letter-spacing: 0.01em; fill: #58452f;
+  paint-order: stroke; stroke: rgba(255, 251, 242, 0.95); stroke-width: 3.4px;
+}
+.build-staff {
+  font-family: var(--mono); font-size: 9px; fill: #6f8f52;
+  paint-order: stroke; stroke: rgba(255, 251, 242, 0.9); stroke-width: 3px;
+}
+.build-staff.is-empty { fill: var(--ink-faint); }
+.bridge { stroke: rgba(255, 252, 240, 0.75); stroke-width: 3; stroke-dasharray: 2 11; stroke-linecap: round; }
 
-/* citizens */
+/* the folk */
 .pin { transition: transform 1100ms cubic-bezier(0.34, 0.02, 0.2, 1); cursor: pointer; }
 .pin .robe { fill: var(--tint); }
-.pin .head { fill: #f4fbff; }
-.pin .aura { fill: var(--tint); opacity: 0.34; }
+.pin .head { fill: #ffe7cd; }
+.pin .hair { fill: #6d5138; opacity: 0.85; }
 .pin .halo { fill: transparent; }
-.pin[data-stage='student'] .robe { fill: #7fa8d8; opacity: 0.9; }
-.pin[data-stage='student'] .aura { fill: var(--cyan); opacity: 0.2; }
-.pin[data-stage='graduate'] .robe { fill: var(--gold); }
-.pin[data-stage='graduate'] .aura { fill: var(--gold); opacity: 0.5; }
-.pin[data-stage='graduate'] .halo { fill: var(--gold); animation: rise 1.6s ease-in-out infinite; }
-@keyframes rise { 0%, 100% { opacity: 0.4; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
-.pin.is-selected .aura { opacity: 0.85; }
-.pin.is-selected .head { fill: #fff; stroke: var(--gold); stroke-width: 1.2; }
+.pin[data-stage='student'] .robe { fill: #cfe3f5; }
+.pin[data-stage='graduate'] .robe { fill: var(--sun); }
+.pin[data-stage='graduate'] .halo { fill: #ffe9a8; stroke: #e0a83c; stroke-width: 0.8; animation: bob 1.8s ease-in-out infinite; }
+@keyframes bob { 0%, 100% { opacity: 0.5; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+.pin.is-selected .head { stroke: var(--berry); stroke-width: 2; }
+.pin.is-selected .robe { stroke: var(--berry); stroke-width: 1.6; }
 
 /* ---------------- HUD ---------------- */
 .hud { position: absolute; z-index: 3; pointer-events: none; }
 .hud > * { pointer-events: auto; }
-.hud-tl { top: 18px; left: 18px; display: flex; align-items: center; gap: 13px; }
-.hud-tr { top: 18px; right: 18px; display: flex; align-items: center; gap: 10px; }
-.hud-b {
-  left: 16px; right: 16px; bottom: 14px;
-  display: grid; grid-template-columns: auto auto 1fr; gap: 12px; align-items: stretch;
-}
-
+.hud-tl { top: 18px; left: 20px; display: flex; align-items: center; gap: 13px; }
+.hud-tr { top: 18px; right: 20px; display: flex; align-items: center; gap: 9px; }
+.hud-b { left: 18px; right: 18px; bottom: 12px; display: grid; grid-template-columns: auto 1fr; gap: 12px; }
+.hud-bl { left: 20px; bottom: 128px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 
 .seal {
-  width: 50px; height: 50px; display: grid; place-items: center; flex: none;
-  border: 1px solid var(--edge-2); border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, rgba(126, 240, 200, 0.22), transparent 70%);
-  font-family: var(--display); font-size: 24px; color: var(--jade);
-  box-shadow: 0 0 26px rgba(126, 240, 200, 0.28);
+  width: 54px; height: 54px; display: grid; place-items: center; flex: none;
+  border-radius: 50%; background: #fffaf0; border: 2px solid #e7d3ae;
+  font-size: 26px; box-shadow: var(--lift-sm);
 }
-.title h1 { font-family: var(--display); font-size: 34px; line-height: 1.05; letter-spacing: 0.01em; }
-.title h1 em { font-style: italic; color: var(--jade); }
-.title p {
-  margin: 1px 0 0; font-size: 11.5px; letter-spacing: 0.28em; text-transform: uppercase;
-  color: var(--muted); opacity: 0.85;
-}
+.title h1 { font-family: var(--display); font-size: 33px; line-height: 1.05; color: #4a3728; }
+.title h1 em { font-style: italic; color: var(--berry); }
+.title p { margin: 1px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #806a52; }
 .panel {
-  background: var(--glass); border: 1px solid var(--edge); border-radius: 12px;
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: var(--card); border: 1.5px solid #ead9be; border-radius: 16px; box-shadow: var(--lift);
 }
 .panel > header {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-  padding: 9px 14px; border-bottom: 1px solid rgba(126, 240, 200, 0.12);
+  padding: 11px 16px; border-bottom: 1.5px solid var(--line-soft);
 }
 .panel > header h2 {
-  font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase;
-  color: var(--jade); font-weight: 600;
+  font-family: var(--display); font-size: 15px; letter-spacing: 0.01em; color: #5b4530; font-weight: 700;
 }
-.panel > header .note { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.panel > header .note { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
 
-.clock { display: flex; align-items: center; gap: 9px; padding: 8px 15px; }
-.clock .label { font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim); }
-.clock .value { font-family: var(--mono); font-size: 24px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.clock { display: flex; align-items: center; gap: 9px; padding: 7px 16px; }
+.clock .label { font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); }
+.clock .value { font-family: var(--display); font-size: 26px; color: var(--berry); font-variant-numeric: tabular-nums; }
 .ctl {
-  padding: 9px 16px; border-radius: 10px; border: 1px solid var(--edge);
-  background: var(--glass); backdrop-filter: blur(14px);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
-  transition: background 140ms, border-color 140ms, color 140ms;
+  padding: 9px 17px; border-radius: 999px; border: 1.5px solid #e3cfa8; background: var(--card);
+  font-size: 12.5px; font-weight: 800; letter-spacing: 0.06em; color: #6b5540;
+  box-shadow: var(--lift-sm); transition: transform 120ms, box-shadow 120ms, background 120ms;
 }
-.ctl:hover { border-color: var(--edge-2); color: var(--jade); }
-.ctl.primary { color: var(--jade); border-color: var(--edge-2); }
-.ctl.primary.running { background: rgba(126, 240, 200, 0.16); }
-.speeds { display: flex; gap: 2px; padding: 4px; border-radius: 10px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); }
-.speeds button { padding: 5px 10px; border-radius: 7px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
-.speeds button[aria-pressed='true'] { background: rgba(126, 240, 200, 0.16); color: var(--jade); }
+.ctl:hover { transform: translateY(-1px); background: #fff6e2; }
+.ctl:active { transform: translateY(1px); box-shadow: 0 1px 0 #ecdcc0; }
+.ctl.primary { background: var(--sun); border-color: #dda12f; color: #4a3510; }
+.ctl.primary.running { background: #ffd98a; }
+.speeds { display: flex; gap: 3px; padding: 4px; border-radius: 999px; border: 1.5px solid #e3cfa8; background: var(--card); box-shadow: var(--lift-sm); }
+.speeds button { padding: 5px 11px; border-radius: 999px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+.speeds button[aria-pressed='true'] { background: #ffe9b8; color: #6b5027; }
 
 .pipeline { display: grid; grid-template-columns: repeat(3, 1fr); }
-.stagebox { padding: 9px 14px; text-align: center; border-right: 1px solid rgba(126, 240, 200, 0.1); }
+.stagebox { padding: 7px 16px; text-align: center; border-right: 1.5px solid var(--line-soft); }
 .stagebox:last-child { border-right: none; }
-.stagebox .n { font-family: var(--mono); font-size: 21px; display: block; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.stagebox .k { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
-.stagebox.study .n { color: var(--cyan); }
-.stagebox.grad .n { color: var(--gold); }
-.stagebox.work .n { color: var(--jade); }
-.metrics { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(126, 240, 200, 0.1); }
+.stagebox .n { font-family: var(--display); font-size: 24px; display: block; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stagebox .k { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+.stagebox.study .n { color: #5d8fbf; }
+.stagebox.grad .n { color: var(--sun); }
+.stagebox.work .n { color: #5f9c4d; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1.5px solid var(--line-soft); }
 .metric { padding: 8px 14px; }
-.metric + .metric { border-left: 1px solid rgba(126, 240, 200, 0.1); }
-.metric .k { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); display: block; }
-.metric .n { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+.metric + .metric { border-left: 1.5px solid var(--line-soft); }
+.metric .k { font-size: 9.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); display: block; }
+.metric .n { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; color: #5b4530; }
 
-.res-list {
-  padding: 9px 14px 11px; display: grid; gap: 7px 18px;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-}
+.res-list { padding: 7px 15px 9px; display: grid; gap: 5px 18px; grid-template-columns: repeat(4, minmax(118px, 1fr)); }
 .res { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 8px; }
-.res .name { font-size: 12px; color: var(--muted); }
-.res .amt { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
-.res .flow { font-family: var(--mono); font-size: 9.5px; color: var(--jade); }
-.res .flow.neg { color: var(--rose); }
-.res .bar { grid-column: 2 / -1; height: 3px; border-radius: 2px; background: rgba(150, 190, 240, 0.14); overflow: hidden; }
-.res .bar span { display: block; height: 100%; background: var(--tint); box-shadow: 0 0 8px var(--tint); transition: width 600ms ease; }
+.res .name { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+.res .amt { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: #5b4530; }
+.res .flow { font-family: var(--mono); font-size: 9.5px; color: #5f9c4d; }
+.res .flow.neg { color: var(--berry); }
+.res .bar { grid-column: 2 / -1; height: 5px; border-radius: 999px; background: #f0e3ca; overflow: hidden; }
+.res .bar span { display: block; height: 100%; background: var(--tint); border-radius: 999px; transition: width 600ms ease; }
 
-.legend {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 26px; padding: 10px 18px;
-  font-size: 12px; color: var(--muted);
-}
-.bar > header { padding: 7px 14px; }
-.metrics { grid-template-columns: repeat(4, 1fr); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 11px 18px; font-size: 12.5px; color: var(--ink-soft); }
 .key { display: inline-flex; align-items: center; gap: 8px; }
-.key i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
-.legend b { color: var(--text); font-weight: 600; }
-.legend .tail { font-family: var(--mono); font-size: 10px; color: var(--gold); }
+.key i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1.5px solid rgba(90, 70, 50, 0.35); }
+.legend b { color: var(--ink); font-weight: 800; }
+.legend .tail { font-family: var(--mono); font-size: 11px; color: var(--berry); }
 
 /* ---------------- decree console ---------------- */
-.hud-bl { left: 18px; bottom: 116px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .decree-badge {
-  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
-  background: rgba(14, 24, 48, 0.82); border: 1px solid var(--edge-2);
-  backdrop-filter: blur(10px); font-size: 12px; color: var(--text);
-  box-shadow: 0 0 22px rgba(126, 240, 200, 0.14);
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px;
+  background: var(--card); border: 1.5px solid #e3cfa8; box-shadow: var(--lift-sm);
+  font-size: 12.5px; font-weight: 700; color: #5b4530;
 }
-.decree-badge b { font-family: var(--mono); font-size: 10px; color: var(--gold); font-weight: 500; }
-.console-body { padding: 13px 16px 15px; display: flex; flex-direction: column; gap: 10px; }
+.decree-badge b { font-family: var(--mono); font-size: 10px; color: var(--berry); font-weight: 500; }
+.console-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
 .decree-form { display: flex; gap: 9px; }
 #decree-input {
-  flex: 1; min-width: 0; padding: 11px 15px; border-radius: 10px;
-  border: 1px solid var(--edge); background: rgba(6, 12, 28, 0.75); color: var(--text);
-  font-family: var(--ui); font-size: 14.5px; letter-spacing: 0.01em;
+  flex: 1; min-width: 0; padding: 12px 17px; border-radius: 999px;
+  border: 1.5px solid #e3cfa8; background: #fffdf6; color: var(--ink);
+  font-family: var(--ui); font-size: 14.5px;
 }
-#decree-input::placeholder { color: var(--dim); }
-#decree-input:focus { outline: none; border-color: var(--edge-2); box-shadow: 0 0 0 3px rgba(126, 240, 200, 0.1); }
-.decree-feedback { margin: 0; min-height: 18px; font-size: 12.5px; color: var(--muted); }
-.decree-feedback.ok { color: var(--jade); }
-.decree-feedback.err { color: var(--rose); }
-.quick { display: flex; flex-wrap: wrap; gap: 7px; }
+#decree-input::placeholder { color: var(--ink-faint); }
+#decree-input:focus { outline: none; border-color: var(--sun); box-shadow: 0 0 0 3px rgba(242, 180, 65, 0.2); }
+.decree-feedback { margin: 0; min-height: 18px; font-size: 12.5px; color: var(--ink-soft); }
+.decree-feedback.ok { color: #5f9c4d; font-weight: 700; }
+.decree-feedback.err { color: var(--berry); font-weight: 700; }
+.quick { display: flex; flex-wrap: wrap; gap: 8px; }
 .quick button {
-  display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px;
-  border: 1px solid var(--edge); font-size: 12.5px; color: var(--muted); transition: all 140ms;
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px;
+  border: 1.5px solid #ead9be; background: var(--card); font-size: 12.5px; font-weight: 700; color: #6b5540;
+  box-shadow: var(--lift-sm); transition: transform 120ms, background 120ms;
 }
-.quick button:hover { border-color: var(--edge-2); color: var(--text); background: rgba(126, 240, 200, 0.08); }
-.quick button .cost { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.quick button:hover { transform: translateY(-1px); background: #fff6e2; }
+.quick button .cost { font-family: var(--mono); font-size: 10px; font-weight: 400; color: var(--ink-faint); }
 
 /* ---------------- record + roster ---------------- */
 .log-list {
-  max-height: 216px; overflow-y: auto; padding: 10px 16px 14px;
+  max-height: 216px; overflow-y: auto; padding: 11px 16px 14px;
   display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 7px 24px; align-content: start;
 }
-.entry { display: grid; grid-template-columns: 38px 1fr; gap: 9px; font-size: 12.5px; line-height: 1.4; }
-.entry .d { font-family: var(--mono); font-size: 10px; color: var(--dim); padding-top: 2px; }
-.entry .t { color: var(--muted); border-left: 2px solid rgba(150, 190, 240, 0.2); padding-left: 10px; }
-.entry[data-kind='graduation'] .t { border-color: var(--gold); color: var(--text); }
-.entry[data-kind='hire'] .t { border-color: var(--jade); color: var(--text); }
-.entry[data-kind='promotion'] .t { border-color: var(--violet); }
+.entry { display: grid; grid-template-columns: 38px 1fr; gap: 9px; font-size: 12.5px; line-height: 1.45; }
+.entry .d { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); padding-top: 2px; }
+.entry .t { color: var(--ink-soft); border-left: 3px solid var(--line); padding-left: 10px; }
+.entry[data-kind='graduation'] .t { border-color: var(--sun); color: var(--ink); }
+.entry[data-kind='hire'] .t { border-color: var(--leaf); color: var(--ink); }
+.entry[data-kind='promotion'] .t { border-color: var(--plum); }
 .entry[data-kind='support'] .t { border-color: var(--rose); }
-.entry[data-kind='town'] .t { border-color: var(--cyan); color: var(--text); }
+.entry[data-kind='town'] .t { border-color: var(--sky); color: var(--ink); }
+.entry[data-kind='decree'] .t { border-color: var(--berry); color: var(--ink); font-weight: 600; }
 
-.roster-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 11px 16px; border-bottom: 1px solid rgba(126, 240, 200, 0.12); }
-.roster-head h2 { font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--jade); margin-right: auto; font-weight: 600; }
-.chip { padding: 5px 13px; border-radius: 999px; border: 1px solid var(--edge); font-size: 11.5px; letter-spacing: 0.1em; color: var(--dim); }
-.chip[aria-pressed='true'] { border-color: var(--edge-2); color: var(--jade); background: rgba(126, 240, 200, 0.12); }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(206px, 1fr)); gap: 1px; background: rgba(126, 240, 200, 0.1); }
-.card { background: rgba(10, 18, 38, 0.9); padding: 11px 13px; text-align: left; display: flex; flex-direction: column; gap: 5px; transition: background 140ms; }
-.card:hover { background: rgba(24, 40, 74, 0.95); }
-.card.is-selected { background: rgba(24, 40, 74, 0.95); box-shadow: inset 2px 0 0 var(--gold); }
-.card .top { display: flex; align-items: center; gap: 7px; }
-.card .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tint); box-shadow: 0 0 9px var(--tint); flex: none; }
-.card .nm { font-weight: 700; font-size: 14.5px; letter-spacing: 0.01em; }
-.card .lv { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--dim); }
-.card .role { font-size: 11.5px; color: var(--muted); min-height: 32px; line-height: 1.35; }
-.card .meter { height: 4px; background: rgba(150, 190, 240, 0.18); border-radius: 2px; overflow: hidden; }
-.card .meter span { display: block; height: 100%; background: var(--jade); box-shadow: 0 0 8px var(--jade); }
-.card .foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; color: var(--dim); }
+.roster-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1.5px solid var(--line-soft); }
+.roster-head h2 { font-family: var(--display); font-size: 15px; color: #5b4530; margin-right: auto; }
+.chip { padding: 6px 14px; border-radius: 999px; border: 1.5px solid #ead9be; font-size: 12px; font-weight: 700; color: var(--ink-faint); background: var(--card); }
+.chip[aria-pressed='true'] { border-color: #dda12f; color: #6b5027; background: #ffe9b8; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 10px; padding: 14px 16px 18px; }
+.card {
+  background: var(--card); border: 1.5px solid #ecdcc0; border-radius: 14px; padding: 12px 13px;
+  text-align: left; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: var(--lift-sm); transition: transform 130ms, box-shadow 130ms;
+}
+.card:hover { transform: translateY(-2px); box-shadow: 0 4px 0 #ecdcc0, 0 12px 20px rgba(103, 78, 52, 0.14); }
+.card.is-selected { border-color: var(--berry); background: #fff5ec; }
+.card .top { display: flex; align-items: center; gap: 8px; }
+.card .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--tint); border: 1.5px solid rgba(90, 70, 50, 0.3); flex: none; }
+.card .nm { font-weight: 800; font-size: 15px; color: #4a3728; }
+.card .lv { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
+.card .role { font-size: 11.5px; color: var(--ink-soft); min-height: 32px; line-height: 1.4; }
+.card .meter { height: 6px; background: #f0e3ca; border-radius: 999px; overflow: hidden; }
+.card .meter span { display: block; height: 100%; background: var(--leaf); border-radius: 999px; }
+.card .foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
 
 /* ---------------- dossier ---------------- */
 .dossier {
-  position: fixed; top: 0; right: 0; width: min(400px, 92vw); height: 100vh; z-index: 40;
-  background: linear-gradient(180deg, rgba(12, 20, 44, 0.97), rgba(8, 14, 32, 0.97));
-  border-left: 1px solid var(--edge-2); backdrop-filter: blur(18px);
-  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.6);
+  position: fixed; top: 0; right: 0; width: min(410px, 93vw); height: 100vh; z-index: 40;
+  background: var(--paper-2); border-left: 2px solid #e7d3ae;
+  box-shadow: -20px 0 50px rgba(103, 78, 52, 0.2);
   transform: translateX(100%); transition: transform 300ms cubic-bezier(0.3, 0.02, 0.2, 1);
-  overflow-y: auto; padding: 22px 24px 40px;
+  overflow-y: auto; padding: 24px 26px 40px;
 }
 .dossier.open { transform: translateX(0); }
-.dossier .close { position: absolute; top: 15px; right: 18px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
-.dossier .close:hover { color: var(--jade); }
-.dossier h3 { font-family: var(--display); font-size: 36px; line-height: 1.1; }
-.dossier .sub { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin: 3px 0 16px; }
-.dsec { border-top: 1px solid rgba(126, 240, 200, 0.14); padding: 13px 0; }
-.dsec h4 { margin: 0 0 8px; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
-.kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; }
-.kv span:last-child { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.apt { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; }
-.apt .lbl { width: 88px; color: var(--muted); text-transform: capitalize; }
-.apt .track { flex: 1; height: 4px; background: rgba(150, 190, 240, 0.14); border-radius: 2px; overflow: hidden; }
-.apt .track span { display: block; height: 100%; background: var(--gold); }
-.apt .val { font-family: var(--mono); font-size: 10px; color: var(--dim); width: 26px; text-align: right; }
-.hl { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 11px; border-left: 2px solid rgba(126, 240, 200, 0.24); margin: 0 0 2px; }
-.transcript { display: flex; flex-direction: column; gap: 7px; }
-.course { display: grid; grid-template-columns: 17px 1fr 32px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.dossier .close { position: absolute; top: 16px; right: 20px; font-size: 12px; font-weight: 700; color: var(--ink-faint); }
+.dossier .close:hover { color: var(--berry); }
+.dossier h3 { font-family: var(--display); font-size: 34px; color: #4a3728; }
+.dossier .sub { font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--berry); margin: 3px 0 18px; }
+.dsec { border-top: 1.5px solid var(--line-soft); padding: 14px 0; }
+.dsec h4 { margin: 0 0 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); }
+.kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; padding: 3px 0; }
+.kv span:first-child { color: var(--ink-soft); }
+.kv span:last-child { font-family: var(--mono); font-size: 12px; color: #5b4530; font-variant-numeric: tabular-nums; }
+.apt { display: flex; align-items: center; gap: 9px; padding: 3px 0; font-size: 12.5px; }
+.apt .lbl { width: 88px; color: var(--ink-soft); text-transform: capitalize; }
+.apt .track { flex: 1; height: 6px; background: #f0e3ca; border-radius: 999px; overflow: hidden; }
+.apt .track span { display: block; height: 100%; background: var(--sun); border-radius: 999px; }
+.apt .val { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); width: 26px; text-align: right; }
+.hl { font-size: 12.5px; color: var(--ink-soft); padding: 5px 0 5px 12px; border-left: 3px solid var(--line); margin: 0 0 3px; }
+.transcript { display: flex; flex-direction: column; gap: 8px; }
+.course { display: grid; grid-template-columns: 18px 1fr 32px; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-soft); }
 .course .cinfo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .course .cname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.course .track { display: block; width: 100%; height: 4px; background: rgba(150, 190, 240, 0.14); border-radius: 2px; overflow: hidden; }
-.course .track span { display: block; height: 100%; background: var(--jade); }
-.course .g { font-family: var(--mono); font-size: 10px; text-align: right; color: var(--dim); }
+.course .track { display: block; width: 100%; height: 6px; background: #f0e3ca; border-radius: 999px; overflow: hidden; }
+.course .track span { display: block; height: 100%; background: var(--leaf); border-radius: 999px; }
+.course .g { font-family: var(--mono); font-size: 10.5px; text-align: right; color: var(--ink-faint); }
 
-.foot-note { color: var(--dim); font-size: 12px; text-align: center; letter-spacing: 0.14em; text-transform: uppercase; margin: 0; }
+.foot-note { color: var(--ink-faint); font-size: 12.5px; text-align: center; font-style: italic; font-family: var(--display); margin: 0; }
 
 @media (max-width: 1120px) {
   .hud { position: static; }
   .hud-b { grid-template-columns: 1fr; }
-  .hud-tl, .hud-tr { padding: 12px 14px 0; flex-wrap: wrap; }
+  .hud-tl, .hud-tr, .hud-bl { padding: 12px 14px 0; flex-wrap: wrap; }
   .res-list { grid-template-columns: repeat(2, 1fr); }
   .world { display: flex; flex-direction: column; padding-bottom: 14px; }
   #map { order: -1; }
@@ -296,10 +292,10 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
     <svg id="map" role="img" aria-label="Eleven floating isles: the campus at the centre and ten guild isles around it"></svg>
 
     <div class="hud hud-tl">
-      <span class="seal">仙</span>
+      <span class="seal">🏡</span>
       <div class="title">
         <h1>Gradient <em>Town</em></h1>
-        <p>66 citizens &middot; 33 halls &middot; 11 isles</p>
+        <p>66 citizens &middot; 33 cottages &middot; 11 isles</p>
       </div>
     </div>
 
@@ -390,14 +386,14 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 // Static world definition for Gradient Town: resources, guilds, buildings, jobs, citizens.
 
 const RESOURCES = [
-  { id: 'energy',    name: 'Energy',    emoji: '⚡', color: '#f6c453' },
-  { id: 'food',      name: 'Food',      emoji: '\u{1F33E}', color: '#8fd694' },
-  { id: 'materials', name: 'Materials', emoji: '\u{1F9F1}', color: '#e08a6a' },
-  { id: 'data',      name: 'Data',      emoji: '\u{1F4E1}', color: '#7fc7ff' },
-  { id: 'compute',   name: 'Compute',   emoji: '\u{1F9EE}', color: '#b39dff' },
-  { id: 'credits',   name: 'Credits',   emoji: '\u{1FA99}', color: '#ffd479' },
-  { id: 'knowledge', name: 'Knowledge', emoji: '\u{1F4DA}', color: '#9ad1c8' },
-  { id: 'care',      name: 'Care',      emoji: '\u{1F49A}', color: '#ff9fb1' },
+  { id: 'energy',    name: 'Energy',    emoji: '⚡', color: '#f2b441' },
+  { id: 'food',      name: 'Food',      emoji: '\u{1F33E}', color: '#7fb069' },
+  { id: 'materials', name: 'Materials', emoji: '\u{1F9F1}', color: '#d96c5f' },
+  { id: 'data',      name: 'Data',      emoji: '\u{1F4E1}', color: '#6fa8dc' },
+  { id: 'compute',   name: 'Compute',   emoji: '\u{1F9EE}', color: '#a99bd4' },
+  { id: 'credits',   name: 'Credits',   emoji: '\u{1FA99}', color: '#f0a868' },
+  { id: 'knowledge', name: 'Knowledge', emoji: '\u{1F4DA}', color: '#5fbfae' },
+  { id: 'care',      name: 'Care',      emoji: '\u{1F49A}', color: '#e8879b' },
 ];
 
 const SKILLS = [
@@ -407,17 +403,17 @@ const SKILLS = [
 
 // Each guild owns a district on the map.
 const GUILDS = [
-  { id: 'aether',    name: 'Aether Guild',    domain: 'Power & Light',      skill: 'energy',      emoji: '⚡', color: '#f6c453' },
-  { id: 'verdant',   name: 'Verdant Guild',   domain: 'Food & Growth',      skill: 'cultivation', emoji: '\u{1F331}', color: '#8fd694' },
-  { id: 'forge',     name: 'Forge Guild',     domain: 'Making & Repair',    skill: 'fabrication', emoji: '\u{1F528}', color: '#e08a6a' },
-  { id: 'lattice',   name: 'Lattice Guild',   domain: 'Data & Compute',     skill: 'computation', emoji: '\u{1F5A5}', color: '#7fc7ff' },
-  { id: 'mender',    name: 'Mender Guild',    domain: 'Health & Repair',    skill: 'healing',     emoji: '\u{1FA7A}', color: '#ff9fb1' },
-  { id: 'ledger',    name: 'Ledger Guild',    domain: 'Markets & Trade',    skill: 'trade',       emoji: '\u{1FA99}', color: '#ffd479' },
-  { id: 'wayfinder', name: 'Wayfinder Guild', domain: 'Transit & Supply',   skill: 'logistics',   emoji: '\u{1F686}', color: '#9fb4ff' },
-  { id: 'keystone',  name: 'Keystone Guild',  domain: 'Civics & Utilities', skill: 'governance',  emoji: '\u{1F3DB}', color: '#c9c3ff' },
-  { id: 'lumen',     name: 'Lumen Guild',     domain: 'Science & Study',    skill: 'inquiry',     emoji: '\u{1F52D}', color: '#6fe3d4' },
-  { id: 'chorus',    name: 'Chorus Guild',    domain: 'Arts & Culture',     skill: 'artistry',    emoji: '\u{1F3AD}', color: '#ffa8e0' },
-  { id: 'hearth',    name: 'Hearth Guild',    domain: 'Learning & Care',    skill: 'teaching',    emoji: '\u{1F3EB}', color: '#ffc98f' },
+  { id: 'aether',    name: 'Aether Guild',    domain: 'Power & Light',      skill: 'energy',      emoji: '⚡', color: '#f2b441' },
+  { id: 'verdant',   name: 'Verdant Guild',   domain: 'Food & Growth',      skill: 'cultivation', emoji: '\u{1F331}', color: '#7fb069' },
+  { id: 'forge',     name: 'Forge Guild',     domain: 'Making & Repair',    skill: 'fabrication', emoji: '\u{1F528}', color: '#d96c5f' },
+  { id: 'lattice',   name: 'Lattice Guild',   domain: 'Data & Compute',     skill: 'computation', emoji: '\u{1F5A5}', color: '#6fa8dc' },
+  { id: 'mender',    name: 'Mender Guild',    domain: 'Health & Repair',    skill: 'healing',     emoji: '\u{1FA7A}', color: '#e8879b' },
+  { id: 'ledger',    name: 'Ledger Guild',    domain: 'Markets & Trade',    skill: 'trade',       emoji: '\u{1FA99}', color: '#f0a868' },
+  { id: 'wayfinder', name: 'Wayfinder Guild', domain: 'Transit & Supply',   skill: 'logistics',   emoji: '\u{1F686}', color: '#8e9ad6' },
+  { id: 'keystone',  name: 'Keystone Guild',  domain: 'Civics & Utilities', skill: 'governance',  emoji: '\u{1F3DB}', color: '#a99bd4' },
+  { id: 'lumen',     name: 'Lumen Guild',     domain: 'Science & Study',    skill: 'inquiry',     emoji: '\u{1F52D}', color: '#5fbfae' },
+  { id: 'chorus',    name: 'Chorus Guild',    domain: 'Arts & Culture',     skill: 'artistry',    emoji: '\u{1F3AD}', color: '#d98cc0' },
+  { id: 'hearth',    name: 'Hearth Guild',    domain: 'Learning & Care',    skill: 'teaching',    emoji: '\u{1F3EB}', color: '#ef9f6a' },
 ];
 
 // posts: seats of work. inputs/outputs are per staffed agent per day at 100% performance.
@@ -1287,17 +1283,19 @@ function stats(town) {
 }
 
 
-// The world: eleven floating isles in a nebula sky, drawn in isometric projection.
-// Buildings are real little structures — spires, domes, tiered pagodas — and every
-// citizen is a small luminous figure standing on the ground.
+// The world, drawn as a storybook: isles of grass floating in a bright sky,
+// cottages with steep coloured roofs and smoking chimneys, and small round
+// people standing on the ground. Everything is drawn with a soft ink line,
+// the way a picture book is.
 
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const VIEW_W = 1440;
 const VIEW_H = 880;
-const CENTER = { x: 720, y: 406 };
+const CENTER = { x: 720, y: 398 };
+const RING = { rx: 505, ry: 188 };
+const INK = '#5b4636';
 
-const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const el = (name, attrs = {}, kids = []) => {
   const n = document.createElementNS(SVG_NS, name);
   for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
@@ -1307,23 +1305,20 @@ const el = (name, attrs = {}, kids = []) => {
 const poly = (pts, attrs) => el('polygon', { points: pts.map((p) => p.join(',')).join(' '), ...attrs });
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
-// Each guild builds in its own manner.
+// Every guild builds in its own storybook manner.
 const ARCHITECTURE = {
-  aether:    { roof: 'spire',  wall: '#2b3f63', h: 46 },
-  verdant:   { roof: 'terrace', wall: '#2c4a44', h: 32 },
-  forge:     { roof: 'gable',  wall: '#4a3a3a', h: 34 },
-  lattice:   { roof: 'flat',   wall: '#263a56', h: 40 },
-  mender:    { roof: 'dome',   wall: '#43334a', h: 30 },
-  ledger:    { roof: 'pagoda', wall: '#4a4034', h: 34 },
-  wayfinder: { roof: 'arch',   wall: '#2f3a5c', h: 38 },
-  keystone:  { roof: 'gable',  wall: '#35395e', h: 36 },
-  lumen:     { roof: 'dome',   wall: '#26454e', h: 34 },
-  chorus:    { roof: 'pagoda', wall: '#4a3550', h: 32 },
-  hearth:    { roof: 'pagoda', wall: '#4a4038', h: 40 },
+  aether:    { roof: 'cone',   h: 44, wall: '#fdf3e0', chimney: false, vane: 'star' },
+  verdant:   { roof: 'thatch', h: 30, wall: '#fbf0dc', chimney: true },
+  forge:     { roof: 'gable',  h: 32, wall: '#f6e7d2', chimney: true },
+  lattice:   { roof: 'gable',  h: 36, wall: '#fdf3e0', chimney: false, vane: 'dish' },
+  mender:    { roof: 'dome',   h: 28, wall: '#fdf3e6', chimney: true },
+  ledger:    { roof: 'awning', h: 30, wall: '#fbeed6', chimney: true },
+  wayfinder: { roof: 'mill',   h: 36, wall: '#fdf3e0', chimney: false },
+  keystone:  { roof: 'gable',  h: 34, wall: '#f8eeda', chimney: true, vane: 'bell' },
+  lumen:     { roof: 'dome',   h: 32, wall: '#fdf3e0', chimney: false, vane: 'star' },
+  chorus:    { roof: 'tent',   h: 28, wall: '#fdf0e4', chimney: false },
+  hearth:    { roof: 'tower',  h: 40, wall: '#fdf4e4', chimney: true, vane: 'flag' },
 };
-
-// The campus sits at the centre; the ten guild isles ring it.
-const RING = { rx: 505, ry: 206 };
 
 function computeGeometry() {
   const isles = [];
@@ -1332,43 +1327,36 @@ function computeGeometry() {
     const a = -Math.PI / 2 + (i / others.length) * Math.PI * 2;
     const cx = CENTER.x + Math.cos(a) * RING.rx;
     const cy = CENTER.y + Math.sin(a) * RING.ry;
-    const depth = clamp01((Math.sin(a) + 1) / 2);        // nearer isles sit lower and read larger
-    const s = 0.82 + depth * 0.26;
+    const s = 0.82 + Math.min(1, Math.max(0, (Math.sin(a) + 1) / 2)) * 0.26;
     isles.push({
-      guild, cx, cy,
-      rx: 152 * s, ry: 76 * s, scale: s,
-      plate: `ISLE ${String(i + 1).padStart(2, '0')}`,
+      guild, cx, cy, rx: 152 * s, ry: 76 * s, scale: s,
       yard: { u0: -0.72, u1: 0.72, v0: 0.28, v1: 0.86, cols: 5 },
     });
   });
-  const campus = {
+  isles.push({
     guild: GUILDS.find((g) => g.id === 'hearth'),
     cx: CENTER.x, cy: CENTER.y + 18,
     rx: 272, ry: 136, scale: 1.2, isCampus: true,
-    plate: 'THE CAMPUS',
     yard: { u0: -0.78, u1: 0.78, v0: 0.16, v1: 0.9, cols: 11 },
-  };
-  isles.push(campus);
+  });
 
-  // Buildings stand in a row across the upper half of their isle.
   const buildings = {};
   for (const isle of isles) {
     const list = BUILDINGS.filter((b) => b.guild === isle.guild.id);
     const n = list.length;
     list.forEach((b, j) => {
-      const spread = isle.isCampus ? 0.5 : 0.42;
+      const spread = isle.isCampus ? 0.58 : 0.42;
       const t = n === 1 ? 0 : -spread + (j / (n - 1)) * spread * 2;
       const back = (isle.isCampus ? -0.3 : -0.26) + (j % 2) * 0.07;
-      const u = t + back;
-      const v = -t + back;
       const arch = ARCHITECTURE[isle.guild.id];
       buildings[b.id] = {
-        building: b, isle, u, v,
+        building: b, isle,
+        u: t + back, v: -t + back,
         du: isle.isCampus ? 0.115 : 0.15,
         dv: isle.isCampus ? 0.115 : 0.15,
-        h: (arch.h + (b.id === 'academy' ? 16 : 0)) * isle.scale * 0.82,
+        h: (arch.h + (b.id === 'academy' ? 18 : 0)) * isle.scale * 0.82,
         arch,
-        labelDrop: (j % 2) * 26,
+        labelDrop: (j % 2) * 30,
         tint: isle.guild.color,
       };
     });
@@ -1386,31 +1374,25 @@ const project = (isle, u, v, lift = 0) => [
 function defs() {
   const d = el('defs');
   d.innerHTML = `
-    <radialGradient id="isleTop" cx="42%" cy="34%" r="72%">
-      <stop offset="0%" stop-color="#2f5e63" />
-      <stop offset="55%" stop-color="#22454f" />
-      <stop offset="100%" stop-color="#152c3b" />
+    <radialGradient id="grassTop" cx="42%" cy="32%" r="74%">
+      <stop offset="0%" stop-color="#b6dd8b" />
+      <stop offset="60%" stop-color="#93c96f" />
+      <stop offset="100%" stop-color="#6fae5b" />
     </radialGradient>
-    <linearGradient id="isleRock" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1b3040" />
-      <stop offset="60%" stop-color="#101d2e" />
-      <stop offset="100%" stop-color="#080e1c" stop-opacity="0.2" />
+    <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a9764c" />
+      <stop offset="45%" stop-color="#8a5c3b" />
+      <stop offset="100%" stop-color="#6d472d" />
     </linearGradient>
-    <linearGradient id="fall" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#8fe9ff" stop-opacity="0.5" />
-      <stop offset="100%" stop-color="#8fe9ff" stop-opacity="0" />
+    <linearGradient id="brook" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bfe6f2" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#bfe6f2" stop-opacity="0" />
     </linearGradient>
-    <linearGradient id="bridge" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#9df3d8" stop-opacity="0.05" />
-      <stop offset="50%" stop-color="#9df3d8" stop-opacity="0.5" />
-      <stop offset="100%" stop-color="#ffd79a" stop-opacity="0.28" />
-    </linearGradient>
-    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="3.4" result="b" />
-      <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+    <filter id="softshadow" x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#5b4636" flood-opacity="0.18" />
     </filter>
-    <filter id="softglow" x="-90%" y="-90%" width="280%" height="280%">
-      <feGaussianBlur stdDeviation="7" />
+    <filter id="lampglow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="3" />
     </filter>`;
   return d;
 }
@@ -1420,135 +1402,172 @@ function defs() {
 function drawIsle(isle) {
   const g = el('g', { class: 'isle', 'data-guild': isle.guild.id });
   const { cx, cy, rx, ry } = isle;
-  const N = [cx, cy - ry / 2 * 1], E = [cx + rx / 2 * 1, cy], S = [cx, cy + ry / 2], W = [cx - rx / 2, cy];
   const top = [[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]];
+  const depth = ry * (isle.isCampus ? 2.2 : 1.9);
 
-  // aura beneath the isle
-  g.appendChild(el('ellipse', {
-    cx, cy: cy + ry * 0.5, rx: rx * 1.15, ry: ry * 0.95,
-    fill: isle.guild.color, opacity: 0.1, filter: 'url(#softglow)',
+  // the earth underneath, rounded and lumpy rather than jagged
+  g.appendChild(el('path', {
+    d: `M ${cx - rx} ${cy}
+        C ${cx - rx * 0.9} ${cy + ry * 1.1}, ${cx - rx * 0.5} ${cy + depth * 0.7}, ${cx - rx * 0.12} ${cy + depth * 0.92}
+        Q ${cx} ${cy + depth * 1.08} ${cx + rx * 0.16} ${cy + depth * 0.88}
+        C ${cx + rx * 0.55} ${cy + depth * 0.66}, ${cx + rx * 0.92} ${cy + ry * 1.05}, ${cx + rx} ${cy}
+        L ${cx} ${cy + ry} Z`,
+    fill: 'url(#soil)', stroke: INK, 'stroke-opacity': 0.35, 'stroke-width': 1.6,
   }));
 
-  // the rock underside, tapering to a point
-  const depth = ry * (isle.isCampus ? 2.5 : 2.1);
-  const rock = `M ${cx - rx} ${cy} L ${cx - rx * 0.55} ${cy + ry * 0.72}
-    L ${cx - rx * 0.2} ${cy + depth * 0.62} L ${cx} ${cy + depth}
-    L ${cx + rx * 0.26} ${cy + depth * 0.55} L ${cx + rx * 0.6} ${cy + ry * 0.68}
-    L ${cx + rx} ${cy} L ${cx} ${cy + ry} Z`;
-  g.appendChild(el('path', { d: rock, fill: 'url(#isleRock)' }));
+  // grass
+  g.appendChild(poly(top, { fill: 'url(#grassTop)', stroke: INK, 'stroke-opacity': 0.42, 'stroke-width': 1.8 }));
 
-  // ground
-  g.appendChild(poly(top, { fill: 'url(#isleTop)', stroke: isle.guild.color, 'stroke-opacity': 0.32 }));
-  g.appendChild(poly(top, { fill: 'none', stroke: isle.guild.color, 'stroke-opacity': 0.5, 'stroke-width': 1.2, filter: 'url(#glow)', class: 'isle-rim' }));
-
-  // a light stream falling from the underside
+  // a winding path and a few tufts of grass
+  const p0 = project(isle, -0.78, 0.12);
+  const p1 = project(isle, 0, 0.34);
+  const p2 = project(isle, 0.78, 0.12);
   g.appendChild(el('path', {
-    d: `M ${cx - rx * 0.1} ${cy + depth * 0.7} L ${cx + rx * 0.06} ${cy + depth * 0.7} L ${cx + rx * 0.02} ${cy + depth * 2.1} L ${cx - rx * 0.04} ${cy + depth * 2.1} Z`,
-    fill: 'url(#fall)', class: 'fall',
+    d: `M ${p0[0]} ${p0[1]} Q ${p1[0]} ${p1[1] + 8} ${p2[0]} ${p2[1]}`,
+    fill: 'none', stroke: '#e9d7ae', 'stroke-width': 5 * isle.scale, 'stroke-linecap': 'round', opacity: 0.85,
+  }));
+  for (let i = 0; i < 7; i++) {
+    const u = -0.85 + (i / 6) * 1.7;
+    const [tx, ty] = project(isle, u, 0.62 + (i % 3) * 0.09);
+    g.appendChild(el('path', {
+      d: `M ${tx} ${ty} q -3 -6 -1 -9 M ${tx} ${ty} q 3 -7 5 -9`,
+      stroke: '#5f9c4d', 'stroke-width': 1.4, fill: 'none', 'stroke-linecap': 'round', opacity: 0.75,
+    }));
+    if (i % 2 === 0) {
+      g.appendChild(el('circle', { cx: tx + 5, cy: ty - 9, r: 2, fill: i % 4 === 0 ? '#f2b441' : '#e8879b', stroke: INK, 'stroke-opacity': 0.25, 'stroke-width': 0.6 }));
+    }
+  }
+
+  // vines and a little waterfall spilling off the underside
+  for (const side of [-1, 1]) {
+    const vx = cx + side * rx * 0.62;
+    const vy = cy + ry * 0.42;
+    g.appendChild(el('path', {
+      d: `M ${vx} ${vy} q ${side * 6} 16 ${-side * 3} 30`,
+      stroke: '#6fae5b', 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round', opacity: 0.8,
+    }));
+  }
+  g.appendChild(el('path', {
+    d: `M ${cx - rx * 0.035} ${cy + depth * 0.92} L ${cx + rx * 0.03} ${cy + depth * 0.92}
+        Q ${cx + rx * 0.05} ${cy + depth * 1.3} ${cx + rx * 0.012} ${cy + depth * 1.45}
+        L ${cx - rx * 0.016} ${cy + depth * 1.45} Z`,
+    fill: 'url(#brook)', class: 'brook',
   }));
 
   if (isle.isCampus) {
     const [px, py] = project(isle, 0, 0.42);
-    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: '#7ef0c8', opacity: 0.07 }));
-    g.appendChild(el('ellipse', {
-      cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: 'none',
-      stroke: '#ffd79a', 'stroke-opacity': 0.4, 'stroke-dasharray': '4 9', class: 'plaza',
-    }));
-    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.17, ry: ry * 0.17, fill: 'none', stroke: '#7ef0c8', 'stroke-opacity': 0.32 }));
+    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: '#f7e9c4', opacity: 0.55, stroke: INK, 'stroke-opacity': 0.2 }));
+    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.17, ry: ry * 0.17, fill: 'none', stroke: '#c9a86a', 'stroke-opacity': 0.6, 'stroke-dasharray': '5 7' }));
   }
 
-  // ground detailing: a path across the isle and a few stones
-  g.appendChild(el('path', {
-    d: `M ${project(isle, -0.8, 0.1)} L ${project(isle, 0.8, 0.1)}`.replace(/,/g, ' '),
-    stroke: '#7fe3d0', 'stroke-opacity': 0.14, 'stroke-width': 2 * isle.scale, fill: 'none',
-  }));
-
-  g.appendChild(el('text', {
-    x: cx, y: cy + ry + 20 * isle.scale, class: 'isle-label', 'text-anchor': 'middle',
-  })).textContent = isle.guild.name.replace(' Guild', '').toUpperCase();
+  const label = el('text', {
+    x: cx - rx * 0.52, y: cy + ry + 15 * isle.scale, class: 'isle-label', 'text-anchor': 'middle',
+  });
+  label.textContent = isle.guild.name.replace(' Guild', '');
+  g.appendChild(label);
   return g;
 }
 
 /* ------------------------------------------------------------ buildings */
 
-function windowsOn(face, h, cols, tint) {
-  // face = [bottomLeft, bottomRight]; windows are parallelograms lifted off the ground
-  const out = [];
-  for (let i = 0; i < cols; i++) {
-    const t0 = 0.16 + (i * 0.72) / cols;
-    const t1 = t0 + 0.36 / cols;
-    for (const [y0, y1] of [[0.3, 0.56], [0.64, 0.86]]) {
-      const a = lerp(face[0], face[1], t0);
-      const b = lerp(face[0], face[1], t1);
-      out.push(poly(
-        [[a[0], a[1] - h * y0], [b[0], b[1] - h * y0], [b[0], b[1] - h * y1], [a[0], a[1] - h * y1]],
-        { fill: tint, opacity: 0.75, class: 'win' },
-      ));
-    }
-  }
-  return out;
+function arcWindow(face, h, t, lift, w, tint) {
+  const a = lerp(face[0], face[1], t);
+  const b = lerp(face[0], face[1], t + w);
+  const top = 0.34;
+  return el('path', {
+    d: `M ${a[0]} ${a[1] - h * lift} L ${b[0]} ${b[1] - h * lift}
+        L ${b[0]} ${b[1] - h * (lift + top) + 3} Q ${(a[0] + b[0]) / 2} ${(a[1] + b[1]) / 2 - h * (lift + top) - 4} ${a[0]} ${a[1] - h * (lift + top) + 3} Z`,
+    fill: tint, stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9, class: 'win',
+  });
 }
 
-function roofOf(kind, top, cx, cyTop, w, tint, scale) {
+function roofOf(kind, top, cx, cyTop, w, tint, scale, arch) {
   const parts = [];
-  const rh = w * 0.55;
-  const apex = [cx, cyTop - rh];
-  const [a, b, c, d] = top;                        // back, right, front, left
+  const [a, b, c, d] = top;
+  const rh = w * 0.9;
+  const eaves = top.map((p) => [cx + (p[0] - cx) * 1.2, cyTop + (p[1] - cyTop) * 1.2]);
+  const shade = { fill: tint, stroke: INK, 'stroke-opacity': 0.42, 'stroke-width': 1.4, 'stroke-linejoin': 'round' };
 
-  if (kind === 'spire') {
-    parts.push(poly([a, b, apex], { fill: tint, opacity: 0.5 }));
-    parts.push(poly([b, c, apex], { fill: tint, opacity: 0.78 }));
-    parts.push(poly([c, d, apex], { fill: tint, opacity: 0.62 }));
-    parts.push(el('line', { x1: cx, y1: cyTop - rh, x2: cx, y2: cyTop - rh * 2.5, stroke: tint, 'stroke-width': 2 * scale, filter: 'url(#glow)' }));
-    parts.push(el('circle', { cx, cy: cyTop - rh * 2.7, r: 4 * scale, fill: '#ffffff', filter: 'url(#glow)', class: 'beacon' }));
+  if (kind === 'cone' || kind === 'tent' || kind === 'tower') {
+    const height = kind === 'tower' ? rh * 1.5 : rh * 1.25;
+    const apex = [cx, cyTop - height];
+    parts.push(poly([eaves[3], eaves[0], apex], { ...shade, opacity: 0.85 }));
+    parts.push(poly([eaves[0], eaves[1], apex], { ...shade, opacity: 0.72 }));
+    parts.push(poly([eaves[1], eaves[2], apex], shade));
+    parts.push(poly([eaves[2], eaves[3], apex], { ...shade, filter: undefined, opacity: 0.9 }));
+    if (kind === 'tent') {
+      for (let i = 1; i < 4; i++) {
+        const edge = lerp(eaves[2], eaves[1], i / 4);
+        parts.push(el('line', { x1: apex[0], y1: apex[1], x2: edge[0], y2: edge[1], stroke: '#fdf3e0', 'stroke-width': 1.6, opacity: 0.8 }));
+      }
+    }
   } else if (kind === 'dome') {
-    const r = w * 0.62;
+    const r = w * 0.78;
     parts.push(el('path', {
-      d: `M ${cx - r} ${cyTop} A ${r} ${r * 1.15} 0 0 1 ${cx + r} ${cyTop} Z`,
-      fill: tint, opacity: 0.72,
+      d: `M ${cx - r} ${cyTop + 2} A ${r} ${r * 1.05} 0 0 1 ${cx + r} ${cyTop + 2} Z`, ...shade,
     }));
     parts.push(el('path', {
-      d: `M ${cx - r * 0.5} ${cyTop - r * 0.5} A ${r * 0.6} ${r * 0.7} 0 0 1 ${cx + r * 0.1} ${cyTop - r * 0.86}`,
-      stroke: '#ffffff', 'stroke-opacity': 0.35, fill: 'none', 'stroke-width': 1.4,
+      d: `M ${cx - r * 0.52} ${cyTop - r * 0.55} A ${r * 0.62} ${r * 0.66} 0 0 1 ${cx + r * 0.06} ${cyTop - r * 0.9}`,
+      stroke: '#fff8e8', 'stroke-opacity': 0.7, fill: 'none', 'stroke-width': 2,
     }));
-    parts.push(el('circle', { cx, cy: cyTop - r * 1.16, r: 3 * scale, fill: '#fff3d0', filter: 'url(#glow)', class: 'beacon' }));
-  } else if (kind === 'pagoda') {
-    for (let tier = 0; tier < 3; tier++) {
-      const k = 1 - tier * 0.26;
-      const lift = tier * rh * 0.52;
-      const eave = top.map((p) => [cx + (p[0] - cx) * (k + 0.22), cyTop - lift + (p[1] - cyTop) * (k + 0.22)]);
-      const peak = [cx, cyTop - lift - rh * 0.5 * k];
-      parts.push(poly([eave[0], eave[1], peak], { fill: tint, opacity: 0.45 }));
-      parts.push(poly([eave[1], eave[2], peak], { fill: tint, opacity: 0.8 }));
-      parts.push(poly([eave[2], eave[3], peak], { fill: tint, opacity: 0.6 }));
-    }
-    parts.push(el('circle', { cx, cy: cyTop - rh * 1.7, r: 3.4 * scale, fill: '#ffe6ac', filter: 'url(#glow)', class: 'beacon' }));
-  } else if (kind === 'gable') {
-    const ridgeA = [(a[0] + d[0]) / 2, (a[1] + d[1]) / 2 - rh * 0.8];
-    const ridgeB = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2 - rh * 0.8];
-    parts.push(poly([d, c, ridgeB, ridgeA], { fill: tint, opacity: 0.72 }));
-    parts.push(poly([a, b, ridgeB, ridgeA], { fill: tint, opacity: 0.42 }));
-    parts.push(el('line', { x1: ridgeA[0], y1: ridgeA[1], x2: ridgeB[0], y2: ridgeB[1], stroke: '#ffffff', 'stroke-opacity': 0.25 }));
-  } else if (kind === 'terrace') {
-    parts.push(poly(top, { fill: tint, opacity: 0.5 }));
+  } else if (kind === 'thatch') {
+    parts.push(el('path', {
+      d: `M ${eaves[3][0]} ${eaves[3][1]} Q ${cx} ${cyTop - rh * 1.5} ${eaves[1][0]} ${eaves[1][1]}
+          Q ${cx} ${cyTop + rh * 0.25} ${eaves[3][0]} ${eaves[3][1]} Z`, ...shade,
+    }));
     for (let i = 0; i < 3; i++) {
-      const p = lerp(lerp(d, c, 0.2 + i * 0.3), lerp(a, b, 0.2 + i * 0.3), 0.4);
-      parts.push(el('circle', { cx: p[0], cy: p[1] - 4, r: 4.5 * scale, fill: tint, opacity: 0.9 }));
-    }
-  } else if (kind === 'arch') {
-    parts.push(poly(top, { fill: tint, opacity: 0.42 }));
-    for (let i = 0; i < 2; i++) {
-      parts.push(el('ellipse', {
-        cx, cy: cyTop - rh * (0.5 + i * 0.55), rx: w * (0.7 - i * 0.18), ry: w * 0.22,
-        fill: 'none', stroke: tint, 'stroke-width': 1.6, opacity: 0.85, class: 'ring',
+      parts.push(el('path', {
+        d: `M ${cx - w * 0.5 + i * w * 0.5} ${cyTop - rh * 0.2} q 4 -${rh * 0.5} 2 -${rh * 0.85}`,
+        stroke: INK, 'stroke-opacity': 0.16, fill: 'none', 'stroke-width': 1.2,
       }));
     }
+  } else if (kind === 'awning') {
+    parts.push(poly([eaves[3], eaves[2], eaves[1], [cx, cyTop - rh * 0.5]], shade));
+    const stripeW = (eaves[1][0] - eaves[3][0]) / 6;
+    for (let i = 0; i < 3; i++) {
+      const x0 = eaves[3][0] + stripeW * (i * 2 + 0.5);
+      parts.push(poly([[x0, eaves[3][1] + (i * 2 + 0.5) * 0], [x0 + stripeW, eaves[3][1]], [cx, cyTop - rh * 0.5]],
+        { fill: '#fff6e4', opacity: 0.55 }));
+    }
+  } else if (kind === 'mill') {
+    parts.push(poly([eaves[3], eaves[0], eaves[1], eaves[2]], { ...shade, opacity: 0.9 }));
+    const hubY = cyTop - rh * 0.5;
+    const blades = el('g', { class: 'blades', style: `--hx:${cx}px; --hy:${hubY}px` });
+    for (let i = 0; i < 4; i++) {
+      blades.appendChild(el('rect', {
+        x: cx - 1.6, y: hubY - w * 1.15, width: 3.2, height: w * 1.15,
+        fill: '#fdf3e0', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9, rx: 1.4,
+        transform: `rotate(${i * 90} ${cx} ${hubY})`,
+      }));
+    }
+    parts.push(blades);
+    parts.push(el('circle', { cx, cy: hubY, r: 2.6, fill: INK, opacity: 0.7 }));
   } else {
-    // flat roof with a mast
-    parts.push(poly(top, { fill: tint, opacity: 0.34 }));
-    parts.push(poly(top.map((p) => [cx + (p[0] - cx) * 0.62, cyTop + (p[1] - cyTop) * 0.62]), { fill: tint, opacity: 0.5 }));
-    parts.push(el('line', { x1: cx, y1: cyTop, x2: cx, y2: cyTop - rh * 1.5, stroke: tint, 'stroke-width': 1.6, opacity: 0.9 }));
-    parts.push(el('circle', { cx, cy: cyTop - rh * 1.5, r: 2.6 * scale, fill: '#bff6ff', filter: 'url(#glow)', class: 'beacon' }));
+    // gable: a steep pitched roof with a ridge
+    const ridgeA = [(eaves[0][0] + eaves[3][0]) / 2, (eaves[0][1] + eaves[3][1]) / 2 - rh];
+    const ridgeB = [(eaves[1][0] + eaves[2][0]) / 2, (eaves[1][1] + eaves[2][1]) / 2 - rh];
+    parts.push(poly([eaves[0], eaves[1], ridgeB, ridgeA], { ...shade, opacity: 0.78 }));
+    parts.push(poly([eaves[3], eaves[2], ridgeB, ridgeA], shade));
+    parts.push(el('line', {
+      x1: ridgeA[0], y1: ridgeA[1], x2: ridgeB[0], y2: ridgeB[1],
+      stroke: '#fff6e4', 'stroke-opacity': 0.5, 'stroke-width': 1.6,
+    }));
+  }
+
+  // weather vanes, bells and flags
+  const vaneY = kind === 'dome' ? cyTop - w * 0.85 : cyTop - rh * 1.35;
+  if (arch.vane === 'star') {
+    parts.push(el('path', {
+      d: `M ${cx} ${vaneY - 8} l 2.2 4.6 5 .7 -3.6 3.5 .9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z`,
+      fill: '#f7c948', stroke: INK, 'stroke-opacity': 0.35, 'stroke-width': 0.8, class: 'twinkle',
+    }));
+  } else if (arch.vane === 'flag') {
+    parts.push(el('line', { x1: cx, y1: vaneY + 4, x2: cx, y2: vaneY - 14, stroke: INK, 'stroke-width': 1.4, opacity: 0.7 }));
+    parts.push(el('path', { d: `M ${cx} ${vaneY - 14} q 9 3 14 0 l 0 7 q -6 3 -14 0 z`, fill: '#d96c5f', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9, class: 'flag' }));
+  } else if (arch.vane === 'bell') {
+    parts.push(el('path', { d: `M ${cx - 4} ${vaneY} q 0 -7 4 -7 t 4 7 z`, fill: '#e0b64a', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9 }));
+  } else if (arch.vane === 'dish') {
+    parts.push(el('ellipse', { cx, cy: vaneY - 2, rx: 6, ry: 3, fill: '#fdf3e0', stroke: INK, 'stroke-opacity': 0.4, 'stroke-width': 0.9 }));
   }
   return parts;
 }
@@ -1561,38 +1580,57 @@ function drawBuilding(id, spec) {
   const top = base.map((p) => [p[0], p[1] - h]);
   const w = (base[1][0] - base[3][0]) * 0.5;
 
-  // shadow on the ground
   g.appendChild(el('ellipse', {
     cx: (base[0][0] + base[2][0]) / 2, cy: (base[0][1] + base[2][1]) / 2 + 3,
-    rx: Math.abs(w) * 1.15, ry: Math.abs(w) * 0.5, fill: '#04070f', opacity: 0.35,
+    rx: Math.abs(w) * 1.2, ry: Math.abs(w) * 0.52, fill: '#4f7a3f', opacity: 0.22,
   }));
 
-  // walls: the two faces that meet at the near corner
-  g.appendChild(poly([base[3], base[2], top[2], top[3]], { fill: arch.wall, class: 'wall-l' }));
-  g.appendChild(poly([base[2], base[1], top[1], top[2]], { fill: arch.wall, class: 'wall-r' }));
-  for (const win of windowsOn([base[3], base[2]], h, 2, tint)) g.appendChild(win);
-  for (const win of windowsOn([base[2], base[1]], h, 2, tint)) g.appendChild(win);
+  const wallStroke = { stroke: INK, 'stroke-opacity': 0.42, 'stroke-width': 1.4, 'stroke-linejoin': 'round' };
+  g.appendChild(poly([base[3], base[2], top[2], top[3]], { fill: arch.wall, class: 'wall-l', ...wallStroke }));
+  g.appendChild(poly([base[2], base[1], top[1], top[2]], { fill: arch.wall, class: 'wall-r', ...wallStroke }));
 
-  // a lit doorway on the near corner
-  const door = lerp(base[3], base[2], 0.5);
-  g.appendChild(poly(
-    [[door[0] - 3, door[1]], [door[0] + 3, door[1] + 1.5], [door[0] + 3, door[1] - h * 0.3], [door[0] - 3, door[1] - h * 0.3 - 1.5]],
-    { fill: '#ffdca6', opacity: 0.9, filter: 'url(#glow)' },
-  ));
+  const glow = '#ffd98a';
+  g.appendChild(arcWindow([base[3], base[2]], h, 0.2, 0.34, 0.22, glow));
+  g.appendChild(arcWindow([base[2], base[1]], h, 0.58, 0.34, 0.22, glow));
+  if (h > 34) {
+    g.appendChild(arcWindow([base[3], base[2]], h, 0.55, 0.62, 0.18, glow));
+    g.appendChild(arcWindow([base[2], base[1]], h, 0.24, 0.62, 0.18, glow));
+  }
+
+  // a rounded door on the near corner, with a lamp beside it
+  const door = lerp(base[3], base[2], 0.52);
+  g.appendChild(el('path', {
+    d: `M ${door[0] - 3.4} ${door[1]} L ${door[0] - 3.4} ${door[1] - h * 0.22}
+        Q ${door[0]} ${door[1] - h * 0.34} ${door[0] + 3.4} ${door[1] - h * 0.22}
+        L ${door[0] + 3.4} ${door[1] + 1.6} Z`,
+    fill: '#9c6b43', stroke: INK, 'stroke-opacity': 0.5, 'stroke-width': 1,
+  }));
+  g.appendChild(el('circle', { cx: door[0] + 7, cy: door[1] - h * 0.3, r: 2.2, fill: '#ffcf6b', class: 'lamp' }));
 
   const cx = (top[1][0] + top[3][0]) / 2;
   const cyTop = (top[0][1] + top[2][1]) / 2;
-  if (id === 'academy') {
-    g.appendChild(el('path', {
-      d: `M ${cx - 14} ${cyTop} L ${cx + 14} ${cyTop} L ${cx + 5} ${cyTop - 190} L ${cx - 5} ${cyTop - 190} Z`,
-      fill: 'url(#fall)', opacity: 0.5, class: 'fall',
-    }));
-  }
-  for (const part of roofOf(arch.roof, top, cx, cyTop, Math.abs(w), tint, isle.scale)) g.appendChild(part);
+  for (const part of roofOf(arch.roof, top, cx, cyTop, Math.abs(w), tint, isle.scale, arch)) g.appendChild(part);
 
-  const APEX = { spire: 1.55, pagoda: 1.0, dome: 0.78, gable: 0.5, flat: 0.9, terrace: 0.25, arch: 0.66 };
-  const apex = cyTop - Math.abs(w) * (APEX[arch.roof] ?? 0.6);
-  spec.labelPos = [cx, apex - 11 - (spec.labelDrop || 0)];
+  // chimney and a curl of smoke
+  if (arch.chimney) {
+    const chx = cx + Math.abs(w) * 0.62;
+    const chy = cyTop - Math.abs(w) * 0.45;
+    g.appendChild(el('rect', {
+      x: chx - 3, y: chy - 12, width: 6, height: 15, rx: 1.5,
+      fill: '#c98a63', stroke: INK, 'stroke-opacity': 0.45, 'stroke-width': 1,
+    }));
+    const smoke = el('g', { class: 'smoke' });
+    for (let i = 0; i < 3; i++) {
+      smoke.appendChild(el('circle', {
+        cx: chx, cy: chy - 14, r: 3 + i * 0.6, fill: '#fffaf0', opacity: 0.75,
+        style: `animation-delay:${i * 1.1}s`,
+      }));
+    }
+    g.appendChild(smoke);
+  }
+
+  const APEX = { cone: 1.5, tower: 1.75, tent: 1.4, dome: 0.95, thatch: 1.6, awning: 0.8, mill: 1.3, gable: 1.1 };
+  spec.labelPos = [cx, cyTop - Math.abs(w) * (APEX[arch.roof] ?? 1.1) - 11 - (spec.labelDrop || 0)];
 
   const t = el('title');
   t.textContent = `${building.name} — ${building.blurb}`;
@@ -1607,21 +1645,19 @@ function drawMap(svg, geo) {
   svg.innerHTML = '';
   svg.appendChild(defs());
 
-  // light bridges from the campus out to every isle
   const campus = geo.isles.find((i) => i.isCampus);
   const bridges = el('g', { class: 'bridges' });
   for (const isle of geo.isles) {
     if (isle.isCampus) continue;
     const mx = (campus.cx + isle.cx) / 2;
-    const my = (campus.cy + isle.cy) / 2 - 70;
+    const my = (campus.cy + isle.cy) / 2 - 62;
     bridges.appendChild(el('path', {
       d: `M ${campus.cx} ${campus.cy} Q ${mx} ${my} ${isle.cx} ${isle.cy}`,
-      class: 'bridge', stroke: 'url(#bridge)', fill: 'none',
+      class: 'bridge', fill: 'none',
     }));
   }
   svg.appendChild(bridges);
 
-  // painter's algorithm: far isles first
   const order = [...geo.isles].sort((a, b) => a.cy - b.cy);
   for (const isle of order) {
     const g = el('g', { class: 'isle-group' });
@@ -1633,7 +1669,6 @@ function drawMap(svg, geo) {
     svg.appendChild(g);
   }
 
-  // name plates last, so no roof can cover them
   const plates = el('g', { class: 'plates' });
   for (const [id, spec] of Object.entries(geo.buildings)) {
     const [lx, ly] = spec.labelPos;
@@ -1641,15 +1676,14 @@ function drawMap(svg, geo) {
     name.textContent = spec.building.short;
     plates.appendChild(name);
     plates.appendChild(el('text', {
-      x: lx, y: ly + 9.5, class: 'build-staff', 'text-anchor': 'middle', 'data-staff': id,
+      x: lx, y: ly + 10.5, class: 'build-staff', 'text-anchor': 'middle', 'data-staff': id,
     }));
   }
   svg.appendChild(plates);
-
   svg.appendChild(el('g', { class: 'pins', id: 'pin-layer' }));
 }
 
-/* ---------------------------------------------------------------- pins */
+/* ---------------------------------------------------------------- folk */
 
 function yardSlot(isle, i, total) {
   const y = isle.yard;
@@ -1664,11 +1698,14 @@ function yardSlot(isle, i, total) {
 
 function makePin(c) {
   const g = el('g', { class: 'pin', 'data-pin': c.id, tabindex: '0' });
-  g.appendChild(el('ellipse', { cx: 0, cy: 1, rx: 4.5, ry: 2, fill: '#04060e', opacity: 0.4 }));
-  g.appendChild(el('circle', { cx: 0, cy: -7, r: 7.5, class: 'aura', filter: 'url(#softglow)' }));
-  g.appendChild(el('path', { d: 'M -3.1 0 L -2.1 -6.4 Q 0 -8.2 2.1 -6.4 L 3.1 0 Z', class: 'robe' }));
-  g.appendChild(el('circle', { cx: 0, cy: -9.2, r: 2.1, class: 'head' }));
-  g.appendChild(el('circle', { cx: 0, cy: -13.5, r: 1.6, class: 'halo' }));
+  g.appendChild(el('ellipse', { cx: 0, cy: 1.5, rx: 4.6, ry: 2, fill: '#4f7a3f', opacity: 0.3 }));
+  g.appendChild(el('path', {
+    d: 'M -4 0.5 Q -4.4 -6 -1.9 -7.6 L 1.9 -7.6 Q 4.4 -6 4 0.5 Z',
+    class: 'robe', stroke: INK, 'stroke-opacity': 0.45, 'stroke-width': 1,
+  }));
+  g.appendChild(el('circle', { cx: 0, cy: -9.6, r: 2.9, class: 'head', stroke: INK, 'stroke-opacity': 0.45, 'stroke-width': 1 }));
+  g.appendChild(el('path', { d: 'M -2.9 -10.6 Q 0 -13.6 2.9 -10.6 Q 0 -12 -2.9 -10.6 Z', class: 'hair' }));
+  g.appendChild(el('circle', { cx: 0, cy: -14.4, r: 2.4, class: 'halo' }));
   g.appendChild(el('title'));
   return g;
 }
@@ -1689,17 +1726,15 @@ function drawPins(svg, geo, town, selectedId) {
     const i = (slots[loc] = (slots[loc] ?? -1) + 1);
     if (c.stage === 'employed') staff[loc] = (staff[loc] || 0) + 1;
 
-    // citizens gather in their building's yard; the campus yard holds the whole student body
     const isle = spec.isle;
-    const total = totals[loc];
     const [u, v] = isle.isCampus && loc === 'academy'
-      ? yardSlot(isle, i, total)
-      : yardSlot({ ...isle, yard: { ...isle.yard, u0: spec.u - 0.3, u1: spec.u + 0.3, cols: 3 } }, i, total);
+      ? yardSlot(isle, i, totals[loc])
+      : yardSlot({ ...isle, yard: { ...isle.yard, u0: spec.u - 0.3, u1: spec.u + 0.3, cols: 3 } }, i, totals[loc]);
     const [x, y] = project(isle, u, v);
 
     let pin = layer.querySelector(`[data-pin="${c.id}"]`);
     if (!pin) { pin = makePin(c); layer.appendChild(pin); }
-    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(isle.scale * 1.22).toFixed(2)})`);
+    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(isle.scale * 1.15).toFixed(2)})`);
     pin.setAttribute('data-stage', c.stage);
     pin.setAttribute('style', `--tint:${GUILDS[c.guildIndex].color}`);
     pin.classList.toggle('is-selected', c.id === selectedId);
@@ -1707,7 +1742,6 @@ function drawPins(svg, geo, town, selectedId) {
       c.stage === 'employed' ? `${c.name} — ${c.role}` : `${c.name} — ${c.stage}`;
     placed.push({ pin, y });
   }
-  // keep nearer citizens in front
   placed.sort((a, b) => a.y - b.y).forEach(({ pin }) => layer.appendChild(pin));
 
   for (const [id, spec] of Object.entries(geo.buildings)) {
@@ -1725,7 +1759,7 @@ function drawPins(svg, geo, town, selectedId) {
 function startSky(canvas) {
   const ctx = canvas.getContext('2d');
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let W = 0, H = 0, stars = [], motes = [], clouds = [];
+  let W = 0, H = 0, clouds = [], birds = [], petals = [];
 
   const seedRand = (() => { let a = 20260821; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296); })();
 
@@ -1735,65 +1769,82 @@ function startSky(canvas) {
     W = Math.max(1, r.width); H = Math.max(1, r.height);
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    stars = Array.from({ length: 220 }, () => ({
-      x: seedRand() * W, y: seedRand() * H * 0.92,
-      r: seedRand() * 1.3 + 0.25, p: seedRand() * Math.PI * 2, s: 0.4 + seedRand(),
+    clouds = Array.from({ length: 9 }, () => ({
+      x: seedRand() * W, y: H * (0.05 + seedRand() * 0.66),
+      s: 0.5 + seedRand() * 0.9, v: 0.05 + seedRand() * 0.11,
     }));
-    motes = Array.from({ length: 46 }, () => ({
+    birds = Array.from({ length: 5 }, () => ({
+      x: seedRand() * W, y: H * (0.08 + seedRand() * 0.3),
+      s: 0.7 + seedRand() * 0.6, v: 0.18 + seedRand() * 0.2, p: seedRand() * 6,
+    }));
+    petals = Array.from({ length: 26 }, () => ({
       x: seedRand() * W, y: seedRand() * H,
-      r: seedRand() * 1.8 + 0.6, v: 0.08 + seedRand() * 0.22, drift: (seedRand() - 0.5) * 0.16,
-      hue: seedRand() > 0.5 ? '#ffd9a0' : '#9ff0dd',
+      r: 1.6 + seedRand() * 2.2, v: 0.16 + seedRand() * 0.3,
+      drift: (seedRand() - 0.5) * 0.5, p: seedRand() * 6,
+      hue: ['#ffd6e0', '#fff0c2', '#e6f2c8'][Math.floor(seedRand() * 3)],
     }));
-    clouds = Array.from({ length: 7 }, (_, i) => ({
-      x: seedRand() * W, y: H * (0.18 + seedRand() * 0.7),
-      rx: 190 + seedRand() * 320, ry: 34 + seedRand() * 54,
-      v: 0.04 + seedRand() * 0.09, o: 0.05 + seedRand() * 0.07,
-      hue: i % 3 === 0 ? '155, 120, 255' : i % 3 === 1 ? '80, 190, 220' : '255, 170, 190',
-    }));
+  }
+
+  function puff(x, y, s) {
+    ctx.beginPath();
+    ctx.ellipse(x, y, 44 * s, 26 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x - 34 * s, y + 6 * s, 28 * s, 18 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 32 * s, y + 7 * s, 30 * s, 19 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + 4 * s, y - 15 * s, 26 * s, 18 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function frame(t) {
     ctx.clearRect(0, 0, W, H);
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#05060f');
-    sky.addColorStop(0.42, '#0b1030');
-    sky.addColorStop(0.74, '#132043');
-    sky.addColorStop(1, '#0d2b3f');
+    sky.addColorStop(0, '#8fd0ea');
+    sky.addColorStop(0.42, '#bfe4f0');
+    sky.addColorStop(0.72, '#f6e2c0');
+    sky.addColorStop(1, '#f7cfa4');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
+    // a low sun with a warm halo
+    const sunX = W * 0.78, sunY = H * 0.2;
+    const halo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, H * 0.42);
+    halo.addColorStop(0, 'rgba(255, 234, 178, 0.9)');
+    halo.addColorStop(1, 'rgba(255, 234, 178, 0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff3cd';
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 30, 0, Math.PI * 2);
+    ctx.fill();
+
     for (const c of clouds) {
       if (!still) c.x += c.v;
-      if (c.x - c.rx > W) c.x = -c.rx;
-      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.rx);
-      g.addColorStop(0, `rgba(${c.hue}, ${c.o})`);
-      g.addColorStop(1, `rgba(${c.hue}, 0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2);
-      ctx.fill();
+      if (c.x - 90 * c.s > W) c.x = -90 * c.s;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      puff(c.x, c.y + 7 * c.s, c.s);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      puff(c.x, c.y, c.s);
     }
 
-    for (const s of stars) {
-      const tw = still ? 0.75 : 0.55 + Math.sin(t / 900 * s.s + s.p) * 0.35;
-      ctx.globalAlpha = tw;
-      ctx.fillStyle = '#dbe8ff';
+    ctx.strokeStyle = 'rgba(91, 70, 54, 0.45)';
+    ctx.lineWidth = 1.4;
+    for (const b of birds) {
+      if (!still) b.x += b.v;
+      if (b.x > W + 20) b.x = -20;
+      const flap = Math.sin(t / 260 + b.p) * 2.4;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(b.x - 6 * b.s, b.y);
+      ctx.quadraticCurveTo(b.x - 3 * b.s, b.y - 3 * b.s - flap, b.x, b.y);
+      ctx.quadraticCurveTo(b.x + 3 * b.s, b.y - 3 * b.s - flap, b.x + 6 * b.s, b.y);
+      ctx.stroke();
     }
-    ctx.globalAlpha = 1;
 
-    for (const m of motes) {
-      if (!still) { m.y -= m.v; m.x += m.drift; }
-      if (m.y < -6) { m.y = H + 6; m.x = seedRand() * W; }
-      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 6);
-      g.addColorStop(0, m.hue);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = g;
+    for (const p of petals) {
+      if (!still) { p.y += p.v; p.x += Math.sin(t / 1400 + p.p) * 0.4 + p.drift * 0.2; }
+      if (p.y > H + 6) { p.y = -6; p.x = seedRand() * W; }
+      ctx.fillStyle = p.hue;
+      ctx.globalAlpha = 0.85;
       ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r * 6, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y, p.r, p.r * 0.62, Math.sin(t / 900 + p.p), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
