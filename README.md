@@ -7,7 +7,12 @@ science, arts and education.
 
 It is a real simulation, not a mock-up: a deterministic engine ticks one day at a time, agents
 produce and consume resources, results are graded, people are promoted and mentored, and the
-map redraws itself from that state.
+world redraws itself from that state.
+
+The town is drawn as eleven isles adrift in a nebula — the campus at the centre, ten guild isles
+ringed around it, joined by bridges of light. Every hall is a real little building (spires,
+domes, tiered pagodas, lit windows) and every citizen is a small robed figure standing on the
+ground, who walks to their posting the day they are hired.
 
 ![the town](docs/town.png)
 
@@ -81,12 +86,13 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 ```
 src/data.js     the world: resources, guilds, buildings, posts, citizens
 src/engine.js   the simulation: study, placement, work, support, upkeep
-src/view.js     the plan-view map: districts, buildings, travelling pins
-src/main.js     the operations board: pipeline, stores, record, roster, dossiers
+src/view.js     the world: floating isles, isometric buildings, citizens, sky
+src/main.js     the HUD: pipeline, stores, town record, roster, dossiers
 build.js        bundles it all into one self-contained page
 test.js         the town's guarantees
 ```
 
-The design is a civic operations board — plan-view survey plots in petrol ink with brass
-instrumentation. Click any citizen, on the map or in the roster, to open their dossier:
-transcript, aptitudes, posting and full record.
+The world is isometric SVG over an animated canvas sky (stars, drifting nebulae, rising motes).
+Architecture varies by guild: Aether builds glowing spires, Lumen and Mender build domes, Ledger
+and Hearth build tiered pagodas, Wayfinder builds ringed towers. Click any citizen — on the isles
+or in the roster — to open their dossier: transcript, aptitudes, posting and full record.

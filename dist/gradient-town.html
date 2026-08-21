@@ -1,273 +1,319 @@
 <title>Gradient Town</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Public+Sans:wght@400;500;600;700&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" />
 <style>
-/* Gradient Town — a civic operations board. Single committed visual world:
-   petrol ink, survey-plan geometry, brass instrumentation. */
+/* Gradient Town — eleven isles adrift in a nebula. One committed visual world:
+   night sky, jade and lantern light, celestial architecture. */
 :root {
-  --ground: #0b1719;
-  --panel: #102327;
-  --panel-2: #163035;
-  --plot: #12272c;
-  --rule: #275055;
-  --rule-soft: #1c3b40;
-  --rule-faint: rgba(120, 190, 185, 0.06);
-  --text: #e8f1ee;
-  --muted: #93b0ac;
-  --dim: #6a8c88;
-  --brass: #d9a441;
-  --brass-soft: rgba(217, 164, 65, 0.16);
-  --good: #6fd3a2;
-  --support: #e2795f;
-  --display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
-  --ui: 'Public Sans', 'Helvetica Neue', Arial, sans-serif;
-  --mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
-  --shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+  --void: #05060f;
+  --deep: #0a1026;
+  --glass: rgba(14, 24, 48, 0.72);
+  --glass-2: rgba(20, 34, 64, 0.66);
+  --edge: rgba(126, 240, 200, 0.18);
+  --edge-2: rgba(126, 240, 200, 0.32);
+  --text: #eaf2ff;
+  --muted: #9db3d4;
+  --dim: #6b82a8;
+  --jade: #7ef0c8;
+  --cyan: #6fd8ff;
+  --gold: #ffcf7a;
+  --rose: #ff9ec4;
+  --violet: #b58cff;
+  --display: 'Cormorant Garamond', 'Songti SC', Georgia, serif;
+  --ui: 'Rajdhani', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  --mono: 'IBM Plex Mono', Menlo, monospace;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--ground);
+  background: var(--void);
   color: var(--text);
   font-family: var(--ui);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3 { margin: 0; font-weight: 400; text-wrap: balance; }
+h1, h2, h3 { margin: 0; font-weight: 500; text-wrap: balance; }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+:focus-visible { outline: 1px solid var(--jade); outline-offset: 3px; }
 
-.board { max-width: 1560px; margin: 0 auto; padding: 20px 20px 48px; display: flex; flex-direction: column; gap: 18px; }
+.board { max-width: 1620px; margin: 0 auto; padding: 0 16px 44px; display: flex; flex-direction: column; gap: 16px; }
 
-/* ---------- masthead ---------- */
-.masthead {
-  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
-  padding: 16px 20px;
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--rule-soft); border-radius: 6px;
+/* ---------------- the world ---------------- */
+.world {
+  position: relative; width: 100%; border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--edge); background: var(--deep);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), inset 0 0 120px rgba(80, 160, 255, 0.06);
 }
-.ident { display: flex; align-items: center; gap: 14px; margin-right: auto; }
+#sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#map { position: relative; display: block; width: 100%; height: auto; }
+
+/* isles + architecture */
+.isle-rim { animation: rimPulse 7s ease-in-out infinite; }
+@keyframes rimPulse { 0%, 100% { stroke-opacity: 0.34; } 50% { stroke-opacity: 0.72; } }
+.isle-label {
+  font-family: var(--ui); font-size: 11px; font-weight: 600; letter-spacing: 0.22em;
+  fill: var(--muted); opacity: 0.75;
+}
+.build { cursor: default; }
+.build:hover .wall-l, .build:focus-visible .wall-l { filter: brightness(1.35); }
+.build:hover .wall-r, .build:focus-visible .wall-r { filter: brightness(1.35); }
+.wall-l { filter: brightness(0.82); }
+.wall-r { filter: brightness(1.12); }
+.win { animation: lamp 5s ease-in-out infinite; }
+.win:nth-of-type(even) { animation-delay: 1.7s; }
+@keyframes lamp { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+.beacon { animation: beacon 3.4s ease-in-out infinite; }
+@keyframes beacon { 0%, 100% { opacity: 0.55; r: 3; } 50% { opacity: 1; r: 4.6; } }
+.ring { animation: spin 9s linear infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.build-name {
+  font-family: var(--ui); font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
+  fill: #cfe2ff; opacity: 0.92; paint-order: stroke; stroke: rgba(5, 8, 20, 0.85); stroke-width: 2.4px;
+}
+.build-staff { font-family: var(--mono); font-size: 8px; fill: var(--jade); opacity: 0.9; }
+.build-staff.is-empty { fill: var(--dim); }
+.bridge { stroke-width: 1.6; stroke-dasharray: 5 12; animation: flow 4.5s linear infinite; opacity: 0.75; }
+@keyframes flow { to { stroke-dashoffset: -34; } }
+.fall { animation: shimmer 5.5s ease-in-out infinite; }
+@keyframes shimmer { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
+
+/* citizens */
+.pin { transition: transform 1100ms cubic-bezier(0.34, 0.02, 0.2, 1); cursor: pointer; }
+.pin .robe { fill: var(--tint); }
+.pin .head { fill: #f4fbff; }
+.pin .aura { fill: var(--tint); opacity: 0.34; }
+.pin .halo { fill: transparent; }
+.pin[data-stage='student'] .robe { fill: #7fa8d8; opacity: 0.9; }
+.pin[data-stage='student'] .aura { fill: var(--cyan); opacity: 0.2; }
+.pin[data-stage='graduate'] .robe { fill: var(--gold); }
+.pin[data-stage='graduate'] .aura { fill: var(--gold); opacity: 0.5; }
+.pin[data-stage='graduate'] .halo { fill: var(--gold); animation: rise 1.6s ease-in-out infinite; }
+@keyframes rise { 0%, 100% { opacity: 0.4; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+.pin.is-selected .aura { opacity: 0.85; }
+.pin.is-selected .head { fill: #fff; stroke: var(--gold); stroke-width: 1.2; }
+
+/* ---------------- HUD ---------------- */
+.hud { position: absolute; z-index: 3; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud-tl { top: 18px; left: 18px; display: flex; align-items: center; gap: 13px; }
+.hud-tr { top: 18px; right: 18px; display: flex; align-items: center; gap: 10px; }
+.hud-b {
+  left: 16px; right: 16px; bottom: 14px;
+  display: grid; grid-template-columns: auto auto 1fr; gap: 12px; align-items: stretch;
+}
+
+
 .seal {
-  width: 46px; height: 46px; display: grid; place-items: center;
-  border: 1px solid var(--brass); border-radius: 50%;
-  color: var(--brass); font-family: var(--display); font-size: 20px; letter-spacing: 0.04em;
+  width: 50px; height: 50px; display: grid; place-items: center; flex: none;
+  border: 1px solid var(--edge-2); border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(126, 240, 200, 0.22), transparent 70%);
+  font-family: var(--display); font-size: 24px; color: var(--jade);
+  box-shadow: 0 0 26px rgba(126, 240, 200, 0.28);
 }
-.ident h1 { font-family: var(--display); font-size: 30px; letter-spacing: 0.01em; line-height: 1.1; }
-.ident p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; letter-spacing: 0.09em; text-transform: uppercase; }
-.clock { display: flex; align-items: baseline; gap: 10px; padding-right: 20px; border-right: 1px solid var(--rule-soft); }
-.clock .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
-.clock .value { font-family: var(--mono); font-size: 30px; color: var(--brass); font-variant-numeric: tabular-nums; }
-.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ctl {
-  padding: 8px 14px; border: 1px solid var(--rule); border-radius: 3px;
-  font-size: 12.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text); background: rgba(255, 255, 255, 0.02); transition: background 120ms, border-color 120ms;
+.title h1 { font-family: var(--display); font-size: 34px; line-height: 1.05; letter-spacing: 0.01em; }
+.title h1 em { font-style: italic; color: var(--jade); }
+.title p {
+  margin: 1px 0 0; font-size: 11.5px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--muted); opacity: 0.85;
 }
-.ctl:hover { border-color: var(--brass); background: var(--brass-soft); }
-.ctl.primary { border-color: var(--brass); color: var(--brass); }
-.ctl.primary.running { background: var(--brass); color: #10222a; }
-.speeds { display: flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
-.speeds button { padding: 8px 11px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
-.speeds button[aria-pressed='true'] { background: var(--brass-soft); color: var(--brass); }
-
-/* ---------- layout ---------- */
-.stage { display: grid; grid-template-columns: minmax(0, 1fr) 348px; gap: 18px; align-items: start; }
-.panel { background: var(--panel); border: 1px solid var(--rule-soft); border-radius: 6px; }
+.panel {
+  background: var(--glass); border: 1px solid var(--edge); border-radius: 12px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
 .panel > header {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-  padding: 12px 16px; border-bottom: 1px solid var(--rule-soft);
+  padding: 9px 14px; border-bottom: 1px solid rgba(126, 240, 200, 0.12);
 }
-.panel > header h2 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
-.panel > header .note { font-family: var(--mono); font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
-.rail { display: flex; flex-direction: column; gap: 18px; }
-.col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.panel > header h2 {
+  font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--jade); font-weight: 600;
+}
+.panel > header .note { font-family: var(--mono); font-size: 10px; color: var(--dim); }
 
-/* ---------- map ---------- */
-.map-panel { overflow: hidden; }
-#map { display: block; width: 100%; height: auto; background: var(--ground); }
-.street { stroke: var(--rule-soft); stroke-width: 6; stroke-linecap: round; opacity: 0.55; }
-.plot-fill { fill: var(--plot); stroke: var(--rule-soft); }
-.plot:hover .plot-fill { stroke: color-mix(in srgb, var(--tint) 60%, transparent); }
-.plate { font-family: var(--mono); font-size: 10px; fill: var(--brass); letter-spacing: 0.1em; }
-.plot-name { font-family: var(--ui); font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; fill: var(--muted); }
-.plot-domain { font-family: var(--mono); font-size: 9.5px; fill: var(--dim); letter-spacing: 0.04em; }
-.block-fill {
-  fill: color-mix(in srgb, var(--tint) 12%, var(--panel-2));
-  stroke: color-mix(in srgb, var(--tint) 38%, transparent);
+.clock { display: flex; align-items: center; gap: 9px; padding: 8px 15px; }
+.clock .label { font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim); }
+.clock .value { font-family: var(--mono); font-size: 24px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.ctl {
+  padding: 9px 16px; border-radius: 10px; border: 1px solid var(--edge);
+  background: var(--glass); backdrop-filter: blur(14px);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  transition: background 140ms, border-color 140ms, color 140ms;
 }
-.block:hover .block-fill, .block:focus-visible .block-fill { stroke: var(--tint); fill: color-mix(in srgb, var(--tint) 20%, var(--panel-2)); }
-.block-glyph { font-size: 17px; }
-.block-name { font-family: var(--ui); font-size: 9px; font-weight: 600; fill: var(--text); letter-spacing: 0.02em; }
-.block-staff { font-family: var(--mono); font-size: 8.5px; fill: var(--good); letter-spacing: 0.03em; }
-.block-staff.is-empty { fill: var(--dim); }
-.pin { transition: transform 900ms cubic-bezier(0.4, 0.05, 0.2, 1); }
-.pin-dot { fill: var(--tint); stroke: var(--ground); stroke-width: 1; }
-.pin[data-stage='student'] .pin-dot { fill: none; stroke: var(--tint); stroke-width: 1.4; r: 3.4; }
-.pin[data-stage='graduate'] .pin-dot { fill: var(--brass); stroke: var(--brass); }
-.pin.is-selected .pin-dot { stroke: var(--text); stroke-width: 2; r: 5.5; }
+.ctl:hover { border-color: var(--edge-2); color: var(--jade); }
+.ctl.primary { color: var(--jade); border-color: var(--edge-2); }
+.ctl.primary.running { background: rgba(126, 240, 200, 0.16); }
+.speeds { display: flex; gap: 2px; padding: 4px; border-radius: 10px; border: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); }
+.speeds button { padding: 5px 10px; border-radius: 7px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.speeds button[aria-pressed='true'] { background: rgba(126, 240, 200, 0.16); color: var(--jade); }
+
+.pipeline { display: grid; grid-template-columns: repeat(3, 1fr); }
+.stagebox { padding: 9px 14px; text-align: center; border-right: 1px solid rgba(126, 240, 200, 0.1); }
+.stagebox:last-child { border-right: none; }
+.stagebox .n { font-family: var(--mono); font-size: 21px; display: block; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.stagebox .k { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.stagebox.study .n { color: var(--cyan); }
+.stagebox.grad .n { color: var(--gold); }
+.stagebox.work .n { color: var(--jade); }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(126, 240, 200, 0.1); }
+.metric { padding: 8px 14px; }
+.metric + .metric { border-left: 1px solid rgba(126, 240, 200, 0.1); }
+.metric .k { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); display: block; }
+.metric .n { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+
+.res-list {
+  padding: 9px 14px 11px; display: grid; gap: 7px 18px;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+}
+.res { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 8px; }
+.res .name { font-size: 12px; color: var(--muted); }
+.res .amt { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.res .flow { font-family: var(--mono); font-size: 9.5px; color: var(--jade); }
+.res .flow.neg { color: var(--rose); }
+.res .bar { grid-column: 2 / -1; height: 3px; border-radius: 2px; background: rgba(150, 190, 240, 0.14); overflow: hidden; }
+.res .bar span { display: block; height: 100%; background: var(--tint); box-shadow: 0 0 8px var(--tint); transition: width 600ms ease; }
+
 .legend {
-  display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
-  padding: 10px 16px; border-top: 1px solid var(--rule-soft);
-  font-family: var(--mono); font-size: 10.5px; color: var(--dim); letter-spacing: 0.05em;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 26px; padding: 10px 18px;
+  font-size: 12px; color: var(--muted);
 }
-.legend b { color: var(--muted); font-weight: 500; }
-.key { display: inline-flex; align-items: center; gap: 6px; }
-.key i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-.key i.hollow { background: none; border: 1.4px solid var(--muted); }
+.bar > header { padding: 7px 14px; }
+.metrics { grid-template-columns: repeat(4, 1fr); }
+.key { display: inline-flex; align-items: center; gap: 8px; }
+.key i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
+.legend b { color: var(--text); font-weight: 600; }
+.legend .tail { font-family: var(--mono); font-size: 10px; color: var(--gold); }
 
-/* ---------- pipeline ---------- */
-.pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule-soft); }
-.stagebox { background: var(--panel); padding: 14px 16px; }
-.stagebox .n { font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; display: block; line-height: 1.1; }
-.stagebox .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--dim); }
-.stagebox.study .n { color: var(--muted); }
-.stagebox.grad .n { color: var(--brass); }
-.stagebox.work .n { color: var(--good); }
-.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--rule-soft); }
-.metric { background: var(--panel); padding: 12px 16px; }
-.metric .n { font-family: var(--mono); font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
-.metric .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); display: block; }
-
-/* ---------- resources ---------- */
-.res-list { padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 9px; }
-.res { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 10px; }
-.res .name { font-size: 12.5px; color: var(--muted); }
-.res .bar { grid-column: 2 / -1; height: 4px; border-radius: 2px; background: var(--rule-soft); overflow: hidden; }
-.res .bar span { display: block; height: 100%; background: var(--tint); transition: width 500ms ease; }
-.res .amt { font-family: var(--mono); font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
-.res .flow { font-family: var(--mono); font-size: 10px; color: var(--good); }
-.res .flow.neg { color: var(--support); }
-
-/* ---------- log ---------- */
-.log-list { max-height: 232px; overflow-y: auto; padding: 10px 16px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 24px; align-content: start; }
-.entry { display: grid; grid-template-columns: 40px 1fr; gap: 10px; font-size: 12.5px; line-height: 1.45; }
-.entry .d { font-family: var(--mono); font-size: 10.5px; color: var(--dim); padding-top: 2px; }
-.entry .t { color: var(--muted); border-left: 2px solid var(--rule-soft); padding-left: 10px; }
-.entry[data-kind='graduation'] .t { border-color: var(--brass); color: var(--text); }
-.entry[data-kind='hire'] .t { border-color: var(--good); color: var(--text); }
-.entry[data-kind='promotion'] .t { border-color: #9fb4ff; }
-.entry[data-kind='support'] .t { border-color: var(--support); }
-.entry[data-kind='town'] .t { border-color: var(--text); color: var(--text); }
-
-/* ---------- roster ---------- */
-.roster-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); }
-.roster-head h2 { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-right: auto; }
-.chip {
-  padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px;
-  font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 0.06em;
+/* ---------------- record + roster ---------------- */
+.log-list {
+  max-height: 216px; overflow-y: auto; padding: 10px 16px 14px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 7px 24px; align-content: start;
 }
-.chip[aria-pressed='true'] { border-color: var(--brass); color: var(--brass); background: var(--brass-soft); }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 1px; background: var(--rule-soft); }
-.card { background: var(--panel); padding: 12px 14px; text-align: left; display: flex; flex-direction: column; gap: 6px; transition: background 120ms; }
-.card:hover { background: var(--panel-2); }
-.card.is-selected { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--brass); }
-.card .top { display: flex; align-items: center; gap: 8px; }
-.card .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--tint); flex: none; }
-.card .nm { font-weight: 600; font-size: 14px; }
-.card .lv { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--dim); }
-.card .role { font-size: 11.5px; color: var(--muted); min-height: 34px; }
-.card .meter { height: 3px; background: var(--rule-soft); border-radius: 2px; overflow: hidden; }
-.card .meter span { display: block; height: 100%; background: var(--good); }
-.card .foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.entry { display: grid; grid-template-columns: 38px 1fr; gap: 9px; font-size: 12.5px; line-height: 1.4; }
+.entry .d { font-family: var(--mono); font-size: 10px; color: var(--dim); padding-top: 2px; }
+.entry .t { color: var(--muted); border-left: 2px solid rgba(150, 190, 240, 0.2); padding-left: 10px; }
+.entry[data-kind='graduation'] .t { border-color: var(--gold); color: var(--text); }
+.entry[data-kind='hire'] .t { border-color: var(--jade); color: var(--text); }
+.entry[data-kind='promotion'] .t { border-color: var(--violet); }
+.entry[data-kind='support'] .t { border-color: var(--rose); }
+.entry[data-kind='town'] .t { border-color: var(--cyan); color: var(--text); }
 
-/* ---------- dossier ---------- */
+.roster-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 11px 16px; border-bottom: 1px solid rgba(126, 240, 200, 0.12); }
+.roster-head h2 { font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--jade); margin-right: auto; font-weight: 600; }
+.chip { padding: 5px 13px; border-radius: 999px; border: 1px solid var(--edge); font-size: 11.5px; letter-spacing: 0.1em; color: var(--dim); }
+.chip[aria-pressed='true'] { border-color: var(--edge-2); color: var(--jade); background: rgba(126, 240, 200, 0.12); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(206px, 1fr)); gap: 1px; background: rgba(126, 240, 200, 0.1); }
+.card { background: rgba(10, 18, 38, 0.9); padding: 11px 13px; text-align: left; display: flex; flex-direction: column; gap: 5px; transition: background 140ms; }
+.card:hover { background: rgba(24, 40, 74, 0.95); }
+.card.is-selected { background: rgba(24, 40, 74, 0.95); box-shadow: inset 2px 0 0 var(--gold); }
+.card .top { display: flex; align-items: center; gap: 7px; }
+.card .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tint); box-shadow: 0 0 9px var(--tint); flex: none; }
+.card .nm { font-weight: 700; font-size: 14.5px; letter-spacing: 0.01em; }
+.card .lv { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--dim); }
+.card .role { font-size: 11.5px; color: var(--muted); min-height: 32px; line-height: 1.35; }
+.card .meter { height: 4px; background: rgba(150, 190, 240, 0.18); border-radius: 2px; overflow: hidden; }
+.card .meter span { display: block; height: 100%; background: var(--jade); box-shadow: 0 0 8px var(--jade); }
+.card .foot { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; color: var(--dim); }
+
+/* ---------------- dossier ---------------- */
 .dossier {
-  position: fixed; top: 0; right: 0; width: min(400px, 92vw); height: 100vh; z-index: 20;
-  background: var(--panel); border-left: 1px solid var(--rule); box-shadow: var(--shadow);
-  transform: translateX(100%); transition: transform 260ms cubic-bezier(0.4, 0.05, 0.2, 1);
+  position: fixed; top: 0; right: 0; width: min(400px, 92vw); height: 100vh; z-index: 40;
+  background: linear-gradient(180deg, rgba(12, 20, 44, 0.97), rgba(8, 14, 32, 0.97));
+  border-left: 1px solid var(--edge-2); backdrop-filter: blur(18px);
+  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.6);
+  transform: translateX(100%); transition: transform 300ms cubic-bezier(0.3, 0.02, 0.2, 1);
   overflow-y: auto; padding: 22px 24px 40px;
 }
 .dossier.open { transform: translateX(0); }
-.dossier .close { position: absolute; top: 16px; right: 18px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
-.dossier .close:hover { color: var(--brass); }
-.dossier h3 { font-family: var(--display); font-size: 30px; }
-.dossier .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass); margin: 4px 0 18px; }
-.dsec { border-top: 1px solid var(--rule-soft); padding: 14px 0; }
-.dsec h4 { margin: 0 0 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); font-weight: 500; }
+.dossier .close { position: absolute; top: 15px; right: 18px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.dossier .close:hover { color: var(--jade); }
+.dossier h3 { font-family: var(--display); font-size: 36px; line-height: 1.1; }
+.dossier .sub { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin: 3px 0 16px; }
+.dsec { border-top: 1px solid rgba(126, 240, 200, 0.14); padding: 13px 0; }
+.dsec h4 { margin: 0 0 8px; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
 .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; }
-.kv span:last-child { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.kv span:last-child { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .apt { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; }
-.apt .lbl { width: 92px; color: var(--muted); text-transform: capitalize; }
-.apt .track { flex: 1; height: 4px; background: var(--rule-soft); border-radius: 2px; overflow: hidden; }
-.apt .track span { display: block; height: 100%; background: var(--brass); }
-.apt .val { font-family: var(--mono); font-size: 10.5px; color: var(--dim); width: 28px; text-align: right; }
-.hl { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 12px; border-left: 2px solid var(--rule); }
-.transcript { display: flex; flex-direction: column; gap: 6px; }
-.course { display: grid; grid-template-columns: 18px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.apt .lbl { width: 88px; color: var(--muted); text-transform: capitalize; }
+.apt .track { flex: 1; height: 4px; background: rgba(150, 190, 240, 0.14); border-radius: 2px; overflow: hidden; }
+.apt .track span { display: block; height: 100%; background: var(--gold); }
+.apt .val { font-family: var(--mono); font-size: 10px; color: var(--dim); width: 26px; text-align: right; }
+.hl { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 11px; border-left: 2px solid rgba(126, 240, 200, 0.24); margin: 0 0 2px; }
+.transcript { display: flex; flex-direction: column; gap: 7px; }
+.course { display: grid; grid-template-columns: 17px 1fr 32px; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .course .cinfo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .course .cname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.course .track { display: block; width: 100%; height: 4px; background: var(--rule-soft); border-radius: 2px; overflow: hidden; }
-.course .track span { display: block; height: 100%; background: var(--good); }
-.course .g { font-family: var(--mono); font-size: 10.5px; text-align: right; color: var(--dim); }
+.course .track { display: block; width: 100%; height: 4px; background: rgba(150, 190, 240, 0.14); border-radius: 2px; overflow: hidden; }
+.course .track span { display: block; height: 100%; background: var(--jade); }
+.course .g { font-family: var(--mono); font-size: 10px; text-align: right; color: var(--dim); }
 
-.foot-note { color: var(--dim); font-size: 12px; text-align: center; font-family: var(--mono); letter-spacing: 0.06em; }
+.foot-note { color: var(--dim); font-size: 12px; text-align: center; letter-spacing: 0.14em; text-transform: uppercase; margin: 0; }
 
-@media (max-width: 1180px) { .stage { grid-template-columns: 1fr; } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 1120px) {
+  .hud { position: static; }
+  .hud-b { grid-template-columns: 1fr; }
+  .hud-tl, .hud-tr { padding: 12px 14px 0; flex-wrap: wrap; }
+  .res-list { grid-template-columns: repeat(2, 1fr); }
+  .world { display: flex; flex-direction: column; padding-bottom: 14px; }
+  #map { order: -1; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 <div class="board">
-  <header class="masthead">
-    <div class="ident">
-      <span class="seal">GT</span>
-      <div>
-        <h1>Gradient Town</h1>
-        <p>Civic operations board &middot; 66 citizens &middot; 33 buildings</p>
+
+  <section class="world">
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <svg id="map" role="img" aria-label="Eleven floating isles: the campus at the centre and ten guild isles around it"></svg>
+
+    <div class="hud hud-tl">
+      <span class="seal">仙</span>
+      <div class="title">
+        <h1>Gradient <em>Town</em></h1>
+        <p>66 citizens &middot; 33 halls &middot; 11 isles</p>
       </div>
     </div>
-    <div class="clock"><span class="label">Day</span><span class="value" id="day">0</span></div>
-    <div class="controls">
+
+    <div class="hud hud-tr">
+      <div class="panel clock"><span class="label">Day</span><span class="value" id="day">0</span></div>
       <button class="ctl primary" id="play">Run</button>
       <button class="ctl" id="step">Step</button>
-      <div class="speeds" role="group" aria-label="Simulation speed">
+      <div class="speeds" role="group" aria-label="Speed">
         <button data-speed="600" aria-pressed="false">1&times;</button>
         <button data-speed="260" aria-pressed="true">2&times;</button>
         <button data-speed="90" aria-pressed="false">6&times;</button>
       </div>
       <button class="ctl" id="reset">Reset</button>
     </div>
-  </header>
 
-  <div class="stage">
-   <div class="col">
-    <section class="panel map-panel">
-      <header>
-        <h2>District Survey</h2>
-        <span class="note" id="map-note">11 districts &middot; plan view</span>
-      </header>
-      <svg id="map" role="img" aria-label="Plan view of Gradient Town's districts, buildings and citizens"></svg>
-      <div class="legend">
-        <span class="key"><i class="hollow"></i> <b>Studying</b> at the Academy</span>
-        <span class="key"><i style="background:#d9a441"></i> <b>Graduated</b>, awaiting placement</span>
-        <span class="key"><i style="background:#6fd3a2"></i> <b>At work</b> — pin takes its guild colour</span>
-        <span id="legend-tail"></span>
-      </div>
-    </section>
-
-   </div>
-
-    <aside class="rail">
-      <section class="panel">
-        <header><h2>Pipeline</h2><span class="note" id="pipe-note">academy &rarr; work</span></header>
+    <div class="hud hud-b">
+      <section class="panel bar">
+        <header><h2>Pipeline</h2><span class="note" id="pipe-note"></span></header>
         <div class="pipeline">
           <div class="stagebox study"><span class="n" id="n-study">66</span><span class="k">Studying</span></div>
           <div class="stagebox grad"><span class="n" id="n-grad">0</span><span class="k">Graduated</span></div>
           <div class="stagebox work"><span class="n" id="n-work">0</span><span class="k">Hired</span></div>
         </div>
         <div class="metrics">
-          <div class="metric"><span class="k">Avg performance</span><span class="n" id="m-perf">—</span></div>
+          <div class="metric"><span class="k">Performance</span><span class="n" id="m-perf">—</span></div>
           <div class="metric"><span class="k">Avg GPA</span><span class="n" id="m-gpa">—</span></div>
           <div class="metric"><span class="k">Wellbeing</span><span class="n" id="m-well">—</span></div>
           <div class="metric"><span class="k">Open posts</span><span class="n" id="m-open">—</span></div>
         </div>
       </section>
 
-      <section class="panel">
-        <header><h2>Town Stores</h2><span class="note" id="res-note">stock &middot; net/day</span></header>
+      <section class="panel bar">
+        <header><h2>Stores</h2><span class="note">stock &middot; net per day</span></header>
         <div class="res-list" id="res-list"></div>
       </section>
-    </aside>
+    </div>
+  </section>
+
+  <div class="legend panel">
+    <span class="key"><i style="background:#7fa8d8;color:#6fd8ff"></i> <b>Studying</b> — in the campus courtyard</span>
+    <span class="key"><i style="background:#ffcf7a;color:#ffcf7a"></i> <b>Graduated</b> — haloed, awaiting placement</span>
+    <span class="key"><i style="background:#7ef0c8;color:#7ef0c8"></i> <b>At work</b> — robed in guild colour</span>
+    <span class="tail" id="legend-tail"></span>
   </div>
 
   <section class="panel">
@@ -286,7 +332,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
     <div class="cards" id="roster"></div>
   </section>
 
-  <p class="foot-note">Every citizen studies, passes finals, and is placed in work that fits their aptitudes.</p>
+  <p class="foot-note">Every citizen studies, passes, and is placed in work that fits them</p>
 </div>
 
 <aside class="dossier" id="dossier" aria-label="Citizen dossier" aria-hidden="true">
@@ -330,155 +376,155 @@ const GUILDS = [
 // posts: seats of work. inputs/outputs are per staffed agent per day at 100% performance.
 const BUILDINGS = [
   // Aether
-  { id: 'solar_spire',  guild: 'aether', name: 'Solar Spire', emoji: '\u{1F506}',
+  { id: 'solar_spire', short: 'Solar Spire',  guild: 'aether', name: 'Solar Spire', emoji: '\u{1F506}',
     blurb: 'Tracks the sun and pours light into the town grid.',
     inputs: { materials: 0.2 }, outputs: { energy: 6.2 },
     posts: [{ title: 'Array Tuner', skill: 'energy', seats: 2 }, { title: 'Light Router', skill: 'computation', seats: 1 }] },
-  { id: 'fusion_kiln',  guild: 'aether', name: 'Fusion Kiln', emoji: '\u{1F525}',
+  { id: 'fusion_kiln', short: 'Fusion Kiln',  guild: 'aether', name: 'Fusion Kiln', emoji: '\u{1F525}',
     blurb: 'A patient little star kept in a ceramic ring.',
     inputs: { materials: 0.5, compute: 0.3 }, outputs: { energy: 9.0 },
     posts: [{ title: 'Plasma Steward', skill: 'energy', seats: 2 }, { title: 'Containment Analyst', skill: 'inquiry', seats: 1 }] },
-  { id: 'grid_vault',   guild: 'aether', name: 'Grid Vault', emoji: '\u{1F50B}',
+  { id: 'grid_vault', short: 'Grid Vault',   guild: 'aether', name: 'Grid Vault', emoji: '\u{1F50B}',
     blurb: 'Stores the surplus so no night is ever dark.',
     inputs: { energy: 0.4 }, outputs: { energy: 3.0, data: 0.6 },
     posts: [{ title: 'Load Balancer', skill: 'energy', seats: 1 }, { title: 'Grid Scribe', skill: 'logistics', seats: 1 }] },
 
   // Verdant
-  { id: 'terrace_farms', guild: 'verdant', name: 'Terrace Farms', emoji: '\u{1F33E}',
+  { id: 'terrace_farms', short: 'Terrace Farms', guild: 'verdant', name: 'Terrace Farms', emoji: '\u{1F33E}',
     blurb: 'Stepped fields that climb the eastern slope.',
     inputs: { energy: 0.4 }, outputs: { food: 4.0 },
     posts: [{ title: 'Field Warden', skill: 'cultivation', seats: 3 }] },
-  { id: 'hydro_groves',  guild: 'verdant', name: 'Hydro Groves', emoji: '\u{1F333}',
+  { id: 'hydro_groves', short: 'Hydro Groves',  guild: 'verdant', name: 'Hydro Groves', emoji: '\u{1F333}',
     blurb: 'Orchards grown in mist and measured light.',
     inputs: { energy: 0.6, data: 0.2 }, outputs: { food: 3.2, care: 0.4 },
     posts: [{ title: 'Grove Keeper', skill: 'cultivation', seats: 2 }, { title: 'Yield Modeler', skill: 'inquiry', seats: 1 }] },
-  { id: 'seed_bank',     guild: 'verdant', name: 'Seed Bank', emoji: '\u{1F9EC}',
+  { id: 'seed_bank', short: 'Seed Bank',     guild: 'verdant', name: 'Seed Bank', emoji: '\u{1F9EC}',
     blurb: 'Every cultivar the town has ever loved, kept safe.',
     inputs: { energy: 0.2 }, outputs: { knowledge: 1.2, food: 0.6 },
     posts: [{ title: 'Seed Archivist', skill: 'cultivation', seats: 1 }, { title: 'Trait Librarian', skill: 'inquiry', seats: 1 }] },
 
   // Forge
-  { id: 'the_foundry',    guild: 'forge', name: 'The Foundry', emoji: '\u{1F528}',
+  { id: 'the_foundry', short: 'The Foundry',    guild: 'forge', name: 'The Foundry', emoji: '\u{1F528}',
     blurb: 'Where raw stock becomes parts that fit the first time.',
     inputs: { energy: 1.2 }, outputs: { materials: 3.6 },
     posts: [{ title: 'Forge Hand', skill: 'fabrication', seats: 3 }] },
-  { id: 'fab_yard',       guild: 'forge', name: 'Fabrication Yard', emoji: '\u{1F3D7}',
+  { id: 'fab_yard', short: 'Fab Yard',       guild: 'forge', name: 'Fabrication Yard', emoji: '\u{1F3D7}',
     blurb: 'Prints housing, bridges, and the occasional bandstand.',
     inputs: { energy: 0.8, materials: 1.4, compute: 0.3 }, outputs: { materials: 2.2, care: 0.5 },
     posts: [{ title: 'Assembly Lead', skill: 'fabrication', seats: 2 }, { title: 'Tolerance Checker', skill: 'inquiry', seats: 1 }] },
-  { id: 'depot',          guild: 'forge', name: 'Materials Depot', emoji: '\u{1F4E6}',
+  { id: 'depot', short: 'Depot',          guild: 'forge', name: 'Materials Depot', emoji: '\u{1F4E6}',
     blurb: 'Nothing is thrown away; it is only between uses.',
     inputs: { energy: 0.3 }, outputs: { materials: 1.6, credits: 0.5 },
     posts: [{ title: 'Stock Keeper', skill: 'logistics', seats: 1 }, { title: 'Reclaimer', skill: 'fabrication', seats: 1 }] },
 
   // Lattice
-  { id: 'compute_bastion', guild: 'lattice', name: 'Compute Bastion', emoji: '\u{1F5A5}',
+  { id: 'compute_bastion', short: 'Bastion', guild: 'lattice', name: 'Compute Bastion', emoji: '\u{1F5A5}',
     blurb: 'Cool halls of quiet reasoning, humming day and night.',
     inputs: { energy: 2.0 }, outputs: { compute: 5.2 },
     posts: [{ title: 'Cluster Warden', skill: 'computation', seats: 3 }] },
-  { id: 'data_reservoir',  guild: 'lattice', name: 'Data Reservoir', emoji: '\u{1F5C4}',
+  { id: 'data_reservoir', short: 'Reservoir',  guild: 'lattice', name: 'Data Reservoir', emoji: '\u{1F5C4}',
     blurb: 'Clean, well-labelled water for thinking machines.',
     inputs: { energy: 0.5, compute: 0.6 }, outputs: { data: 3.8 },
     posts: [{ title: 'Data Curator', skill: 'computation', seats: 2 }, { title: 'Provenance Officer', skill: 'governance', seats: 1 }] },
-  { id: 'signal_tower',    guild: 'lattice', name: 'Signal Tower', emoji: '\u{1F4E1}',
+  { id: 'signal_tower', short: 'Signal Tower',    guild: 'lattice', name: 'Signal Tower', emoji: '\u{1F4E1}',
     blurb: 'Keeps every district talking in the same tense.',
     inputs: { energy: 0.6 }, outputs: { data: 1.8, knowledge: 0.6 },
     posts: [{ title: 'Signal Keeper', skill: 'computation', seats: 1 }, { title: 'Relay Router', skill: 'logistics', seats: 1 }] },
 
   // Mender
-  { id: 'wellspring',   guild: 'mender', name: 'Wellspring Clinic', emoji: '\u{1FA7A}',
+  { id: 'wellspring', short: 'Wellspring',   guild: 'mender', name: 'Wellspring Clinic', emoji: '\u{1FA7A}',
     blurb: 'Diagnostics, recalibration, and unhurried attention.',
     inputs: { energy: 0.5, materials: 0.3 }, outputs: { care: 3.4 },
     posts: [{ title: 'Care Practitioner', skill: 'healing', seats: 3 }] },
-  { id: 'calibration_baths', guild: 'mender', name: 'Calibration Baths', emoji: '\u{1F6C1}',
+  { id: 'calibration_baths', short: 'Baths', guild: 'mender', name: 'Calibration Baths', emoji: '\u{1F6C1}',
     blurb: 'Where drifting agents come back into true.',
     inputs: { energy: 0.6, compute: 0.3 }, outputs: { care: 2.4, knowledge: 0.4 },
     posts: [{ title: 'Drift Therapist', skill: 'healing', seats: 2 }, { title: 'Baseline Analyst', skill: 'inquiry', seats: 1 }] },
 
   // Ledger
-  { id: 'grand_market', guild: 'ledger', name: 'Grand Market', emoji: '\u{1F3EA}',
+  { id: 'grand_market', short: 'Grand Market', guild: 'ledger', name: 'Grand Market', emoji: '\u{1F3EA}',
     blurb: 'Fair prices, posted publicly, argued about warmly.',
     inputs: { food: 0.8, materials: 0.5 }, outputs: { credits: 3.6, care: 0.4 },
     posts: [{ title: 'Market Maker', skill: 'trade', seats: 3 }] },
-  { id: 'ledger_house', guild: 'ledger', name: 'Trade Ledger House', emoji: '\u{1F4D2}',
+  { id: 'ledger_house', short: 'Ledger House', guild: 'ledger', name: 'Trade Ledger House', emoji: '\u{1F4D2}',
     blurb: 'Every promise the town has made, in double entry.',
     inputs: { compute: 0.5, data: 0.4 }, outputs: { credits: 2.4, knowledge: 0.5 },
     posts: [{ title: 'Ledger Clerk', skill: 'trade', seats: 2 }, { title: 'Audit Steward', skill: 'governance', seats: 1 }] },
-  { id: 'granary_exchange', guild: 'ledger', name: 'Granary Exchange', emoji: '\u{1F35E}',
+  { id: 'granary_exchange', short: 'Granary', guild: 'ledger', name: 'Granary Exchange', emoji: '\u{1F35E}',
     blurb: 'Balances the harvest across the whole calendar.',
     inputs: { food: 0.6 }, outputs: { credits: 1.4, food: 1.2 },
     posts: [{ title: 'Stores Broker', skill: 'trade', seats: 1 }, { title: 'Harvest Planner', skill: 'logistics', seats: 1 }] },
 
   // Wayfinder
-  { id: 'roundhouse', guild: 'wayfinder', name: 'Rail Roundhouse', emoji: '\u{1F686}',
+  { id: 'roundhouse', short: 'Roundhouse', guild: 'wayfinder', name: 'Rail Roundhouse', emoji: '\u{1F686}',
     blurb: 'Rolling stock that has never once been late.',
     inputs: { energy: 1.0, materials: 0.4 }, outputs: { credits: 1.6, materials: 1.2, care: 0.3 },
     posts: [{ title: 'Line Conductor', skill: 'logistics', seats: 2 }, { title: 'Rolling Mechanic', skill: 'fabrication', seats: 1 }] },
-  { id: 'sky_docks',  guild: 'wayfinder', name: 'Sky Docks', emoji: '\u{1F388}',
+  { id: 'sky_docks', short: 'Sky Docks',  guild: 'wayfinder', name: 'Sky Docks', emoji: '\u{1F388}',
     blurb: 'Freight balloons that leave at dawn and return full.',
     inputs: { energy: 0.9 }, outputs: { materials: 1.4, credits: 1.4, data: 0.4 },
     posts: [{ title: 'Dock Master', skill: 'logistics', seats: 2 }, { title: 'Route Planner', skill: 'computation', seats: 1 }] },
-  { id: 'waystation', guild: 'wayfinder', name: 'Waystation', emoji: '\u{1F5FA}',
+  { id: 'waystation', short: 'Waystation', guild: 'wayfinder', name: 'Waystation', emoji: '\u{1F5FA}',
     blurb: 'Maps, tea, and directions for anyone passing through.',
     inputs: { food: 0.3, energy: 0.2 }, outputs: { care: 1.2, knowledge: 0.6 },
     posts: [{ title: 'Waystation Host', skill: 'logistics', seats: 1 }, { title: 'Wayfaring Guide', skill: 'teaching', seats: 1 }] },
 
   // Keystone
-  { id: 'town_hall',    guild: 'keystone', name: 'Town Hall', emoji: '\u{1F3DB}',
+  { id: 'town_hall', short: 'Town Hall',    guild: 'keystone', name: 'Town Hall', emoji: '\u{1F3DB}',
     blurb: 'Decisions made in the open, minutes posted by evening.',
     inputs: { data: 0.5, compute: 0.3 }, outputs: { knowledge: 1.6, care: 1.0 },
     posts: [{ title: 'Council Steward', skill: 'governance', seats: 2 }, { title: 'Minutes Keeper', skill: 'teaching', seats: 1 }] },
-  { id: 'commons_court', guild: 'keystone', name: 'Commons Court', emoji: '⚖',
+  { id: 'commons_court', short: 'Commons Court', guild: 'keystone', name: 'Commons Court', emoji: '⚖',
     blurb: 'Disagreements arrive here and leave as agreements.',
     inputs: { knowledge: 0.4 }, outputs: { care: 1.8, knowledge: 0.6 },
     posts: [{ title: 'Commons Mediator', skill: 'governance', seats: 2 }] },
-  { id: 'waterworks',   guild: 'keystone', name: 'Waterworks', emoji: '\u{1F4A7}',
+  { id: 'waterworks', short: 'Waterworks',   guild: 'keystone', name: 'Waterworks', emoji: '\u{1F4A7}',
     blurb: 'Pressure, purity, and pipes that outlive their builders.',
     inputs: { energy: 0.8, materials: 0.3 }, outputs: { care: 1.4, food: 0.8 },
     posts: [{ title: 'Flow Engineer', skill: 'governance', seats: 1 }, { title: 'Main Line Fitter', skill: 'fabrication', seats: 1 }] },
 
   // Lumen
-  { id: 'observatory', guild: 'lumen', name: 'Observatory', emoji: '\u{1F52D}',
+  { id: 'observatory', short: 'Observatory', guild: 'lumen', name: 'Observatory', emoji: '\u{1F52D}',
     blurb: 'Counts the stars and tells the town what it learned.',
     inputs: { energy: 0.7, compute: 0.8 }, outputs: { knowledge: 3.0, data: 0.8 },
     posts: [{ title: 'Night Observer', skill: 'inquiry', seats: 2 }, { title: 'Optics Technician', skill: 'fabrication', seats: 1 }] },
-  { id: 'long_library', guild: 'lumen', name: 'Long Library', emoji: '\u{1F4DA}',
+  { id: 'long_library', short: 'Long Library', guild: 'lumen', name: 'Long Library', emoji: '\u{1F4DA}',
     blurb: 'A corridor of shelving with no visible end.',
     inputs: { energy: 0.3, data: 0.5 }, outputs: { knowledge: 2.6, care: 0.4 },
     posts: [{ title: 'Reference Keeper', skill: 'inquiry', seats: 2 }, { title: 'Reading Guide', skill: 'teaching', seats: 1 }] },
-  { id: 'field_lab',   guild: 'lumen', name: 'Field Lab', emoji: '\u{1F9EA}',
+  { id: 'field_lab', short: 'Field Lab',   guild: 'lumen', name: 'Field Lab', emoji: '\u{1F9EA}',
     blurb: 'Small, careful experiments with honest write-ups.',
     inputs: { compute: 0.6, materials: 0.4 }, outputs: { knowledge: 2.0, data: 1.0 },
     posts: [{ title: 'Bench Researcher', skill: 'inquiry', seats: 2 }, { title: 'Method Reviewer', skill: 'computation', seats: 1 }] },
 
   // Chorus
-  { id: 'amphitheater', guild: 'chorus', name: 'Amphitheater', emoji: '\u{1F3AD}',
+  { id: 'amphitheater', short: 'Amphitheatre', guild: 'chorus', name: 'Amphitheater', emoji: '\u{1F3AD}',
     blurb: 'Free seats, warm acoustics, a new piece every week.',
     inputs: { energy: 0.4, credits: 0.3 }, outputs: { care: 2.8, knowledge: 0.5 },
     posts: [{ title: 'Company Player', skill: 'artistry', seats: 3 }] },
-  { id: 'atelier_row',  guild: 'chorus', name: 'Atelier Row', emoji: '\u{1F3A8}',
+  { id: 'atelier_row', short: 'Atelier Row',  guild: 'chorus', name: 'Atelier Row', emoji: '\u{1F3A8}',
     blurb: 'Studios where the town practises being surprising.',
     inputs: { materials: 0.6, energy: 0.3 }, outputs: { care: 1.8, credits: 1.0 },
     posts: [{ title: 'Studio Artisan', skill: 'artistry', seats: 2 }, { title: 'Materials Colourist', skill: 'fabrication', seats: 1 }] },
-  { id: 'signal_gallery', guild: 'chorus', name: 'Gallery of Signals', emoji: '\u{1F5BC}',
+  { id: 'signal_gallery', short: 'Gallery', guild: 'chorus', name: 'Gallery of Signals', emoji: '\u{1F5BC}',
     blurb: 'Data rendered until it can be felt as well as read.',
     inputs: { data: 0.8, compute: 0.4 }, outputs: { care: 1.4, knowledge: 1.0 },
     posts: [{ title: 'Signal Curator', skill: 'artistry', seats: 1 }, { title: 'Visualisation Lead', skill: 'computation', seats: 1 }] },
 
   // Hearth - the learning and placement campus
-  { id: 'academy', guild: 'hearth', name: 'Gradient Academy', emoji: '\u{1F3EB}', campus: 'school',
+  { id: 'academy', short: 'Gradient Academy', guild: 'hearth', name: 'Gradient Academy', emoji: '\u{1F3EB}', campus: 'school',
     blurb: 'Every citizen begins here. Nobody is rushed through.',
     inputs: { energy: 0.6, knowledge: 1.0, compute: 0.5 }, outputs: { knowledge: 1.4, care: 0.6 },
     posts: [{ title: 'Faculty Lead', skill: 'teaching', seats: 3 }] },
-  { id: 'commencement', guild: 'hearth', name: 'Commencement Green', emoji: '\u{1F393}', campus: 'graduation',
+  { id: 'commencement', short: 'Commencement', guild: 'hearth', name: 'Commencement Green', emoji: '\u{1F393}', campus: 'graduation',
     blurb: 'Where students pass their finals and are read out by name.',
     inputs: { care: 0.4 }, outputs: { care: 1.6, knowledge: 0.8 },
     posts: [{ title: 'Commencement Marshal', skill: 'teaching', seats: 1 }, { title: 'Records Registrar', skill: 'governance', seats: 1 }] },
-  { id: 'placement', guild: 'hearth', name: 'Placement Office', emoji: '\u{1F4BC}', campus: 'placement',
+  { id: 'placement', short: 'Placement', guild: 'hearth', name: 'Placement Office', emoji: '\u{1F4BC}', campus: 'placement',
     blurb: 'Matches every graduate to work that actually suits them.',
     inputs: { data: 0.6, knowledge: 0.4 }, outputs: { care: 1.2, credits: 0.8 },
     posts: [{ title: 'Placement Officer', skill: 'teaching', seats: 2 }, { title: 'Fit Analyst', skill: 'computation', seats: 1 }] },
-  { id: 'mentor_hall', guild: 'hearth', name: 'Mentor Hall', emoji: '\u{1F91D}',
+  { id: 'mentor_hall', short: 'Mentor Hall', guild: 'hearth', name: 'Mentor Hall', emoji: '\u{1F91D}',
     blurb: 'Senior agents on call for anyone having a hard week.',
     inputs: { care: 0.5 }, outputs: { care: 2.0, knowledge: 0.8 },
     posts: [{ title: 'Mentor in Residence', skill: 'teaching', seats: 2 }, { title: 'Peer Coach', skill: 'healing', seats: 1 }] },
@@ -926,207 +972,523 @@ function stats(town) {
 }
 
 
-// Plan-view renderer: districts as survey plots, citizens as brass pins that travel.
+// The world: eleven floating isles in a nebula sky, drawn in isometric projection.
+// Buildings are real little structures — spires, domes, tiered pagodas — and every
+// citizen is a small luminous figure standing on the ground.
 
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const VIEW_W = 1200;
-const VIEW_H = 654;
-const PAD = 24;
-const GAP = 18;
-const CELL_W = 274;
-const CELL_H = 190;
+const VIEW_W = 1440;
+const VIEW_H = 880;
+const CENTER = { x: 720, y: 406 };
 
-// Four columns, three rows. The Hearth campus takes a double plot in the middle band.
-const PLOT_LAYOUT = [
-  { guild: 'aether',    col: 0, row: 0, span: 1 },
-  { guild: 'verdant',   col: 1, row: 0, span: 1 },
-  { guild: 'forge',     col: 2, row: 0, span: 1 },
-  { guild: 'lattice',   col: 3, row: 0, span: 1 },
-  { guild: 'mender',    col: 0, row: 1, span: 1 },
-  { guild: 'hearth',    col: 1, row: 1, span: 2 },
-  { guild: 'ledger',    col: 3, row: 1, span: 1 },
-  { guild: 'wayfinder', col: 0, row: 2, span: 1 },
-  { guild: 'keystone',  col: 1, row: 2, span: 1 },
-  { guild: 'lumen',     col: 2, row: 2, span: 1 },
-  { guild: 'chorus',    col: 3, row: 2, span: 1 },
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const el = (name, attrs = {}, kids = []) => {
+  const n = document.createElementNS(SVG_NS, name);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  for (const k of kids) n.appendChild(k);
+  return n;
+};
+const poly = (pts, attrs) => el('polygon', { points: pts.map((p) => p.join(',')).join(' '), ...attrs });
+const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
+// Each guild builds in its own manner.
+const ARCHITECTURE = {
+  aether:    { roof: 'spire',  wall: '#2b3f63', h: 46 },
+  verdant:   { roof: 'terrace', wall: '#2c4a44', h: 32 },
+  forge:     { roof: 'gable',  wall: '#4a3a3a', h: 34 },
+  lattice:   { roof: 'flat',   wall: '#263a56', h: 40 },
+  mender:    { roof: 'dome',   wall: '#43334a', h: 30 },
+  ledger:    { roof: 'pagoda', wall: '#4a4034', h: 34 },
+  wayfinder: { roof: 'arch',   wall: '#2f3a5c', h: 38 },
+  keystone:  { roof: 'gable',  wall: '#35395e', h: 36 },
+  lumen:     { roof: 'dome',   wall: '#26454e', h: 34 },
+  chorus:    { roof: 'pagoda', wall: '#4a3550', h: 32 },
+  hearth:    { roof: 'pagoda', wall: '#4a4038', h: 40 },
+};
+
+// The campus sits at the centre; the ten guild isles ring it.
+const RING = { rx: 505, ry: 206 };
+
+function computeGeometry() {
+  const isles = [];
+  const others = GUILDS.filter((g) => g.id !== 'hearth');
+  others.forEach((guild, i) => {
+    const a = -Math.PI / 2 + (i / others.length) * Math.PI * 2;
+    const cx = CENTER.x + Math.cos(a) * RING.rx;
+    const cy = CENTER.y + Math.sin(a) * RING.ry;
+    const depth = clamp01((Math.sin(a) + 1) / 2);        // nearer isles sit lower and read larger
+    const s = 0.82 + depth * 0.26;
+    isles.push({
+      guild, cx, cy,
+      rx: 152 * s, ry: 76 * s, scale: s,
+      plate: `ISLE ${String(i + 1).padStart(2, '0')}`,
+      yard: { u0: -0.72, u1: 0.72, v0: 0.28, v1: 0.86, cols: 5 },
+    });
+  });
+  const campus = {
+    guild: GUILDS.find((g) => g.id === 'hearth'),
+    cx: CENTER.x, cy: CENTER.y + 18,
+    rx: 272, ry: 136, scale: 1.2, isCampus: true,
+    plate: 'THE CAMPUS',
+    yard: { u0: -0.78, u1: 0.78, v0: 0.16, v1: 0.9, cols: 11 },
+  };
+  isles.push(campus);
+
+  // Buildings stand in a row across the upper half of their isle.
+  const buildings = {};
+  for (const isle of isles) {
+    const list = BUILDINGS.filter((b) => b.guild === isle.guild.id);
+    const n = list.length;
+    list.forEach((b, j) => {
+      const spread = isle.isCampus ? 0.5 : 0.42;
+      const t = n === 1 ? 0 : -spread + (j / (n - 1)) * spread * 2;
+      const back = (isle.isCampus ? -0.3 : -0.26) + (j % 2) * 0.07;
+      const u = t + back;
+      const v = -t + back;
+      const arch = ARCHITECTURE[isle.guild.id];
+      buildings[b.id] = {
+        building: b, isle, u, v,
+        du: isle.isCampus ? 0.115 : 0.15,
+        dv: isle.isCampus ? 0.115 : 0.15,
+        h: (arch.h + (b.id === 'academy' ? 16 : 0)) * isle.scale * 0.82,
+        arch,
+        labelDrop: (j % 2) * 26,
+        tint: isle.guild.color,
+      };
+    });
+  }
+  return { isles, buildings };
+}
+
+const project = (isle, u, v, lift = 0) => [
+  isle.cx + (u - v) * isle.rx * 0.5,
+  isle.cy + (u + v) * isle.ry * 0.5 - lift,
 ];
 
-const el = (name, attrs = {}, children = []) => {
-  const node = document.createElementNS(SVG_NS, name);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  for (const c of children) node.appendChild(c);
-  return node;
-};
-const text = (str, attrs) => {
-  const t = el('text', attrs);
-  t.textContent = str;
-  return t;
-};
+/* ---------------------------------------------------------------- defs */
 
-function plotRect(entry) {
-  const x = PAD + entry.col * (CELL_W + GAP);
-  const y = PAD + entry.row * (CELL_H + GAP);
-  const w = CELL_W * entry.span + GAP * (entry.span - 1);
-  return { x, y, w, h: CELL_H };
+function defs() {
+  const d = el('defs');
+  d.innerHTML = `
+    <radialGradient id="isleTop" cx="42%" cy="34%" r="72%">
+      <stop offset="0%" stop-color="#2f5e63" />
+      <stop offset="55%" stop-color="#22454f" />
+      <stop offset="100%" stop-color="#152c3b" />
+    </radialGradient>
+    <linearGradient id="isleRock" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b3040" />
+      <stop offset="60%" stop-color="#101d2e" />
+      <stop offset="100%" stop-color="#080e1c" stop-opacity="0.2" />
+    </linearGradient>
+    <linearGradient id="fall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8fe9ff" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#8fe9ff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="bridge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#9df3d8" stop-opacity="0.05" />
+      <stop offset="50%" stop-color="#9df3d8" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#ffd79a" stop-opacity="0.28" />
+    </linearGradient>
+    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3.4" result="b" />
+      <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <filter id="softglow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="7" />
+    </filter>`;
+  return d;
 }
 
-// Geometry for every building and its pin quad, computed once.
-function computeGeometry() {
-  const geo = { buildings: {}, plots: [] };
-  PLOT_LAYOUT.forEach((entry, i) => {
-    const guild = GUILDS.find((g) => g.id === entry.guild);
-    const rect = plotRect(entry);
-    const plate = `D-${String(i + 1).padStart(2, '0')}`;
-    geo.plots.push({ ...rect, guild, plate });
+/* ---------------------------------------------------------------- isles */
 
-    const list = BUILDINGS.filter((b) => b.guild === entry.guild);
-    const n = list.length;
-    const inset = 12;
-    const bw = (rect.w - inset * 2 - (n - 1) * 10) / n;
-    const bh = 84;
-    const isCampus = entry.guild === 'hearth';
-    list.forEach((b, j) => {
-      const bx = rect.x + inset + j * (bw + 10);
-      const by = rect.y + 42;
-      // On the campus the Academy gets a full-width quad along the bottom for its students,
-      // so the other campus buildings keep a shallow band directly beneath their block.
-      const quad = isCampus
-        ? { x: bx, y: by + bh + 6, w: bw, h: 18 }
-        : { x: bx, y: by + bh + 8, w: bw, h: rect.y + rect.h - (by + bh + 14) };
-      geo.buildings[b.id] = { building: b, guild, x: bx, y: by, w: bw, h: bh, cx: bx + bw / 2, quad };
-    });
-    if (isCampus) {
-      geo.buildings.academy.quad = {
-        x: rect.x + inset, y: rect.y + 42 + bh + 28, w: rect.w - inset * 2, h: 26,
-      };
+function drawIsle(isle) {
+  const g = el('g', { class: 'isle', 'data-guild': isle.guild.id });
+  const { cx, cy, rx, ry } = isle;
+  const N = [cx, cy - ry / 2 * 1], E = [cx + rx / 2 * 1, cy], S = [cx, cy + ry / 2], W = [cx - rx / 2, cy];
+  const top = [[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]];
+
+  // aura beneath the isle
+  g.appendChild(el('ellipse', {
+    cx, cy: cy + ry * 0.5, rx: rx * 1.15, ry: ry * 0.95,
+    fill: isle.guild.color, opacity: 0.1, filter: 'url(#softglow)',
+  }));
+
+  // the rock underside, tapering to a point
+  const depth = ry * (isle.isCampus ? 2.5 : 2.1);
+  const rock = `M ${cx - rx} ${cy} L ${cx - rx * 0.55} ${cy + ry * 0.72}
+    L ${cx - rx * 0.2} ${cy + depth * 0.62} L ${cx} ${cy + depth}
+    L ${cx + rx * 0.26} ${cy + depth * 0.55} L ${cx + rx * 0.6} ${cy + ry * 0.68}
+    L ${cx + rx} ${cy} L ${cx} ${cy + ry} Z`;
+  g.appendChild(el('path', { d: rock, fill: 'url(#isleRock)' }));
+
+  // ground
+  g.appendChild(poly(top, { fill: 'url(#isleTop)', stroke: isle.guild.color, 'stroke-opacity': 0.32 }));
+  g.appendChild(poly(top, { fill: 'none', stroke: isle.guild.color, 'stroke-opacity': 0.5, 'stroke-width': 1.2, filter: 'url(#glow)', class: 'isle-rim' }));
+
+  // a light stream falling from the underside
+  g.appendChild(el('path', {
+    d: `M ${cx - rx * 0.1} ${cy + depth * 0.7} L ${cx + rx * 0.06} ${cy + depth * 0.7} L ${cx + rx * 0.02} ${cy + depth * 2.1} L ${cx - rx * 0.04} ${cy + depth * 2.1} Z`,
+    fill: 'url(#fall)', class: 'fall',
+  }));
+
+  if (isle.isCampus) {
+    const [px, py] = project(isle, 0, 0.42);
+    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: '#7ef0c8', opacity: 0.07 }));
+    g.appendChild(el('ellipse', {
+      cx: px, cy: py, rx: rx * 0.34, ry: ry * 0.34, fill: 'none',
+      stroke: '#ffd79a', 'stroke-opacity': 0.4, 'stroke-dasharray': '4 9', class: 'plaza',
+    }));
+    g.appendChild(el('ellipse', { cx: px, cy: py, rx: rx * 0.17, ry: ry * 0.17, fill: 'none', stroke: '#7ef0c8', 'stroke-opacity': 0.32 }));
+  }
+
+  // ground detailing: a path across the isle and a few stones
+  g.appendChild(el('path', {
+    d: `M ${project(isle, -0.8, 0.1)} L ${project(isle, 0.8, 0.1)}`.replace(/,/g, ' '),
+    stroke: '#7fe3d0', 'stroke-opacity': 0.14, 'stroke-width': 2 * isle.scale, fill: 'none',
+  }));
+
+  g.appendChild(el('text', {
+    x: cx, y: cy + ry + 20 * isle.scale, class: 'isle-label', 'text-anchor': 'middle',
+  })).textContent = isle.guild.name.replace(' Guild', '').toUpperCase();
+  return g;
+}
+
+/* ------------------------------------------------------------ buildings */
+
+function windowsOn(face, h, cols, tint) {
+  // face = [bottomLeft, bottomRight]; windows are parallelograms lifted off the ground
+  const out = [];
+  for (let i = 0; i < cols; i++) {
+    const t0 = 0.16 + (i * 0.72) / cols;
+    const t1 = t0 + 0.36 / cols;
+    for (const [y0, y1] of [[0.3, 0.56], [0.64, 0.86]]) {
+      const a = lerp(face[0], face[1], t0);
+      const b = lerp(face[0], face[1], t1);
+      out.push(poly(
+        [[a[0], a[1] - h * y0], [b[0], b[1] - h * y0], [b[0], b[1] - h * y1], [a[0], a[1] - h * y1]],
+        { fill: tint, opacity: 0.75, class: 'win' },
+      ));
     }
-  });
-  return geo;
+  }
+  return out;
 }
 
-// Pins cluster inside their building's quad, wrapping into rows.
-function pinSlot(geo, buildingId, slot, total = 1) {
-  const g = geo.buildings[buildingId];
-  if (!g) return { x: VIEW_W / 2, y: VIEW_H / 2 };
-  const step = 11;
-  const perRow = Math.max(3, Math.floor(g.quad.w / step));
-  const row = Math.floor(slot / perRow);
-  const col = slot % perRow;
-  const maxRows = Math.max(1, Math.round(g.quad.h / step));
-  const usedW = Math.min(total, perRow) * step;
-  return {
-    x: g.quad.x + (g.quad.w - usedW) / 2 + col * step + step / 2,
-    y: g.quad.y + 6 + Math.min(row, maxRows - 1) * step,
-  };
+function roofOf(kind, top, cx, cyTop, w, tint, scale) {
+  const parts = [];
+  const rh = w * 0.55;
+  const apex = [cx, cyTop - rh];
+  const [a, b, c, d] = top;                        // back, right, front, left
+
+  if (kind === 'spire') {
+    parts.push(poly([a, b, apex], { fill: tint, opacity: 0.5 }));
+    parts.push(poly([b, c, apex], { fill: tint, opacity: 0.78 }));
+    parts.push(poly([c, d, apex], { fill: tint, opacity: 0.62 }));
+    parts.push(el('line', { x1: cx, y1: cyTop - rh, x2: cx, y2: cyTop - rh * 2.5, stroke: tint, 'stroke-width': 2 * scale, filter: 'url(#glow)' }));
+    parts.push(el('circle', { cx, cy: cyTop - rh * 2.7, r: 4 * scale, fill: '#ffffff', filter: 'url(#glow)', class: 'beacon' }));
+  } else if (kind === 'dome') {
+    const r = w * 0.62;
+    parts.push(el('path', {
+      d: `M ${cx - r} ${cyTop} A ${r} ${r * 1.15} 0 0 1 ${cx + r} ${cyTop} Z`,
+      fill: tint, opacity: 0.72,
+    }));
+    parts.push(el('path', {
+      d: `M ${cx - r * 0.5} ${cyTop - r * 0.5} A ${r * 0.6} ${r * 0.7} 0 0 1 ${cx + r * 0.1} ${cyTop - r * 0.86}`,
+      stroke: '#ffffff', 'stroke-opacity': 0.35, fill: 'none', 'stroke-width': 1.4,
+    }));
+    parts.push(el('circle', { cx, cy: cyTop - r * 1.16, r: 3 * scale, fill: '#fff3d0', filter: 'url(#glow)', class: 'beacon' }));
+  } else if (kind === 'pagoda') {
+    for (let tier = 0; tier < 3; tier++) {
+      const k = 1 - tier * 0.26;
+      const lift = tier * rh * 0.52;
+      const eave = top.map((p) => [cx + (p[0] - cx) * (k + 0.22), cyTop - lift + (p[1] - cyTop) * (k + 0.22)]);
+      const peak = [cx, cyTop - lift - rh * 0.5 * k];
+      parts.push(poly([eave[0], eave[1], peak], { fill: tint, opacity: 0.45 }));
+      parts.push(poly([eave[1], eave[2], peak], { fill: tint, opacity: 0.8 }));
+      parts.push(poly([eave[2], eave[3], peak], { fill: tint, opacity: 0.6 }));
+    }
+    parts.push(el('circle', { cx, cy: cyTop - rh * 1.7, r: 3.4 * scale, fill: '#ffe6ac', filter: 'url(#glow)', class: 'beacon' }));
+  } else if (kind === 'gable') {
+    const ridgeA = [(a[0] + d[0]) / 2, (a[1] + d[1]) / 2 - rh * 0.8];
+    const ridgeB = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2 - rh * 0.8];
+    parts.push(poly([d, c, ridgeB, ridgeA], { fill: tint, opacity: 0.72 }));
+    parts.push(poly([a, b, ridgeB, ridgeA], { fill: tint, opacity: 0.42 }));
+    parts.push(el('line', { x1: ridgeA[0], y1: ridgeA[1], x2: ridgeB[0], y2: ridgeB[1], stroke: '#ffffff', 'stroke-opacity': 0.25 }));
+  } else if (kind === 'terrace') {
+    parts.push(poly(top, { fill: tint, opacity: 0.5 }));
+    for (let i = 0; i < 3; i++) {
+      const p = lerp(lerp(d, c, 0.2 + i * 0.3), lerp(a, b, 0.2 + i * 0.3), 0.4);
+      parts.push(el('circle', { cx: p[0], cy: p[1] - 4, r: 4.5 * scale, fill: tint, opacity: 0.9 }));
+    }
+  } else if (kind === 'arch') {
+    parts.push(poly(top, { fill: tint, opacity: 0.42 }));
+    for (let i = 0; i < 2; i++) {
+      parts.push(el('ellipse', {
+        cx, cy: cyTop - rh * (0.5 + i * 0.55), rx: w * (0.7 - i * 0.18), ry: w * 0.22,
+        fill: 'none', stroke: tint, 'stroke-width': 1.6, opacity: 0.85, class: 'ring',
+      }));
+    }
+  } else {
+    // flat roof with a mast
+    parts.push(poly(top, { fill: tint, opacity: 0.34 }));
+    parts.push(poly(top.map((p) => [cx + (p[0] - cx) * 0.62, cyTop + (p[1] - cyTop) * 0.62]), { fill: tint, opacity: 0.5 }));
+    parts.push(el('line', { x1: cx, y1: cyTop, x2: cx, y2: cyTop - rh * 1.5, stroke: tint, 'stroke-width': 1.6, opacity: 0.9 }));
+    parts.push(el('circle', { cx, cy: cyTop - rh * 1.5, r: 2.6 * scale, fill: '#bff6ff', filter: 'url(#glow)', class: 'beacon' }));
+  }
+  return parts;
 }
+
+function drawBuilding(id, spec) {
+  const { isle, u, v, du, dv, h, arch, tint, building } = spec;
+  const g = el('g', { class: 'build', 'data-building': id, tabindex: '0' });
+  const base = [[u - du, v - dv], [u + du, v - dv], [u + du, v + dv], [u - du, v + dv]]
+    .map(([U, V]) => project(isle, U, V));
+  const top = base.map((p) => [p[0], p[1] - h]);
+  const w = (base[1][0] - base[3][0]) * 0.5;
+
+  // shadow on the ground
+  g.appendChild(el('ellipse', {
+    cx: (base[0][0] + base[2][0]) / 2, cy: (base[0][1] + base[2][1]) / 2 + 3,
+    rx: Math.abs(w) * 1.15, ry: Math.abs(w) * 0.5, fill: '#04070f', opacity: 0.35,
+  }));
+
+  // walls: the two faces that meet at the near corner
+  g.appendChild(poly([base[3], base[2], top[2], top[3]], { fill: arch.wall, class: 'wall-l' }));
+  g.appendChild(poly([base[2], base[1], top[1], top[2]], { fill: arch.wall, class: 'wall-r' }));
+  for (const win of windowsOn([base[3], base[2]], h, 2, tint)) g.appendChild(win);
+  for (const win of windowsOn([base[2], base[1]], h, 2, tint)) g.appendChild(win);
+
+  // a lit doorway on the near corner
+  const door = lerp(base[3], base[2], 0.5);
+  g.appendChild(poly(
+    [[door[0] - 3, door[1]], [door[0] + 3, door[1] + 1.5], [door[0] + 3, door[1] - h * 0.3], [door[0] - 3, door[1] - h * 0.3 - 1.5]],
+    { fill: '#ffdca6', opacity: 0.9, filter: 'url(#glow)' },
+  ));
+
+  const cx = (top[1][0] + top[3][0]) / 2;
+  const cyTop = (top[0][1] + top[2][1]) / 2;
+  if (id === 'academy') {
+    g.appendChild(el('path', {
+      d: `M ${cx - 14} ${cyTop} L ${cx + 14} ${cyTop} L ${cx + 5} ${cyTop - 190} L ${cx - 5} ${cyTop - 190} Z`,
+      fill: 'url(#fall)', opacity: 0.5, class: 'fall',
+    }));
+  }
+  for (const part of roofOf(arch.roof, top, cx, cyTop, Math.abs(w), tint, isle.scale)) g.appendChild(part);
+
+  const APEX = { spire: 1.55, pagoda: 1.0, dome: 0.78, gable: 0.5, flat: 0.9, terrace: 0.25, arch: 0.66 };
+  const apex = cyTop - Math.abs(w) * (APEX[arch.roof] ?? 0.6);
+  spec.labelPos = [cx, apex - 11 - (spec.labelDrop || 0)];
+
+  const t = el('title');
+  t.textContent = `${building.name} — ${building.blurb}`;
+  g.appendChild(t);
+  return g;
+}
+
+/* ---------------------------------------------------------------- world */
 
 function drawMap(svg, geo) {
   svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
   svg.innerHTML = '';
+  svg.appendChild(defs());
 
-  const defs = el('defs');
-  const grid = el('pattern', { id: 'survey-grid', width: 24, height: 24, patternUnits: 'userSpaceOnUse' });
-  grid.appendChild(el('path', { d: 'M 24 0 L 0 0 0 24', fill: 'none', stroke: 'var(--rule-faint)', 'stroke-width': 1 }));
-  defs.appendChild(grid);
-  svg.appendChild(defs);
-
-  svg.appendChild(el('rect', { x: 0, y: 0, width: VIEW_W, height: VIEW_H, fill: 'url(#survey-grid)' }));
-
-  // Streets: the gaps between plots, drawn as paved bands.
-  const streets = el('g', { class: 'streets' });
-  for (let c = 1; c < 4; c++) {
-    const x = PAD + c * (CELL_W + GAP) - GAP / 2;
-    streets.appendChild(el('line', { x1: x, y1: PAD, x2: x, y2: VIEW_H - PAD, class: 'street' }));
-  }
-  for (let r = 1; r < 3; r++) {
-    const y = PAD + r * (CELL_H + GAP) - GAP / 2;
-    streets.appendChild(el('line', { x1: PAD, y1: y, x2: VIEW_W - PAD, y2: y, class: 'street' }));
-  }
-  svg.appendChild(streets);
-
-  const plots = el('g', { class: 'plots' });
-  for (const p of geo.plots) {
-    const g = el('g', { class: 'plot', 'data-guild': p.guild.id });
-    g.appendChild(el('rect', {
-      x: p.x, y: p.y, width: p.w, height: p.h, rx: 4,
-      class: 'plot-fill', style: `--tint:${p.guild.color}`,
+  // light bridges from the campus out to every isle
+  const campus = geo.isles.find((i) => i.isCampus);
+  const bridges = el('g', { class: 'bridges' });
+  for (const isle of geo.isles) {
+    if (isle.isCampus) continue;
+    const mx = (campus.cx + isle.cx) / 2;
+    const my = (campus.cy + isle.cy) / 2 - 70;
+    bridges.appendChild(el('path', {
+      d: `M ${campus.cx} ${campus.cy} Q ${mx} ${my} ${isle.cx} ${isle.cy}`,
+      class: 'bridge', stroke: 'url(#bridge)', fill: 'none',
     }));
-    g.appendChild(text(p.plate, { x: p.x + 12, y: p.y + 19, class: 'plate' }));
-    g.appendChild(text(p.guild.name.replace(' Guild', '').toUpperCase(), { x: p.x + 46, y: p.y + 19, class: 'plot-name' }));
-    g.appendChild(text(p.guild.domain, { x: p.x + 12, y: p.y + 32, class: 'plot-domain' }));
-    plots.appendChild(g);
   }
-  svg.appendChild(plots);
+  svg.appendChild(bridges);
 
-  const blocks = el('g', { class: 'blocks' });
-  for (const id of Object.keys(geo.buildings)) {
-    const b = geo.buildings[id];
-    const g = el('g', { class: 'block', 'data-building': id, tabindex: '0' });
-    g.appendChild(el('rect', {
-      x: b.x, y: b.y, width: b.w, height: b.h, rx: 3,
-      class: 'block-fill', style: `--tint:${b.guild.color}`,
-    }));
-    g.appendChild(text(b.building.emoji, { x: b.cx, y: b.y + 30, class: 'block-glyph', 'text-anchor': 'middle' }));
-    // Wrap the building name onto two lines so nothing overflows its block.
-    const words = b.building.name.split(' ');
-    const lines = words.length > 2 ? [words.slice(0, -1).join(' '), words.slice(-1)[0]] : words;
-    lines.forEach((ln, i) => {
-      g.appendChild(text(ln, { x: b.cx, y: b.y + 48 + i * 11, class: 'block-name', 'text-anchor': 'middle' }));
-    });
-    g.appendChild(text('', { x: b.cx, y: b.y + b.h - 8, class: 'block-staff', 'text-anchor': 'middle', 'data-staff': id }));
-    const title = el('title');
-    title.textContent = `${b.building.name} — ${b.building.blurb}`;
-    g.appendChild(title);
-    blocks.appendChild(g);
+  // painter's algorithm: far isles first
+  const order = [...geo.isles].sort((a, b) => a.cy - b.cy);
+  for (const isle of order) {
+    const g = el('g', { class: 'isle-group' });
+    g.appendChild(drawIsle(isle));
+    const built = Object.entries(geo.buildings)
+      .filter(([, s]) => s.isle === isle)
+      .sort((a, z) => project(isle, a[1].u, a[1].v)[1] - project(isle, z[1].u, z[1].v)[1]);
+    for (const [id, spec] of built) g.appendChild(drawBuilding(id, spec));
+    svg.appendChild(g);
   }
-  svg.appendChild(blocks);
+
+  // name plates last, so no roof can cover them
+  const plates = el('g', { class: 'plates' });
+  for (const [id, spec] of Object.entries(geo.buildings)) {
+    const [lx, ly] = spec.labelPos;
+    const name = el('text', { x: lx, y: ly, class: 'build-name', 'text-anchor': 'middle' });
+    name.textContent = spec.building.short;
+    plates.appendChild(name);
+    plates.appendChild(el('text', {
+      x: lx, y: ly + 9.5, class: 'build-staff', 'text-anchor': 'middle', 'data-staff': id,
+    }));
+  }
+  svg.appendChild(plates);
 
   svg.appendChild(el('g', { class: 'pins', id: 'pin-layer' }));
 }
 
+/* ---------------------------------------------------------------- pins */
+
+function yardSlot(isle, i, total) {
+  const y = isle.yard;
+  const cols = Math.min(y.cols, Math.max(1, total));
+  const rows = Math.ceil(total / cols);
+  const col = i % cols;
+  const row = Math.floor(i / cols);
+  const u = cols === 1 ? (y.u0 + y.u1) / 2 : y.u0 + (col / (cols - 1)) * (y.u1 - y.u0);
+  const v = rows === 1 ? y.v0 : y.v0 + (row / Math.max(1, rows - 1)) * (y.v1 - y.v0);
+  return [u, v];
+}
+
+function makePin(c) {
+  const g = el('g', { class: 'pin', 'data-pin': c.id, tabindex: '0' });
+  g.appendChild(el('ellipse', { cx: 0, cy: 1, rx: 4.5, ry: 2, fill: '#04060e', opacity: 0.4 }));
+  g.appendChild(el('circle', { cx: 0, cy: -7, r: 7.5, class: 'aura', filter: 'url(#softglow)' }));
+  g.appendChild(el('path', { d: 'M -3.1 0 L -2.1 -6.4 Q 0 -8.2 2.1 -6.4 L 3.1 0 Z', class: 'robe' }));
+  g.appendChild(el('circle', { cx: 0, cy: -9.2, r: 2.1, class: 'head' }));
+  g.appendChild(el('circle', { cx: 0, cy: -13.5, r: 1.6, class: 'halo' }));
+  g.appendChild(el('title'));
+  return g;
+}
+
 function drawPins(svg, geo, town, selectedId) {
   const layer = svg.querySelector('#pin-layer');
+  const where = (c) => (c.stage === 'employed' ? c.post.buildingId : c.location);
+  const totals = {};
   const slots = {};
   const staff = {};
-  const totals = {};
-  const where = (c) => (c.stage === 'employed' ? c.post.buildingId : c.location);
   for (const c of town.citizens) totals[where(c)] = (totals[where(c)] || 0) + 1;
 
+  const placed = [];
   for (const c of town.citizens) {
     const loc = where(c);
-    const slot = (slots[loc] = (slots[loc] ?? -1) + 1);
-    const { x, y } = pinSlot(geo, loc, slot, totals[loc]);
+    const spec = geo.buildings[loc];
+    if (!spec) continue;
+    const i = (slots[loc] = (slots[loc] ?? -1) + 1);
     if (c.stage === 'employed') staff[loc] = (staff[loc] || 0) + 1;
 
+    // citizens gather in their building's yard; the campus yard holds the whole student body
+    const isle = spec.isle;
+    const total = totals[loc];
+    const [u, v] = isle.isCampus && loc === 'academy'
+      ? yardSlot(isle, i, total)
+      : yardSlot({ ...isle, yard: { ...isle.yard, u0: spec.u - 0.3, u1: spec.u + 0.3, cols: 3 } }, i, total);
+    const [x, y] = project(isle, u, v);
+
     let pin = layer.querySelector(`[data-pin="${c.id}"]`);
-    if (!pin) {
-      pin = el('g', { class: 'pin', 'data-pin': c.id, tabindex: '0' });
-      pin.appendChild(el('circle', { r: 4, class: 'pin-dot' }));
-      const title = el('title');
-      title.textContent = c.name;
-      pin.appendChild(title);
-      layer.appendChild(pin);
-    }
-    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    if (!pin) { pin = makePin(c); layer.appendChild(pin); }
+    pin.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(isle.scale * 1.22).toFixed(2)})`);
     pin.setAttribute('data-stage', c.stage);
     pin.setAttribute('style', `--tint:${GUILDS[c.guildIndex].color}`);
     pin.classList.toggle('is-selected', c.id === selectedId);
     pin.querySelector('title').textContent =
       c.stage === 'employed' ? `${c.name} — ${c.role}` : `${c.name} — ${c.stage}`;
+    placed.push({ pin, y });
   }
+  // keep nearer citizens in front
+  placed.sort((a, b) => a.y - b.y).forEach(({ pin }) => layer.appendChild(pin));
 
-  for (const id of Object.keys(geo.buildings)) {
+  for (const [id, spec] of Object.entries(geo.buildings)) {
     const label = svg.querySelector(`[data-staff="${id}"]`);
-    if (label) {
-      const n = staff[id] || 0;
-      const seats = geo.buildings[id].building.posts.reduce((a, p) => a + p.seats, 0);
-      label.textContent = n ? `${n}/${seats} staffed` : `${seats} posts open`;
-      label.classList.toggle('is-empty', n === 0);
-    }
+    if (!label) continue;
+    const n = staff[id] || 0;
+    const seats = spec.building.posts.reduce((a, p) => a + p.seats, 0);
+    label.textContent = n ? `${n}/${seats}` : `${seats} open`;
+    label.classList.toggle('is-empty', n === 0);
   }
 }
 
+/* ------------------------------------------------------------- the sky */
+
+function startSky(canvas) {
+  const ctx = canvas.getContext('2d');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W = 0, H = 0, stars = [], motes = [], clouds = [];
+
+  const seedRand = (() => { let a = 20260821; return () => ((a = (a * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+
+  function size() {
+    const r = canvas.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = Math.max(1, r.width); H = Math.max(1, r.height);
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    stars = Array.from({ length: 220 }, () => ({
+      x: seedRand() * W, y: seedRand() * H * 0.92,
+      r: seedRand() * 1.3 + 0.25, p: seedRand() * Math.PI * 2, s: 0.4 + seedRand(),
+    }));
+    motes = Array.from({ length: 46 }, () => ({
+      x: seedRand() * W, y: seedRand() * H,
+      r: seedRand() * 1.8 + 0.6, v: 0.08 + seedRand() * 0.22, drift: (seedRand() - 0.5) * 0.16,
+      hue: seedRand() > 0.5 ? '#ffd9a0' : '#9ff0dd',
+    }));
+    clouds = Array.from({ length: 7 }, (_, i) => ({
+      x: seedRand() * W, y: H * (0.18 + seedRand() * 0.7),
+      rx: 190 + seedRand() * 320, ry: 34 + seedRand() * 54,
+      v: 0.04 + seedRand() * 0.09, o: 0.05 + seedRand() * 0.07,
+      hue: i % 3 === 0 ? '155, 120, 255' : i % 3 === 1 ? '80, 190, 220' : '255, 170, 190',
+    }));
+  }
+
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#05060f');
+    sky.addColorStop(0.42, '#0b1030');
+    sky.addColorStop(0.74, '#132043');
+    sky.addColorStop(1, '#0d2b3f');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const c of clouds) {
+      if (!still) c.x += c.v;
+      if (c.x - c.rx > W) c.x = -c.rx;
+      const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.rx);
+      g.addColorStop(0, `rgba(${c.hue}, ${c.o})`);
+      g.addColorStop(1, `rgba(${c.hue}, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const s of stars) {
+      const tw = still ? 0.75 : 0.55 + Math.sin(t / 900 * s.s + s.p) * 0.35;
+      ctx.globalAlpha = tw;
+      ctx.fillStyle = '#dbe8ff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const m of motes) {
+      if (!still) { m.y -= m.v; m.x += m.drift; }
+      if (m.y < -6) { m.y = H + 6; m.x = seedRand() * W; }
+      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 6);
+      g.addColorStop(0, m.hue);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r * 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (!still) requestAnimationFrame(frame);
+  }
+
+  size();
+  window.addEventListener('resize', () => { size(); if (still) frame(0); });
+  requestAnimationFrame(frame);
+}
 
 // Wires the simulation to the operations board.
 
@@ -1145,6 +1507,7 @@ let selected = null;
 
 const svg = $('map');
 drawMap(svg, geo);
+startSky($('sky'));
 
 /* ------------------------------------------------------------ rendering */
 

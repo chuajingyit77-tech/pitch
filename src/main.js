@@ -2,7 +2,7 @@
 
 import { createTown, tick, stats, performanceBand, seniority } from './engine.js';
 import { GUILDS, RESOURCES, BUILDINGS, COURSES } from './data.js';
-import { computeGeometry, drawMap, drawPins } from './view.js';
+import { computeGeometry, drawMap, drawPins, startSky } from './view.js';
 
 const $ = (id) => document.getElementById(id);
 const guildById = Object.fromEntries(GUILDS.map((g) => [g.id, g]));
@@ -18,6 +18,7 @@ let selected = null;
 
 const svg = $('map');
 drawMap(svg, geo);
+startSky($('sky'));
 
 /* ------------------------------------------------------------ rendering */
 
