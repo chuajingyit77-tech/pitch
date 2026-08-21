@@ -2,6 +2,7 @@
 // Deterministic: same seed -> same town history.
 
 import { RESOURCES, SKILLS, GUILDS, BUILDINGS, CITIZEN_NAMES, COURSES, HONOURS } from './data.js';
+import { DECREE_BY_KEY } from './decrees.js';
 
 const POPULATION = 66;
 const COHORT_COUNT = 6;
@@ -113,7 +114,8 @@ export function createTown(seed = 66) {
     resources: { ...START_STOCK },
     flows: Object.fromEntries(RESOURCES.map((r) => [r.id, 0])),
     log: [],
-    ledger: { graduates: 0, hires: 0, promotions: 0, mentorships: 0, chartered: 0, projects: 0 },
+    decrees: [],
+    ledger: { graduates: 0, hires: 0, promotions: 0, mentorships: 0, chartered: 0, projects: 0, decrees: 0 },
     history: [],
   };
   say(town, 'town', `\u{1F3D9} Gradient Town opens with ${POPULATION} citizens enrolled at Gradient Academy.`);
@@ -128,16 +130,146 @@ function say(town, kind, text) {
 const buildingById = Object.fromEntries(BUILDINGS.map((b) => [b.id, b]));
 export const BUILDING_BY_ID = buildingById;
 
+// ------------------------------------------------------------- decrees
+
+// What the standing decrees add up to on any given day.
+export function activeModifiers(town) {
+  const m = { study: 1, perfAdd: 0, wellAdd: 0, mulDefault: 1, mul: {} };
+  for (const d of town.decrees) {
+    const e = d.effects || {};
+    if (e.study) m.study *= e.study;
+    if (e.perfAdd) m.perfAdd += e.perfAdd;
+    if (e.wellAdd) m.wellAdd += e.wellAdd;
+    if (e.mulDefault) m.mulDefault *= e.mulDefault;
+    for (const [r, v] of Object.entries(e.mul || {})) m.mul[r] = (m.mul[r] || 1) * v;
+  }
+  return m;
+}
+
+const outputScale = (mods, resource) => (mods.mul[resource] ?? 1) * mods.mulDefault;
+
+function expireDecrees(town) {
+  const live = [];
+  for (const d of town.decrees) {
+    if (d.until > town.day) live.push(d);
+    else if (!d.instant) say(town, 'decree', `${d.emoji} ${d.name} has run its course.`);
+  }
+  town.decrees = live;
+}
+
+// Issue an order to the town. Returns { ok, message } — the console shows the message.
+export function issueDecree(town, key) {
+  const spec = DECREE_BY_KEY[key];
+  if (!spec) return { ok: false, message: 'No such decree.' };
+
+  for (const [r, amount] of Object.entries(spec.cost)) {
+    if (town.resources[r] < amount) {
+      const res = RESOURCES.find((x) => x.id === r);
+      return { ok: false, message: `Not enough ${res ? res.name.toLowerCase() : r} — ${spec.name} needs ${amount}, the town has ${Math.floor(town.resources[r])}.` };
+    }
+  }
+  for (const [r, amount] of Object.entries(spec.cost)) town.resources[r] = round2(town.resources[r] - amount);
+
+  const replaced = town.decrees.find((d) => d.slot === spec.slot);
+  town.decrees = town.decrees.filter((d) => d.slot !== spec.slot);
+  town.decrees.push({
+    key: spec.key, slot: spec.slot, name: spec.name, emoji: spec.emoji,
+    issued: town.day, until: town.day + spec.days, effects: spec.effects, instant: spec.instant,
+  });
+  town.ledger.decrees++;
+
+  let extra = '';
+  if (spec.once === 'mentorAll') extra = mentorEveryone(town);
+  if (spec.once === 'charterPosts') extra = charterAndReassign(town, 3);
+
+  const verb = replaced && replaced.key === spec.key ? 'renewed' : replaced ? `replaces ${replaced.name}` : 'issued';
+  const span = spec.instant ? 'takes effect at once' : `${spec.days} days`;
+  say(town, 'decree', `${spec.emoji} Decree ${verb}: ${spec.name} — ${span}.${extra ? ' ' + extra : ''}`);
+  return { ok: true, message: `${spec.name} — ${span}${extra ? '. ' + extra : ''}` };
+}
+
+function mentorEveryone(town) {
+  let paired = 0;
+  for (const c of town.citizens) {
+    if (c.stage === 'employed' && !c.mentor && pairMentor(town, c, 'by decree')) paired++;
+  }
+  return `${paired} new pairing${paired === 1 ? '' : 's'}.`;
+}
+
+// New posts, then a town-wide reshuffle so everyone sits in their best available work.
+function charterAndReassign(town, n) {
+  const short = [...GUILDS].sort((a, b) => staffOf(town, a.id) - staffOf(town, b.id)).slice(0, n);
+  for (const guild of short) {
+    const home = BUILDINGS.filter((b) => b.guild === guild.id);
+    const b = home[Math.floor(town.rand() * home.length)];
+    town.posts.push({
+      id: `${b.id}:chartered:${town.posts.length}`,
+      buildingId: b.id,
+      title: `${guild.domain.split(' ')[0]} Specialist`,
+      skill: guild.skill,
+      chartered: true,
+      holder: null,
+    });
+    town.ledger.chartered++;
+  }
+
+  const employed = town.citizens.filter((c) => c.stage === 'employed');
+  if (!employed.length) return `${n} posts chartered.`;
+  const meanFit = (list) => list.reduce((a, c) => a + c.aptitudes[c.post.skill], 0) / list.length;
+  const before = meanFit(employed);
+  const moved = reassignImprovements(town);
+  const after = meanFit(employed);
+  return `${n} posts chartered, ${moved} moved to work that suits them better — average fit ${Math.round(before * 100)}% \u2192 ${Math.round(after * 100)}%.`;
+}
+
+// Move a citizen only when an open post is clearly a better use of them.
+function reassignImprovements(town, threshold = 0.05) {
+  let moved = 0;
+  for (let round = 0; round < 3; round++) {
+    let changed = 0;
+    for (const c of town.citizens) {
+      if (c.stage !== 'employed') continue;
+      const current = c.aptitudes[c.post.skill];
+      let best = null;
+      for (const p of town.posts) {
+        if (p.holder) continue;
+        const gain = c.aptitudes[p.skill] - current;
+        if (gain >= threshold && (!best || gain > best.gain)) best = { post: p, gain };
+      }
+      if (!best) continue;
+      const old = c.post;
+      old.holder = null;
+      seat(town, c, best.post);
+      c.highlights.push(`Moved to ${buildingById[best.post.buildingId].name} on day ${town.day} for a better fit`);
+      changed++;
+    }
+    moved += changed;
+    if (!changed) break;
+  }
+  return moved;
+}
+
+// Seat a citizen in a post without the fanfare of a first hiring.
+function seat(town, c, post) {
+  post.holder = c.id;
+  c.post = post;
+  c.role = post.title;
+  c.location = post.buildingId;
+}
+
+const staffOf = (town, guildId) =>
+  town.citizens.filter((c) => c.stage === 'employed' && buildingById[c.post.buildingId].guild === guildId).length;
+
 // ---------------------------------------------------------------- phases
 
-function studyPhase(town) {
+function studyPhase(town, mods) {
   for (const c of town.citizens) {
     if (c.stage !== 'student') continue;
     if (town.day < c.cohort * COHORT_GAP) continue;      // staggered intake
     c.location = 'academy';
     const teaching = 1 + facultyStrength(town) * 0.35;
     const focus = 0.055 + town.rand() * 0.05;
-    const gain = focus * teaching * (0.85 + c.wellbeing * 0.3);
+    const gain = focus * teaching * (0.85 + c.wellbeing * 0.3) * mods.study;
     c.mastery = round2(clamp(c.mastery + gain, 0, 1));
     // spread progress across the five courses
     const course = COURSES[Math.min(COURSES.length - 1, Math.floor(c.mastery * COURSES.length))];
@@ -232,7 +364,7 @@ function hire(town, c, post) {
   pairMentor(town, c, 'starting out');
 }
 
-function workPhase(town) {
+function workPhase(town, mods) {
   const staffed = {};
   for (const c of town.citizens) {
     if (c.stage !== 'employed') continue;
@@ -247,7 +379,7 @@ function workPhase(town) {
       const fit = fitScore(c, c.post);
       const mentorBoost = c.mentor ? 0.06 : 0;
       const noise = (town.rand() - 0.4) * 0.06;
-      let perf = 0.52 + fit * 0.28 + Math.min(c.level, 6) * 0.012 + (c.wellbeing - 0.75) * 0.12 + careIndex * 0.04 + mentorBoost + noise;
+      let perf = 0.52 + fit * 0.28 + Math.min(c.level, 6) * 0.012 + (c.wellbeing - 0.75) * 0.12 + careIndex * 0.04 + mentorBoost + noise + mods.perfAdd;
       perf = clamp(perf, 0.4, 1);
       if (perf < SUPPORT_FLOOR) perf = supportAgent(town, c, perf);
       c.performance = round2(perf);
@@ -265,13 +397,13 @@ function workPhase(town) {
         flows[r] -= used;
       }
       for (const [r, amt] of Object.entries(b.outputs || {})) {
-        const made = amt * perf * throttle;
+        const made = amt * perf * throttle * outputScale(mods, r);
         town.resources[r] += made;
         flows[r] += made;
       }
 
       c.xp = round2(c.xp + perf);
-      const wbTarget = clamp(0.6 + careIndex * 0.35, 0.5, 0.98);
+      const wbTarget = clamp(0.6 + careIndex * 0.35 + mods.wellAdd, 0.5, 0.98);
       c.wellbeing = round2(clamp(c.wellbeing + (wbTarget - c.wellbeing) * 0.08, 0.5, 0.98));
       if (perf >= 0.96) {
         c.streak++;
@@ -369,10 +501,12 @@ function upkeepPhase(town) {
 
 export function tick(town) {
   town.day++;
+  expireDecrees(town);
   releaseMentors(town);
-  studyPhase(town);
+  const mods = activeModifiers(town);
+  studyPhase(town, mods);
   placementPhase(town);
-  workPhase(town);
+  workPhase(town, mods);
   upkeepPhase(town);
   if (town.day % 7 === 0) skillsExchange(town);
   const s = stats(town);
@@ -407,6 +541,7 @@ export function stats(town) {
     openPosts: town.posts.filter((p) => !p.holder).length,
     // Running totals live under `totals` so they can't shadow the live stage counts.
     totals: { ...town.ledger },
+    decrees: town.decrees.map((d) => ({ ...d, daysLeft: Math.max(0, d.until - town.day) })),
   };
 }
 

@@ -1,7 +1,7 @@
 // Bundles the ES modules + shell into one self-contained page for publishing.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
-const MODULES = ['src/data.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
+const MODULES = ['src/data.js', 'src/decrees.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
 
 function stripModuleSyntax(src) {
   return src

@@ -190,6 +190,35 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .legend b { color: var(--text); font-weight: 600; }
 .legend .tail { font-family: var(--mono); font-size: 10px; color: var(--gold); }
 
+/* ---------------- decree console ---------------- */
+.hud-bl { left: 18px; bottom: 116px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.decree-badge {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+  background: rgba(14, 24, 48, 0.82); border: 1px solid var(--edge-2);
+  backdrop-filter: blur(10px); font-size: 12px; color: var(--text);
+  box-shadow: 0 0 22px rgba(126, 240, 200, 0.14);
+}
+.decree-badge b { font-family: var(--mono); font-size: 10px; color: var(--gold); font-weight: 500; }
+.console-body { padding: 13px 16px 15px; display: flex; flex-direction: column; gap: 10px; }
+.decree-form { display: flex; gap: 9px; }
+#decree-input {
+  flex: 1; min-width: 0; padding: 11px 15px; border-radius: 10px;
+  border: 1px solid var(--edge); background: rgba(6, 12, 28, 0.75); color: var(--text);
+  font-family: var(--ui); font-size: 14.5px; letter-spacing: 0.01em;
+}
+#decree-input::placeholder { color: var(--dim); }
+#decree-input:focus { outline: none; border-color: var(--edge-2); box-shadow: 0 0 0 3px rgba(126, 240, 200, 0.1); }
+.decree-feedback { margin: 0; min-height: 18px; font-size: 12.5px; color: var(--muted); }
+.decree-feedback.ok { color: var(--jade); }
+.decree-feedback.err { color: var(--rose); }
+.quick { display: flex; flex-wrap: wrap; gap: 7px; }
+.quick button {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--edge); font-size: 12.5px; color: var(--muted); transition: all 140ms;
+}
+.quick button:hover { border-color: var(--edge-2); color: var(--text); background: rgba(126, 240, 200, 0.08); }
+.quick button .cost { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
 /* ---------------- record + roster ---------------- */
 .log-list {
   max-height: 216px; overflow-y: auto; padding: 10px 16px 14px;
@@ -293,6 +322,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
       <button class="ctl" id="reset">Reset</button>
     </div>
 
+    <div class="hud hud-bl" id="active-decrees" aria-live="polite"></div>
+
     <div class="hud hud-b">
       <section class="panel bar">
         <header><h2>Pipeline</h2><span class="note" id="pipe-note"></span></header>
@@ -313,6 +344,22 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
         <header><h2>Stores</h2><span class="note">stock &middot; net per day</span></header>
         <div class="res-list" id="res-list"></div>
       </section>
+    </div>
+  </section>
+
+  <section class="panel console">
+    <header>
+      <h2>Decree Console</h2>
+      <span class="note">standing orders shape how the town works</span>
+    </header>
+    <div class="console-body">
+      <form class="decree-form" id="decree-form" autocomplete="off">
+        <input id="decree-input" type="text" aria-label="Order for the town"
+          placeholder="Tell the town what to do — “focus on energy”, “expand the academy”, “来场庆典”" />
+        <button class="ctl primary" type="submit">Issue</button>
+      </form>
+      <p class="decree-feedback" id="decree-feedback"></p>
+      <div class="quick" id="quick-decrees"></div>
     </div>
   </section>
 

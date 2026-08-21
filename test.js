@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTown, tick, stats, BUILDING_BY_ID } from './src/engine.js';
+import { createTown, tick, stats, issueDecree, activeModifiers, BUILDING_BY_ID } from './src/engine.js';
 import { BUILDINGS, GUILDS, RESOURCES, CITIZEN_NAMES } from './src/data.js';
+import { parseDecree, DECREE_BY_KEY, DECREES } from './src/decrees.js';
 
 const run = (days, seed = 66) => {
   const town = createTown(seed);
@@ -93,4 +94,83 @@ test('the same seed replays the same town', () => {
   const fingerprint = (t) => t.citizens.map((c) => `${c.name}:${c.role}:${c.gpa}`).join('|');
   assert.equal(fingerprint(a), fingerprint(b));
   assert.notEqual(fingerprint(run(50, 8)), fingerprint(a), 'a different seed tells a different story');
+});
+
+/* ------------------------------------------------------------- decrees */
+
+test('a written order is understood in English or Chinese', () => {
+  assert.equal(parseDecree('put everything into energy'), 'focus:energy');
+  assert.equal(parseDecree('把力气都放在能量上'), 'focus:energy');
+  assert.equal(parseDecree('expand the academy'), 'expand_academy');
+  assert.equal(parseDecree('来场庆典'), 'festival');
+  assert.equal(parseDecree('让大家休息一下'), 'rest');
+  assert.equal(parseDecree('we need more research'), 'innovate');
+  assert.equal(parseDecree('asdfgh'), null, 'nonsense is refused, not guessed at');
+  assert.equal(parseDecree(''), null);
+});
+
+test('a focus decree really changes what the town produces', () => {
+  const plain = run(40);
+  const ordered = run(40);
+  assert.equal(issueDecree(ordered, 'focus:energy').ok, true);
+  for (let i = 0; i < 5; i++) tick(ordered);
+  for (let i = 0; i < 5; i++) tick(plain);
+  assert.ok(ordered.flows.energy > plain.flows.energy * 1.5, `energy ${plain.flows.energy} -> ${ordered.flows.energy}`);
+  assert.ok(ordered.flows.food < plain.flows.food, 'other work eases off');
+});
+
+test('a decree expires and the town goes back to normal', () => {
+  const town = run(40);
+  issueDecree(town, 'focus:energy');
+  const spec = DECREE_BY_KEY['focus:energy'];
+  for (let i = 0; i < spec.days; i++) tick(town);
+  assert.equal(town.decrees.length, 0, 'the decree has run its course');
+  const mods = activeModifiers(town);
+  assert.equal(mods.mulDefault, 1);
+  assert.deepEqual(mods.mul, {});
+});
+
+test('an order the town cannot afford is refused, and costs nothing', () => {
+  const town = run(30);
+  town.resources.food = 0;
+  const before = { ...town.resources };
+  const result = issueDecree(town, 'festival');
+  assert.equal(result.ok, false);
+  assert.match(result.message, /not enough food/i);
+  assert.deepEqual(town.resources, before, 'a refused decree spends nothing');
+  assert.equal(town.decrees.length, 0);
+});
+
+test('a new decree replaces the standing one in the same slot', () => {
+  const town = run(40);
+  issueDecree(town, 'focus:energy');
+  issueDecree(town, 'focus:food');
+  const focused = town.decrees.filter((d) => d.slot === 'focus');
+  assert.equal(focused.length, 1);
+  assert.equal(focused[0].key, 'focus:food');
+});
+
+test('chartering posts moves people only into work that suits them better', () => {
+  const town = run(50);
+  const before = new Map(town.citizens.map((c) => [c.id, c.aptitudes[c.post.skill]]));
+  assert.equal(issueDecree(town, 'open_posts').ok, true);
+  for (const c of town.citizens) {
+    assert.ok(c.aptitudes[c.post.skill] >= before.get(c.id), `${c.name} is never moved into worse-fitting work`);
+    assert.equal(c.stage, 'employed');
+  }
+  const held = town.citizens.map((c) => c.post.id);
+  assert.equal(new Set(held).size, held.length, 'no post is double-held after a reshuffle');
+});
+
+test('decrees never break the town: everyone stays employed and stores stay solvent', () => {
+  const town = createTown(66);
+  const orders = ['focus:energy', 'festival', 'expand_academy', 'rest', 'mentor_all', 'innovate', 'open_posts', 'focus:care'];
+  for (let i = 0; i < 160; i++) {
+    tick(town);
+    if (i % 12 === 0) issueDecree(town, orders[(i / 12) % orders.length]);
+    for (const r of RESOURCES) assert.ok(town.resources[r.id] >= 0, `${r.id} negative on day ${town.day}`);
+  }
+  const s = stats(town);
+  assert.equal(s.employed, 66);
+  for (const c of town.citizens) assert.ok(c.performance >= 0.7, `${c.name} still doing well (${c.performance})`);
 });

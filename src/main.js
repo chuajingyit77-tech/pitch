@@ -1,7 +1,8 @@
 // Wires the simulation to the operations board.
 
-import { createTown, tick, stats, performanceBand, seniority } from './engine.js';
+import { createTown, tick, stats, performanceBand, seniority, issueDecree } from './engine.js';
 import { GUILDS, RESOURCES, BUILDINGS, COURSES } from './data.js';
+import { parseDecree, DECREE_BY_KEY, QUICK_DECREES, decreeCostText } from './decrees.js';
 import { computeGeometry, drawMap, drawPins, startSky } from './view.js';
 
 const $ = (id) => document.getElementById(id);
@@ -35,6 +36,43 @@ function renderPipeline(s) {
   $('legend-tail').textContent = town.fullEmploymentDay
     ? `All 66 placed on day ${town.fullEmploymentDay}`
     : '';
+}
+
+function renderActiveDecrees() {
+  const box = $('active-decrees');
+  box.innerHTML = town.decrees
+    .filter((d) => !d.instant)
+    .map((d) => {
+      const left = Math.max(0, d.until - town.day);
+      return `<span class="decree-badge">${d.emoji} ${d.name} <b>${left}d</b></span>`;
+    })
+    .join('');
+}
+
+function renderQuickDecrees() {
+  $('quick-decrees').innerHTML = QUICK_DECREES.map((key) => {
+    const d = DECREE_BY_KEY[key];
+    return `<button type="button" data-decree="${key}" title="${d.blurb} (${decreeCostText(d)})">
+      <span aria-hidden="true">${d.emoji}</span> ${d.name} <span class="cost">${decreeCostText(d)}</span>
+    </button>`;
+  }).join('');
+}
+
+function saySomething(text, kind) {
+  const box = $('decree-feedback');
+  box.textContent = text;
+  box.className = `decree-feedback ${kind}`;
+}
+
+function order(key, spoken) {
+  if (!key) {
+    saySomething(`I couldn't read that order — try “focus on food”, “hold a festival”, or pick one below.`, 'err');
+    return;
+  }
+  const result = issueDecree(town, key);
+  saySomething(`${result.ok ? '✓' : '✗'} ${result.message}`, result.ok ? 'ok' : 'err');
+  if (result.ok && spoken) $('decree-input').value = '';
+  render();
 }
 
 function renderResources() {
@@ -161,6 +199,7 @@ function render() {
   renderResources();
   renderLog();
   renderRoster();
+  renderActiveDecrees();
   drawPins(svg, geo, town, selected);
   if (selected) renderDossier();
 }
@@ -180,6 +219,17 @@ function setRunning(on) {
   btn.classList.toggle('running', on);
 }
 
+$('decree-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('decree-input').value;
+  order(parseDecree(text), true);
+});
+
+$('quick-decrees').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-decree]');
+  if (btn) order(btn.dataset.decree, false);
+});
+
 $('play').addEventListener('click', () => setRunning(!timer));
 $('step').addEventListener('click', () => { setRunning(false); advance(); });
 $('reset').addEventListener('click', () => {
@@ -187,6 +237,7 @@ $('reset').addEventListener('click', () => {
   town = createTown(66);
   selected = null;
   $('dossier').classList.remove('open');
+  saySomething('', '');
   render();
 });
 
@@ -237,5 +288,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ' ' && e.target === document.body) { e.preventDefault(); setRunning(!timer); }
 });
 
+renderQuickDecrees();
 render();
 setRunning(true);
