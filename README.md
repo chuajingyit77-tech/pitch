@@ -20,7 +20,7 @@ ground, who walks to their posting the day they are hired.
 
 ```bash
 npm run build      # bundle to dist/gradient-town.html (single self-contained file)
-npm test           # 16 tests covering the town's guarantees
+npm test           # 23 tests covering the town's guarantees
 ```
 
 Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
@@ -53,6 +53,29 @@ The Hearth district is the pipeline the whole town runs on:
 
 Full employment lands around **day 25**, and average performance climbs from ~85% to ~96% as
 people level up from Associate to Practitioner to Guild Master.
+
+## The Workshop — hand the town your work
+
+Under the world sits **The Workshop**. You give it your material and the points you care
+about, and the guilds assemble a proposal draft.
+
+1. **Hand over your material** — drop in or choose text files (txt, md, csv, json, log), or
+   paste anything into the box. For PDF or Word, copy the text in. Files stay in your browser:
+   they are read locally, kept in `localStorage`, and never sent anywhere.
+2. **Give the points** — what it is, for whom, what they want, your key points, budget, timing.
+3. **Hand it to the town** — each section is assembled and signed by the citizen whose craft it
+   belongs to: Lumen reads the material, Keystone sets out the approach, Wayfinder the timeline,
+   Ledger the money, Chorus the case for the team.
+4. **Take it away** — save it as Markdown, or copy it.
+
+English or 中文, switched at any time — the same brief re-assembles in the other language.
+
+**What this is honest about:** the draft is *assembled*, not written for you. It is your words,
+your material, and a structure the town knows how to hold — the useful lines are pulled out of
+your files by a scoring heuristic (numbers, money, deadlines, goals, requirements), and the
+prose around them comes from a template. It gives you a complete, well-ordered draft to work
+from in seconds. It does not invent argument or research your client. Uploaded text is escaped
+before it is ever rendered.
 
 ## Decrees — giving the town orders
 
@@ -96,7 +119,7 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 
 ## What the tests guarantee
 
-`npm test` (16 tests) asserts the things the town promises:
+`npm test` (23 tests) asserts the things the town promises:
 
 - all 66 citizens graduate in good standing and are hired within 60 days
 - everyone is placed on a skill they actually have an aptitude for
@@ -106,12 +129,16 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 - the same seed replays the same town exactly
 - decrees really change output, expire cleanly, and are refused when unaffordable
 - 160 days of constant decrees still ends with all 66 employed and every store solvent
+- the workshop keeps the lines that carry meaning and drops the noise
+- every proposal section is signed by a different, real citizen
+- an almost-empty brief still produces a usable draft, in either language
 
 ## Layout
 
 ```
 src/data.js     the world: resources, guilds, buildings, posts, citizens
 src/decrees.js  the orders the town accepts, and the parser that reads them
+src/workshop.js reading your material, and assembling the proposal draft
 src/engine.js   the simulation: study, placement, work, support, upkeep, decrees
 src/view.js     the world: floating isles, isometric buildings, citizens, sky
 src/main.js     the HUD: pipeline, stores, town record, roster, dossiers

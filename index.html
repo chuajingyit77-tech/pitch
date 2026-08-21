@@ -182,6 +182,82 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .legend b { color: var(--ink); font-weight: 800; }
 .legend .tail { font-family: var(--mono); font-size: 11px; color: var(--berry); }
 
+/* ---------------- the workshop ---------------- */
+.ws-body { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 18px; padding: 16px; }
+.ws-in { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
+.drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  padding: 22px 16px; border: 2px dashed #dcc59c; border-radius: 16px; background: #fffdf6;
+  cursor: pointer; text-align: center; transition: background 140ms, border-color 140ms;
+}
+.drop:hover, .drop.over { background: #fff4dd; border-color: var(--sun); }
+.drop b { font-size: 14.5px; color: #5b4530; }
+.drop span { font-size: 12px; color: var(--ink-faint); }
+.sources { display: flex; flex-direction: column; gap: 6px; }
+.source {
+  display: flex; align-items: center; gap: 9px; padding: 8px 12px;
+  background: #fffdf6; border: 1.5px solid #ecdcc0; border-radius: 12px; font-size: 12.5px;
+}
+.source .nm { font-weight: 700; color: #5b4530; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source .meta { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-left: auto; white-space: nowrap; }
+.source .drop-one { color: var(--ink-faint); font-size: 15px; line-height: 1; padding: 0 2px; }
+.source .drop-one:hover { color: var(--berry); }
+#paste {
+  width: 100%; padding: 10px 13px; border-radius: 12px; border: 1.5px solid #e3cfa8;
+  background: #fffdf6; font-family: var(--ui); font-size: 13px; color: var(--ink); resize: vertical;
+}
+#paste:focus, .fields input:focus, .fields textarea:focus {
+  outline: none; border-color: var(--sun); box-shadow: 0 0 0 3px rgba(242, 180, 65, 0.18);
+}
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fields .f-wide { grid-column: 1 / -1; }
+.fields span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+.fields input, .fields textarea {
+  padding: 9px 12px; border-radius: 11px; border: 1.5px solid #e3cfa8; background: #fffdf6;
+  font-family: var(--ui); font-size: 13.5px; color: var(--ink); resize: vertical; min-width: 0;
+}
+.ws-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.langs { display: flex; gap: 3px; padding: 4px; border-radius: 999px; border: 1.5px solid #e3cfa8; background: var(--card); }
+.langs button { padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--ink-faint); }
+.langs button[aria-pressed='true'] { background: #ffe9b8; color: #6b5027; }
+.ws-actions .primary { margin-left: auto; }
+
+.ws-out { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ws-out-bar { display: flex; align-items: center; gap: 9px; }
+.ws-out-bar .note { margin-right: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+.ws-doc {
+  background: #fffdf7; border: 1.5px solid #ecdcc0; border-radius: 16px; padding: 26px 30px;
+  max-height: 620px; overflow-y: auto; box-shadow: inset 0 2px 10px rgba(103, 78, 52, 0.05);
+}
+.ws-empty { color: var(--ink-faint); font-style: italic; font-family: var(--display); margin: 0; }
+.ws-doc h3 { font-family: var(--display); font-size: 27px; color: #4a3728; margin-bottom: 2px; }
+.ws-doc .doc-sub { font-size: 13px; color: var(--ink-soft); font-style: italic; margin: 0 0 18px; }
+.ws-sec { border-top: 1.5px solid var(--line-soft); padding: 15px 0 6px; }
+.ws-sec h4 { font-family: var(--display); font-size: 18px; color: #5b4530; margin: 0 0 8px; font-weight: 700; }
+.ws-sec p { margin: 0 0 9px; font-size: 14px; line-height: 1.65; color: #4f3d2c; max-width: 68ch; }
+.ws-sec ul { margin: 0 0 10px; padding-left: 20px; }
+.ws-sec li { font-size: 14px; line-height: 1.6; margin-bottom: 3px; color: #4f3d2c; }
+.ws-sec blockquote {
+  margin: 0 0 8px; padding: 7px 0 7px 14px; border-left: 3px solid #e8d3a6;
+  font-size: 13.5px; color: var(--ink-soft); font-style: italic;
+}
+.ws-step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; margin-bottom: 8px; align-items: baseline; }
+.ws-step .n {
+  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: #ffe9b8; color: #6b5027; font-family: var(--mono); font-size: 11px; font-weight: 500;
+}
+.ws-step b { color: #4a3728; }
+.ws-step span { font-size: 14px; line-height: 1.6; color: #4f3d2c; }
+.ws-by {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 4px;
+  font-size: 12px; color: var(--ink-soft); font-style: italic;
+}
+.ws-by i { width: 9px; height: 9px; border-radius: 50%; background: var(--tint); border: 1.5px solid rgba(90, 70, 50, 0.3); font-style: normal; }
+.ws-note { margin: 16px 0 0; padding-top: 12px; border-top: 1.5px solid var(--line-soft); font-size: 12px; color: var(--ink-faint); font-style: italic; }
+
+@media (max-width: 1000px) { .ws-body { grid-template-columns: 1fr; } }
+
 /* ---------------- decree console ---------------- */
 .decree-badge {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px;
@@ -340,6 +416,52 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
         <header><h2>Stores</h2><span class="note">stock &middot; net per day</span></header>
         <div class="res-list" id="res-list"></div>
       </section>
+    </div>
+  </section>
+
+  <section class="panel workshop">
+    <header>
+      <h2>The Workshop</h2>
+      <span class="note">hand the town your material and your points — the guilds assemble a draft</span>
+    </header>
+    <div class="ws-body">
+      <div class="ws-in">
+        <label class="drop" id="drop" for="files">
+          <b>Drop your material here</b>
+          <span>or click to choose &middot; txt, md, csv, json</span>
+          <input type="file" id="files" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.rtf" hidden />
+        </label>
+        <div class="sources" id="sources"></div>
+        <textarea id="paste" rows="3" placeholder="…or paste anything here. For PDF or Word, copy the text in."></textarea>
+
+        <div class="fields">
+          <label class="f-wide"><span>What is it</span><input id="f-title" placeholder="Retail expansion proposal" /></label>
+          <label><span>For whom</span><input id="f-client" placeholder="Acme Coffee" /></label>
+          <label><span>Timing</span><input id="f-timeline" placeholder="by Q4" /></label>
+          <label class="f-wide"><span>What they want</span><input id="f-goal" placeholder="open 12 stores by the end of the year" /></label>
+          <label class="f-wide"><span>Key points — one per line</span><textarea id="f-points" rows="4" placeholder="Site selection framework&#10;Store fit-out playbook&#10;Opening timeline"></textarea></label>
+          <label class="f-wide"><span>Budget</span><input id="f-budget" placeholder="RM 4.5m for phase one" /></label>
+        </div>
+
+        <div class="ws-actions">
+          <div class="langs" role="group" aria-label="Language">
+            <button type="button" data-lang="en" aria-pressed="true">English</button>
+            <button type="button" data-lang="zh" aria-pressed="false">中文</button>
+          </div>
+          <button class="ctl primary" id="make">Hand it to the town</button>
+        </div>
+      </div>
+
+      <div class="ws-out">
+        <div class="ws-out-bar">
+          <span class="note" id="ws-status">No draft yet</span>
+          <button class="ctl" id="export-md" hidden>Save as .md</button>
+          <button class="ctl" id="copy-md" hidden>Copy</button>
+        </div>
+        <div class="ws-doc" id="ws-doc">
+          <p class="ws-empty">Give the town something to work with — a few points is enough. Your material stays in this browser.</p>
+        </div>
+      </div>
     </div>
   </section>
 

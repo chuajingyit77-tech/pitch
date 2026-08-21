@@ -122,6 +122,9 @@ export function createTown(seed = 66) {
   return town;
 }
 
+// Write a line into the town record from outside the simulation.
+export function note(town, kind, text) { say(town, kind, text); }
+
 function say(town, kind, text) {
   town.log.unshift({ day: town.day, kind, text });
   if (town.log.length > 240) town.log.length = 240;

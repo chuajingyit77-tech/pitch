@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { createTown, tick, stats, issueDecree, activeModifiers, BUILDING_BY_ID } from './src/engine.js';
 import { BUILDINGS, GUILDS, RESOURCES, CITIZEN_NAMES } from './src/data.js';
 import { parseDecree, DECREE_BY_KEY, DECREES } from './src/decrees.js';
+import {
+  digestSource, buildProposal, proposalToMarkdown, slugify, isAccepted, fileTooLarge,
+} from './src/workshop.js';
 
 const run = (days, seed = 66) => {
   const town = createTown(seed);
@@ -173,4 +176,94 @@ test('decrees never break the town: everyone stays employed and stores stay solv
   const s = stats(town);
   assert.equal(s.employed, 66);
   for (const c of town.citizens) assert.ok(c.performance >= 0.7, `${c.name} still doing well (${c.performance})`);
+});
+
+/* ------------------------------------------------------------ workshop */
+
+const BRIEF_FILE = `Acme Coffee — retail expansion brief
+We want to open 12 new stores across Malaysia by Q4 2026.
+Budget is around RM 4.5 million for the first phase.
+ok
+Some filler text that carries no information whatsoever.
+Our target audience is office workers aged 25-40.`;
+
+test('reading a file keeps the lines that carry something', () => {
+  const d = digestSource('brief.txt', BRIEF_FILE);
+  assert.equal(d.name, 'brief.txt');
+  assert.ok(d.highlights.length >= 3, 'it finds the substantive lines');
+  assert.ok(d.highlights.some((h) => h.includes('RM 4.5 million')), 'money is kept');
+  assert.ok(d.highlights.some((h) => h.includes('12 new stores')), 'numbers are kept');
+  assert.ok(!d.highlights.some((h) => h === 'ok'), 'noise is dropped');
+  assert.ok(!d.highlights.some((h) => h.includes('filler text')), 'lines saying nothing are dropped');
+});
+
+test('only text files are accepted, and not oversized ones', () => {
+  assert.equal(isAccepted('notes.md'), true);
+  assert.equal(isAccepted('data.CSV'), true);
+  assert.equal(isAccepted('deck.pdf'), false);
+  assert.equal(isAccepted('report.docx'), false);
+  assert.equal(fileTooLarge(600 * 1024), true);
+  assert.equal(fileTooLarge(10 * 1024), false);
+});
+
+test('the guilds assemble a full proposal, each section signed by a different citizen', () => {
+  const town = run(50);
+  const doc = buildProposal({
+    title: 'Retail expansion', client: 'Acme Coffee', goal: 'open 12 stores',
+    points: ['Site selection', 'Fit-out playbook'], budget: 'RM 4.5m', timeline: 'by Q4',
+  }, [digestSource('brief.txt', BRIEF_FILE)], town, 'en');
+
+  assert.equal(doc.sections.length, 8);
+  assert.equal(doc.title, 'Retail expansion');
+  assert.match(doc.subtitle, /Acme Coffee/);
+  const authors = doc.sections.map((s) => s.author && s.author.name);
+  assert.ok(authors.every(Boolean), 'every section has an author');
+  assert.equal(new Set(authors).size, authors.length, 'no citizen signs twice');
+  for (const s of doc.sections) {
+    assert.ok(s.heading && s.blocks.length, `${s.key} has a heading and content`);
+    assert.ok(town.citizens.some((c) => c.name === s.author.name), 'the author is a real citizen');
+  }
+});
+
+test('the draft carries the brief and the material into the markdown', () => {
+  const town = run(50);
+  const doc = buildProposal({
+    title: 'Retail expansion', client: 'Acme Coffee', goal: 'open 12 stores',
+    points: ['Site selection framework'], budget: 'RM 4.5m', timeline: 'by Q4',
+  }, [digestSource('brief.txt', BRIEF_FILE)], town, 'en');
+  const md = proposalToMarkdown(doc);
+
+  assert.match(md, /^# Retail expansion/);
+  assert.match(md, /Acme Coffee/);
+  assert.match(md, /- Site selection framework/, 'the points survive');
+  assert.match(md, /> .*RM 4\.5 million/, 'quoted material survives');
+  assert.match(md, /RM 4\.5m/, 'the budget survives');
+  assert.match(md, /\*— \w+, .+\*/, 'sections are signed');
+});
+
+test('a draft can be assembled in Chinese, and in English, from the same brief', () => {
+  const town = run(50);
+  const brief = { title: '零售扩张', client: 'Acme', goal: '开 12 家店', points: ['选址'], budget: '450 万' };
+  const zh = buildProposal(brief, [], town, 'zh');
+  const en = buildProposal(brief, [], town, 'en');
+  assert.equal(zh.sections[0].heading, '概述');
+  assert.equal(en.sections[0].heading, 'Overview');
+  assert.match(proposalToMarkdown(zh), /开 12 家店/);
+  assert.equal(zh.sections.length, en.sections.length);
+});
+
+test('an almost-empty brief still produces a usable draft', () => {
+  const town = run(50);
+  const doc = buildProposal({ points: [] }, [], town, 'en');
+  assert.equal(doc.sections.length, 8);
+  assert.ok(doc.title.length > 0);
+  const md = proposalToMarkdown(doc);
+  assert.ok(md.length > 400, 'there is still a real document');
+});
+
+test('filenames are made safe for saving', () => {
+  assert.equal(slugify('Retail expansion proposal'), 'retail-expansion-proposal');
+  assert.equal(slugify('  ../../etc/passwd  '), 'etc-passwd');
+  assert.equal(slugify(''), 'proposal');
+  assert.ok(slugify('x'.repeat(200)).length <= 48);
 });

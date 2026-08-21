@@ -1,12 +1,14 @@
 // Bundles the ES modules + shell into one self-contained page for publishing.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
-const MODULES = ['src/data.js', 'src/decrees.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
+const MODULES = ['src/data.js', 'src/decrees.js', 'src/workshop.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
 
 function stripModuleSyntax(src) {
   return src
+    // imports, single-line or spread across several lines
+    .replace(/^[ \t]*import[\s\S]*?from\s+['"][^'"]*['"];?[ \t]*$/gm, '')
     .split('\n')
-    .filter((l) => !/^\s*import\s.+from\s+['"].+['"];?\s*$/.test(l))
     .filter((l) => !/^\s*export\s*\{[^}]*\}\s*;?\s*$/.test(l))
     .map((l) => l.replace(/^(\s*)export\s+(const|let|function|class)\s/, '$1$2 '))
     .join('\n');
@@ -27,6 +29,12 @@ function assertNoCollisions(chunks) {
 
 const chunks = MODULES.map((file) => ({ file, code: stripModuleSyntax(readFileSync(file, 'utf8')) }));
 assertNoCollisions(chunks);
+
+// Nothing may survive that only makes sense inside a module.
+for (const { file, code } of chunks) {
+  const leftover = code.split('\n').find((l) => /^\s*(import|export)\s/.test(l));
+  if (leftover) throw new Error(`Module syntax survived stripping in ${file}: ${leftover.trim()}`);
+}
 
 const shell = readFileSync('index.html', 'utf8');
 const pick = (re, label) => {
@@ -50,6 +58,20 @@ ${chunks.map((c) => c.code).join('\n')}
 </script>
 `;
 
+// Parse the bundled script before shipping it: concatenation can produce
+// duplicate declarations that no single module would ever show.
+const script = chunks.map((c) => c.code).join('\n');
+const probe = 'dist/.syntax-probe.mjs';
 mkdirSync('dist', { recursive: true });
+writeFileSync(probe, script);
+try {
+  execFileSync(process.execPath, ['--check', probe], { stdio: 'pipe' });
+} catch (err) {
+  rmSync(probe, { force: true });
+  throw new Error(`Bundled script does not parse:\n${err.stderr ? err.stderr.toString() : err.message}`);
+} finally {
+  rmSync(probe, { force: true });
+}
+
 writeFileSync('dist/gradient-town.html', out);
 console.log(`built dist/gradient-town.html — ${(out.length / 1024).toFixed(1)} KB`);

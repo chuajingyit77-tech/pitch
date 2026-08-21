@@ -1,8 +1,12 @@
 // Wires the simulation to the operations board.
 
-import { createTown, tick, stats, performanceBand, seniority, issueDecree } from './engine.js';
+import { createTown, tick, stats, performanceBand, seniority, issueDecree, note } from './engine.js';
 import { GUILDS, RESOURCES, BUILDINGS, COURSES } from './data.js';
 import { parseDecree, DECREE_BY_KEY, QUICK_DECREES, decreeCostText } from './decrees.js';
+import {
+  digestSource, buildProposal, proposalToMarkdown, slugify,
+  isAccepted, fileTooLarge, totalTooLarge,
+} from './workshop.js';
 import { computeGeometry, drawMap, drawPins, startSky } from './view.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,6 +20,10 @@ let timer = null;
 let speed = 260;
 let filter = 'all';
 let selected = null;
+let wsSources = [];
+let wsLang = 'en';
+let wsDoc = null;
+const WS_KEY = 'gradient-town-workshop';
 
 const svg = $('map');
 drawMap(svg, geo);
@@ -204,6 +212,233 @@ function render() {
   if (selected) renderDossier();
 }
 
+
+/* ------------------------------------------------------------ workshop */
+
+const esc = (v) => String(v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+const guildTint = (name) => (GUILDS.find((g) => g.name === name) || {}).color || '#d4a373';
+
+function wsSay(text, kind = '') {
+  const box = $('ws-status');
+  box.textContent = text;
+  box.className = `note ${kind}`;
+}
+
+function saveWorkshop() {
+  try {
+    localStorage.setItem(WS_KEY, JSON.stringify({ sources: wsSources, brief: readBrief(), lang: wsLang }));
+  } catch { /* private browsing, or the drawer is full — the page still works */ }
+}
+
+function loadWorkshop() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(WS_KEY) || 'null'); } catch { saved = null; }
+  if (!saved) return;
+  wsSources = Array.isArray(saved.sources) ? saved.sources : [];
+  wsLang = saved.lang === 'zh' ? 'zh' : 'en';
+  const b = saved.brief || {};
+  $('f-title').value = b.title || '';
+  $('f-client').value = b.client || '';
+  $('f-goal').value = b.goal || '';
+  $('f-points').value = (b.points || []).join('\n');
+  $('f-budget').value = b.budget || '';
+  $('f-timeline').value = b.timeline || '';
+  document.querySelectorAll('.langs button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.lang === wsLang)));
+  renderSources();
+}
+
+function readBrief() {
+  return {
+    title: $('f-title').value.trim(),
+    client: $('f-client').value.trim(),
+    goal: $('f-goal').value.trim(),
+    points: $('f-points').value.split('\n').map((x) => x.trim()).filter(Boolean),
+    budget: $('f-budget').value.trim(),
+    timeline: $('f-timeline').value.trim(),
+  };
+}
+
+function renderSources() {
+  const box = $('sources');
+  box.innerHTML = wsSources
+    .map((s, i) => `<div class="source">
+      <span class="nm">${esc(s.name)}</span>
+      <span class="meta">${s.highlights.length} pts · ${(s.chars / 1000).toFixed(1)}k</span>
+      <button class="drop-one" data-drop="${i}" title="Remove" aria-label="Remove ${esc(s.name)}">×</button>
+    </div>`)
+    .join('');
+}
+
+function addSource(name, text) {
+  const total = wsSources.reduce((a, s) => a + s.chars, 0) + text.length;
+  if (totalTooLarge(total)) {
+    wsSay('That is more material than the workshop can hold — remove a file first.', 'err');
+    return false;
+  }
+  wsSources.push(digestSource(name, text));
+  renderSources();
+  saveWorkshop();
+  return true;
+}
+
+function takeFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  let queued = 0;
+  for (const file of files) {
+    if (!isAccepted(file.name)) {
+      wsSay(`${file.name} is not a text file — paste its contents into the box instead.`, 'err');
+      continue;
+    }
+    if (fileTooLarge(file.size)) {
+      wsSay(`${file.name} is too large (over 512 KB).`, 'err');
+      continue;
+    }
+    queued++;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (addSource(file.name, String(reader.result || ''))) {
+        wsSay(`${wsSources.length} source${wsSources.length === 1 ? '' : 's'} ready`, 'ok');
+      }
+    };
+    reader.onerror = () => wsSay(`Could not read ${file.name}.`, 'err');
+    reader.readAsText(file);
+  }
+  if (queued) wsSay('Reading…', '');
+}
+
+function blocksToHtml(blocks) {
+  return blocks.map((b) => {
+    if (b.type === 'p') return `<p>${esc(b.text)}</p>`;
+    if (b.type === 'list') return `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`;
+    if (b.type === 'quotes') return b.items.map((i) => `<blockquote>${esc(i)}</blockquote>`).join('');
+    if (b.type === 'steps') {
+      return b.items.map((i) => `<div class="ws-step"><span class="n">${i.n}</span><span>${
+        i.text ? `<b>${esc(i.name)}</b> — ${esc(i.text)}` : esc(i.name)
+      }</span></div>`).join('');
+    }
+    return '';
+  }).join('');
+}
+
+function renderProposal() {
+  const box = $('ws-doc');
+  if (!wsDoc) {
+    box.innerHTML = '<p class="ws-empty">Give the town something to work with — a few points is enough. Your material stays in this browser.</p>';
+    return;
+  }
+  box.innerHTML = `
+    <h3>${esc(wsDoc.title)}</h3>
+    <p class="doc-sub">${esc(wsDoc.subtitle)}</p>
+    ${wsDoc.sections.map((s) => `<section class="ws-sec">
+      <h4>${esc(s.heading)}</h4>
+      ${blocksToHtml(s.blocks)}
+      ${s.author ? `<span class="ws-by" style="--tint:${guildTint(s.author.guild)}"><i></i>${
+        esc(s.author.name)} · ${esc(s.author.role)} · ${esc(s.author.guild)}</span>` : ''}
+    </section>`).join('')}
+    <p class="ws-note">${esc(wsDoc.note)}</p>`;
+  box.scrollTop = 0;
+}
+
+function makeProposal() {
+  const brief = readBrief();
+  const pasted = $('paste').value.trim();
+  if (pasted) {
+    addSource(wsLang === 'zh' ? '贴上的资料' : 'Pasted notes', pasted);
+    $('paste').value = '';
+  }
+  if (!brief.title && !brief.goal && !brief.points.length && !wsSources.length) {
+    wsSay('Tell the town what it is, or hand it some material first.', 'err');
+    return;
+  }
+  wsDoc = buildProposal(brief, wsSources, town, wsLang);
+  renderProposal();
+  $('export-md').hidden = false;
+  $('copy-md').hidden = false;
+  const signed = wsDoc.sections.filter((s) => s.author).length;
+  wsSay(`Draft ready · ${wsDoc.sections.length} sections · ${signed} signed`, 'ok');
+  note(town, 'town', `\u{1F4DC} The Workshop: ${wsSources.length} source${wsSources.length === 1 ? '' : 's'} taken in, draft assembled by ${signed} citizens.`);
+  saveWorkshop();
+  renderLog();
+}
+
+async function exportMarkdown() {
+  if (!wsDoc) return;
+  const filename = `${slugify(wsDoc.title)}.md`;
+  const data = proposalToMarkdown(wsDoc);
+  try {
+    const downloads = window.claude && typeof window.claude.use === 'function'
+      ? await window.claude.use('downloads')
+      : null;
+    if (downloads) {
+      await downloads.save({ filename, data });
+      wsSay(`Saved as ${filename}`, 'ok');
+      return;
+    }
+  } catch (err) {
+    if (err && err.code === 'declined') { wsSay('Save cancelled.', ''); return; }
+    wsSay('Could not save the file — use Copy instead.', 'err');
+    return;
+  }
+  // Outside the artifact viewer a plain download link still works.
+  const url = URL.createObjectURL(new Blob([data], { type: 'text/markdown' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  wsSay(`Saved as ${filename}`, 'ok');
+}
+
+async function copyMarkdown() {
+  if (!wsDoc) return;
+  try {
+    await navigator.clipboard.writeText(proposalToMarkdown(wsDoc));
+    wsSay('Copied to the clipboard', 'ok');
+  } catch {
+    wsSay('Could not copy — select the text and copy it by hand.', 'err');
+  }
+}
+
+function wireWorkshop() {
+  const drop = $('drop');
+  $('files').addEventListener('change', (e) => { takeFiles(e.target.files); e.target.value = ''; });
+  for (const type of ['dragenter', 'dragover']) {
+    drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  }
+  for (const type of ['dragleave', 'drop']) {
+    drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+  }
+  drop.addEventListener('drop', (e) => takeFiles(e.dataTransfer.files));
+
+  $('sources').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-drop]');
+    if (!btn) return;
+    wsSources.splice(Number(btn.dataset.drop), 1);
+    renderSources();
+    saveWorkshop();
+  });
+
+  document.querySelectorAll('.langs button').forEach((b) => {
+    b.addEventListener('click', () => {
+      wsLang = b.dataset.lang;
+      document.querySelectorAll('.langs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      if (wsDoc) makeProposal();
+      saveWorkshop();
+    });
+  });
+
+  $('make').addEventListener('click', makeProposal);
+  $('export-md').addEventListener('click', exportMarkdown);
+  $('copy-md').addEventListener('click', copyMarkdown);
+  for (const id of ['f-title', 'f-client', 'f-goal', 'f-points', 'f-budget', 'f-timeline']) {
+    $(id).addEventListener('change', saveWorkshop);
+  }
+}
+
 /* ------------------------------------------------------------ controls */
 
 function advance() {
@@ -289,5 +524,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 renderQuickDecrees();
+wireWorkshop();
+loadWorkshop();
 render();
 setRunning(true);
