@@ -20,7 +20,7 @@ ground, who walks to their posting the day they are hired.
 
 ```bash
 npm run build      # bundle to dist/gradient-town.html (single self-contained file)
-npm test           # 23 tests covering the town's guarantees
+npm test           # 29 tests covering the town's guarantees
 ```
 
 Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
@@ -54,28 +54,44 @@ The Hearth district is the pipeline the whole town runs on:
 Full employment lands around **day 25**, and average performance climbs from ~85% to ~96% as
 people level up from Associate to Practitioner to Guild Master.
 
-## The Workshop — hand the town your work
+## The Workshop — five things the town can make
 
-Under the world sits **The Workshop**. You give it your material and the points you care
-about, and the guilds assemble a proposal draft.
+Under the world sits **The Workshop**. Pick what you need, hand over your material and the
+points you care about, and the guilds assemble it — each section signed by the citizen whose
+craft it belongs to.
+
+| | What you get |
+|---|---|
+| 📜 **Proposal** | Eight sections: overview, what we understand, approach, deliverables, timeline, investment, why this team, next steps |
+| 💡 **Ideas** | Eleven angles on your subject — one per guild, each a sharp question plus a concrete move |
+| 🗣 **Pitch outline** | Ten slides in the order a room can follow, from the one-line to the ask |
+| 📋 **Brief** | Background, objective, audience, scope, out of scope, success, timing, budget |
+| ✉ **Email** | A short draft you can send, with your notes kept out of it |
+
+**Ideas** is the one only this town can make. Each guild reads your problem through its own
+craft: Aether asks what the *engine* is, Forge asks for the smallest version you could build
+this week, Lumen asks what would have to be true for this to be a bad idea, Chorus asks what a
+customer says when they describe it to a friend. Eleven angles, each signed by the citizen who
+would take that view.
+
+**How to use it**
 
 1. **Hand over your material** — drop in or choose text files (txt, md, csv, json, log), or
    paste anything into the box. For PDF or Word, copy the text in. Files stay in your browser:
-   they are read locally, kept in `localStorage`, and never sent anywhere.
+   read locally, kept in `localStorage`, never sent anywhere.
 2. **Give the points** — what it is, for whom, what they want, your key points, budget, timing.
-3. **Hand it to the town** — each section is assembled and signed by the citizen whose craft it
-   belongs to: Lumen reads the material, Keystone sets out the approach, Wayfinder the timeline,
-   Ledger the money, Chorus the case for the team.
-4. **Take it away** — save it as Markdown, or copy it.
+3. **Ask the town** — the citizens who sign light up on the map, gain the experience, and carry
+   the piece in their own record afterwards. The town spends a little knowledge doing it.
+4. **Take it away** — save as Markdown, or copy.
 
 English or 中文, switched at any time — the same brief re-assembles in the other language.
 
 **What this is honest about:** the draft is *assembled*, not written for you. It is your words,
 your material, and a structure the town knows how to hold — the useful lines are pulled out of
 your files by a scoring heuristic (numbers, money, deadlines, goals, requirements), and the
-prose around them comes from a template. It gives you a complete, well-ordered draft to work
-from in seconds. It does not invent argument or research your client. Uploaded text is escaped
-before it is ever rendered.
+prose around them is written into the town. It gives you a complete, well-ordered draft in
+seconds, and in Ideas it gives you eleven angles you would not have asked yourself. It does not
+invent argument or research your client. Uploaded text is escaped before it is ever rendered.
 
 ## Decrees — giving the town orders
 
@@ -119,7 +135,7 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 
 ## What the tests guarantee
 
-`npm test` (23 tests) asserts the things the town promises:
+`npm test` (29 tests) asserts the things the town promises:
 
 - all 66 citizens graduate in good standing and are hired within 60 days
 - everyone is placed on a skill they actually have an aptitude for
@@ -132,13 +148,16 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 - the workshop keeps the lines that carry meaning and drops the noise
 - every proposal section is signed by a different, real citizen
 - an almost-empty brief still produces a usable draft, in either language
+- all five deliverables assemble, in both languages, with no citizen signing twice
+- a town that has not graduated anyone yet can still be asked for work
 
 ## Layout
 
 ```
 src/data.js     the world: resources, guilds, buildings, posts, citizens
 src/decrees.js  the orders the town accepts, and the parser that reads them
-src/workshop.js reading your material, and assembling the proposal draft
+src/workshop.js reading your material: which files, and which lines carry meaning
+src/deliverables.js  the five things the town can make, and the eleven guild lenses
 src/engine.js   the simulation: study, placement, work, support, upkeep, decrees
 src/view.js     the world: floating isles, isometric buildings, citizens, sky
 src/main.js     the HUD: pipeline, stores, town record, roster, dossiers

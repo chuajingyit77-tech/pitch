@@ -122,6 +122,23 @@ export function createTown(seed = 66) {
   return town;
 }
 
+// The workshop drew on the town: the citizens who signed gain from the work,
+// and the town spends a little knowledge doing it.
+export function creditWorkshop(town, authorIds, label) {
+  const ids = new Set(authorIds.filter(Boolean));
+  let credited = 0;
+  for (const c of town.citizens) {
+    if (!ids.has(c.id)) continue;
+    c.xp = round2(c.xp + 2);
+    c.workshopJobs = (c.workshopJobs || 0) + 1;
+    c.highlights.push(`Worked on ${label} for the workshop on day ${town.day}`);
+    credited++;
+  }
+  town.resources.knowledge = Math.max(0, round2(town.resources.knowledge - credited * 0.5));
+  town.ledger.commissions = (town.ledger.commissions || 0) + 1;
+  return credited;
+}
+
 // Write a line into the town record from outside the simulation.
 export function note(town, kind, text) { say(town, kind, text); }
 

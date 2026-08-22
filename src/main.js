@@ -1,12 +1,10 @@
 // Wires the simulation to the operations board.
 
-import { createTown, tick, stats, performanceBand, seniority, issueDecree, note } from './engine.js';
+import { createTown, tick, stats, performanceBand, seniority, issueDecree, note, creditWorkshop } from './engine.js';
 import { GUILDS, RESOURCES, BUILDINGS, COURSES } from './data.js';
 import { parseDecree, DECREE_BY_KEY, QUICK_DECREES, decreeCostText } from './decrees.js';
-import {
-  digestSource, buildProposal, proposalToMarkdown, slugify,
-  isAccepted, fileTooLarge, totalTooLarge,
-} from './workshop.js';
+import { digestSource, docToMarkdown, slugify, isAccepted, fileTooLarge, totalTooLarge } from './workshop.js';
+import { DELIVERABLES, DELIVERABLE_BY_ID, assemble } from './deliverables.js';
 import { computeGeometry, drawMap, drawPins, startSky } from './view.js';
 
 const $ = (id) => document.getElementById(id);
@@ -22,6 +20,7 @@ let filter = 'all';
 let selected = null;
 let wsSources = [];
 let wsLang = 'en';
+let wsKind = 'proposal';
 let wsDoc = null;
 const WS_KEY = 'gradient-town-workshop';
 
@@ -177,6 +176,7 @@ function renderDossier() {
       ${c.stage === 'student' ? `<div class="kv"><span>Mastery</span><span>${Math.round(c.mastery * 100)}%</span></div>` : ''}
       <div class="kv"><span>Wellbeing</span><span>${Math.round(c.wellbeing * 100)}%</span></div>
       ${mentor ? `<div class="kv"><span>Mentor</span><span>${mentor.name}</span></div>` : ''}
+      ${c.workshopJobs ? `<div class="kv"><span>Workshop pieces</span><span>${c.workshopJobs}</span></div>` : ''}
     </div>
 
     <div class="dsec">
@@ -221,6 +221,15 @@ const esc = (v) => String(v)
 
 const guildTint = (name) => (GUILDS.find((g) => g.name === name) || {}).color || '#d4a373';
 
+function renderKinds() {
+  $('kinds').innerHTML = DELIVERABLES.map((d) => `<button type="button" data-kind="${d.id}" aria-pressed="${
+    d.id === wsKind}"><span aria-hidden="true">${d.emoji}</span> ${wsLang === 'zh' ? d.zh : d.en}</button>`).join('');
+  const spec = DELIVERABLE_BY_ID[wsKind];
+  $('make').textContent = wsLang === 'zh'
+    ? `让小镇做${spec.zh}`
+    : `Ask the town for ${spec.en.toLowerCase()}`;
+}
+
 function wsSay(text, kind = '') {
   const box = $('ws-status');
   box.textContent = text;
@@ -229,7 +238,7 @@ function wsSay(text, kind = '') {
 
 function saveWorkshop() {
   try {
-    localStorage.setItem(WS_KEY, JSON.stringify({ sources: wsSources, brief: readBrief(), lang: wsLang }));
+    localStorage.setItem(WS_KEY, JSON.stringify({ sources: wsSources, brief: readBrief(), lang: wsLang, kind: wsKind }));
   } catch { /* private browsing, or the drawer is full — the page still works */ }
 }
 
@@ -239,6 +248,7 @@ function loadWorkshop() {
   if (!saved) return;
   wsSources = Array.isArray(saved.sources) ? saved.sources : [];
   wsLang = saved.lang === 'zh' ? 'zh' : 'en';
+  if (DELIVERABLE_BY_ID[saved.kind]) wsKind = saved.kind;
   const b = saved.brief || {};
   $('f-title').value = b.title || '';
   $('f-client').value = b.client || '';
@@ -247,6 +257,7 @@ function loadWorkshop() {
   $('f-budget').value = b.budget || '';
   $('f-timeline').value = b.timeline || '';
   document.querySelectorAll('.langs button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.lang === wsLang)));
+  renderKinds();
   renderSources();
 }
 
@@ -343,6 +354,19 @@ function renderProposal() {
   box.scrollTop = 0;
 }
 
+function lightUpAuthors(doc) {
+  document.querySelectorAll('.pin.is-working').forEach((p) => p.classList.remove('is-working'));
+  const ids = doc.sections.map((s) => s.author && s.author.id).filter(Boolean);
+  for (const id of ids) {
+    const pin = svg.querySelector(`[data-pin="${id}"]`);
+    if (pin) pin.classList.add('is-working');
+  }
+  clearTimeout(lightUpAuthors.timer);
+  lightUpAuthors.timer = setTimeout(() => {
+    document.querySelectorAll('.pin.is-working').forEach((p) => p.classList.remove('is-working'));
+  }, 12000);
+}
+
 function makeProposal() {
   const brief = readBrief();
   const pasted = $('paste').value.trim();
@@ -354,21 +378,26 @@ function makeProposal() {
     wsSay('Tell the town what it is, or hand it some material first.', 'err');
     return;
   }
-  wsDoc = buildProposal(brief, wsSources, town, wsLang);
+  wsDoc = assemble(wsKind, brief, wsSources, town, wsLang);
   renderProposal();
+  lightUpAuthors(wsDoc);
   $('export-md').hidden = false;
   $('copy-md').hidden = false;
   const signed = wsDoc.sections.filter((s) => s.author).length;
-  wsSay(`Draft ready · ${wsDoc.sections.length} sections · ${signed} signed`, 'ok');
-  note(town, 'town', `\u{1F4DC} The Workshop: ${wsSources.length} source${wsSources.length === 1 ? '' : 's'} taken in, draft assembled by ${signed} citizens.`);
+  const spec = DELIVERABLE_BY_ID[wsKind];
+  creditWorkshop(town, wsDoc.sections.map((s) => s.author && s.author.id), spec.en.toLowerCase());
+  wsSay(wsLang === 'zh'
+    ? `${spec.zh}已备好 · ${wsDoc.sections.length} 节 · ${signed} 人署名`
+    : `${spec.en} ready · ${wsDoc.sections.length} sections · ${signed} signed`, 'ok');
+  note(town, 'town', `${spec.emoji} The Workshop: ${spec.en.toLowerCase()} assembled by ${signed} citizens from ${wsSources.length} source${wsSources.length === 1 ? '' : 's'}.`);
   saveWorkshop();
   renderLog();
 }
 
 async function exportMarkdown() {
   if (!wsDoc) return;
-  const filename = `${slugify(wsDoc.title)}.md`;
-  const data = proposalToMarkdown(wsDoc);
+  const filename = `${slugify(wsDoc.title)}-${wsDoc.kind}.md`;
+  const data = docToMarkdown(wsDoc);
   try {
     const downloads = window.claude && typeof window.claude.use === 'function'
       ? await window.claude.use('downloads')
@@ -396,7 +425,7 @@ async function exportMarkdown() {
 async function copyMarkdown() {
   if (!wsDoc) return;
   try {
-    await navigator.clipboard.writeText(proposalToMarkdown(wsDoc));
+    await navigator.clipboard.writeText(docToMarkdown(wsDoc));
     wsSay('Copied to the clipboard', 'ok');
   } catch {
     wsSay('Could not copy — select the text and copy it by hand.', 'err');
@@ -426,9 +455,19 @@ function wireWorkshop() {
     b.addEventListener('click', () => {
       wsLang = b.dataset.lang;
       document.querySelectorAll('.langs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      renderKinds();
       if (wsDoc) makeProposal();
       saveWorkshop();
     });
+  });
+
+  $('kinds').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-kind]');
+    if (!btn) return;
+    wsKind = btn.dataset.kind;
+    renderKinds();
+    if (wsDoc) makeProposal();
+    saveWorkshop();
   });
 
   $('make').addEventListener('click', makeProposal);
@@ -524,6 +563,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 renderQuickDecrees();
+renderKinds();
 wireWorkshop();
 loadWorkshop();
 render();

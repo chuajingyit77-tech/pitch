@@ -183,6 +183,17 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .legend .tail { font-family: var(--mono); font-size: 11px; color: var(--berry); }
 
 /* ---------------- the workshop ---------------- */
+.kinds { display: flex; flex-wrap: wrap; gap: 7px; }
+.kinds button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px;
+  border: 1.5px solid #ead9be; background: var(--card); font-size: 13px; font-weight: 700; color: #6b5540;
+  box-shadow: var(--lift-sm); transition: transform 120ms, background 120ms, border-color 120ms;
+}
+.kinds button:hover { transform: translateY(-1px); background: #fff6e2; }
+.kinds button[aria-pressed='true'] { background: var(--sun); border-color: #dda12f; color: #4a3510; }
+.pin.is-working .robe { stroke: #e0a83c; stroke-width: 2; }
+.pin.is-working .halo { fill: #ffe9a8; stroke: #e0a83c; stroke-width: 0.9; animation: bob 1.4s ease-in-out infinite; }
+
 .ws-body { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 18px; padding: 16px; }
 .ws-in { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
 .drop {
@@ -422,10 +433,11 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   <section class="panel workshop">
     <header>
       <h2>The Workshop</h2>
-      <span class="note">hand the town your material and your points — the guilds assemble a draft</span>
+      <span class="note" id="ws-hint">pick what you need, hand over your material, and the guilds assemble it</span>
     </header>
     <div class="ws-body">
       <div class="ws-in">
+        <div class="kinds" id="kinds" role="group" aria-label="What do you need"></div>
         <label class="drop" id="drop" for="files">
           <b>Drop your material here</b>
           <span>or click to choose &middot; txt, md, csv, json</span>

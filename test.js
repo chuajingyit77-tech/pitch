@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { createTown, tick, stats, issueDecree, activeModifiers, BUILDING_BY_ID } from './src/engine.js';
 import { BUILDINGS, GUILDS, RESOURCES, CITIZEN_NAMES } from './src/data.js';
 import { parseDecree, DECREE_BY_KEY, DECREES } from './src/decrees.js';
-import {
-  digestSource, buildProposal, proposalToMarkdown, slugify, isAccepted, fileTooLarge,
-} from './src/workshop.js';
+import { digestSource, docToMarkdown, slugify, isAccepted, fileTooLarge } from './src/workshop.js';
+import { assemble, DELIVERABLES, DELIVERABLE_BY_ID, LENSES } from './src/deliverables.js';
 
 const run = (days, seed = 66) => {
   const town = createTown(seed);
@@ -208,7 +207,7 @@ test('only text files are accepted, and not oversized ones', () => {
 
 test('the guilds assemble a full proposal, each section signed by a different citizen', () => {
   const town = run(50);
-  const doc = buildProposal({
+  const doc = assemble('proposal', {
     title: 'Retail expansion', client: 'Acme Coffee', goal: 'open 12 stores',
     points: ['Site selection', 'Fit-out playbook'], budget: 'RM 4.5m', timeline: 'by Q4',
   }, [digestSource('brief.txt', BRIEF_FILE)], town, 'en');
@@ -227,11 +226,11 @@ test('the guilds assemble a full proposal, each section signed by a different ci
 
 test('the draft carries the brief and the material into the markdown', () => {
   const town = run(50);
-  const doc = buildProposal({
+  const doc = assemble('proposal', {
     title: 'Retail expansion', client: 'Acme Coffee', goal: 'open 12 stores',
     points: ['Site selection framework'], budget: 'RM 4.5m', timeline: 'by Q4',
   }, [digestSource('brief.txt', BRIEF_FILE)], town, 'en');
-  const md = proposalToMarkdown(doc);
+  const md = docToMarkdown(doc);
 
   assert.match(md, /^# Retail expansion/);
   assert.match(md, /Acme Coffee/);
@@ -244,20 +243,20 @@ test('the draft carries the brief and the material into the markdown', () => {
 test('a draft can be assembled in Chinese, and in English, from the same brief', () => {
   const town = run(50);
   const brief = { title: '零售扩张', client: 'Acme', goal: '开 12 家店', points: ['选址'], budget: '450 万' };
-  const zh = buildProposal(brief, [], town, 'zh');
-  const en = buildProposal(brief, [], town, 'en');
+  const zh = assemble('proposal', brief, [], town, 'zh');
+  const en = assemble('proposal', brief, [], town, 'en');
   assert.equal(zh.sections[0].heading, '概述');
   assert.equal(en.sections[0].heading, 'Overview');
-  assert.match(proposalToMarkdown(zh), /开 12 家店/);
+  assert.match(docToMarkdown(zh), /开 12 家店/);
   assert.equal(zh.sections.length, en.sections.length);
 });
 
 test('an almost-empty brief still produces a usable draft', () => {
   const town = run(50);
-  const doc = buildProposal({ points: [] }, [], town, 'en');
+  const doc = assemble('proposal', { points: [] }, [], town, 'en');
   assert.equal(doc.sections.length, 8);
   assert.ok(doc.title.length > 0);
-  const md = proposalToMarkdown(doc);
+  const md = docToMarkdown(doc);
   assert.ok(md.length > 400, 'there is still a real document');
 });
 
@@ -266,4 +265,82 @@ test('filenames are made safe for saving', () => {
   assert.equal(slugify('  ../../etc/passwd  '), 'etc-passwd');
   assert.equal(slugify(''), 'proposal');
   assert.ok(slugify('x'.repeat(200)).length <= 48);
+});
+
+/* --------------------------------------------------------- deliverables */
+
+test('the town can make all five things, from the same brief', () => {
+  const town = run(50);
+  const brief = {
+    title: 'Coffee expansion', client: 'Acme', goal: 'open 12 stores by Q4',
+    points: ['Site selection', 'Fit-out playbook'], budget: 'RM 4.5m', timeline: 'by Q4',
+  };
+  assert.equal(DELIVERABLES.length, 5);
+  for (const spec of DELIVERABLES) {
+    const doc = assemble(spec.id, brief, [], town, 'en');
+    assert.ok(doc.sections.length >= 1, `${spec.id} has sections`);
+    assert.equal(doc.kind, spec.id);
+    assert.ok(doc.title, `${spec.id} has a title`);
+    for (const s of doc.sections) {
+      assert.ok(s.heading, `${spec.id}: every section has a heading`);
+      assert.ok(s.blocks.length, `${spec.id}: every section has content`);
+    }
+    const md = docToMarkdown(doc);
+    assert.ok(md.includes(doc.title), `${spec.id} markdown carries the title`);
+  }
+});
+
+test('ideas puts all eleven guild lenses on your subject', () => {
+  const town = run(50);
+  const doc = assemble('ideas', { goal: 'open 12 stores by Q4', points: [] }, [], town, 'en');
+  assert.equal(LENSES.length, 11);
+  const lensSections = doc.sections.filter((s) => s.key.startsWith('lens-'));
+  assert.equal(lensSections.length, 11, 'one angle per guild');
+  for (const g of GUILDS) {
+    assert.ok(doc.sections.some((s) => s.key === `lens-${g.id}`), `${g.name} has an angle`);
+  }
+  for (const s of lensSections) {
+    assert.equal(s.blocks.length, 2, 'a question and a move');
+    assert.match(s.blocks[0].text, /open 12 stores by Q4/, 'the question is about your subject');
+    assert.ok(s.blocks[1].text.length > 30, 'the move is concrete');
+  }
+});
+
+test('every section is signed by a real, distinct citizen with an id', () => {
+  const town = run(50);
+  for (const spec of DELIVERABLES) {
+    const doc = assemble(spec.id, { title: 'X', points: ['a', 'b'] }, [], town, 'en');
+    const ids = doc.sections.map((s) => s.author && s.author.id);
+    assert.ok(ids.every(Boolean), `${spec.id}: every section is signed`);
+    assert.equal(new Set(ids).size, ids.length, `${spec.id}: nobody signs twice`);
+    for (const id of ids) {
+      assert.ok(town.citizens.some((c) => c.id === id), `${spec.id}: ${id} is a real citizen`);
+    }
+  }
+});
+
+test('a town that has not graduated anyone can still be asked for work', () => {
+  const town = createTown(66);
+  tick(town);
+  const doc = assemble('ideas', { goal: 'launch something', points: [] }, [], town, 'en');
+  assert.equal(doc.sections.length, 11);
+  assert.ok(doc.sections.every((s) => s.author), 'students sign when nobody is employed yet');
+});
+
+test('every deliverable can be assembled in Chinese', () => {
+  const town = run(50);
+  for (const spec of DELIVERABLES) {
+    const doc = assemble(spec.id, { title: '咖啡扩张', client: 'Acme', goal: '开 12 家店', points: ['选址'] }, [], town, 'zh');
+    assert.equal(doc.lang, 'zh');
+    assert.equal(doc.kindName, spec.zh);
+    const md = docToMarkdown(doc);
+    assert.ok(/[一-龥]/.test(md), `${spec.id} produces Chinese text`);
+  }
+});
+
+test('an unknown deliverable falls back to a proposal rather than breaking', () => {
+  const town = run(40);
+  const doc = assemble('nonsense', { title: 'X', points: [] }, [], town, 'en');
+  assert.equal(doc.kind, 'proposal');
+  assert.ok(doc.sections.length > 0);
 });
