@@ -20,7 +20,7 @@ ground, who walks to their posting the day they are hired.
 
 ```bash
 npm run build      # bundle to dist/gradient-town.html (single self-contained file)
-npm test           # 29 tests covering the town's guarantees
+npm test           # 39 tests covering the town's guarantees
 ```
 
 Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
@@ -67,6 +67,28 @@ craft it belongs to.
 | 🗣 **Pitch outline** | Ten slides in the order a room can follow, from the one-line to the ask |
 | 📋 **Brief** | Background, objective, audience, scope, out of scope, success, timing, budget |
 | ✉ **Email** | A short draft you can send, with your notes kept out of it |
+| 🔍 **Check my proposal** | Eleven checks on a proposal you already have — see below |
+
+**Check my proposal** reads a document you already wrote and reports on it, guild by guild.
+Each one checks the single thing its craft cares about, marks it **OK** or **Look**, and quotes
+the sentence it is talking about:
+
+| Guild | Checks |
+|---|---|
+| Ledger | Is there a price anywhere? |
+| Wayfinder | Are there dates and durations, or just "soon"? |
+| Keystone | Does it say what is **not** included? |
+| Lattice | Is success measurable, or is "done" a feeling? |
+| Lumen | Are there figures behind the claims? |
+| Forge | Does it name what the client ends up holding? |
+| Chorus | Does the opening say something, or lean on stock phrases? |
+| Mender | Are there absolute promises that will be quoted back at you? |
+| Hearth | Does it address the reader, or only describe the seller? |
+| Aether | Does it say why now? |
+| Verdant | Does it ask for a next action? |
+
+It is a linter for proposals: it finds what is missing and where the language goes soft. It
+does not judge whether your idea is good.
 
 **Ideas** is the one only this town can make. Each guild reads your problem through its own
 craft: Aether asks what the *engine* is, Forge asks for the smallest version you could build
@@ -76,9 +98,15 @@ would take that view.
 
 **How to use it**
 
-1. **Hand over your material** — drop in or choose text files (txt, md, csv, json, log), or
-   paste anything into the box. For PDF or Word, copy the text in. Files stay in your browser:
-   read locally, kept in `localStorage`, never sent anywhere.
+1. **Hand over your material** — drop in **PDFs** or text files (txt, md, csv, json, log), or
+   paste anything into the box. Files stay in your browser: read locally, kept in
+   `localStorage`, never sent anywhere.
+
+   PDFs are read in the page itself by `src/pdf.js` — a small extractor that inflates the
+   content streams and follows each font's ToUnicode table, which is how Word, Chrome and
+   LaTeX encode their glyphs. English and Chinese both come back as text. It cannot read a
+   scanned page — those are pictures of words — and it says so plainly rather than handing you
+   nonsense. For Word files, copy the text in.
 2. **Give the points** — what it is, for whom, what they want, your key points, budget, timing.
 3. **Ask the town** — the citizens who sign light up on the map, gain the experience, and carry
    the piece in their own record afterwards. The town spends a little knowledge doing it.
@@ -135,7 +163,7 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 
 ## What the tests guarantee
 
-`npm test` (29 tests) asserts the things the town promises:
+`npm test` (39 tests) asserts the things the town promises:
 
 - all 66 citizens graduate in good standing and are hired within 60 days
 - everyone is placed on a skill they actually have an aptitude for
@@ -148,7 +176,11 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 - the workshop keeps the lines that carry meaning and drops the noise
 - every proposal section is signed by a different, real citizen
 - an almost-empty brief still produces a usable draft, in either language
-- all five deliverables assemble, in both languages, with no citizen signing twice
+- all six deliverables assemble, in both languages, with no citizen signing twice
+- a real PDF (English and Chinese) gives its text back, and a non-PDF is refused, not guessed at
+- a weak proposal is flagged on price, dates, scope, measures, deliverables and stock phrases
+- a solid proposal passes, with the price quoted back in its own sentence
+- asked to review nothing, the town says so instead of inventing a verdict
 - a town that has not graduated anyone yet can still be asked for work
 
 ## Layout
@@ -156,8 +188,9 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 ```
 src/data.js     the world: resources, guilds, buildings, posts, citizens
 src/decrees.js  the orders the town accepts, and the parser that reads them
+src/pdf.js      pulling text out of a PDF, ToUnicode tables and all
 src/workshop.js reading your material: which files, and which lines carry meaning
-src/deliverables.js  the five things the town can make, and the eleven guild lenses
+src/deliverables.js  the six things the town can make: lenses for ideas, checks for review
 src/engine.js   the simulation: study, placement, work, support, upkeep, decrees
 src/view.js     the world: floating isles, isometric buildings, citizens, sky
 src/main.js     the HUD: pipeline, stores, town record, roster, dossiers

@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { createTown, tick, stats, issueDecree, activeModifiers, BUILDING_BY_ID } from './src/engine.js';
 import { BUILDINGS, GUILDS, RESOURCES, CITIZEN_NAMES } from './src/data.js';
 import { parseDecree, DECREE_BY_KEY, DECREES } from './src/decrees.js';
-import { digestSource, docToMarkdown, slugify, isAccepted, fileTooLarge } from './src/workshop.js';
+import { digestSource, docToMarkdown, slugify, isAccepted, isPdf, fileTooLarge, joinSoftBreaks } from './src/workshop.js';
+import { extractPdfText, legibility } from './src/pdf.js';
+import { measureText } from './src/deliverables.js';
+import { readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
+
+const nodeInflate = async (bytes) => new Uint8Array(inflateSync(Buffer.from(bytes)));
+const fixture = (name) => readFileSync(new URL(`./test-fixtures/${name}`, import.meta.url));
 import { assemble, DELIVERABLES, DELIVERABLE_BY_ID, LENSES } from './src/deliverables.js';
 
 const run = (days, seed = 66) => {
@@ -196,13 +203,16 @@ test('reading a file keeps the lines that carry something', () => {
   assert.ok(!d.highlights.some((h) => h.includes('filler text')), 'lines saying nothing are dropped');
 });
 
-test('only text files are accepted, and not oversized ones', () => {
+test('text files and PDFs are accepted, other formats are not', () => {
   assert.equal(isAccepted('notes.md'), true);
   assert.equal(isAccepted('data.CSV'), true);
-  assert.equal(isAccepted('deck.pdf'), false);
-  assert.equal(isAccepted('report.docx'), false);
-  assert.equal(fileTooLarge(600 * 1024), true);
-  assert.equal(fileTooLarge(10 * 1024), false);
+  assert.equal(isAccepted('proposal.pdf'), true);
+  assert.equal(isPdf('proposal.PDF'), true);
+  assert.equal(isPdf('notes.md'), false);
+  assert.equal(isAccepted('report.docx'), false, 'Word is not read; the text must be pasted');
+  assert.equal(isAccepted('photo.png'), false);
+  assert.equal(fileTooLarge(9 * 1024 * 1024), true);
+  assert.equal(fileTooLarge(600 * 1024), false, 'a normal PDF fits');
 });
 
 test('the guilds assemble a full proposal, each section signed by a different citizen', () => {
@@ -269,13 +279,13 @@ test('filenames are made safe for saving', () => {
 
 /* --------------------------------------------------------- deliverables */
 
-test('the town can make all five things, from the same brief', () => {
+test('the town can make all six things, from the same brief', () => {
   const town = run(50);
   const brief = {
     title: 'Coffee expansion', client: 'Acme', goal: 'open 12 stores by Q4',
     points: ['Site selection', 'Fit-out playbook'], budget: 'RM 4.5m', timeline: 'by Q4',
   };
-  assert.equal(DELIVERABLES.length, 5);
+  assert.equal(DELIVERABLES.length, 6);
   for (const spec of DELIVERABLES) {
     const doc = assemble(spec.id, brief, [], town, 'en');
     assert.ok(doc.sections.length >= 1, `${spec.id} has sections`);
@@ -343,4 +353,113 @@ test('an unknown deliverable falls back to a proposal rather than breaking', () 
   const doc = assemble('nonsense', { title: 'X', points: [] }, [], town, 'en');
   assert.equal(doc.kind, 'proposal');
   assert.ok(doc.sections.length > 0);
+});
+
+/* -------------------------------------------------------------- reading PDFs */
+
+test('a real PDF gives back its text, following the font tables', async () => {
+  const r = await extractPdfText(fixture('sample-en.pdf'), nodeInflate);
+  assert.equal(r.ok, true, `expected readable text, got ${r.reason}`);
+  assert.ok(r.legible > 0.6, `legibility ${r.legible}`);
+  assert.match(r.text, /Retail Expansion for Acme Coffee/);
+  assert.match(r.text, /RM\s+4\.5 million/, 'a figure survives intact');
+  assert.match(r.text, /foot traffic/);
+  assert.ok(r.pages >= 1);
+});
+
+test('a Chinese PDF comes back as Chinese, not glyph soup', async () => {
+  const r = await extractPdfText(fixture('sample-zh.pdf'), nodeInflate);
+  assert.equal(r.ok, true, `expected readable text, got ${r.reason}`);
+  assert.match(r.text, /咖啡零售扩张/);
+  assert.match(r.text, /450 万令吉/);
+  assert.ok(!/�/.test(r.text), 'no replacement characters');
+});
+
+test('something that is not a PDF is refused, not guessed at', async () => {
+  const r = await extractPdfText(new TextEncoder().encode('just a text file, honestly'), nodeInflate);
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'not-pdf');
+  assert.equal(r.text, '');
+});
+
+test('legibility separates language from salvage', () => {
+  assert.ok(legibility('This is an ordinary English sentence.') > 0.7);
+  assert.ok(legibility('������') < 0.2);
+  assert.equal(legibility(''), 0);
+});
+
+test('lines broken by the page are rejoined, headings and lists are not', () => {
+  const joined = joinSoftBreaks('Overview\nAcme Coffee intends to open 12 new\nstores across Malaysia.\n- first item\n- second item');
+  assert.match(joined, /open 12 new stores across Malaysia\./, 'a split sentence is put back together');
+  assert.ok(joined.startsWith('Overview\n'), 'a heading keeps its own line');
+  assert.match(joined, /\n- first item\n- second item/, 'list items keep their own lines');
+});
+
+/* --------------------------------------------------------------- reviewing */
+
+const WEAK_PROPOSAL = `Our Proposal for Globex
+We are a world-class agency with cutting-edge capability and we deliver seamless outcomes.
+We will work hard on the brand refresh and we guarantee results.
+We are excited about this partnership and we look forward to working together.`;
+
+const STRONG_PROPOSAL = `Proposal for Globex — brand refresh
+You asked for a brand refresh before your March launch, and this sets out what that costs and what you get.
+Scope: identity, packaging for 3 SKUs, and a one-page guideline.
+Not included: photography, media buying, or web build. Those can be quoted separately.
+You will receive: a logo suite, colour and type system, and packaging artwork for 3 SKUs.
+Timeline: 6 weeks from signature, with a first version in week 2.
+Our fee is RM 68,000, invoiced in two parts.
+Success is measured by pack artwork approved and at press by 20 March 2026.
+Why now: your March launch fixes the date, and press slots close 3 weeks before.
+Next steps: approve this scope and we start on Monday.`;
+
+test('a weak proposal is caught on the things that matter', () => {
+  const town = run(50);
+  const doc = assemble('review', {}, [digestSource('weak.txt', WEAK_PROPOSAL)], town, 'en');
+  const flagged = doc.sections.filter((s) => s.status === 'look').map((s) => s.key);
+  for (const key of ['check-ledger', 'check-wayfinder', 'check-keystone', 'check-lattice', 'check-forge', 'check-mender', 'check-chorus']) {
+    assert.ok(flagged.includes(key), `${key} should be flagged on a weak proposal`);
+  }
+  const cliche = doc.sections.find((s) => s.key === 'check-chorus');
+  assert.match(cliche.blocks[0].text, /world-class|cutting-edge/, 'the stock phrases are named');
+  const promise = doc.sections.find((s) => s.key === 'check-mender');
+  assert.match(promise.blocks[0].text, /guarantee/, 'the absolute promise is named');
+});
+
+test('a solid proposal passes almost everything, with evidence quoted back', () => {
+  const town = run(50);
+  const doc = assemble('review', {}, [digestSource('strong.txt', STRONG_PROPOSAL)], town, 'en');
+  const flagged = doc.sections.filter((s) => s.status === 'look');
+  assert.ok(flagged.length <= 1, `expected at most one flag, got ${flagged.map((s) => s.key).join(', ')}`);
+  const money = doc.sections.find((s) => s.key === 'check-ledger');
+  assert.equal(money.status, 'good');
+  assert.match(money.blocks[1].items[0], /RM 68,000/, 'the price is quoted back with its sentence');
+});
+
+test('asked to review nothing, the town says so instead of inventing a verdict', () => {
+  const town = run(50);
+  const doc = assemble('review', { title: 'x' }, [], town, 'en');
+  assert.equal(doc.sections.length, 1);
+  assert.match(doc.sections[0].blocks[0].text, /Upload the PDF or paste/);
+  assert.ok(!doc.sections.some((s) => s.status === 'good'), 'nothing is passed without a document');
+});
+
+test('the review reads a PDF end to end', async () => {
+  const town = run(50);
+  const r = await extractPdfText(fixture('sample-en.pdf'), nodeInflate);
+  const doc = assemble('review', {}, [digestSource('sample-en.pdf', r.text)], town, 'en');
+  assert.ok(doc.sections.length >= 11);
+  const money = doc.sections.find((s) => s.key === 'check-ledger');
+  assert.equal(money.status, 'good', 'it finds the price that is in the PDF');
+  assert.match(money.blocks[1].items[0], /RM 4\.5 million/);
+});
+
+test('measurements describe the document rather than guessing', () => {
+  const m = measureText(STRONG_PROPOSAL);
+  assert.ok(m.words > 80);
+  assert.ok(m.money.length >= 1);
+  assert.ok(m.dates.length >= 2);
+  assert.ok(m.you > 0);
+  assert.equal(m.cliches.length, 0);
+  assert.equal(measureText(WEAK_PROPOSAL).cliches.length >= 2, true);
 });

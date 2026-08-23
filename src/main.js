@@ -3,7 +3,8 @@
 import { createTown, tick, stats, performanceBand, seniority, issueDecree, note, creditWorkshop } from './engine.js';
 import { GUILDS, RESOURCES, BUILDINGS, COURSES } from './data.js';
 import { parseDecree, DECREE_BY_KEY, QUICK_DECREES, decreeCostText } from './decrees.js';
-import { digestSource, docToMarkdown, slugify, isAccepted, fileTooLarge, totalTooLarge } from './workshop.js';
+import { digestSource, docToMarkdown, slugify, isAccepted, isPdf, fileTooLarge, totalTooLarge } from './workshop.js';
+import { extractPdfText } from './pdf.js';
 import { DELIVERABLES, DELIVERABLE_BY_ID, assemble } from './deliverables.js';
 import { computeGeometry, drawMap, drawPins, startSky } from './view.js';
 
@@ -225,9 +226,7 @@ function renderKinds() {
   $('kinds').innerHTML = DELIVERABLES.map((d) => `<button type="button" data-kind="${d.id}" aria-pressed="${
     d.id === wsKind}"><span aria-hidden="true">${d.emoji}</span> ${wsLang === 'zh' ? d.zh : d.en}</button>`).join('');
   const spec = DELIVERABLE_BY_ID[wsKind];
-  $('make').textContent = wsLang === 'zh'
-    ? `让小镇做${spec.zh}`
-    : `Ask the town for ${spec.en.toLowerCase()}`;
+  $('make').textContent = wsLang === 'zh' ? spec.ctaZh : spec.ctaEn;
 }
 
 function wsSay(text, kind = '') {
@@ -277,48 +276,75 @@ function renderSources() {
   box.innerHTML = wsSources
     .map((s, i) => `<div class="source">
       <span class="nm">${esc(s.name)}</span>
+      ${s.pages ? `<span class="kind">PDF · ${s.pages}p</span>` : ''}
       <span class="meta">${s.highlights.length} pts · ${(s.chars / 1000).toFixed(1)}k</span>
       <button class="drop-one" data-drop="${i}" title="Remove" aria-label="Remove ${esc(s.name)}">×</button>
     </div>`)
     .join('');
 }
 
-function addSource(name, text) {
+function addSource(name, text, extra = {}) {
   const total = wsSources.reduce((a, s) => a + s.chars, 0) + text.length;
   if (totalTooLarge(total)) {
     wsSay('That is more material than the workshop can hold — remove a file first.', 'err');
     return false;
   }
-  wsSources.push(digestSource(name, text));
+  wsSources.push({ ...digestSource(name, text), ...extra });
   renderSources();
   saveWorkshop();
   return true;
 }
 
+const PDF_TROUBLE = {
+  'not-pdf': 'that file is not really a PDF',
+  encrypted: 'that PDF is password-protected',
+  'no-text': 'that PDF has no text in it — it is probably a scan',
+  unreadable: 'the text in that PDF did not come out legibly',
+};
+
+async function readOneFile(file) {
+  if (!isAccepted(file.name)) {
+    wsSay(`${file.name} is not a kind the town reads — paste its contents into the box instead.`, 'err');
+    return false;
+  }
+  if (fileTooLarge(file.size)) {
+    wsSay(`${file.name} is too large (over 8 MB).`, 'err');
+    return false;
+  }
+  if (isPdf(file.name)) {
+    const result = await extractPdfText(await file.arrayBuffer());
+    if (!result.ok) {
+      wsSay(`${file.name}: ${PDF_TROUBLE[result.reason] || 'the text could not be read'}. Copy the text and paste it in instead.`, 'err');
+      return false;
+    }
+    return addSource(file.name, result.text, { pages: result.pages });
+  }
+  const text = await file.text();
+  return addSource(file.name, text);
+}
+
+let wsQueue = Promise.resolve();
+
+// Reads are queued: dropping a second file while the first is still being read
+// must not interleave two updates to the same list.
 function takeFiles(fileList) {
   const files = [...fileList];
-  if (!files.length) return;
-  let queued = 0;
+  if (!files.length) return wsQueue;
+  wsQueue = wsQueue.then(() => readFiles(files));
+  return wsQueue;
+}
+
+async function readFiles(files) {
+  wsSay('Reading…', '');
+  let added = 0;
   for (const file of files) {
-    if (!isAccepted(file.name)) {
-      wsSay(`${file.name} is not a text file — paste its contents into the box instead.`, 'err');
-      continue;
+    try {
+      if (await readOneFile(file)) added++;
+    } catch {
+      wsSay(`Could not read ${file.name}.`, 'err');
     }
-    if (fileTooLarge(file.size)) {
-      wsSay(`${file.name} is too large (over 512 KB).`, 'err');
-      continue;
-    }
-    queued++;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (addSource(file.name, String(reader.result || ''))) {
-        wsSay(`${wsSources.length} source${wsSources.length === 1 ? '' : 's'} ready`, 'ok');
-      }
-    };
-    reader.onerror = () => wsSay(`Could not read ${file.name}.`, 'err');
-    reader.readAsText(file);
   }
-  if (queued) wsSay('Reading…', '');
+  if (added) wsSay(`${wsSources.length} source${wsSources.length === 1 ? '' : 's'} ready`, 'ok');
 }
 
 function blocksToHtml(blocks) {
@@ -345,7 +371,9 @@ function renderProposal() {
     <h3>${esc(wsDoc.title)}</h3>
     <p class="doc-sub">${esc(wsDoc.subtitle)}</p>
     ${wsDoc.sections.map((s) => `<section class="ws-sec">
-      <h4>${esc(s.heading)}</h4>
+      <h4>${esc(s.heading)}${s.status ? `<span class="tag ${esc(s.status)}">${
+        s.status === 'good' ? (wsDoc.lang === 'zh' ? '通过' : 'OK') : wsDoc.lang === 'zh' ? '要看' : 'Look'
+      }</span>` : ''}</h4>
       ${blocksToHtml(s.blocks)}
       ${s.author ? `<span class="ws-by" style="--tint:${guildTint(s.author.guild)}"><i></i>${
         esc(s.author.name)} · ${esc(s.author.role)} · ${esc(s.author.guild)}</span>` : ''}

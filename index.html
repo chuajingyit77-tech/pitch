@@ -269,6 +269,16 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 @media (max-width: 1000px) { .ws-body { grid-template-columns: 1fr; } }
 
+.ws-sec .tag {
+  display: inline-block; margin-left: 9px; padding: 2px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; vertical-align: 3px;
+  border: 1.5px solid transparent;
+}
+.ws-sec .tag.good { background: #e6f2dc; color: #4f7a2f; border-color: #cbe3b4; }
+.ws-sec .tag.look { background: #fdeae2; color: #b5503f; border-color: #f3cabb; }
+.ws-sec .tag.mixed { background: #fdf0d2; color: #96702a; border-color: #f0dcae; }
+.source .kind { font-family: var(--mono); font-size: 9.5px; padding: 1px 7px; border-radius: 999px; background: #f3e7cd; color: #7a6242; }
+
 /* ---------------- decree console ---------------- */
 .decree-badge {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px;
@@ -440,11 +450,11 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
         <div class="kinds" id="kinds" role="group" aria-label="What do you need"></div>
         <label class="drop" id="drop" for="files">
           <b>Drop your material here</b>
-          <span>or click to choose &middot; txt, md, csv, json</span>
-          <input type="file" id="files" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.rtf" hidden />
+          <span>or click to choose &middot; pdf, txt, md, csv, json</span>
+          <input type="file" id="files" multiple accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.json,.log,.rtf" hidden />
         </label>
         <div class="sources" id="sources"></div>
-        <textarea id="paste" rows="3" placeholder="…or paste anything here. For PDF or Word, copy the text in."></textarea>
+        <textarea id="paste" rows="3" placeholder="…or paste anything here. For Word, copy the text in."></textarea>
 
         <div class="fields">
           <label class="f-wide"><span>What is it</span><input id="f-title" placeholder="Retail expansion proposal" /></label>

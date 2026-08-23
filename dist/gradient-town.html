@@ -264,6 +264,16 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 
 @media (max-width: 1000px) { .ws-body { grid-template-columns: 1fr; } }
 
+.ws-sec .tag {
+  display: inline-block; margin-left: 9px; padding: 2px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; vertical-align: 3px;
+  border: 1.5px solid transparent;
+}
+.ws-sec .tag.good { background: #e6f2dc; color: #4f7a2f; border-color: #cbe3b4; }
+.ws-sec .tag.look { background: #fdeae2; color: #b5503f; border-color: #f3cabb; }
+.ws-sec .tag.mixed { background: #fdf0d2; color: #96702a; border-color: #f0dcae; }
+.source .kind { font-family: var(--mono); font-size: 9.5px; padding: 1px 7px; border-radius: 999px; background: #f3e7cd; color: #7a6242; }
+
 /* ---------------- decree console ---------------- */
 .decree-badge {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px;
@@ -433,11 +443,11 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
         <div class="kinds" id="kinds" role="group" aria-label="What do you need"></div>
         <label class="drop" id="drop" for="files">
           <b>Drop your material here</b>
-          <span>or click to choose &middot; txt, md, csv, json</span>
-          <input type="file" id="files" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.rtf" hidden />
+          <span>or click to choose &middot; pdf, txt, md, csv, json</span>
+          <input type="file" id="files" multiple accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.json,.log,.rtf" hidden />
         </label>
         <div class="sources" id="sources"></div>
-        <textarea id="paste" rows="3" placeholder="…or paste anything here. For PDF or Word, copy the text in."></textarea>
+        <textarea id="paste" rows="3" placeholder="…or paste anything here. For Word, copy the text in."></textarea>
 
         <div class="fields">
           <label class="f-wide"><span>What is it</span><input id="f-title" placeholder="Retail expansion proposal" /></label>
@@ -872,12 +882,304 @@ function decreeCostText(d) {
   return parts.length ? parts.join(' + ') : 'free';
 }
 
+// A small PDF text extractor.
+//
+// It does the part that matters for reading a proposal: find the content
+// streams, inflate them, and turn the text-showing operators back into text -
+// following each font's ToUnicode table, which is how modern PDFs (Word,
+// Chrome, LaTeX) encode their glyphs.
+//
+// It does not render, and it cannot read a scanned page: those carry pictures
+// of words, not words. When too little comes back, say so rather than handing
+// the reader nonsense.
+
+const latin1 = (bytes) => {
+  let out = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return out;
+};
+
+const bytesOf = (str) => {
+  const out = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xff;
+  return out;
+};
+
+// /FlateDecode is zlib-wrapped deflate. The platform decompressor is stricter
+// than zlib about trailing bytes, so fall back to the raw form before giving up.
+async function inflateWith(bytes, format) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(format));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function inflateInBrowser(bytes) {
+  try {
+    return await inflateWith(bytes, 'deflate');
+  } catch {
+    return inflateWith(bytes, 'deflate-raw');
+  }
+}
+
+/* ------------------------------------------------------------ structure */
+
+// Every "N 0 obj ... endobj" in the file, by object number.
+function readObjects(raw) {
+  const objects = new Map();
+  const re = /(\d+)\s+0\s+obj\b/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    const end = raw.indexOf('endobj', m.index);
+    if (end < 0) continue;
+    objects.set(Number(m[1]), { body: raw.slice(m.index, end) });
+  }
+  return objects;
+}
+
+// The bytes between "stream" and "endstream", inflated when they are deflated.
+async function streamOf(obj, inflate) {
+  const at = obj.body.indexOf('stream');
+  if (at < 0) return null;
+  let from = at + 6;
+  if (obj.body[from] === '\r') from++;
+  if (obj.body[from] === '\n') from++;
+  const to = obj.body.indexOf('endstream', from);
+  if (to < 0) return null;
+  const header = obj.body.slice(0, at);
+
+  // Prefer the declared length: the bytes before "endstream" usually carry an
+  // end-of-line the compressor never wrote, and strict decoders reject it.
+  const declared = /\/Length\s+(\d+)(?!\s+\d+\s+R)/.exec(header);
+  let body = obj.body.slice(from, to);
+  if (declared) {
+    const n = Number(declared[1]);
+    if (n > 0 && n <= body.length) body = body.slice(0, n);
+  } else {
+    body = body.replace(/[\r\n]+$/, '');
+  }
+  const data = bytesOf(body);
+  if (!/\/Filter\s*(\/FlateDecode|\[\s*\/FlateDecode)/.test(header)) return latin1(data);
+  try {
+    return latin1(await inflate(data));
+  } catch {
+    return null;                       // encrypted, damaged, or a filter we do not do
+  }
+}
+
+/* --------------------------------------------------------------- CMaps */
+
+const fromUtf16 = (hex) => {
+  let out = '';
+  for (let i = 0; i + 3 < hex.length + 1; i += 4) {
+    const code = parseInt(hex.slice(i, i + 4), 16);
+    if (!Number.isNaN(code) && code !== 0) out += String.fromCharCode(code);
+  }
+  return out;
+};
+
+// A font's ToUnicode table: glyph code -> the text it stands for.
+function parseCMap(text) {
+  const map = new Map();
+  let width = 2;
+  const range = /begincodespacerange([\s\S]*?)endcodespacerange/.exec(text);
+  if (range) {
+    const first = /<([0-9A-Fa-f]+)>/.exec(range[1]);
+    if (first) width = Math.max(1, Math.round(first[1].length / 2));
+  }
+
+  for (const block of text.match(/beginbfchar([\s\S]*?)endbfchar/g) || []) {
+    const pair = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g;
+    let m;
+    while ((m = pair.exec(block))) map.set(parseInt(m[1], 16), fromUtf16(m[2]));
+  }
+
+  for (const block of text.match(/beginbfrange([\s\S]*?)endbfrange/g) || []) {
+    const simple = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g;
+    let m;
+    while ((m = simple.exec(block))) {
+      const lo = parseInt(m[1], 16);
+      const hi = parseInt(m[2], 16);
+      const base = parseInt(m[3].slice(-4) || '0', 16);
+      const prefix = m[3].length > 4 ? fromUtf16(m[3].slice(0, -4)) : '';
+      if (hi < lo || hi - lo > 65535) continue;
+      for (let c = lo; c <= hi; c++) map.set(c, prefix + String.fromCharCode(base + (c - lo)));
+    }
+    const listed = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([\s\S]*?)\]/g;
+    while ((m = listed.exec(block))) {
+      const lo = parseInt(m[1], 16);
+      const items = m[3].match(/<([0-9A-Fa-f]*)>/g) || [];
+      items.forEach((item, i) => map.set(lo + i, fromUtf16(item.slice(1, -1))));
+    }
+  }
+  return { map, width };
+}
+
+// Resource name (/F4) -> that font's ToUnicode table.
+async function readFonts(raw, objects, inflate) {
+  const fonts = new Map();
+  const toUnicodeOf = new Map();
+
+  for (const [num, obj] of objects) {
+    const ref = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(obj.body);
+    if (!ref) continue;
+    const target = objects.get(Number(ref[1]));
+    if (!target) continue;
+    const text = await streamOf(target, inflate);
+    if (text) toUnicodeOf.set(num, parseCMap(text));
+  }
+
+  const dict = /\/Font\s*<<([\s\S]*?)>>/g;
+  let d;
+  while ((d = dict.exec(raw))) {
+    const entry = /\/([A-Za-z0-9_.-]+)\s+(\d+)\s+0\s+R/g;
+    let e;
+    while ((e = entry.exec(d[1]))) {
+      const cmap = toUnicodeOf.get(Number(e[2]));
+      if (cmap) fonts.set(e[1], cmap);
+    }
+  }
+  const fallback = toUnicodeOf.values().next().value || null;
+  return { fonts, fallback };
+}
+
+/* ---------------------------------------------------------------- text */
+
+const ESCAPES = { n: '\n', r: '\r', t: '\t', b: '', f: '' };
+const unescapeLiteral = (s) => s
+  .replace(/\\([nrtbf])/g, (_, c) => ESCAPES[c])
+  .replace(/\\([0-7]{1,3})/g, (_, o) => String.fromCharCode(parseInt(o, 8)))
+  .replace(/\\(.)/g, '$1');
+
+function decodeHex(hex, cmap) {
+  const clean = hex.replace(/\s+/g, '');
+  if (!cmap) {
+    let out = '';
+    for (let i = 0; i + 1 < clean.length; i += 2) out += String.fromCharCode(parseInt(clean.slice(i, i + 2), 16));
+    return out;
+  }
+  const step = cmap.width * 2;
+  let out = '';
+  for (let i = 0; i + step - 1 < clean.length; i += step) {
+    const mapped = cmap.map.get(parseInt(clean.slice(i, i + step), 16));
+    if (mapped !== undefined) out += mapped;
+  }
+  return out;
+}
+
+function textFromContent(content, fonts, fallback) {
+  let out = '';
+  let cmap = fallback;
+  let y = null;                        // where on the page the current run sits
+  let pendingBreak = false;
+
+  // A run only starts a new line when it actually moved down the page; a font
+  // change mid-sentence must not break the sentence.
+  const moveTo = (nextY) => {
+    if (y !== null && Math.abs(nextY - y) > 2.5) pendingBreak = true;
+    y = nextY;
+  };
+  const emit = (piece) => {
+    if (!piece) return;
+    if (pendingBreak && out) out += '\n';
+    pendingBreak = false;
+    out += piece;
+  };
+
+  const re = new RegExp([
+    '\\/([A-Za-z0-9_.-]+)\\s+[-\\d.]+\\s+Tf',                                   // 1 font
+    '\\[((?:[^\\][\\\\]|\\\\.)*)\\]\\s*TJ',                              // 2 array show
+    '\\(((?:[^()\\\\]|\\\\.)*)\\)\\s*Tj',                                  // 3 literal show
+    '<([0-9A-Fa-f\\s]*)>\\s*Tj',                                                     // 4 hex show
+    '([-\\d.]+)\\s+([-\\d.]+)\\s+([-\\d.]+)\\s+([-\\d.]+)\\s+([-\\d.]+)\\s+([-\\d.]+)\\s+Tm', // 5-10 matrix
+    '([-\\d.]+)\\s+([-\\d.]+)\\s+T[dD]',                                         // 11-12 offset
+    '\\b(T\\*|ET)\\b',                                                             // 13 newline ops
+  ].join('|'), 'g');
+
+  let m;
+  while ((m = re.exec(content))) {
+    if (m[1] !== undefined) {
+      cmap = fonts.get(m[1]) || fallback;
+    } else if (m[2] !== undefined) {
+      const parts = m[2].match(/\(((?:[^()\\]|\\.)*)\)|<([0-9A-Fa-f\s]*)>|(-?\d+(?:\.\d+)?)/g) || [];
+      for (const part of parts) {
+        if (part.startsWith('(')) emit(unescapeLiteral(part.slice(1, -1)));
+        else if (part.startsWith('<')) emit(decodeHex(part.slice(1, -1), cmap));
+        else if (Number(part) < -120) emit(' ');
+      }
+    } else if (m[3] !== undefined) {
+      emit(unescapeLiteral(m[3]));
+    } else if (m[4] !== undefined) {
+      emit(decodeHex(m[4], cmap));
+    } else if (m[10] !== undefined) {
+      moveTo(Number(m[10]));
+    } else if (m[12] !== undefined) {
+      const dy = Number(m[12]);
+      if (dy !== 0 && y !== null) moveTo(y + dy);
+    } else if (m[13] === 'T*') {
+      pendingBreak = true;
+    }
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------- public */
+
+// The replacement character, plus the control codes that mean a glyph did not
+// survive decoding. Built from escapes so the source stays plain ASCII.
+const JUNK = new RegExp('[\\uFFFD\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]', 'g');
+
+// How much of this reads as language rather than salvage.
+function legibility(text) {
+  if (!text) return 0;
+  const letters = (text.match(/[\p{L}\p{N}]/gu) || []).length;
+  const junk = (text.match(JUNK) || []).length;
+  return Math.max(0, (letters - junk * 3) / text.length);
+}
+
+/**
+ * Pull the text out of a PDF.
+ * Returns { text, pages, legible, ok, reason } - when `ok` is false, tell the
+ * reader why instead of handing them the text.
+ */
+async function extractPdfText(buffer, inflate = inflateInBrowser) {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const raw = latin1(bytes);
+  if (!raw.startsWith('%PDF')) return { text: '', pages: 0, legible: 0, ok: false, reason: 'not-pdf' };
+  if (/\/Encrypt\s/.test(raw)) return { text: '', pages: 0, legible: 0, ok: false, reason: 'encrypted' };
+
+  const objects = readObjects(raw);
+  const { fonts, fallback } = await readFonts(raw, objects, inflate);
+
+  const chunks = [];
+  for (const [, obj] of objects) {
+    if (/\/ToUnicode|\/Type\s*\/Font|\/Subtype\s*\/Image/.test(obj.body)) continue;
+    const content = await streamOf(obj, inflate);
+    if (!content || !/\bTj\b|\bTJ\b/.test(content)) continue;
+    chunks.push(textFromContent(content, fonts, fallback));
+  }
+
+  const text = chunks
+    .join('\n')
+    .replace(JUNK, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const pages = (raw.match(/\/Type\s*\/Page[^s]/g) || []).length || 1;
+  const legible = legibility(text);
+  const ok = text.length > 40 && legible > 0.45;
+  return { text, pages, legible, ok, reason: ok ? '' : text.length > 40 ? 'unreadable' : 'no-text' };
+}
+
 // Reading what you hand the town: which files are accepted, and which lines in
 // them actually carry meaning. The assembly itself lives in deliverables.js.
 
-const MAX_FILE_BYTES = 512 * 1024;
-const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
-const ACCEPTED = ['.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.log', '.rtf'];
+const MAX_FILE_BYTES = 8 * 1024 * 1024;   // a PDF is heavier than a text file
+const MAX_TOTAL_BYTES = 4 * 1024 * 1024;
+const ACCEPTED = ['.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.log', '.rtf', '.pdf'];
 
 // Lines that tend to matter in a brief, in either language.
 const SIGNAL_WORDS = [
@@ -901,9 +1203,34 @@ function scoreLine(line) {
   return score;
 }
 
-// Pull the lines worth quoting out of one uploaded file.
+// How much of a file we keep for review. Enough for a long proposal, small
+// enough to sit in localStorage beside everything else.
+const KEEP_CHARS = 120 * 1024;
+
+// A PDF breaks lines wherever the page did. Rejoin the ones that are plainly
+// mid-sentence, while leaving headings and list items on their own lines.
+function joinSoftBreaks(text) {
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    const line = raw.trim();
+    if (!line) { out.push(''); continue; }
+    const prev = out.length ? out[out.length - 1] : '';
+    const isListItem = /^([-*\u2022]|\d+[.)])\s/.test(line);
+    const prevEndsSentence = /[.。!！?？:：;；]$/.test(prev);
+    const prevIsHeading = prev.length > 0 && prev.length < 30;
+    if (prev && !isListItem && !prevEndsSentence && !prevIsHeading) {
+      out[out.length - 1] = `${prev} ${line}`;
+    } else {
+      out.push(line);
+    }
+  }
+  return out.join('\n');
+}
+
+// Pull the lines worth quoting out of one uploaded file, and keep the text
+// itself so the town can read the whole thing when asked to review it.
 function digestSource(name, text, take = 4) {
-  const clean = String(text).replace(/\r/g, '');
+  const clean = joinSoftBreaks(String(text).replace(/\r/g, ''));
   const lines = clean.split('\n').map((l) => l.replace(/^[-*•·]\s*/, '').trim()).filter(Boolean);
   const scored = lines
     .map((line, i) => ({ line, i, score: scoreLine(line) }))
@@ -918,11 +1245,19 @@ function digestSource(name, text, take = 4) {
     highlights.push(line.length > 200 ? `${line.slice(0, 197)}…` : line);
     if (highlights.length >= take) break;
   }
-  return { name, chars: clean.length, lines: lines.length, highlights };
+  return {
+    name,
+    chars: clean.length,
+    lines: lines.length,
+    highlights,
+    text: clean.length > KEEP_CHARS ? clean.slice(0, KEEP_CHARS) : clean,
+  };
 }
 
 function fileTooLarge(size) { return size > MAX_FILE_BYTES; }
 function totalTooLarge(bytes) { return bytes > MAX_TOTAL_BYTES; }
+const isPdf = (name) => String(name).toLowerCase().endsWith('.pdf');
+
 function isAccepted(name) {
   const lower = String(name).toLowerCase();
   return ACCEPTED.some((ext) => lower.endsWith(ext));
@@ -931,7 +1266,8 @@ function isAccepted(name) {
 function docToMarkdown(doc) {
   const out = [`# ${doc.title}`, '', `_${doc.subtitle}_`, ''];
   for (const s of doc.sections) {
-    out.push(`## ${s.heading}`, '');
+    const tag = s.status === 'good' ? ' [OK]' : s.status === 'look' ? ' [LOOK]' : '';
+    out.push(`## ${s.heading}${tag}`, '');
     for (const b of s.blocks) {
       if (b.type === 'p') out.push(b.text, '');
       if (b.type === 'list') { for (const i of b.items) out.push(`- ${i}`); out.push(''); }
@@ -1359,11 +1695,12 @@ function buildEmail(brief, sources, town, lang) {
 /* ------------------------------------------------------------- registry */
 
 const DELIVERABLES = [
-  { id: 'proposal', emoji: '\u{1F4DC}', en: 'Proposal', zh: '提案', build: buildProposalDoc },
-  { id: 'ideas', emoji: '\u{1F4A1}', en: 'Ideas', zh: '想法', build: buildIdeas },
-  { id: 'pitch', emoji: '\u{1F5E3}', en: 'Pitch outline', zh: '路演大纲', build: buildPitch },
-  { id: 'brief', emoji: '\u{1F4CB}', en: 'Brief', zh: '简报', build: buildBrief },
-  { id: 'email', emoji: '\u{2709}', en: 'Email', zh: '邮件', build: buildEmail },
+  { id: 'proposal', emoji: '\u{1F4DC}', en: 'Proposal', zh: '提案', ctaEn: 'Ask the town for a proposal', ctaZh: '让小镇写提案', build: buildProposalDoc },
+  { id: 'ideas', emoji: '\u{1F4A1}', en: 'Ideas', zh: '想法', ctaEn: 'Ask the town for ideas', ctaZh: '让小镇给想法', build: buildIdeas },
+  { id: 'pitch', emoji: '\u{1F5E3}', en: 'Pitch outline', zh: '路演大纲', ctaEn: 'Ask the town for an outline', ctaZh: '让小镇列大纲', build: buildPitch },
+  { id: 'brief', emoji: '\u{1F4CB}', en: 'Brief', zh: '简报', ctaEn: 'Ask the town for a brief', ctaZh: '让小镇写简报', build: buildBrief },
+  { id: 'email', emoji: '\u{2709}', en: 'Email', zh: '邮件', ctaEn: 'Ask the town to draft it', ctaZh: '让小镇拟邮件', build: buildEmail },
+  { id: 'review', emoji: '\u{1F50D}', en: 'Check my proposal', zh: '检查我的提案', ctaEn: 'Ask the town to check it', ctaZh: '让小镇检查', build: buildReview },
 ];
 
 const DELIVERABLE_BY_ID = Object.fromEntries(DELIVERABLES.map((d) => [d.id, d]));
@@ -1380,6 +1717,269 @@ function assemble(kind, brief, sources, town, lang = 'en') {
     lang: lang === 'zh' ? 'zh' : 'en',
     note: T[lang === 'zh' ? 'zh' : 'en'].note,
     sourceCount: (sources || []).length,
+  };
+}
+
+/* ------------------------------------------------------------- reviewing */
+
+const CLICHES = [
+  'world-class', 'cutting-edge', 'best-in-class', 'synergy', 'synergies', 'leverage',
+  'seamless', 'holistic', 'paradigm', 'game-changing', 'value-add', 'turnkey',
+  'state-of-the-art', 'robust solution', 'bespoke solution',
+  '一站式', '赋能', '闭环', '抓手', '颠覆', '业界领先', '世界一流', '全方位',
+];
+const OVERPROMISE = [
+  'guarantee', 'guaranteed', '100%', 'unlimited', 'always', 'never fail', 'risk-free',
+  'no risk', 'any time', 'fully automated',
+  '保证', '一定能', '无限', '绝对', '零风险', '百分之百',
+];
+
+const has = (text, words) => words.filter((w) => text.toLowerCase().includes(w.toLowerCase()));
+const oneLine = (v) => String(v).replace(/\s+/g, ' ').trim();
+
+const firstMatch = (text, re) => {
+  const m = re.exec(text);
+  return m ? m[0].trim() : null;
+};
+
+// The sentence a match sits in, so a finding can point at real words.
+function sentenceAround(text, needle) {
+  const at = text.toLowerCase().indexOf(String(needle).toLowerCase());
+  if (at < 0) return null;
+  const from = Math.max(0, text.lastIndexOf('\n', at) + 1);
+  // A full stop only ends a sentence when something other than a digit follows,
+  // so "RM 4.5 million" stays in one piece.
+  const stop = text.slice(at).search(/[。!！?？\n]|\.(?=\s|$)/);
+  const to = stop < 0 ? Math.min(text.length, at + 160) : at + stop + 1;
+  const line = text.slice(from, to).trim();
+  return line.length > 220 ? `${line.slice(0, 217)}...` : line;
+}
+
+// Everything the checks below need to know about the document, measured once.
+function measureText(text) {
+  const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || []).length;
+  const cjk = (text.match(/[一-鿿]/g) || []).length;
+  const sentences = (text.match(/[^.。!！?？\n]{6,}[.。!！?？]/g) || []);
+  const avgSentence = sentences.length
+    ? Math.round(sentences.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) / sentences.length)
+    : 0;
+  return {
+    words: words + Math.round(cjk / 1.6),
+    cjk,
+    sentences: sentences.length,
+    avgSentence,
+    longest: sentences.slice().sort((a, b) => b.length - a.length)[0] || '',
+    paragraphs: text.split(/\n\s*\n/).filter((p) => p.trim().length > 40).length,
+    numbers: (text.match(/\d[\d,.]*/g) || []).length,
+    money: text.match(/(?:RM|USD|SGD|MYR|\$|£|€|¥|RMB)\s?[\d,.]+\s?(?:m|k|million|billion|万|亿)?|\d[\d,.]*\s*(?:万|亿|元|令吉|dollars?)/gi) || [],
+    dates: text.match(/\b(?:Q[1-4]|202\d|20[3-9]\d)\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b|\d+\s*(?:weeks?|months?|days?)|\d+\s*(?:周|个月|天|月份)|第[一二三四]季度/gi) || [],
+    you: (text.match(/\byou\b|\byour\b|你们|贵[公司方]/gi) || []).length,
+    we: (text.match(/\bwe\b|\bour\b|\bus\b|我们|本[公司司]/gi) || []).length,
+    passive: (text.match(/\b(?:is|are|was|were|be|been|being)\s+\w+(?:ed|en)\b/gi) || []).length,
+    cliches: has(text, CLICHES),
+    overpromise: has(text, OVERPROMISE),
+  };
+}
+
+// Each guild checks the one thing its craft cares about.
+const CHECKS = [
+  {
+    guild: 'ledger', en: 'The money', zh: '钱',
+    run: (t, m, lang) => (m.money.length
+      ? { ok: true,
+          en: `A price is stated — ${m.money.slice(0, 3).map(oneLine).join(', ')}. A reader can act on that.`,
+          zh: `文中写了价格——${m.money.slice(0, 3).map(oneLine).join('、')}。读者能据此行动。`,
+          quote: sentenceAround(t, m.money[0]) }
+      : { ok: false,
+          en: 'No price anywhere in this document. A proposal without a number makes the reader do the work of guessing, and they will guess low or walk away.',
+          zh: '整份文件里没有价格。没有数字的提案，等于让对方替你猜——他们要么猜低，要么走开。' }),
+  },
+  {
+    guild: 'wayfinder', en: 'The dates', zh: '时间',
+    run: (t, m) => (m.dates.length
+      ? { ok: true,
+          en: `Timing is on the page — ${[...new Set(m.dates.map(oneLine))].slice(0, 4).join(', ')}.`,
+          zh: `时间写清楚了——${[...new Set(m.dates.map(oneLine))].slice(0, 4).join('、')}。`,
+          quote: sentenceAround(t, m.dates[0]) }
+      : { ok: false,
+          en: 'No dates and no durations. "Soon" is not a plan; give at least a start and a first milestone.',
+          zh: '没有日期，也没有周期。「尽快」不是计划——至少给出开始时间和第一个里程碑。' }),
+  },
+  {
+    guild: 'keystone', en: 'What is not included', zh: '不包含什么',
+    run: (t) => {
+      const found = firstMatch(t, /(not included|out of scope|excludes?|does not cover|不包[含括]|不在范围|不负责)/i);
+      return found
+        ? { ok: true, en: 'The boundary is written down. That sentence is what protects you later.', zh: '边界写下来了。以后保护你的就是这句话。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'Nothing says what this does NOT cover. Every argument about scope starts here — one short paragraph now saves a hard conversation later.',
+            zh: '没有一句话说明「不做什么」。所有关于范围的争执都从这里开始——现在写一小段，省掉以后一场硬仗。' };
+    },
+  },
+  {
+    guild: 'lattice', en: 'How success is measured', zh: '怎么算成功',
+    run: (t) => {
+      const found = firstMatch(t, /(success (?:is|will be|looks)|measured? by|KPI|metrics?|benchmark|成功的标准|衡量|指标)/i);
+      return found
+        ? { ok: true, en: 'There is a stated measure. Both sides can tell whether this worked.', zh: '写了衡量标准，双方都能判断这件事成没成。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'No measure of success. Without one, "done" is whatever the client feels on the day.',
+            zh: '没有成功的衡量标准。没有它，「做完了」就取决于客户当天的心情。' };
+    },
+  },
+  {
+    guild: 'lumen', en: 'Evidence', zh: '证据',
+    run: (t, m) => (m.numbers >= 6
+      ? { ok: true, en: `${m.numbers} figures in the document — the argument rests on something.`, zh: `文中有 ${m.numbers} 处数字——论证有落点。` }
+      : { ok: false,
+          en: `Only ${m.numbers} figure${m.numbers === 1 ? '' : 's'} in the whole document. Claims without numbers read as opinion. Add one piece of evidence per claim that matters.`,
+          zh: `全文只有 ${m.numbers} 处数字。没有数字的主张读起来只是意见——给每个重要主张配一条证据。` }),
+  },
+  {
+    guild: 'forge', en: 'What they actually get', zh: '他们到底拿到什么',
+    run: (t) => {
+      const found = firstMatch(t, /(you (?:will )?(?:get|receive)|deliverables?|we will (?:deliver|produce|build|provide)|交付|你会拿到|我们会提供)/i);
+      return found
+        ? { ok: true, en: 'Deliverables are named. The reader knows what lands on their desk.', zh: '交付物写明了，读者知道最后拿到什么。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'The document never names what the client ends up holding. Describe the artefacts, not the activity.',
+            zh: '文件里始终没说客户最后手里有什么。要描述产出物，而不是过程。' };
+    },
+  },
+  {
+    guild: 'chorus', en: 'The opening', zh: '开头',
+    run: (t, m, lang) => {
+      const first = t.split(/\n/).map((l) => l.trim()).find((l) => l.length > 45) || '';
+      if (m.cliches.length) {
+        return { ok: false,
+          en: `The language leans on stock phrases: ${m.cliches.slice(0, 4).join(', ')}. Every competitor writes these; they carry no information. Say the specific thing instead.`,
+          zh: `文字里有套话：${m.cliches.slice(0, 4).join('、')}。每个竞争对手都在写这些，它们不携带信息——换成具体的说法。`,
+          quote: sentenceAround(t, m.cliches[0]) };
+      }
+      return first
+        ? { ok: true, en: 'The opening says something specific rather than clearing its throat.', zh: '开头直接说事，没有绕圈子。', quote: first.length > 200 ? `${first.slice(0, 197)}...` : first }
+        : { ok: false, en: 'There is no real opening paragraph — the document starts mid-thought.', zh: '没有真正的开头段落，文件像是从半句话开始的。' };
+    },
+  },
+  {
+    guild: 'mender', en: 'Promises you may regret', zh: '可能后悔的承诺',
+    run: (t, m) => (m.overpromise.length
+      ? { ok: false,
+          en: `Absolute promises: ${m.overpromise.slice(0, 4).join(', ')}. These are the lines that get quoted back at you. Soften them or make them conditional.`,
+          zh: `出现了绝对化的承诺：${m.overpromise.slice(0, 4).join('、')}。这些话日后会被原样引用回来——要么放软，要么加条件。`,
+          quote: sentenceAround(t, m.overpromise[0]) }
+      : { ok: true, en: 'No absolute promises. Nothing here will be read back to you in a dispute.', zh: '没有绝对化的承诺，将来不会有人拿着某句话来质问你。' }),
+  },
+  {
+    guild: 'hearth', en: 'Who it is written for', zh: '写给谁看',
+    run: (t, m) => {
+      if (m.you === 0 && m.words > 80) {
+        return { ok: false,
+          en: 'The document never addresses the reader directly — not one "you". It reads as a description of the seller. Rewrite the opening in the second person.',
+          zh: '整份文件没有一次直接称呼读者——一个「你」都没有。它读起来像在描述卖方。把开头改成对着对方说。' };
+      }
+      if (m.we > m.you * 2 && m.we > 6) {
+        return { ok: false,
+          en: `The document says "we" ${m.we} times and "you" ${m.you}. It is about the seller, not the buyer. Turn the sentences around.`,
+          zh: `文中「我们」出现 ${m.we} 次，「你/贵司」只有 ${m.you} 次。这份东西在讲卖方，不是买方——把句子调转过来。` };
+      }
+      return { ok: true, en: `Balanced address — "you" ${m.you}, "we" ${m.we}. It reads as being written for the reader.`, zh: `称呼比例合适——「你」${m.you} 次，「我们」${m.we} 次，读起来是写给对方的。` };
+    },
+  },
+  {
+    guild: 'aether', en: 'Why now', zh: '为什么是现在',
+    run: (t) => {
+      const found = firstMatch(t, /(right now|this year|window|urgent|before the|opportunity to|现在|当下|今年|窗口|时机)/i);
+      return found
+        ? { ok: true, en: 'There is a reason this is happening now rather than later.', zh: '说明了为什么是现在做，而不是以后。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'Nothing explains why now. Without urgency, a good proposal simply waits on someone’s desk.',
+            zh: '没有说明为什么是现在。缺了紧迫感，再好的提案也只是躺在别人桌上。' };
+    },
+  },
+  {
+    guild: 'verdant', en: 'What happens next', zh: '接下来做什么',
+    run: (t) => {
+      const found = firstMatch(t, /(next steps?|to proceed|to get started|sign|approve|下一步|如何开始|签署|确认后)/i);
+      return found
+        ? { ok: true, en: 'The reader is told what to do next. That is what turns reading into a decision.', zh: '告诉了读者下一步该做什么——这才把「读完」变成「决定」。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'The document ends without asking for anything. Tell them exactly what the next action is, and who takes it.',
+            zh: '文件结束时什么都没要。明确写出下一步动作是什么、由谁来做。' };
+    },
+  },
+];
+
+// Read a document and report on it, guild by guild.
+function buildReview(brief, sources, town, lang) {
+  const en = lang !== 'zh';
+  const text = sources
+    .map((s) => s.text || s.highlights.join('\n'))
+    .join('\n\n')
+    .trim();
+  const used = new Set();
+
+  if (text.length < 200) {
+    return {
+      title: en ? 'Nothing to review yet' : '还没有可以审阅的东西',
+      subtitle: en ? 'The town needs the document itself' : '小镇需要文件本身',
+      sections: [{
+        key: 'empty',
+        heading: en ? 'Hand over the proposal' : '把提案交过来',
+        blocks: [{
+          type: 'p',
+          text: en
+            ? 'Upload the PDF or paste the text of the proposal you want checked. Key points alone are not enough to review — the town reads the actual words.'
+            : '上传 PDF，或把要检查的提案正文贴进来。只有要点是没法审阅的——小镇读的是实际的字句。',
+        }],
+        author: sign(town, 'hearth', used),
+      }],
+    };
+  }
+
+  const m = measureText(text);
+  const results = CHECKS.map((check) => ({ check, verdict: check.run(text, m, lang) }));
+  const flagged = results.filter((r) => !r.verdict.ok);
+
+  const overview = {
+    key: 'overview',
+    heading: en ? 'What the town found' : '小镇看到的',
+    status: flagged.length === 0 ? 'good' : flagged.length > 4 ? 'look' : 'mixed',
+    blocks: [
+      { type: 'p', text: en
+        ? `${results.length - flagged.length} of ${results.length} checks pass. ${flagged.length ? `${flagged.length} need${flagged.length === 1 ? 's' : ''} your attention, below.` : 'Nothing is missing that the town knows to look for.'}`
+        : `${results.length} 项检查里通过 ${results.length - flagged.length} 项。${flagged.length ? `有 ${flagged.length} 项需要你处理，列在下面。` : '小镇知道要找的东西，都在。'}` },
+      { type: 'p', text: en
+        ? `${m.words} words, ${m.paragraphs} paragraph${m.paragraphs === 1 ? '' : 's'}, ${m.numbers} figure${m.numbers === 1 ? '' : 's'}, average sentence ${m.avgSentence} words.${m.avgSentence > 26 ? ' That average is long — a reader skimming will lose the thread.' : ''}`
+        : `全文约 ${m.words} 字，${m.paragraphs} 个段落，${m.numbers} 处数字，平均句长 ${m.avgSentence} 词。${m.avgSentence > 26 ? ' 句子偏长，快速浏览的读者会跟丢。' : ''}` },
+      ...(flagged.length ? [{
+        type: 'list',
+        items: flagged.map((r) => (en ? r.check.en : r.check.zh)),
+      }] : []),
+    ],
+    author: sign(town, 'keystone', used),
+  };
+
+  const sections = results.map(({ check, verdict }) => {
+    const guild = GUILDS.find((g) => g.id === check.guild);
+    return {
+      key: `check-${check.guild}`,
+      heading: `${guild.name.replace(' Guild', '')} — ${en ? check.en : check.zh}`,
+      status: verdict.ok ? 'good' : 'look',
+      blocks: [
+        { type: 'p', text: en ? verdict.en : verdict.zh },
+        ...(verdict.quote ? [{ type: 'quotes', items: [verdict.quote] }] : []),
+      ],
+      author: sign(town, check.guild, used),
+    };
+  });
+
+  return {
+    title: brief.title || (en ? 'Proposal review' : '提案审阅'),
+    subtitle: en
+      ? `${sources.length} document${sources.length === 1 ? '' : 's'} read, ${results.length} checks`
+      : `读了 ${sources.length} 份文件，做了 ${results.length} 项检查`,
+    sections: [overview, ...sections],
   };
 }
 
@@ -2534,6 +3134,7 @@ function startSky(canvas) {
 
 
 
+
 const $ = (id) => document.getElementById(id);
 const guildById = Object.fromEntries(GUILDS.map((g) => [g.id, g]));
 const bldById = Object.fromEntries(BUILDINGS.map((b) => [b.id, b]));
@@ -2752,9 +3353,7 @@ function renderKinds() {
   $('kinds').innerHTML = DELIVERABLES.map((d) => `<button type="button" data-kind="${d.id}" aria-pressed="${
     d.id === wsKind}"><span aria-hidden="true">${d.emoji}</span> ${wsLang === 'zh' ? d.zh : d.en}</button>`).join('');
   const spec = DELIVERABLE_BY_ID[wsKind];
-  $('make').textContent = wsLang === 'zh'
-    ? `让小镇做${spec.zh}`
-    : `Ask the town for ${spec.en.toLowerCase()}`;
+  $('make').textContent = wsLang === 'zh' ? spec.ctaZh : spec.ctaEn;
 }
 
 function wsSay(text, kind = '') {
@@ -2804,48 +3403,75 @@ function renderSources() {
   box.innerHTML = wsSources
     .map((s, i) => `<div class="source">
       <span class="nm">${esc(s.name)}</span>
+      ${s.pages ? `<span class="kind">PDF · ${s.pages}p</span>` : ''}
       <span class="meta">${s.highlights.length} pts · ${(s.chars / 1000).toFixed(1)}k</span>
       <button class="drop-one" data-drop="${i}" title="Remove" aria-label="Remove ${esc(s.name)}">×</button>
     </div>`)
     .join('');
 }
 
-function addSource(name, text) {
+function addSource(name, text, extra = {}) {
   const total = wsSources.reduce((a, s) => a + s.chars, 0) + text.length;
   if (totalTooLarge(total)) {
     wsSay('That is more material than the workshop can hold — remove a file first.', 'err');
     return false;
   }
-  wsSources.push(digestSource(name, text));
+  wsSources.push({ ...digestSource(name, text), ...extra });
   renderSources();
   saveWorkshop();
   return true;
 }
 
+const PDF_TROUBLE = {
+  'not-pdf': 'that file is not really a PDF',
+  encrypted: 'that PDF is password-protected',
+  'no-text': 'that PDF has no text in it — it is probably a scan',
+  unreadable: 'the text in that PDF did not come out legibly',
+};
+
+async function readOneFile(file) {
+  if (!isAccepted(file.name)) {
+    wsSay(`${file.name} is not a kind the town reads — paste its contents into the box instead.`, 'err');
+    return false;
+  }
+  if (fileTooLarge(file.size)) {
+    wsSay(`${file.name} is too large (over 8 MB).`, 'err');
+    return false;
+  }
+  if (isPdf(file.name)) {
+    const result = await extractPdfText(await file.arrayBuffer());
+    if (!result.ok) {
+      wsSay(`${file.name}: ${PDF_TROUBLE[result.reason] || 'the text could not be read'}. Copy the text and paste it in instead.`, 'err');
+      return false;
+    }
+    return addSource(file.name, result.text, { pages: result.pages });
+  }
+  const text = await file.text();
+  return addSource(file.name, text);
+}
+
+let wsQueue = Promise.resolve();
+
+// Reads are queued: dropping a second file while the first is still being read
+// must not interleave two updates to the same list.
 function takeFiles(fileList) {
   const files = [...fileList];
-  if (!files.length) return;
-  let queued = 0;
+  if (!files.length) return wsQueue;
+  wsQueue = wsQueue.then(() => readFiles(files));
+  return wsQueue;
+}
+
+async function readFiles(files) {
+  wsSay('Reading…', '');
+  let added = 0;
   for (const file of files) {
-    if (!isAccepted(file.name)) {
-      wsSay(`${file.name} is not a text file — paste its contents into the box instead.`, 'err');
-      continue;
+    try {
+      if (await readOneFile(file)) added++;
+    } catch {
+      wsSay(`Could not read ${file.name}.`, 'err');
     }
-    if (fileTooLarge(file.size)) {
-      wsSay(`${file.name} is too large (over 512 KB).`, 'err');
-      continue;
-    }
-    queued++;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (addSource(file.name, String(reader.result || ''))) {
-        wsSay(`${wsSources.length} source${wsSources.length === 1 ? '' : 's'} ready`, 'ok');
-      }
-    };
-    reader.onerror = () => wsSay(`Could not read ${file.name}.`, 'err');
-    reader.readAsText(file);
   }
-  if (queued) wsSay('Reading…', '');
+  if (added) wsSay(`${wsSources.length} source${wsSources.length === 1 ? '' : 's'} ready`, 'ok');
 }
 
 function blocksToHtml(blocks) {
@@ -2872,7 +3498,9 @@ function renderProposal() {
     <h3>${esc(wsDoc.title)}</h3>
     <p class="doc-sub">${esc(wsDoc.subtitle)}</p>
     ${wsDoc.sections.map((s) => `<section class="ws-sec">
-      <h4>${esc(s.heading)}</h4>
+      <h4>${esc(s.heading)}${s.status ? `<span class="tag ${esc(s.status)}">${
+        s.status === 'good' ? (wsDoc.lang === 'zh' ? '通过' : 'OK') : wsDoc.lang === 'zh' ? '要看' : 'Look'
+      }</span>` : ''}</h4>
       ${blocksToHtml(s.blocks)}
       ${s.author ? `<span class="ws-by" style="--tint:${guildTint(s.author.guild)}"><i></i>${
         esc(s.author.name)} · ${esc(s.author.role)} · ${esc(s.author.guild)}</span>` : ''}

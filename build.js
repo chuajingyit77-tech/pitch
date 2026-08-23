@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
-const MODULES = ['src/data.js', 'src/decrees.js', 'src/workshop.js', 'src/deliverables.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
+const MODULES = ['src/data.js', 'src/decrees.js', 'src/pdf.js', 'src/workshop.js', 'src/deliverables.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
 
 function stripModuleSyntax(src) {
   return src
@@ -10,7 +10,7 @@ function stripModuleSyntax(src) {
     .replace(/^[ \t]*import[\s\S]*?from\s+['"][^'"]*['"];?[ \t]*$/gm, '')
     .split('\n')
     .filter((l) => !/^\s*export\s*\{[^}]*\}\s*;?\s*$/.test(l))
-    .map((l) => l.replace(/^(\s*)export\s+(const|let|function|class)\s/, '$1$2 '))
+    .map((l) => l.replace(/^(\s*)export\s+(async\s+function|const|let|var|function|class)\s/, '$1$2 '))
     .join('\n');
 }
 

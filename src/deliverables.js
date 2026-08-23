@@ -405,11 +405,12 @@ function buildEmail(brief, sources, town, lang) {
 /* ------------------------------------------------------------- registry */
 
 export const DELIVERABLES = [
-  { id: 'proposal', emoji: '\u{1F4DC}', en: 'Proposal', zh: '提案', build: buildProposalDoc },
-  { id: 'ideas', emoji: '\u{1F4A1}', en: 'Ideas', zh: '想法', build: buildIdeas },
-  { id: 'pitch', emoji: '\u{1F5E3}', en: 'Pitch outline', zh: '路演大纲', build: buildPitch },
-  { id: 'brief', emoji: '\u{1F4CB}', en: 'Brief', zh: '简报', build: buildBrief },
-  { id: 'email', emoji: '\u{2709}', en: 'Email', zh: '邮件', build: buildEmail },
+  { id: 'proposal', emoji: '\u{1F4DC}', en: 'Proposal', zh: '提案', ctaEn: 'Ask the town for a proposal', ctaZh: '让小镇写提案', build: buildProposalDoc },
+  { id: 'ideas', emoji: '\u{1F4A1}', en: 'Ideas', zh: '想法', ctaEn: 'Ask the town for ideas', ctaZh: '让小镇给想法', build: buildIdeas },
+  { id: 'pitch', emoji: '\u{1F5E3}', en: 'Pitch outline', zh: '路演大纲', ctaEn: 'Ask the town for an outline', ctaZh: '让小镇列大纲', build: buildPitch },
+  { id: 'brief', emoji: '\u{1F4CB}', en: 'Brief', zh: '简报', ctaEn: 'Ask the town for a brief', ctaZh: '让小镇写简报', build: buildBrief },
+  { id: 'email', emoji: '\u{2709}', en: 'Email', zh: '邮件', ctaEn: 'Ask the town to draft it', ctaZh: '让小镇拟邮件', build: buildEmail },
+  { id: 'review', emoji: '\u{1F50D}', en: 'Check my proposal', zh: '检查我的提案', ctaEn: 'Ask the town to check it', ctaZh: '让小镇检查', build: buildReview },
 ];
 
 export const DELIVERABLE_BY_ID = Object.fromEntries(DELIVERABLES.map((d) => [d.id, d]));
@@ -426,5 +427,268 @@ export function assemble(kind, brief, sources, town, lang = 'en') {
     lang: lang === 'zh' ? 'zh' : 'en',
     note: T[lang === 'zh' ? 'zh' : 'en'].note,
     sourceCount: (sources || []).length,
+  };
+}
+
+/* ------------------------------------------------------------- reviewing */
+
+const CLICHES = [
+  'world-class', 'cutting-edge', 'best-in-class', 'synergy', 'synergies', 'leverage',
+  'seamless', 'holistic', 'paradigm', 'game-changing', 'value-add', 'turnkey',
+  'state-of-the-art', 'robust solution', 'bespoke solution',
+  '一站式', '赋能', '闭环', '抓手', '颠覆', '业界领先', '世界一流', '全方位',
+];
+const OVERPROMISE = [
+  'guarantee', 'guaranteed', '100%', 'unlimited', 'always', 'never fail', 'risk-free',
+  'no risk', 'any time', 'fully automated',
+  '保证', '一定能', '无限', '绝对', '零风险', '百分之百',
+];
+
+const has = (text, words) => words.filter((w) => text.toLowerCase().includes(w.toLowerCase()));
+const oneLine = (v) => String(v).replace(/\s+/g, ' ').trim();
+
+const firstMatch = (text, re) => {
+  const m = re.exec(text);
+  return m ? m[0].trim() : null;
+};
+
+// The sentence a match sits in, so a finding can point at real words.
+function sentenceAround(text, needle) {
+  const at = text.toLowerCase().indexOf(String(needle).toLowerCase());
+  if (at < 0) return null;
+  const from = Math.max(0, text.lastIndexOf('\n', at) + 1);
+  // A full stop only ends a sentence when something other than a digit follows,
+  // so "RM 4.5 million" stays in one piece.
+  const stop = text.slice(at).search(/[。!！?？\n]|\.(?=\s|$)/);
+  const to = stop < 0 ? Math.min(text.length, at + 160) : at + stop + 1;
+  const line = text.slice(from, to).trim();
+  return line.length > 220 ? `${line.slice(0, 217)}...` : line;
+}
+
+// Everything the checks below need to know about the document, measured once.
+export function measureText(text) {
+  const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || []).length;
+  const cjk = (text.match(/[一-鿿]/g) || []).length;
+  const sentences = (text.match(/[^.。!！?？\n]{6,}[.。!！?？]/g) || []);
+  const avgSentence = sentences.length
+    ? Math.round(sentences.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) / sentences.length)
+    : 0;
+  return {
+    words: words + Math.round(cjk / 1.6),
+    cjk,
+    sentences: sentences.length,
+    avgSentence,
+    longest: sentences.slice().sort((a, b) => b.length - a.length)[0] || '',
+    paragraphs: text.split(/\n\s*\n/).filter((p) => p.trim().length > 40).length,
+    numbers: (text.match(/\d[\d,.]*/g) || []).length,
+    money: text.match(/(?:RM|USD|SGD|MYR|\$|£|€|¥|RMB)\s?[\d,.]+\s?(?:m|k|million|billion|万|亿)?|\d[\d,.]*\s*(?:万|亿|元|令吉|dollars?)/gi) || [],
+    dates: text.match(/\b(?:Q[1-4]|202\d|20[3-9]\d)\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b|\d+\s*(?:weeks?|months?|days?)|\d+\s*(?:周|个月|天|月份)|第[一二三四]季度/gi) || [],
+    you: (text.match(/\byou\b|\byour\b|你们|贵[公司方]/gi) || []).length,
+    we: (text.match(/\bwe\b|\bour\b|\bus\b|我们|本[公司司]/gi) || []).length,
+    passive: (text.match(/\b(?:is|are|was|were|be|been|being)\s+\w+(?:ed|en)\b/gi) || []).length,
+    cliches: has(text, CLICHES),
+    overpromise: has(text, OVERPROMISE),
+  };
+}
+
+// Each guild checks the one thing its craft cares about.
+const CHECKS = [
+  {
+    guild: 'ledger', en: 'The money', zh: '钱',
+    run: (t, m, lang) => (m.money.length
+      ? { ok: true,
+          en: `A price is stated — ${m.money.slice(0, 3).map(oneLine).join(', ')}. A reader can act on that.`,
+          zh: `文中写了价格——${m.money.slice(0, 3).map(oneLine).join('、')}。读者能据此行动。`,
+          quote: sentenceAround(t, m.money[0]) }
+      : { ok: false,
+          en: 'No price anywhere in this document. A proposal without a number makes the reader do the work of guessing, and they will guess low or walk away.',
+          zh: '整份文件里没有价格。没有数字的提案，等于让对方替你猜——他们要么猜低，要么走开。' }),
+  },
+  {
+    guild: 'wayfinder', en: 'The dates', zh: '时间',
+    run: (t, m) => (m.dates.length
+      ? { ok: true,
+          en: `Timing is on the page — ${[...new Set(m.dates.map(oneLine))].slice(0, 4).join(', ')}.`,
+          zh: `时间写清楚了——${[...new Set(m.dates.map(oneLine))].slice(0, 4).join('、')}。`,
+          quote: sentenceAround(t, m.dates[0]) }
+      : { ok: false,
+          en: 'No dates and no durations. "Soon" is not a plan; give at least a start and a first milestone.',
+          zh: '没有日期，也没有周期。「尽快」不是计划——至少给出开始时间和第一个里程碑。' }),
+  },
+  {
+    guild: 'keystone', en: 'What is not included', zh: '不包含什么',
+    run: (t) => {
+      const found = firstMatch(t, /(not included|out of scope|excludes?|does not cover|不包[含括]|不在范围|不负责)/i);
+      return found
+        ? { ok: true, en: 'The boundary is written down. That sentence is what protects you later.', zh: '边界写下来了。以后保护你的就是这句话。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'Nothing says what this does NOT cover. Every argument about scope starts here — one short paragraph now saves a hard conversation later.',
+            zh: '没有一句话说明「不做什么」。所有关于范围的争执都从这里开始——现在写一小段，省掉以后一场硬仗。' };
+    },
+  },
+  {
+    guild: 'lattice', en: 'How success is measured', zh: '怎么算成功',
+    run: (t) => {
+      const found = firstMatch(t, /(success (?:is|will be|looks)|measured? by|KPI|metrics?|benchmark|成功的标准|衡量|指标)/i);
+      return found
+        ? { ok: true, en: 'There is a stated measure. Both sides can tell whether this worked.', zh: '写了衡量标准，双方都能判断这件事成没成。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'No measure of success. Without one, "done" is whatever the client feels on the day.',
+            zh: '没有成功的衡量标准。没有它，「做完了」就取决于客户当天的心情。' };
+    },
+  },
+  {
+    guild: 'lumen', en: 'Evidence', zh: '证据',
+    run: (t, m) => (m.numbers >= 6
+      ? { ok: true, en: `${m.numbers} figures in the document — the argument rests on something.`, zh: `文中有 ${m.numbers} 处数字——论证有落点。` }
+      : { ok: false,
+          en: `Only ${m.numbers} figure${m.numbers === 1 ? '' : 's'} in the whole document. Claims without numbers read as opinion. Add one piece of evidence per claim that matters.`,
+          zh: `全文只有 ${m.numbers} 处数字。没有数字的主张读起来只是意见——给每个重要主张配一条证据。` }),
+  },
+  {
+    guild: 'forge', en: 'What they actually get', zh: '他们到底拿到什么',
+    run: (t) => {
+      const found = firstMatch(t, /(you (?:will )?(?:get|receive)|deliverables?|we will (?:deliver|produce|build|provide)|交付|你会拿到|我们会提供)/i);
+      return found
+        ? { ok: true, en: 'Deliverables are named. The reader knows what lands on their desk.', zh: '交付物写明了，读者知道最后拿到什么。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'The document never names what the client ends up holding. Describe the artefacts, not the activity.',
+            zh: '文件里始终没说客户最后手里有什么。要描述产出物，而不是过程。' };
+    },
+  },
+  {
+    guild: 'chorus', en: 'The opening', zh: '开头',
+    run: (t, m, lang) => {
+      const first = t.split(/\n/).map((l) => l.trim()).find((l) => l.length > 45) || '';
+      if (m.cliches.length) {
+        return { ok: false,
+          en: `The language leans on stock phrases: ${m.cliches.slice(0, 4).join(', ')}. Every competitor writes these; they carry no information. Say the specific thing instead.`,
+          zh: `文字里有套话：${m.cliches.slice(0, 4).join('、')}。每个竞争对手都在写这些，它们不携带信息——换成具体的说法。`,
+          quote: sentenceAround(t, m.cliches[0]) };
+      }
+      return first
+        ? { ok: true, en: 'The opening says something specific rather than clearing its throat.', zh: '开头直接说事，没有绕圈子。', quote: first.length > 200 ? `${first.slice(0, 197)}...` : first }
+        : { ok: false, en: 'There is no real opening paragraph — the document starts mid-thought.', zh: '没有真正的开头段落，文件像是从半句话开始的。' };
+    },
+  },
+  {
+    guild: 'mender', en: 'Promises you may regret', zh: '可能后悔的承诺',
+    run: (t, m) => (m.overpromise.length
+      ? { ok: false,
+          en: `Absolute promises: ${m.overpromise.slice(0, 4).join(', ')}. These are the lines that get quoted back at you. Soften them or make them conditional.`,
+          zh: `出现了绝对化的承诺：${m.overpromise.slice(0, 4).join('、')}。这些话日后会被原样引用回来——要么放软，要么加条件。`,
+          quote: sentenceAround(t, m.overpromise[0]) }
+      : { ok: true, en: 'No absolute promises. Nothing here will be read back to you in a dispute.', zh: '没有绝对化的承诺，将来不会有人拿着某句话来质问你。' }),
+  },
+  {
+    guild: 'hearth', en: 'Who it is written for', zh: '写给谁看',
+    run: (t, m) => {
+      if (m.you === 0 && m.words > 80) {
+        return { ok: false,
+          en: 'The document never addresses the reader directly — not one "you". It reads as a description of the seller. Rewrite the opening in the second person.',
+          zh: '整份文件没有一次直接称呼读者——一个「你」都没有。它读起来像在描述卖方。把开头改成对着对方说。' };
+      }
+      if (m.we > m.you * 2 && m.we > 6) {
+        return { ok: false,
+          en: `The document says "we" ${m.we} times and "you" ${m.you}. It is about the seller, not the buyer. Turn the sentences around.`,
+          zh: `文中「我们」出现 ${m.we} 次，「你/贵司」只有 ${m.you} 次。这份东西在讲卖方，不是买方——把句子调转过来。` };
+      }
+      return { ok: true, en: `Balanced address — "you" ${m.you}, "we" ${m.we}. It reads as being written for the reader.`, zh: `称呼比例合适——「你」${m.you} 次，「我们」${m.we} 次，读起来是写给对方的。` };
+    },
+  },
+  {
+    guild: 'aether', en: 'Why now', zh: '为什么是现在',
+    run: (t) => {
+      const found = firstMatch(t, /(right now|this year|window|urgent|before the|opportunity to|现在|当下|今年|窗口|时机)/i);
+      return found
+        ? { ok: true, en: 'There is a reason this is happening now rather than later.', zh: '说明了为什么是现在做，而不是以后。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'Nothing explains why now. Without urgency, a good proposal simply waits on someone’s desk.',
+            zh: '没有说明为什么是现在。缺了紧迫感，再好的提案也只是躺在别人桌上。' };
+    },
+  },
+  {
+    guild: 'verdant', en: 'What happens next', zh: '接下来做什么',
+    run: (t) => {
+      const found = firstMatch(t, /(next steps?|to proceed|to get started|sign|approve|下一步|如何开始|签署|确认后)/i);
+      return found
+        ? { ok: true, en: 'The reader is told what to do next. That is what turns reading into a decision.', zh: '告诉了读者下一步该做什么——这才把「读完」变成「决定」。', quote: sentenceAround(t, found) }
+        : { ok: false,
+            en: 'The document ends without asking for anything. Tell them exactly what the next action is, and who takes it.',
+            zh: '文件结束时什么都没要。明确写出下一步动作是什么、由谁来做。' };
+    },
+  },
+];
+
+// Read a document and report on it, guild by guild.
+function buildReview(brief, sources, town, lang) {
+  const en = lang !== 'zh';
+  const text = sources
+    .map((s) => s.text || s.highlights.join('\n'))
+    .join('\n\n')
+    .trim();
+  const used = new Set();
+
+  if (text.length < 200) {
+    return {
+      title: en ? 'Nothing to review yet' : '还没有可以审阅的东西',
+      subtitle: en ? 'The town needs the document itself' : '小镇需要文件本身',
+      sections: [{
+        key: 'empty',
+        heading: en ? 'Hand over the proposal' : '把提案交过来',
+        blocks: [{
+          type: 'p',
+          text: en
+            ? 'Upload the PDF or paste the text of the proposal you want checked. Key points alone are not enough to review — the town reads the actual words.'
+            : '上传 PDF，或把要检查的提案正文贴进来。只有要点是没法审阅的——小镇读的是实际的字句。',
+        }],
+        author: sign(town, 'hearth', used),
+      }],
+    };
+  }
+
+  const m = measureText(text);
+  const results = CHECKS.map((check) => ({ check, verdict: check.run(text, m, lang) }));
+  const flagged = results.filter((r) => !r.verdict.ok);
+
+  const overview = {
+    key: 'overview',
+    heading: en ? 'What the town found' : '小镇看到的',
+    status: flagged.length === 0 ? 'good' : flagged.length > 4 ? 'look' : 'mixed',
+    blocks: [
+      { type: 'p', text: en
+        ? `${results.length - flagged.length} of ${results.length} checks pass. ${flagged.length ? `${flagged.length} need${flagged.length === 1 ? 's' : ''} your attention, below.` : 'Nothing is missing that the town knows to look for.'}`
+        : `${results.length} 项检查里通过 ${results.length - flagged.length} 项。${flagged.length ? `有 ${flagged.length} 项需要你处理，列在下面。` : '小镇知道要找的东西，都在。'}` },
+      { type: 'p', text: en
+        ? `${m.words} words, ${m.paragraphs} paragraph${m.paragraphs === 1 ? '' : 's'}, ${m.numbers} figure${m.numbers === 1 ? '' : 's'}, average sentence ${m.avgSentence} words.${m.avgSentence > 26 ? ' That average is long — a reader skimming will lose the thread.' : ''}`
+        : `全文约 ${m.words} 字，${m.paragraphs} 个段落，${m.numbers} 处数字，平均句长 ${m.avgSentence} 词。${m.avgSentence > 26 ? ' 句子偏长，快速浏览的读者会跟丢。' : ''}` },
+      ...(flagged.length ? [{
+        type: 'list',
+        items: flagged.map((r) => (en ? r.check.en : r.check.zh)),
+      }] : []),
+    ],
+    author: sign(town, 'keystone', used),
+  };
+
+  const sections = results.map(({ check, verdict }) => {
+    const guild = GUILDS.find((g) => g.id === check.guild);
+    return {
+      key: `check-${check.guild}`,
+      heading: `${guild.name.replace(' Guild', '')} — ${en ? check.en : check.zh}`,
+      status: verdict.ok ? 'good' : 'look',
+      blocks: [
+        { type: 'p', text: en ? verdict.en : verdict.zh },
+        ...(verdict.quote ? [{ type: 'quotes', items: [verdict.quote] }] : []),
+      ],
+      author: sign(town, check.guild, used),
+    };
+  });
+
+  return {
+    title: brief.title || (en ? 'Proposal review' : '提案审阅'),
+    subtitle: en
+      ? `${sources.length} document${sources.length === 1 ? '' : 's'} read, ${results.length} checks`
+      : `读了 ${sources.length} 份文件，做了 ${results.length} 项检查`,
+    sections: [overview, ...sections],
   };
 }
