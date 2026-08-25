@@ -20,7 +20,7 @@ ground, who walks to their posting the day they are hired.
 
 ```bash
 npm run build      # bundle to dist/gradient-town.html (single self-contained file)
-npm test           # 39 tests covering the town's guarantees
+npm test           # 44 tests covering the town's guarantees
 ```
 
 Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
@@ -68,6 +68,25 @@ craft it belongs to.
 | 📋 **Brief** | Background, objective, audience, scope, out of scope, success, timing, budget |
 | ✉ **Email** | A short draft you can send, with your notes kept out of it |
 | 🔍 **Check my proposal** | Eleven checks on a proposal you already have — see below |
+| 🏛 **Ask the council** | A portable prompt that turns any assistant into your eleven-guild advisory council |
+
+**Ask the council** is for decisions rather than documents — *should I take this supplement,
+take this job, buy this thing, do this risky thing.* It writes a complete prompt with your
+question and material already inside it, which you copy into any assistant — Claude, ChatGPT,
+Gemini, a local model. That assistant then answers as the eleven guilds under a fixed set of
+rules:
+
+- numbers instead of adjectives, and an estimate with its basis when there is no number
+- every material claim tagged `[established]` / `[contested]` / `[my estimate]` / `[unknown]`
+- warn once with the magnitude, then move on — no moralising, no repeated disclaimers
+- follow the money on both sides, including whoever funds the warnings
+- always end with: if I go ahead anyway, what is the smartest way, and what should stop me
+- show the disagreement between guilds rather than manufacturing consensus
+- ask up to three questions before assuming
+
+The council is advisory. It informs the decision; it does not take it, and it does not exist to
+protect you from yourself. The prompt lives in `prompts/council-en.md` and `prompts/council-zh.md`
+if you would rather take it straight.
 
 **Check my proposal** reads a document you already wrote and reports on it, guild by guild.
 Each one checks the single thing its craft cares about, marks it **OK** or **Look**, and quotes
@@ -163,7 +182,7 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 
 ## What the tests guarantee
 
-`npm test` (39 tests) asserts the things the town promises:
+`npm test` (44 tests) asserts the things the town promises:
 
 - all 66 citizens graduate in good standing and are hired within 60 days
 - everyone is placed on a skill they actually have an aptitude for
@@ -176,11 +195,12 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 - the workshop keeps the lines that carry meaning and drops the noise
 - every proposal section is signed by a different, real citizen
 - an almost-empty brief still produces a usable draft, in either language
-- all six deliverables assemble, in both languages, with no citizen signing twice
+- all seven deliverables assemble, in both languages, with no citizen signing twice
 - a real PDF (English and Chinese) gives its text back, and a non-PDF is refused, not guessed at
 - a weak proposal is flagged on price, dates, scope, measures, deliverables and stock phrases
 - a solid proposal passes, with the price quoted back in its own sentence
 - asked to review nothing, the town says so instead of inventing a verdict
+- the council prompt carries your question, your context and all eleven seats
 - a town that has not graduated anyone yet can still be asked for work
 
 ## Layout
@@ -190,7 +210,8 @@ src/data.js     the world: resources, guilds, buildings, posts, citizens
 src/decrees.js  the orders the town accepts, and the parser that reads them
 src/pdf.js      pulling text out of a PDF, ToUnicode tables and all
 src/workshop.js reading your material: which files, and which lines carry meaning
-src/deliverables.js  the six things the town can make: lenses for ideas, checks for review
+src/deliverables.js  the seven things the town can make: lenses, checks, and the council prompt
+prompts/        the council prompt on its own, in English and Chinese
 src/engine.js   the simulation: study, placement, work, support, upkeep, decrees
 src/view.js     the world: floating isles, isometric buildings, citizens, sky
 src/main.js     the HUD: pipeline, stores, town record, roster, dossiers

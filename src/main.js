@@ -352,6 +352,13 @@ function blocksToHtml(blocks) {
     if (b.type === 'p') return `<p>${esc(b.text)}</p>`;
     if (b.type === 'list') return `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`;
     if (b.type === 'quotes') return b.items.map((i) => `<blockquote>${esc(i)}</blockquote>`).join('');
+    if (b.type === 'prompt') {
+      return `<div class="ws-prompt">
+        <button type="button" class="ctl copy-prompt" data-copy-prompt>${
+          wsLang === 'zh' ? '复制这段 prompt' : 'Copy this prompt'}</button>
+        <pre>${esc(b.text)}</pre>
+      </div>`;
+    }
     if (b.type === 'steps') {
       return b.items.map((i) => `<div class="ws-step"><span class="n">${i.n}</span><span>${
         i.text ? `<b>${esc(i.name)}</b> — ${esc(i.text)}` : esc(i.name)
@@ -557,6 +564,19 @@ document.querySelectorAll('.chip').forEach((b) => {
     document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     renderRoster();
   });
+});
+
+$('ws-doc').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-copy-prompt]');
+  if (!btn) return;
+  const text = btn.parentElement.querySelector('pre').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = wsLang === 'zh' ? '已复制 ✓' : 'Copied ✓';
+    setTimeout(() => { btn.textContent = wsLang === 'zh' ? '复制这段 prompt' : 'Copy this prompt'; }, 2200);
+  } catch {
+    wsSay(wsLang === 'zh' ? '复制失败——请手动选取。' : 'Could not copy — select the text by hand.', 'err');
+  }
 });
 
 $('roster').addEventListener('click', (e) => {

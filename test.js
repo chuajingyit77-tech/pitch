@@ -279,13 +279,13 @@ test('filenames are made safe for saving', () => {
 
 /* --------------------------------------------------------- deliverables */
 
-test('the town can make all six things, from the same brief', () => {
+test('the town can make all seven things, from the same brief', () => {
   const town = run(50);
   const brief = {
     title: 'Coffee expansion', client: 'Acme', goal: 'open 12 stores by Q4',
     points: ['Site selection', 'Fit-out playbook'], budget: 'RM 4.5m', timeline: 'by Q4',
   };
-  assert.equal(DELIVERABLES.length, 6);
+  assert.equal(DELIVERABLES.length, 7);
   for (const spec of DELIVERABLES) {
     const doc = assemble(spec.id, brief, [], town, 'en');
     assert.ok(doc.sections.length >= 1, `${spec.id} has sections`);
@@ -462,4 +462,62 @@ test('measurements describe the document rather than guessing', () => {
   assert.ok(m.you > 0);
   assert.equal(m.cliches.length, 0);
   assert.equal(measureText(WEAK_PROPOSAL).cliches.length >= 2, true);
+});
+
+/* ----------------------------------------------------------- the council */
+
+test('the council prompt carries the question and all eleven seats', () => {
+  const town = run(50);
+  const doc = assemble('council', {
+    title: 'Supplement decision',
+    goal: 'should I take magnesium for sleep',
+    points: ['I sleep about 5 hours', 'I drink coffee late'],
+  }, [], town, 'en');
+
+  const prompt = doc.sections.find((s) => s.key === 'prompt').blocks[0];
+  assert.equal(prompt.type, 'prompt');
+  assert.match(prompt.text, /should I take magnesium for sleep/, 'my question is in it');
+  assert.match(prompt.text, /I sleep about 5 hours/, 'my context is in it');
+  for (const g of GUILDS) {
+    assert.ok(prompt.text.includes(g.name.replace(' Guild', '')), `${g.name} has a seat`);
+  }
+  assert.match(prompt.text, /Numbers over adjectives/);
+  assert.match(prompt.text, /\[established\]/, 'certainty tagging is asked for');
+  assert.match(prompt.text, /If I proceed anyway|proceed anyway/i, 'it asks for the go-ahead-anyway branch');
+  assert.ok(prompt.text.length > 2500, 'the prompt is complete, not a stub');
+});
+
+test('the council prompt works in Chinese too', () => {
+  const town = run(50);
+  const doc = assemble('council', { goal: '我该不该买这款补剂', points: ['我一天睡 5 小时'] }, [], town, 'zh');
+  const prompt = doc.sections.find((s) => s.key === 'prompt').blocks[0].text;
+  assert.match(prompt, /我该不该买这款补剂/);
+  assert.match(prompt, /我一天睡 5 小时/);
+  assert.match(prompt, /议事规则/);
+  assert.match(prompt, /\[已确立\]/);
+});
+
+test('material handed to the town rides along in the council prompt', () => {
+  const town = run(50);
+  const source = digestSource('label.txt', 'Each capsule contains 400mg of magnesium citrate.\nThe recommended dose is 2 capsules daily.\nPrice is RM 89 for 60 capsules.');
+  const doc = assemble('council', { goal: 'should I buy this' }, [source], town, 'en');
+  const prompt = doc.sections.find((s) => s.key === 'prompt').blocks[0].text;
+  assert.match(prompt, /Material I am giving you/);
+  assert.match(prompt, /400mg of magnesium citrate/);
+});
+
+test('a council prompt with no question still gives a usable frame', () => {
+  const town = run(50);
+  const doc = assemble('council', { points: [] }, [], town, 'en');
+  const prompt = doc.sections.find((s) => s.key === 'prompt').blocks[0].text;
+  assert.match(prompt, /write your question here/);
+  assert.ok(prompt.length > 2500);
+});
+
+test('the prompt survives the trip through markdown', () => {
+  const town = run(50);
+  const doc = assemble('council', { goal: 'should I take this job' }, [], town, 'en');
+  const md = docToMarkdown(doc);
+  assert.match(md, /```/, 'the prompt is fenced');
+  assert.match(md, /should I take this job/);
 });

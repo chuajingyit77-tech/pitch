@@ -96,6 +96,7 @@ export function docToMarkdown(doc) {
       if (b.type === 'p') out.push(b.text, '');
       if (b.type === 'list') { for (const i of b.items) out.push(`- ${i}`); out.push(''); }
       if (b.type === 'quotes') { for (const i of b.items) out.push(`> ${i}`, ''); }
+      if (b.type === 'prompt') out.push('```', b.text, '```', '');
       if (b.type === 'steps') {
         for (const i of b.items) out.push(i.text ? `${i.n}. **${i.name}** — ${i.text}` : `${i.n}. ${i.name}`);
         out.push('');
