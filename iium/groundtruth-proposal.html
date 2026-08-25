@@ -1,0 +1,686 @@
+<title>GroundTruth Programme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#F1F2ED;
+  --surface:#FBFBF8;
+  --surface-2:#E8EAE1;
+  --ink:#14180F;
+  --ink-2:#4A5142;
+  --ink-3:#79806F;
+  --rule:#D2D6C9;
+  --rule-strong:#B4BAA9;
+  --frond:#3F5C26;
+  --frond-soft:#E2E9D6;
+  --fruit:#B0461A;
+  --fruit-soft:#F2DFD4;
+  --shadow:0 1px 2px rgba(20,24,15,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#11140E;
+    --surface:#191D15;
+    --surface-2:#212619;
+    --ink:#E9EBE2;
+    --ink-2:#A9B19D;
+    --ink-3:#7D8573;
+    --rule:#2C3225;
+    --rule-strong:#3D4534;
+    --frond:#94BA6B;
+    --frond-soft:#222B19;
+    --fruit:#E27C4F;
+    --fruit-soft:#2E2017;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11140E;
+  --surface:#191D15;
+  --surface-2:#212619;
+  --ink:#E9EBE2;
+  --ink-2:#A9B19D;
+  --ink-3:#7D8573;
+  --rule:#2C3225;
+  --rule-strong:#3D4534;
+  --frond:#94BA6B;
+  --frond-soft:#222B19;
+  --fruit:#E27C4F;
+  --fruit-soft:#2E2017;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Newsreader",Georgia,"Times New Roman",serif;
+  font-size:18px;
+  line-height:1.62;
+  font-weight:400;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{
+  max-width:1120px;
+  margin:0 auto;
+  padding:0 24px 120px;
+}
+
+/* ---------- masthead ---------- */
+
+.masthead{
+  border-bottom:2px solid var(--ink);
+  padding:56px 0 22px;
+  margin-bottom:8px;
+}
+.stamp{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 22px;
+  margin-bottom:34px;
+}
+.stamp b{color:var(--frond);font-weight:600}
+
+h1{
+  font-family:"Archivo",system-ui,sans-serif;
+  font-weight:700;
+  font-size:clamp(46px,8vw,86px);
+  line-height:.94;
+  letter-spacing:-.035em;
+  margin:0 0 4px;
+  text-wrap:balance;
+}
+h1 .sub{
+  display:block;
+  font-size:clamp(17px,2.4vw,25px);
+  font-weight:500;
+  letter-spacing:-.012em;
+  line-height:1.22;
+  color:var(--frond);
+  margin-top:20px;
+  max-width:26ch;
+}
+
+.thesis{
+  font-size:clamp(19px,2.3vw,23px);
+  line-height:1.5;
+  color:var(--ink-2);
+  max-width:60ch;
+  margin:38px 0 0;
+  font-weight:300;
+}
+.thesis em{
+  font-style:normal;
+  color:var(--ink);
+  border-bottom:2px solid var(--fruit);
+  padding-bottom:1px;
+}
+
+/* ---------- section grid ---------- */
+
+section{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:0 40px;
+  padding:52px 0 8px;
+  border-top:1px solid var(--rule);
+}
+section:first-of-type{border-top:none}
+
+@media (min-width:900px){
+  section{grid-template-columns:150px minmax(0,1fr)}
+}
+
+.rail{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  padding-top:9px;
+  margin-bottom:18px;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+.rail .no{
+  color:var(--fruit);
+  font-weight:600;
+  font-size:13px;
+  letter-spacing:.08em;
+}
+.rail .note{
+  color:var(--ink-3);
+  text-transform:none;
+  letter-spacing:0;
+  font-size:11.5px;
+  line-height:1.45;
+  max-width:20ch;
+}
+@media (max-width:899px){
+  .rail{flex-direction:row;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .rail .note{display:none}
+}
+
+.body{min-width:0;max-width:68ch}
+
+h2{
+  font-family:"Archivo",system-ui,sans-serif;
+  font-weight:600;
+  font-size:clamp(27px,3.6vw,36px);
+  line-height:1.1;
+  letter-spacing:-.024em;
+  margin:0 0 20px;
+  text-wrap:balance;
+}
+h3{
+  font-family:"Archivo",system-ui,sans-serif;
+  font-weight:600;
+  font-size:19px;
+  line-height:1.28;
+  letter-spacing:-.012em;
+  margin:34px 0 10px;
+}
+p{margin:0 0 17px}
+.body>p:last-child{margin-bottom:0}
+strong{font-weight:500;color:var(--ink)}
+a{color:var(--frond);text-decoration:none;border-bottom:1px solid var(--rule-strong)}
+a:hover{border-bottom-color:var(--frond)}
+a:focus-visible{outline:2px solid var(--frond);outline-offset:3px;border-radius:2px}
+
+ul{margin:0 0 17px;padding-left:0;list-style:none}
+li{
+  position:relative;
+  padding-left:22px;
+  margin-bottom:9px;
+}
+li::before{
+  content:"";
+  position:absolute;
+  left:2px;top:.62em;
+  width:6px;height:1.5px;
+  background:var(--fruit);
+}
+
+/* ---------- data blocks ---------- */
+
+.figs{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+  gap:1px;
+  background:var(--rule);
+  border:1px solid var(--rule);
+  margin:28px 0 30px;
+}
+.fig{
+  background:var(--surface);
+  padding:16px 15px 15px;
+}
+.fig .n{
+  font-family:"Archivo",system-ui,sans-serif;
+  font-weight:700;
+  font-size:26px;
+  letter-spacing:-.03em;
+  line-height:1;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+  display:block;
+  margin-bottom:7px;
+}
+.fig .n small{font-size:14px;font-weight:600;color:var(--ink-2);letter-spacing:0}
+.fig .l{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;
+  line-height:1.45;
+  letter-spacing:.03em;
+  color:var(--ink-3);
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:15.5px;
+  margin:6px 0 26px;
+}
+.scroll{overflow-x:auto;margin:26px 0}
+.scroll table{margin:0;min-width:520px}
+th{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;
+  font-weight:600;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  text-align:left;
+  padding:0 14px 8px 0;
+  border-bottom:1.5px solid var(--rule-strong);
+  vertical-align:bottom;
+}
+td{
+  padding:12px 14px 12px 0;
+  border-bottom:1px solid var(--rule);
+  vertical-align:top;
+  line-height:1.44;
+  color:var(--ink-2);
+}
+td:first-child{color:var(--ink);font-weight:500;white-space:nowrap}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+
+.wp{
+  border-left:2px solid var(--frond);
+  padding:2px 0 2px 20px;
+  margin:26px 0;
+}
+.wp .tag{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--frond);
+  display:block;
+  margin-bottom:6px;
+}
+.wp h3{margin:0 0 8px}
+.wp p{margin-bottom:11px}
+.wp .out{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:12px;
+  line-height:1.5;
+  color:var(--ink-2);
+  background:var(--frond-soft);
+  padding:9px 12px;
+  display:block;
+}
+.wp .out span{color:var(--frond);font-weight:600}
+
+.pull{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  border-left:3px solid var(--fruit);
+  padding:20px 22px;
+  margin:30px 0;
+  font-size:17.5px;
+  line-height:1.5;
+}
+.pull p:last-child{margin-bottom:0}
+.pull .lbl{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;
+  font-weight:600;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--fruit);
+  display:block;
+  margin-bottom:9px;
+}
+
+/* ---------- loop diagram ---------- */
+
+.loop{
+  margin:30px 0;
+  border:1px solid var(--rule);
+  background:var(--surface);
+  padding:22px 20px 18px;
+}
+.loop-cap{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+  margin-top:14px;
+}
+.loop svg{display:block;width:100%;height:auto}
+
+/* ---------- timeline ---------- */
+
+.tl{display:flex;flex-direction:column;gap:0;margin:26px 0}
+.tl-row{
+  display:grid;
+  grid-template-columns:88px 1fr;
+  gap:20px;
+  padding:16px 0;
+  border-bottom:1px solid var(--rule);
+}
+.tl-row:last-child{border-bottom:none}
+.tl-when{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.05em;
+  color:var(--fruit);
+  padding-top:4px;
+  line-height:1.5;
+}
+.tl-what h3{margin:0 0 5px;font-size:17px}
+.tl-what p{margin:0;font-size:16px;color:var(--ink-2);line-height:1.5}
+
+.closer{
+  border-top:2px solid var(--ink);
+  margin-top:64px;
+  padding-top:26px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11.5px;
+  line-height:1.7;
+  letter-spacing:.02em;
+  color:var(--ink-3);
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px 40px;
+}
+.closer b{color:var(--ink-2);font-weight:600}
+
+@media (prefers-reduced-motion:no-preference){
+  a{transition:border-color .15s ease}
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="stamp">
+    <span>Joint Research Proposal</span>
+    <span>IIUM &middot; Kulliyyah of Engineering &middot; <b>CUTe</b></span>
+    <span>Draft for discussion</span>
+  </div>
+  <h1>GroundTruth
+    <span class="sub">Air–ground collaborative recovery of oil palm loose fruit</span>
+  </h1>
+  <p class="thesis">Loose fruit carries roughly twice the oil of the bunch it falls from, and loses that value by the day it lies on the ground. Nobody has measured the clock. <em>This programme measures it, and builds the machines that beat it.</em></p>
+</header>
+
+<section>
+  <div class="rail">
+    <span class="no">01</span>
+    <span>The problem</span>
+    <span class="note">Why this is a value-recovery problem, not a labour problem</span>
+  </div>
+  <div class="body">
+    <h2>The most valuable fruit in the plantation is the fruit on the ground</h2>
+
+    <p>A tenera bunch delivers a national average oil extraction rate of <strong>19.86%</strong>. The loose fruitlets that detach from it carry <strong>over 40% oil by weight</strong> — the single richest material moving through the estate. Loose fruit accounts for 5–10% of total crop, and 3–7% of production is estimated lost in harvesting and in-field transport.</p>
+
+    <p>Collecting it is the lowest-paid, least-wanted job on the estate. Fruit-picking crews earn RM800–1,000 a month against a statutory minimum of RM1,700, and the national shortfall stands at roughly 40,000 workers, more than half of it concentrated in harvesting and in-field collection. Overall mechanisation of the crop sits near 11%.</p>
+
+    <div class="figs">
+      <div class="fig"><span class="n">&gt;40<small>%</small></span><span class="l">Oil content of loose fruit, by weight</span></div>
+      <div class="fig"><span class="n">19.86<small>%</small></span><span class="l">National oil extraction rate, whole bunch (2023)</span></div>
+      <div class="fig"><span class="n">RM47.39</span><span class="l">Value of each 1% of OER, per tonne FFB (2025 mean)</span></div>
+      <div class="fig"><span class="n">~40,000</span><span class="l">National plantation labour shortfall, harvesting-weighted</span></div>
+    </div>
+
+    <p>Every serious attempt at this problem for the past century has been a mechanical one — suction rigs, rakes, hoppers. MPOB's own review is blunt: in a hundred years of commercial cultivation, the method has not fundamentally changed. The current generation of machines moves 1,200–1,500 kg a day but chokes on fronds, sinks in wet soil, and admits up to 15% debris. The most advanced robotic attempt — an arm-and-gripper picker built by one of the largest growers — recovers around 40 kg.</p>
+
+    <p>The gap between those two numbers is the whole thesis. <strong>Throughput comes from bulk collection; value comes from knowing which fruit is still worth collecting.</strong> No one is working on the second half.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">02</span>
+    <span>The gap</span>
+    <span class="note">A measurable quantity that has never been measured in the field</span>
+  </div>
+  <div class="body">
+    <h2>The clock nobody has measured</h2>
+
+    <p>Fresh, undamaged fruit yields oil at under 0.3% free fatty acid. The detachment scar is the entry point for lipase, which is why loose fruit is inherently more fragile than fruit still on the bunch. Bruise it and FFA at the wound climbs steeply within the hour; bruised fruit in contact with water reaches 10.44% FFA by day five, against a commercial ceiling normally set at 5%.</p>
+
+    <p>So loose fruit decays along two axes at once — oil is lost to germination and rot, and what oil remains is discounted for acidity. The economics of recovery therefore depend on a variable no one currently observes: <strong>how many days has this fruit been lying here?</strong></p>
+
+    <div class="pull">
+      <span class="lbl">The literature gap</span>
+      <p>Published FFA data comes almost entirely from laboratory bruising and immersion trials. We could not locate a single Malaysian field study that closes the chain from <strong>days on ground → FFA → RM per tonne</strong>. That curve does not exist. It is simultaneously an open research question, a pricing instrument, and a proprietary asset.</p>
+    </div>
+
+    <p>There is a second, sharper reason this matters. Graders already read ripeness from the number of fruitlets on the ground — the industry's oldest visual heuristic. Loose fruit is not merely a loss to be recovered; it is <strong>a signal about the block that produced it</strong>. Read it correctly and it tells you which blocks are over-ripe, which harvesting gangs are leaving crop behind, and where the next round should go.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">03</span>
+    <span>Why air–ground</span>
+    <span class="note">Forced by the physiology of the crop, not chosen for novelty</span>
+  </div>
+  <div class="body">
+    <h2>The crop's own structure dictates the architecture</h2>
+
+    <p>Oil palm defeats aerial sensing in a specific way: bunches sit <em>beneath</em> the canopy, and the ripest ones sit lowest. From directly above they are essentially invisible. This is why aerial ripeness assessment has stalled everywhere it has been attempted, and why MPOB's own aerial <em>Bacillus thuringiensis</em> trials against bagworm — 96% larval knockdown, yet pupae still recorded at 28 days — confirmed excellent upper-surface coverage and insufficient deposition underneath.</p>
+
+    <p>Both of the crop's highest-value problems are the same shape: <strong>invisible from the air, reachable from the ground</strong>. Meanwhile the ground robot has the opposite deficiency — it can see and touch anything within a few metres and knows nothing about the block it is standing in.</p>
+
+    <p>Ground-level loose fruit is the one high-value target that reverses the occlusion problem. It lies in the open, in the inter-row and around the palm circle, where a low-flying aircraft can see it and a canopy cannot hide it. It is the natural handshake between the two platforms.</p>
+
+    <div class="loop">
+      <svg viewBox="0 0 720 128" role="img" aria-label="Closed loop: aerial survey produces a density and dwell-time map, which becomes a work order for the ground robot, whose recovered mass is fed back to recalibrate the model.">
+        <defs>
+          <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g style="color:var(--rule-strong)" fill="none" stroke="currentColor" stroke-width="1.25">
+          <line x1="132" y1="34" x2="184" y2="34" marker-end="url(#ar)"/>
+          <line x1="336" y1="34" x2="388" y2="34" marker-end="url(#ar)"/>
+          <line x1="540" y1="34" x2="592" y2="34" marker-end="url(#ar)"/>
+          <path d="M660 60 L660 100 L60 100 L60 60" marker-end="url(#ar)" stroke-dasharray="4 4"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="500">
+          <g style="color:var(--ink)" fill="currentColor">
+            <text x="0" y="30">Aerial survey</text>
+            <text x="188" y="30">Density + dwell map</text>
+            <text x="392" y="30">Prioritised work order</text>
+            <text x="596" y="30">Ground robot</text>
+          </g>
+          <g style="color:var(--ink-3)" fill="currentColor" font-size="10.5" font-weight="400">
+            <text x="0" y="48">low-altitude RGB</text>
+            <text x="188" y="48">kg/ha &amp; days-on-ground</text>
+            <text x="392" y="48">route, sequence, cut-off</text>
+            <text x="596" y="48">bulk recovery</text>
+          </g>
+          <g style="color:var(--fruit)" fill="currentColor" font-size="10.5" font-weight="500">
+            <text x="240" y="116">recovered mass recalibrates the model — every hectare worked is a labelled sample</text>
+          </g>
+        </g>
+      </svg>
+      <p class="loop-cap">Fig. 1 — The closed loop. The ground robot is not only the actuator; it is the annotator.</p>
+    </div>
+
+    <p>To our knowledge no published work combines UAV and UGV in oil palm. The components exist and are recent: insect-inspired online navigation for micro-aerial vehicles among <em>oil palm</em> specifically (2025); UAV-prior-guided UGV path planning demonstrated in banana plantations under closely comparable tropical, ground-constrained conditions (2026); UAV–UGV cooperative targeted spraying in pomelo orchards. Nobody has assembled them for this crop. That is the opening.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">04</span>
+    <span>Work packages</span>
+    <span class="note">Three packages, three theses, one system</span>
+  </div>
+  <div class="body">
+    <h2>Programme structure</h2>
+
+    <p>Each package stands alone as a publishable contribution and as a postgraduate project, while composing into a single field-validated system by month 18.</p>
+
+    <div class="wp">
+      <span class="tag">WP-A · Perception</span>
+      <h3>Loose fruit detection and density mapping from low altitude</h3>
+      <p>Detection of ground-level fruitlets under the conditions that defeat existing work: frond litter around the palm circle, partial burial in soft ground after rain, extreme illumination range between full sun and canopy shadow, and small, low-contrast targets against laterite. Existing published detection reaches 97% precision on curated ground imagery; none of it has been tested against these conditions, and no public Malaysian field dataset exists.</p>
+      <span class="out"><span>Output —</span> The first open field dataset of ground-level oil palm loose fruit, with a detection benchmark. Published for the community; the extended proprietary corpus stays with the commercial partner.</span>
+    </div>
+
+    <div class="wp">
+      <span class="tag">WP-B · The clock</span>
+      <h3>Dwell-time estimation and its economic calibration</h3>
+      <p>Estimating <em>how long</em> a fruitlet has been on the ground from its visual signature — exocarp colour progression, germination, mud adhesion, fungal bloom — calibrated against FFA assayed on the same fruit at a partner mill laboratory. The output is not an accuracy figure but a curve: days on ground mapped to FFA, mapped to discount per tonne.</p>
+      <span class="out"><span>Output —</span> The dwell-time → FFA → value relationship, established under Malaysian field conditions. Novel, citable, and directly usable as a commercial pricing basis.</span>
+    </div>
+
+    <div class="wp">
+      <span class="tag">WP-C · Coordination</span>
+      <h3>Air-informed scheduling for time-critical recovery</h3>
+      <p>Converting the aerial prior into ground-vehicle routing and sequencing under an objective that is neither distance nor coverage but <strong>recoverable oil value per unit time</strong> — which implies deliberately abandoning fruit whose remaining value no longer justifies the traverse. Closed-loop validation: predicted recoverable mass against mass actually delivered to the mill.</p>
+      <span class="out"><span>Output —</span> A scheduling formulation with field validation, plus the closed-loop measurement protocol that makes outcome-based commercial contracts auditable.</span>
+    </div>
+
+    <h3>Regulatory position</h3>
+    <p>The programme flies sensing payloads, not dispensing payloads. Under CAD 6011 this places the work in the lightest applicable category — surveillance-class small unmanned aircraft under 20 kg, operated on standard authorisation — rather than requiring an Unmanned Aerial Work Certificate and agricultural pilot module, and it avoids the parallel Department of Agriculture approvals governing what may be dispensed from the air. <strong>This is a deliberate design choice: it is what allows field data collection to begin in weeks rather than quarters.</strong></p>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">05</span>
+    <span>The partnership</span>
+    <span class="note">Complementary strengths, and one gap stated plainly</span>
+  </div>
+  <div class="body">
+    <h2>What each side brings</h2>
+
+    <p>The Centre for Unmanned Technologies is the right partner for a specific reason: its published strength is computer and robotic vision, deep learning for robotics, and unmanned systems, demonstrated on autonomous surface vessels, driver-assistance, and vision-based inspection. WP-A and WP-C are that capability pointed at a new domain — not a request to develop competence the centre does not have.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Contribution</th><th>IIUM / CUTe</th><th>Industry partner</th></tr></thead>
+        <tbody>
+          <tr><td>Perception &amp; autonomy</td><td>Model architecture, navigation, scheduling formulation, supervision</td><td>Field engineering, deployment, edge integration</td></tr>
+          <tr><td>Flight operations</td><td>—</td><td>Certified remote pilots, flight authorisations, insured operations</td></tr>
+          <tr><td>Site access</td><td>—</td><td>Estate agreements, mill laboratory access, harvesting-gang coordination</td></tr>
+          <tr><td>Data</td><td>Annotation protocol, benchmark curation</td><td>Collection at scale, storage, versioning, grower consent</td></tr>
+          <tr><td>Funding eligibility</td><td>University-track schemes; OIC-linked instruments</td><td>Company-track schemes; matching capital</td></tr>
+          <tr><td>Route to market</td><td>Academic validation, standards influence</td><td>Commercial deployment, export channel</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>One gap should be named at the outset.</strong> IIUM has no agriculture faculty, and CUTe has no published agronomic or aerial-application track record. WP-B requires FFA assay and agronomic sampling discipline that neither partner holds. The proposal is to close this with a third participant — a mill laboratory, which performs FFA titration as routine daily work — rather than to pretend the gap away. A mill partner also supplies the delivery-weight ground truth that WP-C's closed loop depends on, and is a natural first customer.</p>
+
+    <h3>The channel argument</h3>
+    <p>IIUM's distinguishing asset in this programme is not laboratory capacity. It is institutional reach: co-sponsored by eight member governments and OIC-affiliated since 2011, with over 6,000 international students drawn from more than 116 countries. Two of the world's five largest palm oil producers are OIC members, and Islamic Development Bank innovation instruments are open to member-state institutions. For technology intended to leave Malaysia, that is a channel no ranking captures — and it should be written into the collaboration's scope, not treated as incidental.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">06</span>
+    <span>Funding</span>
+    <span class="note">Sequenced so that regulatory access arrives with the money</span>
+  </div>
+  <div class="body">
+    <h2>Non-dilutive funding path</h2>
+
+    <p>The sequence below is ordered by what each instrument unlocks, not by size. The first is decisive because it is the only one that supplies research funding <em>and</em> regulatory latitude in the same award.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Instrument</th><th class="num">Scale</th><th>Why it comes when it does</th></tr></thead>
+        <tbody>
+          <tr><td>NTIS</td><td class="num">RM250k–500k<br>→ RM4m</td><td>Open year-round on monthly cohorts. Explicitly admits university researchers alongside companies, and works with the aviation and survey authorities to grant special approvals or permit relaxations for real-environment testing. Agriculture is already among its approved drone deployments.</td></tr>
+          <tr><td>MARCOP</td><td class="num">Matching</td><td>The oil palm mechanisation and automation consortium, with the national board as secretariat. The most domain-aligned money available, and its endorsement carries procurement weight with estates.</td></tr>
+          <tr><td>GET</td><td class="num">RM250k</td><td>The 2026 successor to FRGS, assessed on return-on-value rather than publication count, with collaborative and product-innovation strands. Applications open around March — the university-side anchor for the next cycle.</td></tr>
+          <tr><td>IIUM IMGS / C-RIGS</td><td class="num">Internal</td><td>Both 2026 windows have closed. The 2027 cycle requires an industry letter of intent and a draft agreement <em>at application</em>, which sets the legal timetable working backwards from roughly mid-2027.</td></tr>
+          <tr><td>CRDF 2</td><td class="num">up to RM4m</td><td>The commercialisation channel for university-originated IP through an operating company. Only accessible if the IP and licensing structure is correctly built at the outset.</td></tr>
+          <tr><td>IsDB Transform</td><td class="num">USD 50k–1m</td><td>Member-state instrument reachable through IIUM's OIC affiliation. Aligns funding with the intended export geography rather than fighting it.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pull">
+      <span class="lbl">Immediate, time-limited</span>
+      <p>The aviation authority opened public consultation on Malaysia's Low Altitude Economy Framework on 4 August 2026, with responses due <strong>2 September 2026</strong>. A joint university–industry submission on agricultural beyond-visual-line-of-sight scenarios and research exemptions costs nothing, shapes rules this programme will operate under, and establishes the partnership publicly before any agreement is signed. It is the fastest available first act.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">07</span>
+    <span>Principles</span>
+    <span class="note">Stated up front so the agreement drafts quickly</span>
+  </div>
+  <div class="body">
+    <h2>Intellectual property and data</h2>
+
+    <p>Agricultural AI collaborations fail at the data clause, because standard research agreements do not have one. Four principles, offered as an opening position:</p>
+
+    <ul>
+      <li><strong>Background is inventoried.</strong> Pre-existing models, code, pipelines and airframe designs are listed in a schedule and transfer nothing by participating.</li>
+      <li><strong>Data and weights are separated from publications.</strong> Raw field imagery, annotations and trained weights sit with the commercial partner; the university receives a perpetual non-commercial licence for teaching and research, and the benchmark subset is published openly under both names.</li>
+      <li><strong>Foreground is licensed on terms fixed now.</strong> Rate, milestones and territory are agreed when the agreement is signed, not deferred. Territory is worldwide with sublicensing to affiliates and local partners, or the export thesis fails on contact.</li>
+      <li><strong>Publication is encouraged, with a short review window.</strong> A 60-day pre-submission review, extendable only to file, applied consistently to papers and to student theses including repository deposit.</li>
+    </ul>
+
+    <p>Grower data carries its own obligations: block-level yield and gang-performance data is commercially sensitive to the estate, and collection requires informed consent and personal-data compliance. Getting this right is a condition of estate access, not a formality.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rail">
+    <span class="no">08</span>
+    <span>Sequence</span>
+    <span class="note">First twelve months</span>
+  </div>
+  <div class="body">
+    <h2>Twelve-month plan</h2>
+
+    <div class="tl">
+      <div class="tl-row">
+        <div class="tl-when">Weeks<br>0–2</div>
+        <div class="tl-what">
+          <h3>Joint consultation response; agreement templates requested</h3>
+          <p>Submit to the Low Altitude Economy consultation before 2 September. In parallel, obtain the university's IP policy and standard collaboration templates from the research management centre — read the contract before scoping the science.</p>
+        </div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-when">Months<br>1–3</div>
+        <div class="tl-what">
+          <h3>Agreement signed; NTIS submitted; site secured</h3>
+          <p>Execute the collaboration agreement with the data clause settled. Submit to the next monthly NTIS cohort. Secure one mid-size estate and one mill laboratory. Confirm pilot certification and flight authorisation lead times.</p>
+        </div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-when">Months<br>2–6</div>
+        <div class="tl-what">
+          <h3>Data collection — the critical path</h3>
+          <p>Begin capture across wet and dry season, immediately post-harvest and at intervals thereafter, with mill FFA assays on tracked samples. Every week of delay here delays everything downstream, because the dataset is the asset.</p>
+        </div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-when">Months<br>5–9</div>
+        <div class="tl-what">
+          <h3>Detection baseline and first dwell-time curve</h3>
+          <p>WP-A benchmark released. First WP-B calibration submitted for publication. GET application prepared for the March window. Postgraduate candidates confirmed against each package.</p>
+        </div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-when">Months<br>8–12</div>
+        <div class="tl-what">
+          <h3>Closed-loop trial and first commercial contract</h3>
+          <p>Aerial prior driving ground recovery on a single estate, measured against mill delivery weight. On the strength of that measurement, negotiate the first outcome-based commercial agreement and file MARCOP and commercialisation applications.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>What success looks like at month 12</h3>
+    <p>One dataset nobody else has. One curve nobody else has published. One estate where predicted recoverable value was measured against delivered tonnage and the numbers agreed. Everything after that — additional estates, additional territories, additional crops that drop their fruit to the ground — is repetition of a proven measurement, not a new invention.</p>
+  </div>
+</section>
+
+<div class="closer">
+  <span><b>Prepared for:</b> Centre for Unmanned Technologies, Kulliyyah of Engineering, IIUM Gombak</span>
+  <span><b>Status:</b> Discussion draft — figures cited from public sources and to be verified against primary documents before any funding submission</span>
+</div>
+
+</div>
