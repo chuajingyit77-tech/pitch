@@ -20,7 +20,7 @@ ground, who walks to their posting the day they are hired.
 
 ```bash
 npm run build      # bundle to dist/gradient-town.html (single self-contained file)
-npm test           # 44 tests covering the town's guarantees
+npm test           # 53 tests covering the town's guarantees
 ```
 
 Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
@@ -62,6 +62,7 @@ craft it belongs to.
 
 | | What you get |
 |---|---|
+| 🔎 **Read my document** | Hand it a contract, quotation, policy or letter — see below |
 | 📜 **Proposal** | Eight sections: overview, what we understand, approach, deliverables, timeline, investment, why this team, next steps |
 | 💡 **Ideas** | Eleven angles on your subject — one per guild, each a sharp question plus a concrete move |
 | 🗣 **Pitch outline** | Ten slides in the order a room can follow, from the one-line to the ask |
@@ -69,6 +70,29 @@ craft it belongs to.
 | ✉ **Email** | A short draft you can send, with your notes kept out of it |
 | 🔍 **Check my proposal** | Eleven checks on a proposal you already have — see below |
 | 🏛 **Ask the council** | A portable prompt that turns any assistant into your eleven-guild advisory council |
+
+**Read my document** is the one to reach for first. Give it a tenancy agreement, an employment
+contract, an insurance policy, a quotation, a loan document — anything you signed or are about
+to sign — and it returns six things:
+
+1. **The numbers in it** — every amount, rate, period and date, labelled (rent, deposit, penalty,
+   notice period, increase) and quoted with the sentence it came from. Most people read a
+   contract looking for exactly these, and have to hunt through ten pages for them.
+2. **Put these in your calendar** — when it ends, and the last day you can give notice. A 24-month
+   lease that renews itself unless you write 90 days ahead has one date that matters, and it is
+   not the expiry date. The town works it out.
+3. **The clauses worth your attention** — automatic renewal, terms they can change alone,
+   liability with no ceiling, what leaving early costs, who pays for repairs, when they can walk
+   in — each quoted from your document, with what it means for you.
+4. **Not in here** — what a document of this kind should say and this one does not: deposit
+   return conditions, what is out of scope, how a dispute gets settled.
+5. **Ask them this** — a question per finding, worded so you can copy it straight into a reply.
+6. **Take it further** — a prompt carrying the whole document and every finding, to paste into any
+   assistant for redlines on the clauses that worry you.
+
+It recognises tenancy, employment, insurance, service/quotation and loan documents, and applies
+the checks that belong to each. Everything it says is quoted from your own document; what it
+cannot find, it says it cannot find.
 
 **Ask the council** is for decisions rather than documents — *should I take this supplement,
 take this job, buy this thing, do this risky thing.* It writes a complete prompt with your
@@ -182,7 +206,7 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 
 ## What the tests guarantee
 
-`npm test` (44 tests) asserts the things the town promises:
+`npm test` (53 tests) asserts the things the town promises:
 
 - all 66 citizens graduate in good standing and are hired within 60 days
 - everyone is placed on a skill they actually have an aptitude for
@@ -195,12 +219,17 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 - the workshop keeps the lines that carry meaning and drops the noise
 - every proposal section is signed by a different, real citizen
 - an almost-empty brief still produces a usable draft, in either language
-- all seven deliverables assemble, in both languages, with no citizen signing twice
+- all eight deliverables assemble, in both languages, with no citizen signing twice
 - a real PDF (English and Chinese) gives its text back, and a non-PDF is refused, not guessed at
 - a weak proposal is flagged on price, dates, scope, measures, deliverables and stock phrases
 - a solid proposal passes, with the price quoted back in its own sentence
 - asked to review nothing, the town says so instead of inventing a verdict
 - the council prompt carries your question, your context and all eleven seats
+- a one-sided tenancy has every trap caught: auto-renewal, unilateral change, uncapped
+  liability, forfeiture, deposit terms, structural repairs, unrestricted entry
+- rent, deposit, penalty rate and expiry date are pulled out and labelled correctly
+- a notice period is the number beside the word "notice" — the 24-month term is not mistaken
+  for one — and the calendar names the last day you can act, not just the expiry
 - a town that has not graduated anyone yet can still be asked for work
 
 ## Layout
@@ -209,6 +238,7 @@ when a resource runs short instead of collapsing, so the economy stays solvent.
 src/data.js     the world: resources, guilds, buildings, posts, citizens
 src/decrees.js  the orders the town accepts, and the parser that reads them
 src/pdf.js      pulling text out of a PDF, ToUnicode tables and all
+src/reading-room.js  what to look for in a contract: clauses, figures, dates, gaps
 src/workshop.js reading your material: which files, and which lines carry meaning
 src/deliverables.js  the seven things the town can make: lenses, checks, and the council prompt
 prompts/        the council prompt on its own, in English and Chinese

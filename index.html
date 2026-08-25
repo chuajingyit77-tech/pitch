@@ -288,6 +288,25 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 .copy-prompt { position: absolute; top: 10px; right: 12px; padding: 6px 14px; font-size: 11.5px; }
 
+.ws-table-wrap { overflow-x: auto; margin: 2px 0 12px; border: 1.5px solid #ecdcc0; border-radius: 12px; }
+.ws-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ws-table th {
+  text-align: left; padding: 9px 13px; background: #fdf3e0; color: #6b5540;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  border-bottom: 1.5px solid #ecdcc0; white-space: nowrap;
+}
+.ws-table td { padding: 9px 13px; border-bottom: 1px solid #f3e8d3; color: #4f3d2c; vertical-align: top; }
+.ws-table tr:last-child td { border-bottom: none; }
+.ws-table td:nth-child(2) { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: #4a3728; font-weight: 500; }
+.ws-table td.src { color: var(--ink-faint); font-size: 12px; line-height: 1.5; min-width: 240px; }
+.ws-checklist { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.ws-checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.55; color: #4f3d2c; }
+.ws-checklist .tick {
+  flex: none; margin-top: 1px; padding: 4px 11px; border-radius: 999px; border: 1.5px solid #ead9be;
+  background: var(--card); font-size: 11px; font-weight: 700; color: var(--ink-faint);
+}
+.ws-checklist .tick:hover { border-color: var(--sun); color: #6b5027; background: #fff6e2; }
+
 /* ---------------- decree console ---------------- */
 .decree-badge {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px;

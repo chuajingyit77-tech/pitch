@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
-const MODULES = ['src/data.js', 'src/decrees.js', 'src/pdf.js', 'src/workshop.js', 'src/deliverables.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
+const MODULES = ['src/data.js', 'src/decrees.js', 'src/pdf.js', 'src/workshop.js', 'src/reading-room.js', 'src/deliverables.js', 'src/engine.js', 'src/view.js', 'src/main.js'];
 
 function stripModuleSyntax(src) {
   return src

@@ -3,6 +3,7 @@
 // that section belongs to.
 
 import { GUILDS } from './data.js';
+import { readDocument, diaryDates } from './reading-room.js';
 
 /* ------------------------------------------------------------- authorship */
 
@@ -867,3 +868,222 @@ DELIVERABLES.push({
   ctaEn: 'Build a council prompt', ctaZh: '生成议会 prompt', build: buildCouncil,
 });
 DELIVERABLE_BY_ID.council = DELIVERABLES[DELIVERABLES.length - 1];
+
+
+/* ------------------------------------------------------- the reading room */
+
+const READ_COPY = {
+  en: {
+    nothing: 'Hand the town a document',
+    nothingBody: 'Upload the PDF, or paste the text of the contract, quotation, policy or letter you want read. The town reads the words themselves - a few notes are not enough.',
+    overview: 'What this is',
+    numbers: 'The numbers in it',
+    diary: 'Put these in your calendar',
+    missing: 'Not in here',
+    asks: 'Ask them this',
+    further: 'Take it further',
+    kinds: { money: 'Money', percent: 'Rate', duration: 'Period', date: 'Date' },
+    role: { rent: 'Rent', deposit: 'Deposit', penalty: 'Penalty', fee: 'Fee', notice: 'Notice period', term: 'Term', increase: 'Increase' },
+    cols: ['What', 'Value', 'Where it says so'],
+    diaryCols: ['Date', 'What happens', 'From'],
+    noneMissing: 'Everything the town knows to look for in this kind of document is present.',
+    askLead: 'Copy these and send them. Each one is a real gap in what you have been given.',
+    furtherLead: 'This prompt carries the document and the findings. Paste it into any assistant to go deeper on the clauses that worry you.',
+  },
+  zh: {
+    nothing: '先把文件交给小镇',
+    nothingBody: '上传 PDF，或把合同、报价、保单、通知的正文贴进来。小镇读的是文件本身的字句，几条笔记是不够的。',
+    overview: '这是什么',
+    numbers: '文件里的数字',
+    diary: '把这些放进日历',
+    missing: '这里面没有的',
+    asks: '把这些问回去',
+    further: '继续深挖',
+    kinds: { money: '金额', percent: '比率', duration: '期限', date: '日期' },
+    role: { rent: '租金', deposit: '押金', penalty: '罚则', fee: '费用', notice: '通知期', term: '期限', increase: '涨幅' },
+    cols: ['是什么', '数值', '出自哪一句'],
+    diaryCols: ['日期', '会发生什么', '出处'],
+    noneMissing: '小镇知道要在这类文件里找的东西，这份都有。',
+    askLead: '把这些复制发过去。每一条都对应你手上真实缺的东西。',
+    furtherLead: '这段 prompt 已经带上文件和发现。贴给任何 AI，就能针对你担心的条款继续深挖。',
+  },
+};
+
+function readingPrompt(text, read, lang) {
+  const en = lang === 'en';
+  const concerns = read.found
+    .map((f) => `- ${en ? f.check.en : f.check.zh}: "${f.quote}"`)
+    .join('\n');
+  const gaps = read.missing.map((c) => `- ${en ? c.en : c.zh}`).join('\n');
+  const body = text.length > 12000 ? `${text.slice(0, 12000)}\n[...truncated]` : text;
+
+  if (!en) {
+    return `你是一位替我看文件的资深顾问。下面是一份${read.type.zh}的全文，以及我已经标出的疑点。
+
+请你做三件事：
+1. 逐条评估我标出的疑点：这在同类文件里是否常见？对我实际的风险有多大？给出量级，不要只说「有风险」。
+2. 找出我漏掉的问题——特别是那些看起来正常、实际上对我不利的措辞。
+3. 给我一份改写建议：哪几句该改成什么，用可以直接发给对方的说法。
+
+规矩：引用原文时要写清是哪一条。不确定的地方标明不确定。不要给我泛泛的免责声明，我要的是具体的判断。
+
+## 我已经标出的疑点
+
+${concerns || '（暂无）'}
+
+${gaps ? `## 文件里似乎缺少的\n\n${gaps}\n` : ''}
+## 文件全文
+
+${body}`;
+  }
+
+  return `You are a senior adviser reading a document on my behalf. Below is the full text of a ${read.type.en.toLowerCase()}, and the concerns I have already marked.
+
+Do three things:
+1. Assess each concern I marked: is this normal in documents of this kind, and how much real exposure does it create for me? Give magnitudes, not just "this is risky".
+2. Find what I missed - particularly wording that looks ordinary but works against me.
+3. Give me redlines: which sentences to change, and the exact wording I could send back.
+
+Rules: cite the clause number when you quote. Say plainly where you are unsure. Skip the general disclaimers - I want specific judgement.
+
+## Concerns I already marked
+
+${concerns || '(none yet)'}
+
+${gaps ? `## Apparently missing from the document\n\n${gaps}\n` : ''}
+## Full text
+
+${body}`;
+}
+
+function buildReading(brief, sources, town, lang) {
+  const en = lang !== 'zh';
+  const C = READ_COPY[en ? 'en' : 'zh'];
+  const used = new Set();
+  const text = sources.map((s) => s.text || s.highlights.join('\n')).join('\n\n').trim();
+
+  if (text.length < 200) {
+    return {
+      title: C.nothing,
+      subtitle: en ? 'The Reading Room' : '阅读室',
+      sections: [{
+        key: 'empty', heading: C.nothing,
+        blocks: [{ type: 'p', text: C.nothingBody }],
+        author: sign(town, 'hearth', used),
+      }],
+    };
+  }
+
+  const read = readDocument(text, en ? 'en' : 'zh');
+  const diary = diaryDates(read);
+  const high = read.found.filter((f) => f.check.severity === 'high').length;
+  const sections = [];
+
+  sections.push({
+    key: 'overview',
+    heading: C.overview,
+    status: high ? 'look' : read.found.length ? 'mixed' : 'good',
+    blocks: [{
+      type: 'p',
+      text: en
+        ? `This reads as a ${read.type.en.toLowerCase()}. The town found ${read.found.length} clause${read.found.length === 1 ? '' : 's'} worth your attention${high ? `, ${high} of them serious` : ''}, pulled out ${read.figures.length} figures, and has ${read.missing.length} thing${read.missing.length === 1 ? '' : 's'} it expected to see and did not.`
+        : `这看起来是一份${read.type.zh}。小镇找出 ${read.found.length} 处值得注意的条款${high ? `，其中 ${high} 处比较严重` : ''}，提取了 ${read.figures.length} 个数字，另有 ${read.missing.length} 项本该出现却没找到。`,
+    }],
+    author: sign(town, 'lumen', used),
+  });
+
+  if (read.figures.length) {
+    sections.push({
+      key: 'numbers',
+      heading: C.numbers,
+      blocks: [{
+        type: 'table',
+        head: C.cols,
+        rows: read.figures.slice(0, 24).map((f) => [
+          f.role ? C.role[f.role] || C.kinds[f.kind] : C.kinds[f.kind],
+          f.value,
+          f.context,
+        ]),
+      }],
+      author: sign(town, 'ledger', used),
+    });
+  }
+
+  if (diary.length) {
+    sections.push({
+      key: 'diary',
+      heading: C.diary,
+      status: diary.some((d) => d.critical) ? 'look' : undefined,
+      blocks: [{
+        type: 'table',
+        head: C.diaryCols,
+        rows: diary.map((d) => [d.when + (d.critical ? ' ❗' : ''), d.what, d.from]),
+      }],
+      author: sign(town, 'wayfinder', used),
+    });
+  }
+
+  for (const { check, quote } of read.found) {
+    const guild = GUILDS.find((g) => g.id === check.guild);
+    sections.push({
+      key: `clause-${check.id}`,
+      heading: `${guild.name.replace(' Guild', '')} — ${en ? check.en : check.zh}`,
+      status: 'look',
+      blocks: [
+        { type: 'quotes', items: [quote] },
+        { type: 'p', text: en ? check.whyEn : check.whyZh },
+      ],
+      author: sign(town, check.guild, used),
+    });
+  }
+
+  sections.push({
+    key: 'missing',
+    heading: C.missing,
+    status: read.missing.length ? 'look' : 'good',
+    blocks: read.missing.length
+      ? [{ type: 'list', items: read.missing.map((c) => `${en ? c.en : c.zh} — ${en ? c.missingEn : c.missingZh}`) }]
+      : [{ type: 'p', text: C.noneMissing }],
+    author: sign(town, 'keystone', used),
+  });
+
+  const asks = [
+    ...read.found.map((f) => (en ? f.check.askEn : f.check.askZh)),
+    ...read.missing.map((c) => (en ? c.askEn : c.askZh)),
+  ].filter(Boolean);
+  if (asks.length) {
+    sections.push({
+      key: 'asks',
+      heading: C.asks,
+      blocks: [
+        { type: 'p', text: C.askLead },
+        { type: 'checklist', items: [...new Set(asks)] },
+      ],
+      author: sign(town, 'chorus', used),
+    });
+  }
+
+  sections.push({
+    key: 'further',
+    heading: C.further,
+    blocks: [
+      { type: 'p', text: C.furtherLead },
+      { type: 'prompt', text: readingPrompt(text, read, en ? 'en' : 'zh') },
+    ],
+    author: sign(town, 'lattice', used),
+  });
+
+  return {
+    title: brief.title || (en ? `Reading: ${read.type.en}` : `阅读：${read.type.zh}`),
+    subtitle: en
+      ? `${sources.length} document${sources.length === 1 ? '' : 's'} read · ${read.found.length} to watch · ${read.figures.length} figures`
+      : `读了 ${sources.length} 份 · ${read.found.length} 处要注意 · ${read.figures.length} 个数字`,
+    sections,
+  };
+}
+
+DELIVERABLES.unshift({
+  id: 'reading', emoji: '\u{1F50E}', en: 'Read my document', zh: '读我的文件',
+  ctaEn: 'Ask the town to read it', ctaZh: '让小镇读这份文件', build: buildReading,
+});
+DELIVERABLE_BY_ID.reading = DELIVERABLES[0];

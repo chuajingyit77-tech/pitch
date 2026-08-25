@@ -352,6 +352,16 @@ function blocksToHtml(blocks) {
     if (b.type === 'p') return `<p>${esc(b.text)}</p>`;
     if (b.type === 'list') return `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`;
     if (b.type === 'quotes') return b.items.map((i) => `<blockquote>${esc(i)}</blockquote>`).join('');
+    if (b.type === 'table') {
+      return `<div class="ws-table-wrap"><table class="ws-table">
+        <thead><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${b.rows.map((r) => `<tr>${r.map((c, i) => `<td${i === r.length - 1 ? ' class="src"' : ''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table></div>`;
+    }
+    if (b.type === 'checklist') {
+      return `<ul class="ws-checklist">${b.items.map((i) => `<li><button type="button" class="tick" data-copy-line>${
+        wsLang === 'zh' ? '复制' : 'Copy'}</button><span>${esc(i)}</span></li>`).join('')}</ul>`;
+    }
     if (b.type === 'prompt') {
       return `<div class="ws-prompt">
         <button type="button" class="ctl copy-prompt" data-copy-prompt>${
@@ -567,6 +577,15 @@ document.querySelectorAll('.chip').forEach((b) => {
 });
 
 $('ws-doc').addEventListener('click', async (e) => {
+  const line = e.target.closest('[data-copy-line]');
+  if (line) {
+    try {
+      await navigator.clipboard.writeText(line.parentElement.querySelector('span').textContent);
+      line.textContent = wsLang === 'zh' ? '已复制' : 'Copied';
+      setTimeout(() => { line.textContent = wsLang === 'zh' ? '复制' : 'Copy'; }, 1800);
+    } catch { /* the text is on screen either way */ }
+    return;
+  }
   const btn = e.target.closest('[data-copy-prompt]');
   if (!btn) return;
   const text = btn.parentElement.querySelector('pre').textContent;

@@ -12,6 +12,7 @@ import { inflateSync } from 'node:zlib';
 const nodeInflate = async (bytes) => new Uint8Array(inflateSync(Buffer.from(bytes)));
 const fixture = (name) => readFileSync(new URL(`./test-fixtures/${name}`, import.meta.url));
 import { assemble, DELIVERABLES, DELIVERABLE_BY_ID, LENSES } from './src/deliverables.js';
+import { detectType, extractFigures, noticePeriods, readDocument, diaryDates } from './src/reading-room.js';
 
 const run = (days, seed = 66) => {
   const town = createTown(seed);
@@ -279,13 +280,13 @@ test('filenames are made safe for saving', () => {
 
 /* --------------------------------------------------------- deliverables */
 
-test('the town can make all seven things, from the same brief', () => {
+test('the town can make all eight things, from the same brief', () => {
   const town = run(50);
   const brief = {
     title: 'Coffee expansion', client: 'Acme', goal: 'open 12 stores by Q4',
     points: ['Site selection', 'Fit-out playbook'], budget: 'RM 4.5m', timeline: 'by Q4',
   };
-  assert.equal(DELIVERABLES.length, 7);
+  assert.equal(DELIVERABLES.length, 8);
   for (const spec of DELIVERABLES) {
     const doc = assemble(spec.id, brief, [], town, 'en');
     assert.ok(doc.sections.length >= 1, `${spec.id} has sections`);
@@ -520,4 +521,129 @@ test('the prompt survives the trip through markdown', () => {
   const md = docToMarkdown(doc);
   assert.match(md, /```/, 'the prompt is fenced');
   assert.match(md, /should I take this job/);
+});
+
+/* ------------------------------------------------------- the reading room */
+
+const TENANCY = `TENANCY AGREEMENT
+This Agreement is made on 1 March 2026 between Sunrise Property Sdn Bhd (the Landlord) and the Tenant.
+1. Term. The tenancy shall be for a period of 24 months commencing 1 April 2026 and expiring 31 March 2028.
+2. Rent. The Tenant shall pay monthly rent of RM 3,200 on or before the 5th day of each month. Late payment shall attract interest of 8% per annum.
+3. Deposit. The Tenant shall pay a security deposit of RM 9,600. The security deposit shall be refunded within 90 days of expiry, less any deductions the Landlord deems reasonable.
+4. Renewal. This Agreement shall automatically renew for a further term of 24 months unless either party gives written notice of not less than 90 days before expiry.
+5. Rent Revision. Upon renewal the Landlord may revise the rent by up to 15% without the consent of the Tenant.
+6. Early Termination. Should the Tenant terminate before expiry, the Tenant shall forfeit the entire security deposit.
+7. Repairs. The Tenant shall be responsible for all repairs and maintenance including structural repairs.
+8. Entry. The Landlord may enter the premises at any time for inspection.
+9. Liability. The Tenant shall indemnify the Landlord against all claims, losses and damages of any nature whatsoever, without limit.
+10. Governing Law. This Agreement shall be governed by the laws of Malaysia.`;
+
+test('the town recognises what kind of document it is holding', () => {
+  assert.equal(detectType(TENANCY).id, 'tenancy');
+  assert.equal(detectType('The Employee shall serve a probation period. Salary is paid monthly. Employment may be terminated.').id, 'employment');
+  assert.equal(detectType('Hello, just writing to say the weather is nice today and I hope you are well.').id, 'general');
+});
+
+test('every figure in a contract is pulled out and labelled', () => {
+  const figures = extractFigures(TENANCY);
+  const value = (v) => figures.find((f) => f.value.replace(/\s/g, '') === v.replace(/\s/g, ''));
+
+  assert.ok(value('RM 3,200'), 'the rent is found');
+  assert.equal(value('RM 3,200').role, 'rent');
+  assert.ok(value('RM 9,600'), 'the deposit is found');
+  assert.equal(value('RM 9,600').role, 'deposit');
+  assert.equal(value('15%').role, 'increase', 'the rent revision is read as an increase');
+  assert.ok(value('31 March 2028'), 'the expiry date is found');
+  for (const f of figures) {
+    assert.ok(f.context.length > 10, 'every figure carries the sentence it came from');
+  }
+});
+
+test('a notice period is the number beside the word notice, not any duration nearby', () => {
+  const periods = noticePeriods(TENANCY);
+  assert.equal(periods.length, 1);
+  assert.equal(periods[0].days, 90);
+  assert.ok(!periods.some((p) => p.days === 720), 'the 24-month term is not mistaken for a notice period');
+});
+
+test('the calendar gives the deadline and the last day you can act', () => {
+  const read = readDocument(TENANCY, 'en');
+  const diary = diaryDates(read);
+  const ends = diary.find((d) => !d.critical);
+  const act = diary.find((d) => d.critical);
+
+  assert.equal(ends.when, '2028-03-31', 'it ends when the document says it ends');
+  assert.equal(act.when, '2028-01-01', '90 days before that is the last day to give notice');
+  assert.ok(diary.every((d) => d.when >= '2026-01-01'), 'no dates from before the agreement');
+});
+
+test('the traps in a one-sided tenancy are all caught', () => {
+  const read = readDocument(TENANCY, 'en');
+  const caught = read.found.map((f) => f.check.id);
+  for (const id of ['auto_renew', 'unilateral_change', 'unlimited_liability', 'penalty', 'deposit_return', 'repairs', 'entry']) {
+    assert.ok(caught.includes(id), `${id} should be caught`);
+  }
+  for (const f of read.found) {
+    assert.ok(f.quote.length > 25, `${f.check.id} quotes a real sentence, not a heading`);
+    assert.ok(f.check.severity === 'high' || f.check.severity === 'medium');
+  }
+  assert.ok(read.found.filter((f) => f.check.severity === 'high').length >= 4);
+});
+
+test('what is missing from a document is reported as missing', () => {
+  const bare = `SERVICE QUOTATION
+We will deliver a brand refresh for Globex. The scope of work covers identity and packaging.
+Our fee is RM 68,000. Invoice on completion.`;
+  const read = readDocument(bare, 'en');
+  const gaps = read.missing.map((c) => c.id);
+  assert.ok(gaps.includes('scope_out'), 'nothing says what is out of scope');
+  assert.ok(gaps.includes('dispute'), 'no dispute clause');
+  for (const c of read.missing) {
+    assert.ok(c.missingEn && c.askEn, `${c.id} explains the gap and gives something to ask`);
+  }
+});
+
+test('the reading report carries numbers, clauses, questions and a prompt', () => {
+  const town = run(50);
+  const doc = assemble('reading', {}, [digestSource('tenancy.pdf', TENANCY)], town, 'en');
+  const keys = doc.sections.map((s) => s.key);
+
+  assert.ok(keys.includes('numbers'));
+  assert.ok(keys.includes('diary'));
+  assert.ok(keys.includes('asks'));
+  assert.ok(keys.includes('further'));
+  assert.ok(keys.includes('clause-auto_renew'));
+
+  const table = doc.sections.find((s) => s.key === 'numbers').blocks[0];
+  assert.equal(table.type, 'table');
+  assert.equal(table.head.length, 3);
+  assert.ok(table.rows.length >= 6);
+
+  const asks = doc.sections.find((s) => s.key === 'asks').blocks.find((b) => b.type === 'checklist');
+  assert.ok(asks.items.length >= 5, 'there are real questions to send back');
+  assert.equal(new Set(asks.items).size, asks.items.length, 'no duplicate questions');
+
+  const prompt = doc.sections.find((s) => s.key === 'further').blocks.find((b) => b.type === 'prompt');
+  assert.match(prompt.text, /Full text/);
+  assert.match(prompt.text, /automatically renew/, 'the document itself rides along');
+  assert.match(prompt.text, /redlines/, 'it asks for wording I can send back');
+
+  const md = docToMarkdown(doc);
+  assert.match(md, /\| RM 3,200 \|/, 'the table survives into markdown');
+  assert.match(md, /- \[ \] /, 'the questions become a checklist');
+});
+
+test('asked to read nothing, the reading room says so', () => {
+  const town = run(50);
+  const doc = assemble('reading', {}, [], town, 'en');
+  assert.equal(doc.sections.length, 1);
+  assert.match(doc.sections[0].blocks[0].text, /Upload the PDF/);
+});
+
+test('the reading room works in Chinese', () => {
+  const town = run(50);
+  const doc = assemble('reading', {}, [digestSource('t.txt', TENANCY)], town, 'zh');
+  assert.match(doc.title, /阅读/);
+  const asks = doc.sections.find((s) => s.key === 'asks').blocks.find((b) => b.type === 'checklist');
+  assert.ok(/[一-龥]/.test(asks.items[0]), 'the questions are in Chinese');
 });
