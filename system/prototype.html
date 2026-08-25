@@ -1,0 +1,811 @@
+<title>JY 集团运营系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#EFF3F9; --surface:#FFFFFF; --surface-2:#E6ECF5; --surface-3:#DCE4F0;
+  --ink:#0B1526; --ink-2:#3A4963; --muted:#69788F; --line:#D3DCEA; --line-2:#BCC8DC;
+  --brand:#1D4ED8; --brand-soft:#DDE6FB; --teal:#0D8F84; --teal-soft:#D5F0ED;
+  --pass:#04785B; --pass-soft:#D6F0E6; --warn:#9A5B06; --warn-soft:#FBEBD2; --fail:#AF2020; --fail-soft:#FADFDF;
+  --shadow-sm:0 1px 2px rgba(11,21,38,.06);
+  --shadow:0 2px 4px rgba(11,21,38,.05),0 12px 28px -18px rgba(11,21,38,.35);
+  --shadow-lg:0 4px 8px rgba(11,21,38,.06),0 24px 48px -24px rgba(11,21,38,.4);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#070C16; --surface:#0F1826; --surface-2:#172234; --surface-3:#1F2C42;
+    --ink:#E9EFFA; --ink-2:#A9B7CD; --muted:#74869F; --line:#212F47; --line-2:#2D3F5C;
+    --brand:#5B94F8; --brand-soft:#152444; --teal:#2DD4BF; --teal-soft:#0B2E2C;
+    --pass:#3DDC9A; --pass-soft:#0C2C22; --warn:#F3B13C; --warn-soft:#2E2413; --fail:#F87171; --fail-soft:#31191A;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+    --shadow:0 2px 4px rgba(0,0,0,.4),0 12px 28px -18px rgba(0,0,0,.9);
+    --shadow-lg:0 4px 8px rgba(0,0,0,.5),0 24px 48px -24px rgba(0,0,0,1);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#070C16; --surface:#0F1826; --surface-2:#172234; --surface-3:#1F2C42;
+  --ink:#E9EFFA; --ink-2:#A9B7CD; --muted:#74869F; --line:#212F47; --line-2:#2D3F5C;
+  --brand:#5B94F8; --brand-soft:#152444; --teal:#2DD4BF; --teal-soft:#0B2E2C;
+  --pass:#3DDC9A; --pass-soft:#0C2C22; --warn:#F3B13C; --warn-soft:#2E2413; --fail:#F87171; --fail-soft:#31191A;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  --shadow:0 2px 4px rgba(0,0,0,.4),0 12px 28px -18px rgba(0,0,0,.9);
+  --shadow-lg:0 4px 8px rgba(0,0,0,.5),0 24px 48px -24px rgba(0,0,0,1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--ground); color:var(--ink); font-size:15px; line-height:1.55;
+  font-family:Manrope,-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased; padding-bottom:72px;
+}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;font-variant-numeric:tabular-nums}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+
+/* ============ shell ============ */
+.topbar{
+  position:sticky;top:0;z-index:50;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:14px;padding:10px 18px;flex-wrap:wrap;
+}
+.brandmark{display:flex;align-items:center;gap:10px;margin-right:auto}
+.brandmark .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(140deg,var(--brand),var(--teal));flex:none}
+.brandmark .t{font-weight:800;letter-spacing:-.02em;font-size:15px;line-height:1.1}
+.brandmark .s{font-size:10.5px;color:var(--muted);letter-spacing:.09em;text-transform:uppercase;font-weight:600}
+
+.roleswitch{display:flex;gap:3px;background:var(--surface-2);padding:3px;border-radius:9px;flex-wrap:wrap}
+.roleswitch button{padding:5px 11px;border-radius:6px;font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap;transition:.15s}
+.roleswitch button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
+.iconbtn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--surface-2);color:var(--ink-2);font-size:15px;transition:.15s}
+.iconbtn:hover{background:var(--surface-3)}
+
+.layout{display:grid;grid-template-columns:216px 1fr;gap:0;min-height:calc(100vh - 56px)}
+.rail{border-right:1px solid var(--line);padding:18px 12px;background:var(--surface);position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+.rail .grouplabel{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 10px;margin:0 0 8px}
+.navitem{
+  display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;border-radius:9px;
+  font-size:13.5px;font-weight:600;color:var(--ink-2);text-align:left;margin-bottom:2px;transition:.14s;position:relative;
+}
+.navitem:hover{background:var(--surface-2)}
+.navitem[aria-current="true"]{background:var(--brand-soft);color:var(--brand)}
+.navitem .ico{width:18px;text-align:center;flex:none;font-size:14px}
+.navitem .badge{margin-left:auto;background:var(--fail);color:#fff;font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:9px;display:grid;place-items:center;padding:0 5px}
+.main{padding:26px 30px 60px;max-width:1180px;min-width:0}
+
+.tabbar{display:none}
+
+/* ============ typography ============ */
+h1{font-size:clamp(1.5rem,3.6vw,2rem);font-weight:800;letter-spacing:-.025em;margin:0 0 4px;line-height:1.12;text-wrap:balance}
+.pagelede{color:var(--muted);margin:0 0 24px;font-size:14px;max-width:62ch}
+h2{font-size:15px;font-weight:700;margin:0 0 12px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+h2 .cnt{font-size:11px;color:var(--muted);font-weight:600;background:var(--surface-2);padding:2px 7px;border-radius:20px}
+.eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+
+/* ============ cards ============ */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:var(--shadow-sm)}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+
+/* ============ chips / pills ============ */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;letter-spacing:.01em}
+.p-pass{background:var(--pass-soft);color:var(--pass)}
+.p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-fail{background:var(--fail-soft);color:var(--fail)}
+.p-brand{background:var(--brand-soft);color:var(--brand)}
+.p-teal{background:var(--teal-soft);color:var(--teal)}
+.p-mute{background:var(--surface-2);color:var(--muted)}
+
+/* ============ buttons ============ */
+.btn{padding:8px 15px;border-radius:9px;font-weight:700;font-size:13px;transition:.15s;display:inline-flex;align-items:center;gap:7px;justify-content:center}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{filter:brightness(1.1)}
+.btn-pass{background:var(--pass);color:#fff}
+.btn-pass:hover{filter:brightness(1.1)}
+.btn-ghost{background:var(--surface-2);color:var(--ink-2)}
+.btn-ghost:hover{background:var(--surface-3)}
+.btn-danger{background:var(--fail-soft);color:var(--fail)}
+.btn-danger:hover{filter:brightness(.95)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-block{width:100%}
+
+/* ============ my day ============ */
+.taskcard{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:17px;margin-bottom:12px;box-shadow:var(--shadow-sm);transition:.2s}
+.taskcard.done{border-color:var(--pass);background:linear-gradient(0deg,var(--pass-soft),var(--pass-soft)),var(--surface);background-blend-mode:normal}
+.taskcard.rejected{border-color:var(--fail)}
+.taskcard .hd{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:9px}
+.taskcard .title{font-weight:700;font-size:15px;line-height:1.35;letter-spacing:-.01em}
+.criteria{background:var(--surface-2);border-radius:9px;padding:11px 13px;margin:11px 0;font-size:13px;border-left:3px solid var(--teal)}
+.criteria .lb{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:4px}
+.metaline{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.metaline b{color:var(--ink-2);font-weight:600}
+
+.submitbox{border:1.5px dashed var(--line-2);border-radius:11px;padding:13px;margin-top:12px;background:var(--surface-2)}
+.submitbox textarea{
+  width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:inherit;font-size:14px;
+  background:var(--surface);color:var(--ink);resize:vertical;min-height:64px;
+}
+.submitbox textarea:focus{outline:none;border-color:var(--brand)}
+.attachrow{display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap}
+.attachchip{display:inline-flex;align-items:center;gap:6px;background:var(--teal-soft);color:var(--teal);font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:7px}
+.timerhint{font-size:11px;color:var(--muted);margin-left:auto}
+
+/* ============ board ============ */
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:13px;align-items:start}
+.col{background:var(--surface-2);border-radius:13px;padding:11px;min-width:0}
+.col .colhd{display:flex;align-items:center;gap:9px;padding:3px 5px 11px}
+.avatar{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:11.5px;font-weight:800;color:#fff;flex:none;letter-spacing:-.02em}
+.col .nm{font-weight:700;font-size:13.5px;line-height:1.15}
+.col .rl{font-size:10.5px;color:var(--muted);line-height:1.2}
+.bcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:8px;box-shadow:var(--shadow-sm);animation:pop .3s cubic-bezier(.2,.8,.3,1) both}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+.bcard .t{font-weight:600;font-size:13px;line-height:1.4;margin-bottom:8px}
+.bcard .ev{font-size:11.5px;color:var(--muted);background:var(--surface-2);border-radius:6px;padding:7px 9px;margin:8px 0;line-height:1.45}
+.actionrow{display:flex;gap:6px;margin-top:9px}
+.actionrow .btn{flex:1;padding:6px 10px;font-size:12px}
+.emptycol{text-align:center;padding:18px 8px;color:var(--muted);font-size:12px;border:1.5px dashed var(--line-2);border-radius:9px}
+
+/* ============ decisions ============ */
+.dec{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:11px;padding:16px;margin-bottom:11px;box-shadow:var(--shadow-sm)}
+.dec.overdue{border-left-color:var(--fail);background:linear-gradient(90deg,var(--fail-soft) 0%,var(--surface) 60%)}
+.dec .hd{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap}
+.dec .q{font-weight:700;font-size:15px;line-height:1.35;letter-spacing:-.01em}
+.clock{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:7px;background:var(--warn-soft);color:var(--warn);white-space:nowrap}
+.clock.red{background:var(--fail-soft);color:var(--fail)}
+.opts{display:grid;gap:7px;margin:12px 0}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:13px;text-align:left;width:100%;transition:.14s;background:var(--surface)}
+.opt:hover{border-color:var(--brand);background:var(--brand-soft)}
+.opt.sel{border-color:var(--brand);background:var(--brand-soft);box-shadow:inset 0 0 0 1px var(--brand)}
+.opt .k{font-weight:800;color:var(--brand);flex:none;font-size:12px;width:14px}
+.opt .rec{margin-left:auto;font-size:10px;font-weight:700;color:var(--teal);background:var(--teal-soft);padding:2px 7px;border-radius:20px;white-space:nowrap;flex:none}
+
+/* ============ revenue / projects ============ */
+.linecard{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:17px;box-shadow:var(--shadow-sm)}
+.linecard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.linecard .nm{font-weight:800;font-size:14.5px;letter-spacing:-.01em}
+.bigfig{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.projrow{
+  display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;
+  margin-bottom:7px;background:var(--surface);width:100%;text-align:left;transition:.15s;
+}
+.projrow:hover{border-color:var(--brand-soft);background:var(--surface-2)}
+.projrow.dead{opacity:.5}
+.projrow.dead:hover{opacity:.75}
+.projrow .pn{font-weight:650;font-size:13.5px;min-width:0;flex:1}
+.projrow .sub{font-size:11.5px;color:var(--muted);margin-top:1px}
+.fieldgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:9px;margin-top:12px}
+.field{border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--surface)}
+.field.missing{border-color:var(--fail);background:var(--fail-soft)}
+.field .fl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.field.missing .fl{color:var(--fail)}
+.field .fv{font-size:13px;font-weight:600;line-height:1.35}
+
+/* ============ cash ============ */
+.gauge{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:24px;box-shadow:var(--shadow)}
+.runway{font-family:"JetBrains Mono",monospace;font-size:clamp(2.6rem,9vw,4rem);font-weight:700;letter-spacing:-.05em;line-height:.95;font-variant-numeric:tabular-nums}
+.bar{position:relative;height:38px;background:var(--surface-2);border-radius:9px;overflow:hidden;margin:18px 0 8px}
+.bar .fill{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--brand),var(--teal));transition:width .45s cubic-bezier(.3,.8,.3,1)}
+.bar .fill.breach{background:linear-gradient(90deg,var(--fail),#d97706)}
+.bar .lineMark{position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--ink);border-radius:2px}
+.bar .lineLbl{position:absolute;top:-20px;transform:translateX(-50%);font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--ink);white-space:nowrap}
+.slider{width:100%;margin:6px 0 2px;accent-color:var(--brand);height:26px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted)}
+.kv .v{font-family:"JetBrains Mono",monospace;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ============ weekly six ============ */
+.q6{border:1px solid var(--line);border-radius:11px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.q6 .qh{display:flex;gap:11px;padding:14px 16px;font-weight:700;font-size:14px;align-items:baseline}
+.q6 .qn{font-family:"JetBrains Mono",monospace;color:var(--brand);font-size:12px;font-weight:700;flex:none}
+.q6 .qa{padding:0 16px 15px 41px;font-size:13.5px;color:var(--ink-2);line-height:1.6}
+.q6 .qa ul{margin:6px 0 0;padding-left:17px}
+.q6 .qa li{margin-bottom:4px}
+
+/* ============ toast ============ */
+#toast{
+  position:fixed;left:50%;bottom:88px;transform:translate(-50%,20px);z-index:200;
+  background:var(--ink);color:var(--ground);padding:11px 20px;border-radius:11px;font-size:13.5px;font-weight:600;
+  box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:.28s;max-width:88vw;text-align:center;
+}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+.notice{border:1px solid var(--line);border-left:3px solid var(--brand);background:var(--brand-soft);border-radius:9px;padding:13px 15px;font-size:13px;margin-bottom:18px;line-height:1.55}
+.notice b{font-weight:700}
+
+/* ============ responsive ============ */
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .rail{display:none}
+  .main{padding:18px 16px 40px}
+  .tabbar{
+    display:grid;grid-template-columns:repeat(5,1fr);position:fixed;bottom:0;left:0;right:0;z-index:60;
+    background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabbar button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;font-size:10px;font-weight:600;color:var(--muted);border-radius:9px;position:relative}
+  .tabbar button[aria-current="true"]{color:var(--brand)}
+  .tabbar .ico{font-size:17px;line-height:1}
+  .tabbar .badge{position:absolute;top:2px;right:calc(50% - 20px);background:var(--fail);color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:8px;display:grid;place-items:center;padding:0 4px}
+  .brandmark .s{display:none}
+  .topbar{padding:9px 14px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="topbar">
+  <div class="brandmark">
+    <span class="dot"></span>
+    <span>
+      <span class="t">JY 集团运营系统</span><br>
+      <span class="s">Operating System · 原型 v0.1</span>
+    </span>
+  </div>
+  <div class="roleswitch" id="roleswitch" role="group" aria-label="切换身份"></div>
+  <button class="iconbtn" id="themebtn" title="切换深浅色" aria-label="切换深浅色">◐</button>
+</div>
+
+<div class="layout">
+  <nav class="rail" id="rail" aria-label="主导航"></nav>
+  <main class="main" id="main"></main>
+</div>
+
+<nav class="tabbar" id="tabbar" aria-label="主导航"></nav>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   状态 — 全部使用 JY 档案（2026-08-24）中的真实数据
+   ══════════════════════════════════════════════════════════════ */
+const TODAY = new Date('2026-08-24T21:00:00+08:00');
+
+const PEOPLE = {
+  JY:      {name:'蔡景昱 JY',  role:'CEO · 唯一决策人', color:'#1D4ED8', initials:'JY'},
+  Shermyn: {name:'Shermyn',    role:'HDJ 与 IIUM 协调', color:'#0D8F84', initials:'SH'},
+  Hanif:   {name:'Hanif',      role:'Robotics · 无人机技术', color:'#7C3AED', initials:'HA'},
+  Liong:   {name:'Liong',      role:'Blek 撤退 · 资产变现', color:'#B45309', initials:'LI'},
+  Papu:    {name:'Papu',       role:'Software Engineer', color:'#BE185D', initials:'PA'},
+};
+
+const LINES = [
+  {id:'blek', name:'Blek 资产止血', target:'减少每月现金流出', owner:'Liong',   received:0},
+  {id:'hdj',  name:'HDJ 无人机',    target:'至少 1 个付费小单或订金', owner:'Shermyn', received:0},
+  {id:'fac',  name:'工厂数字化',    target:'1 个付费诊断 / POC', owner:'Papu',    received:0},
+  {id:'big',  name:'大型项目',      target:'1 份正式 Mandate / LOI / 付费 Scope', owner:'JY', received:0},
+];
+
+let state = {
+  role:'JY', screen:'day', selectedProject:null, expense:0,
+  deliverables:[
+    {id:1, who:'Shermyn', line:'hdj', title:'建立 HDJ 项目清单、文件证据及 8月26日 IIUM 合作执行表',
+     criteria:'一份 PDF：列出全部 HDJ 在手事项、每项的证据文件链接、8/26 当天谁交什么。缺证据的行必须标红。', due:'2026-08-26', status:'todo', evidence:null},
+    {id:2, who:'Hanif', line:'hdj', title:'定义可重复展示的无人机技术 Demo',
+     criteria:'写下 Demo 的场景、设备、耗时、交付物样本。必须是能在客户面前重复第二次的东西，不是一次性表演。', due:'2026-08-28', status:'todo', evidence:null},
+    {id:3, who:'Liong', line:'blek', title:'本周资产出租 Pipeline 与现金回收结果',
+     criteria:'资产清单（Foodtruck / 档口 / 中央厨房 / 设备）逐项：询盘数、带看数、报价、已收订金金额。要有银行进账截图。', due:'2026-08-25', status:'submitted',
+     evidence:'已上传：资产清单 v2.xlsx、3 张带看照片、Maybank 进账截图 RM2,000（SS13 档口订金）'},
+    {id:4, who:'Papu', line:'fac', title:'AI OS 数据模型 + 「我的今天 / 交付看板」可演示版本',
+     criteria:'7 张表的 schema 图 + 两个屏幕能在手机上真的点。JY 能用它验收一条真实交付。', due:'2026-08-31', status:'todo', evidence:null},
+    {id:5, who:'JY', line:'big', title:'Kangar 会面资料与付款结构问题清单',
+     criteria:'一页纸：谁付款、预算/租金来源、土地权利、批准路径、山东角色、我的费用。每项后面写「已确认 / 待证据」。', due:'2026-08-27', status:'todo', evidence:null},
+    {id:6, who:'Shermyn', line:'hdj', title:'科威特买方 KYC 与最终用途书面确认',
+     criteria:'买方公司注册资料、授权信、End-User / End-Use 声明扫描件。没有这三样，不推进任何设备采购。', due:'2026-08-29', status:'todo', evidence:null},
+  ],
+  decisions:[
+    {id:1, q:'是否批准 IIUM 实验室月租 RM3,500 × 12 个月', amount:42000, by:'Shermyn', hours:31,
+     opts:[
+       {k:'A', t:'签 12 个月 — 锁定 IIUM 合作与实验室排期', rec:false},
+       {k:'B', t:'先签 3 个月试用，附续约权 — 现金风险 RM10,500', rec:true},
+       {k:'C', t:'不签，改为按次租用 — 但可能失去 8/26 签约仪式', rec:false},
+     ], done:null},
+    {id:2, q:'Blek SS13 档口是否续租', amount:null, by:'Liong', hours:55,
+     opts:[
+       {k:'A', t:'续租 — 但必须连续 4 周正贡献且不需我每天介入', rec:false},
+       {k:'B', t:'不续租，转出租/转让设备 — 立即减少月流出', rec:true},
+       {k:'C', t:'再观察 2 周 — 每周继续流失约 RM1,800', rec:false},
+     ], done:null},
+    {id:3, q:'科威特出口是否先垫付样机订金 RM18,000', amount:18000, by:'Hanif', hours:12,
+     opts:[
+       {k:'A', t:'垫付 — 但买方 KYC 与最终用途声明尚未到手', rec:false},
+       {k:'B', t:'不垫付，等买方先付订金 — 符合出口项目红线', rec:true},
+       {k:'C', t:'与厂家谈寄售 — 需 2 周谈判', rec:false},
+     ], done:null},
+  ],
+  projects:[
+    {id:'kangar', line:'big', name:'Kangar 市政局 15 层楼', stage:'正式会面前', value:'RM85,000,000',
+     payer:null, budget:null, nextStep:'确认付款结构、预算/租金来源、土地权利、批准路径', gate:'2026-09-05', grade:'C'},
+    {id:'bank', line:'big', name:'银行数字化', stage:'提案准备', value:'待定',
+     payer:null, budget:null, nextStep:'锁定银行痛点、决策人、数据边界和付费 POC', gate:'2026-09-12', grade:'C'},
+    {id:'airport', line:'big', name:'机场项目', stage:'关系推进', value:'待定',
+     payer:null, budget:null, nextStep:'安排与机场负责人及真正决策人会面', gate:null, grade:'M'},
+    {id:'dc', line:'big', name:'数据中心', stage:'等待投资方', value:'待定',
+     payer:null, budget:null, nextStep:'制作投资方问题清单并要求书面回答', gate:null, grade:'M'},
+    {id:'highway', line:'big', name:'高速公路数字化', stage:'已停止', value:'—',
+     payer:null, budget:null, nextStep:'对方要求免费使用 — 已停止投入', gate:null, grade:'M', dead:true},
+    {id:'iium', line:'hdj', name:'IIUM 合作签约（8/26）', stage:'签约准备', value:'待定',
+     payer:'IIUM / 企业委托方', budget:null, nextStep:'签 IP、Royalty、商业化权与实验室排期', gate:'2026-08-26', grade:'S'},
+    {id:'kuwait', line:'hdj', name:'科威特无人机出口', stage:'买方核实', value:'待定',
+     payer:null, budget:null, nextStep:'取得买方 KYC、最终用途声明、出口合规书面意见', gate:'2026-08-29', grade:'C'},
+    {id:'ss13', line:'blek', name:'Blek SS13 档口', stage:'撤退/出租', value:'RM2,000 订金已收',
+     payer:'承租方（已付订金）', budget:'承租方自有', nextStep:'签租约并收首月租金 RM3,800', gate:'2026-08-30', grade:'V'},
+    {id:'ft', line:'blek', name:'Foodtruck 与中央厨房设备', stage:'估值中', value:'待估',
+     payer:null, budget:null, nextStep:'完成资产估值表并挂出售/出租', gate:'2026-09-02', grade:'S'},
+    {id:'facpoc', line:'fac', name:'工厂数字化 POC 产品', stage:'产品未完成', value:'待定',
+     payer:null, budget:null, nextStep:'选定 1 个行业、1 项痛点、30天 POC、固定交付和价格', gate:'2026-09-10', grade:'M'},
+  ],
+  money:{ cash:500000, fd:500000, cashLine:1000000, burnLow:40000, burnHigh:60000, receivedThisWeek:2000 },
+};
+
+/* ══════════════════════════════════════════════════════════════
+   工具
+   ══════════════════════════════════════════════════════════════ */
+const $ = s => document.querySelector(s);
+const rm = n => 'RM' + Math.round(n).toLocaleString('en-MY');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const daysTo = d => Math.round((new Date(d+'T00:00:00+08:00') - TODAY) / 864e5);
+const isJY = () => state.role === 'JY';
+
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove('on'), 2600);
+}
+const GRADE = {V:['p-pass','V 已验证'], S:['p-brand','S 有书面支持'], C:['p-warn','C 仅口头声称'], M:['p-fail','M 缺失/冲突']};
+
+/* ══════════════════════════════════════════════════════════════
+   导航
+   ══════════════════════════════════════════════════════════════ */
+const SCREENS = [
+  {id:'day',      ico:'◉', label:'我的今天',   full:'我的今天',       all:true},
+  {id:'board',    ico:'▤', label:'交付看板',   full:'交付看板',       jyOnly:true},
+  {id:'decide',   ico:'⚡', label:'决策',       full:'决策队列',       jyOnly:true},
+  {id:'revenue',  ico:'◈', label:'收入线',     full:'收入线与付款节点', all:true},
+  {id:'cash',     ico:'▦', label:'现金',       full:'现金与跑道',     jyOnly:true},
+  {id:'weekly',   ico:'✦', label:'每周六问',   full:'每周六问',       jyOnly:true},
+];
+const visibleScreens = () => SCREENS.filter(s => isJY() || s.all);
+const pendingDecisions = () => state.decisions.filter(d => !d.done).length;
+const pendingReview = () => state.deliverables.filter(d => d.status === 'submitted').length;
+
+function renderNav(){
+  const scr = visibleScreens();
+  if(!scr.some(s => s.id === state.screen)) state.screen = 'day';
+
+  $('#rail').innerHTML =
+    `<p class="grouplabel">${isJY() ? '总控' : '我的工作'}</p>` +
+    scr.map(s => {
+      const b = s.id==='decide' ? pendingDecisions() : s.id==='board' ? pendingReview() : 0;
+      return `<button class="navitem" data-scr="${s.id}" aria-current="${state.screen===s.id}">
+        <span class="ico">${s.ico}</span><span>${s.full}</span>
+        ${b ? `<span class="badge">${b}</span>` : ''}</button>`;
+    }).join('');
+
+  const tabs = scr.slice(0,5);
+  const tb = $('#tabbar');
+  tb.style.gridTemplateColumns = `repeat(${tabs.length},1fr)`;
+  tb.innerHTML = tabs.map(s => {
+    const b = s.id==='decide' ? pendingDecisions() : s.id==='board' ? pendingReview() : 0;
+    return `<button data-scr="${s.id}" aria-current="${state.screen===s.id}">
+      <span class="ico">${s.ico}</span><span>${s.label}</span>
+      ${b ? `<span class="badge">${b}</span>` : ''}</button>`;
+  }).join('');
+
+  $('#roleswitch').innerHTML = Object.keys(PEOPLE).map(k =>
+    `<button data-role="${k}" aria-pressed="${state.role===k}">${k==='JY'?'JY（老板）':k}</button>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   屏幕 1 — 我的今天
+   ══════════════════════════════════════════════════════════════ */
+function screenDay(){
+  const mine = state.deliverables.filter(d => d.who === state.role);
+  const p = PEOPLE[state.role];
+  return `
+  <h1>我的今天</h1>
+  <p class="pagelede">${esc(p.name)} · ${esc(p.role)} — 本周你只需要交这 ${mine.length} 件事。其余的不在这里，不代表不重要，代表这周不由你交。</p>
+  ${!isJY() ? `<div class="notice"><b>你只看得到自己这一栏。</b>现金、薪资、其他人的交付都不会出现在这里 —— 这是刻意的设计，不是权限出错。</div>` : ''}
+  ${mine.length ? mine.map(taskCard).join('') : `<div class="card" style="text-align:center;color:var(--muted);padding:34px">本周没有指派给你的交付。</div>`}`;
+}
+
+function taskCard(d){
+  const dd = daysTo(d.due);
+  const overdue = dd < 0 && d.status === 'todo';
+  const badge = d.status==='accepted' ? '<span class="pill p-pass">✓ 已验收</span>'
+    : d.status==='rejected' ? '<span class="pill p-fail">✕ 被打回</span>'
+    : d.status==='submitted' ? '<span class="pill p-brand">等待 JY 验收</span>'
+    : overdue ? `<span class="pill p-fail">逾期 ${-dd} 天</span>`
+    : `<span class="pill ${dd<=2?'p-warn':'p-mute'}">${dd===0?'今天到期':dd<0?`逾期 ${-dd} 天`:`还剩 ${dd} 天`}</span>`;
+  const line = LINES.find(l => l.id === d.line);
+
+  return `<article class="taskcard ${d.status==='accepted'?'done':''} ${d.status==='rejected'?'rejected':''}">
+    <div class="hd"><div class="title">${esc(d.title)}</div>${badge}</div>
+    <div class="criteria">
+      <div class="lb">验收标准 · 完成长什么样</div>
+      ${esc(d.criteria)}
+    </div>
+    <div class="metaline">
+      <span>收入线 <b>${esc(line.name)}</b></span>
+      <span>截止 <b class="mono">${d.due}</b></span>
+    </div>
+    ${d.evidence ? `<div class="ev" style="font-size:12px;color:var(--muted);background:var(--surface-2);border-radius:8px;padding:9px 11px;margin-top:11px;line-height:1.5">📎 ${esc(d.evidence)}</div>` : ''}
+    ${d.status==='rejected' ? `<div class="notice" style="margin:11px 0 0;border-left-color:var(--fail);background:var(--fail-soft)">JY 打回：证据不足，请补上银行进账截图。</div>` : ''}
+    ${(d.status==='todo'||d.status==='rejected') && d.who===state.role ? `
+      <div class="submitbox">
+        <textarea id="ta-${d.id}" placeholder="一句话说明你交了什么（例：已完成资产清单，SS13 收到订金 RM2,000）"></textarea>
+        <div class="attachrow">
+          <button class="btn btn-ghost" data-attach="${d.id}">📎 附证据</button>
+          <span id="att-${d.id}"></span>
+          <span class="timerhint">目标 30 秒内完成</span>
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top:10px" data-submit="${d.id}">提交交付</button>
+      </div>` : ''}
+  </article>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   屏幕 2 — 交付看板
+   ══════════════════════════════════════════════════════════════ */
+function screenBoard(){
+  const cols = Object.keys(PEOPLE).map(k => {
+    const items = state.deliverables.filter(d => d.who === k);
+    const p = PEOPLE[k];
+    return `<div class="col">
+      <div class="colhd">
+        <span class="avatar" style="background:${p.color}">${p.initials}</span>
+        <span><span class="nm">${esc(k)}</span><br><span class="rl">${esc(p.role)}</span></span>
+      </div>
+      ${items.length ? items.map(boardCard).join('') : `<div class="emptycol">本周无交付</div>`}
+    </div>`;
+  }).join('');
+
+  return `
+  <h1>交付看板</h1>
+  <p class="pagelede">你在这个屏幕上只有两个动作：<b>验收</b> 或 <b>打回</b>。刻意没有「我来做」按钮 —— 这是把你从执行者变回验收者的机制。</p>
+  <div class="notice"><b>本周待你验收 ${pendingReview()} 条。</b>验收标准由你在派发时写下，现在只需判断证据是否满足它。</div>
+  <div class="board">${cols}</div>`;
+}
+
+function boardCard(d){
+  const dd = daysTo(d.due), overdue = dd < 0 && d.status === 'todo';
+  const st = d.status==='accepted' ? '<span class="pill p-pass">已验收</span>'
+    : d.status==='rejected' ? '<span class="pill p-fail">已打回</span>'
+    : d.status==='submitted' ? '<span class="pill p-brand">待验收</span>'
+    : overdue ? `<span class="pill p-fail">逾期 ${-dd} 天</span>` : '<span class="pill p-mute">进行中</span>';
+
+  return `<div class="bcard">
+    <div class="t">${esc(d.title)}</div>
+    ${st}
+    ${d.evidence ? `<div class="ev">📎 ${esc(d.evidence)}</div>` : ''}
+    ${d.status==='submitted' ? `<div class="actionrow">
+      <button class="btn btn-pass" data-accept="${d.id}">验收</button>
+      <button class="btn btn-danger" data-reject="${d.id}">打回</button>
+    </div>` : ''}
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   屏幕 3 — 决策队列
+   ══════════════════════════════════════════════════════════════ */
+function screenDecide(){
+  const open = state.decisions.filter(d => !d.done);
+  const done = state.decisions.filter(d => d.done);
+  return `
+  <h1>决策队列</h1>
+  <p class="pagelede">48 小时 SLA。解决「所有决定回到我身上」的方法不是减少决策，是让每个决策<b>排队、计时、并带上建议选项</b>。</p>
+  ${open.length ? open.map(decCard).join('') : `<div class="card" style="text-align:center;color:var(--muted);padding:34px">队列已清空。</div>`}
+  ${done.length ? `<h2 style="margin-top:26px">今天已决 <span class="cnt">${done.length}</span></h2>
+    ${done.map(d => `<div class="card" style="margin-bottom:9px;display:flex;gap:11px;align-items:center;flex-wrap:wrap">
+      <span class="pill p-pass">已决</span>
+      <span style="font-weight:650;font-size:13.5px;flex:1;min-width:180px">${esc(d.q)}</span>
+      <span class="mono" style="font-size:12px;color:var(--muted)">选了 ${d.done}</span>
+    </div>`).join('')}` : ''}`;
+}
+
+function decCard(d){
+  const over = d.hours > 48;
+  return `<article class="dec ${over?'overdue':''}">
+    <div class="hd">
+      <div class="q">${esc(d.q)}</div>
+      <span class="clock ${over?'red':''}">${over?'⚠ 超时 ':''}已等 ${d.hours}h / 48h</span>
+    </div>
+    <div class="metaline" style="margin:0 0 4px">
+      ${d.amount ? `<span>金额 <b class="mono">${rm(d.amount)}</b></span>` : ''}
+      <span>提出人 <b>${esc(d.by)}</b></span>
+      ${d.amount ? `<span>影响跑道 <b class="mono">−${(d.amount/50000*30).toFixed(0)} 天</b></span>` : ''}
+    </div>
+    <div class="opts">
+      ${d.opts.map(o => `<button class="opt" data-dec="${d.id}" data-opt="${o.k}">
+        <span class="k">${o.k}</span><span>${esc(o.t)}</span>
+        ${o.rec ? '<span class="rec">建议</span>' : ''}
+      </button>`).join('')}
+    </div>
+  </article>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   屏幕 4 — 收入线与付款节点
+   ══════════════════════════════════════════════════════════════ */
+function screenRevenue(){
+  const cards = LINES.map(l => {
+    const ps = state.projects.filter(p => p.line === l.id);
+    const dead = ps.filter(p => !p.payer || !p.budget).length;
+    return `<div class="linecard">
+      <div class="top">
+        <div><div class="nm">${esc(l.name)}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">30 天目标：${esc(l.target)}</div></div>
+        <span class="pill p-mute">${esc(l.owner)}</span>
+      </div>
+      <div class="bigfig" style="color:${l.received?'var(--pass)':'var(--muted)'}">${rm(l.received)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">本月已收</div>
+      <div style="margin-top:14px">
+        ${ps.map(p => {
+          const missing = !p.payer || !p.budget;
+          const g = GRADE[p.grade];
+          return `<button class="projrow ${p.dead?'dead':''}" data-proj="${p.id}">
+            <span class="pill ${g[0]}" style="flex:none">${p.grade}</span>
+            <span class="pn">${esc(p.name)}<div class="sub">${esc(p.stage)}${p.value!=='待定'&&p.value!=='—'?' · '+esc(p.value):''}</div></span>
+            ${missing ? '<span class="pill p-fail" style="flex:none">无付款路径</span>' : '<span class="pill p-pass" style="flex:none">✓ 有付款人</span>'}
+          </button>`;
+        }).join('')}
+      </div>
+      ${dead ? `<div style="font-size:11.5px;color:var(--fail);margin-top:9px;font-weight:600">⚠ ${dead} 个项目缺付款人或预算来源</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const sel = state.selectedProject && state.projects.find(p => p.id === state.selectedProject);
+
+  return `
+  <h1>收入线与付款节点</h1>
+  <p class="pagelede">每个项目强制回答四件事：<b>谁付款、预算来源、下一个收钱动作、证据</b>。缺任一项，项目自动标「无付款路径」—— 直接回答你写的那句「不清楚最接近收费的三个项目是什么」。</p>
+  ${sel ? projDetail(sel) : ''}
+  <div class="grid g2">${cards}</div>`;
+}
+
+function projDetail(p){
+  const g = GRADE[p.grade];
+  const dd = p.gate ? daysTo(p.gate) : null;
+  return `<div class="card" style="margin-bottom:20px;border-color:var(--brand);box-shadow:var(--shadow)">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div><p class="eyebrow">项目卡</p>
+        <div style="font-size:19px;font-weight:800;letter-spacing:-.02em">${esc(p.name)}</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:3px">${esc(p.stage)} · 规模 ${esc(p.value)}</div></div>
+      <div style="display:flex;gap:7px;align-items:center">
+        <span class="pill ${g[0]}">${g[1]}</span>
+        <button class="iconbtn" data-closeproj="1" aria-label="关闭">✕</button>
+      </div>
+    </div>
+    <div class="fieldgrid">
+      <div class="field ${!p.payer?'missing':''}"><div class="fl">① 谁付款</div><div class="fv">${p.payer?esc(p.payer):'⚠ 未确认'}</div></div>
+      <div class="field ${!p.budget?'missing':''}"><div class="fl">② 预算来源</div><div class="fv">${p.budget?esc(p.budget):'⚠ 未确认'}</div></div>
+      <div class="field"><div class="fl">③ 下一个收钱动作</div><div class="fv">${esc(p.nextStep)}</div></div>
+      <div class="field ${!p.gate?'missing':''}"><div class="fl">④ Gate 日期</div><div class="fv">${p.gate?`${p.gate} <span style="color:var(--muted);font-weight:500">(${dd>=0?dd+' 天后':'已过 '+(-dd)+' 天'})</span>`:'⚠ 未设定'}</div></div>
+    </div>
+    ${(!p.payer||!p.budget) ? `<div class="notice" style="margin:14px 0 0;border-left-color:var(--fail);background:var(--fail-soft)">
+      <b>Kill Rule 触发：</b>此项目缺${!p.payer?'付款人':''}${!p.payer&&!p.budget?'与':''}${!p.budget?'预算来源':''}。按你自己的规则，它只能计入 Pipeline，不得计入收入，也不应占用主要人力。</div>` : ''}
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   屏幕 5 — 现金与跑道
+   ══════════════════════════════════════════════════════════════ */
+function screenCash(){
+  const m = state.money;
+  const total = m.cash + m.fd;
+  const burn = (m.burnLow + m.burnHigh) / 2;
+  const afterExp = total - state.expense;
+  const aboveLine = afterExp - m.cashLine;
+  const monthsAbove = aboveLine > 0 ? aboveLine / burn : 0;
+  const monthsIfFD = afterExp / burn;
+  const breach = afterExp < m.cashLine;
+  const pct = Math.max(0, Math.min(100, afterExp / 1200000 * 100));
+  const linePct = m.cashLine / 1200000 * 100;
+
+  return `
+  <h1>现金与跑道</h1>
+  <p class="pagelede">你的档案里有现金，也有月烧，但从来没把两者连成一个数字。这就是那个数字。</p>
+
+  <div class="gauge">
+    <p class="eyebrow">不动用现金防线的情况下，跑道还有</p>
+    <div class="runway" style="color:${monthsAbove<=0?'var(--fail)':monthsAbove<3?'var(--warn)':'var(--pass)'}">
+      ${monthsAbove.toFixed(1)} <span style="font-size:.42em;font-weight:600;letter-spacing:0">个月</span>
+    </div>
+    <div style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5">
+      ${monthsAbove<=0
+        ? `你现有现金 <b class="mono">${rm(afterExp)}</b> ${breach?'已经低于':'刚好等于'}你自己定的防线 <b class="mono">${rm(m.cashLine)}</b>。<b style="color:var(--fail)">在防线以上，你没有可自由投资的钱。</b>`
+        : `防线以上可用 <b class="mono">${rm(aboveLine)}</b>，按月烧 <b class="mono">${rm(burn)}</b> 计。`}
+      <br>若允许动用全部现金与 FD，跑道为 <b class="mono">${monthsIfFD.toFixed(1)} 个月</b>。
+    </div>
+
+    <div class="bar">
+      <div class="fill ${breach?'breach':''}" style="width:${pct}%"></div>
+      <div class="lineMark" style="left:${linePct}%"></div>
+      <div class="lineLbl" style="left:${linePct}%">现金防线 ${rm(m.cashLine)}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)" class="mono">
+      <span>RM0</span><span>RM1,200,000</span>
+    </div>
+
+    <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line)">
+      <p class="eyebrow">试算：如果我现在批一笔支出</p>
+      <input class="slider" type="range" id="expslider" min="0" max="300000" step="5000" value="${state.expense}" aria-label="拟批支出金额">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <span class="mono" style="font-size:21px;font-weight:700">${rm(state.expense)}</span>
+        <span style="font-size:13px;color:${state.expense?'var(--fail)':'var(--muted)'};font-weight:600">
+          ${state.expense ? `跑道减少 ${(state.expense/burn*30).toFixed(0)} 天 · 防线以下 ${rm(Math.max(0, m.cashLine - afterExp))}` : '拖动看这笔钱对防线的影响'}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h2>现金构成</h2>
+      <div class="kv"><span class="k">可动用现金</span><span class="v">${rm(m.cash)}</span></div>
+      <div class="kv"><span class="k">定期存款 FD</span><span class="v">${rm(m.fd)}</span></div>
+      <div class="kv"><span class="k">贷款</span><span class="v">RM0</span></div>
+      <div class="kv"><span class="k" style="font-weight:700;color:var(--ink)">合计</span><span class="v" style="font-size:15px">${rm(total)}</span></div>
+      <div class="kv"><span class="k">现金防线</span><span class="v" style="color:var(--fail)">${rm(m.cashLine)}</span></div>
+    </div>
+    <div class="card">
+      <h2>月度流出 <span class="cnt">必须分账</span></h2>
+      <div class="kv"><span class="k">个人月开支</span><span class="v">RM20,000–30,000</span></div>
+      <div class="kv"><span class="k">公司月固定开支</span><span class="v">RM20,000–30,000</span></div>
+      <div class="kv"><span class="k" style="font-weight:700;color:var(--ink)">真实月烧</span><span class="v" style="font-size:15px;color:var(--fail)">RM40,000–60,000</span></div>
+      <div class="kv"><span class="k">本周实际收到</span><span class="v" style="color:var(--pass)">${rm(m.receivedThisWeek)}</span></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5">
+        个人与公司开支目前是同一个口径（你的待补事项第 2 条）。分账之前，上面这个「真实月烧」只能当估算用。
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   屏幕 6 — 每周六问
+   ══════════════════════════════════════════════════════════════ */
+function screenWeekly(){
+  const m = state.money, burn = (m.burnLow+m.burnHigh)/2;
+  const accepted = state.deliverables.filter(d => d.status === 'accepted');
+  const noPayer = state.projects.filter(p => (!p.payer || !p.budget) && !p.dead);
+  const near = state.projects.filter(p => p.gate).sort((a,b) => daysTo(a.gate)-daysTo(b.gate)).slice(0,3);
+  const open = state.decisions.filter(d => !d.done);
+
+  const Q = [
+    ['本周实际收到多少钱？', `<b class="mono" style="font-size:17px;color:var(--pass)">${rm(m.receivedThisWeek)}</b> —— Blek SS13 档口订金，已有 Maybank 进账截图为证。<br><span style="color:var(--muted)">这是过去 90 天以来的第一笔实际进账。</span>`],
+    ['未来 30 天最可能收到的三笔钱是什么？证据是什么？',
+      `<ul>${near.map(p => `<li><b>${esc(p.name)}</b> — ${esc(p.nextStep)}<br>
+        <span style="color:var(--muted)">Gate ${p.gate}（${daysTo(p.gate)} 天后）· 证据等级 <b>${p.grade}</b>${!p.payer?' · <span style="color:var(--fail)">尚无确认付款人</span>':''}</span></li>`).join('')}</ul>`],
+    ['哪些项目没有付款人或预算，应该暂停？',
+      `共 <b>${noPayer.length}</b> 个：${noPayer.map(p=>esc(p.name)).join('、')}。<br>
+       <span style="color:var(--muted)">按你自己的规则，这些只计入 Pipeline，不计入收入，也不应占用主要人力。</span>`],
+    ['哪一项支出会令现金防线下降？是否值得？',
+      open.filter(d=>d.amount).length
+        ? `<ul>${open.filter(d=>d.amount).map(d=>`<li><b>${esc(d.q)}</b> — ${rm(d.amount)}，跑道 −${(d.amount/burn*30).toFixed(0)} 天<br><span style="color:var(--muted)">建议选项 ${d.opts.find(o=>o.rec)?.k}：${esc(d.opts.find(o=>o.rec)?.t||'')}</span></li>`).join('')}</ul>`
+        : '本周无待批支出。'],
+    ['每名员工交出了什么可验收成果？',
+      accepted.length
+        ? `<ul>${accepted.map(d=>`<li><b>${esc(d.who)}</b> — ${esc(d.title)}<br><span style="color:var(--muted)">📎 ${esc(d.evidence||'')}</span></li>`).join('')}</ul>`
+        : `<span style="color:var(--fail)">本周尚无已验收成果。</span>在交付看板上完成验收后，这里会自动填上。`],
+    ['哪些决定必须由我在 48 小时内作出？',
+      open.length
+        ? `<ul>${open.map(d=>`<li><b>${esc(d.q)}</b> — 已等 ${d.hours}h${d.hours>48?' <span style="color:var(--fail)">（已超时）</span>':''}</li>`).join('')}</ul>`
+        : '队列已清空。'],
+  ];
+
+  return `
+  <h1>每周六问</h1>
+  <p class="pagelede">你第 12 节写下的六个问题，由系统按当前数据自动作答。<b>周会只看这一页 —— 不在系统里的东西不被讨论。</b></p>
+  ${Q.map(([q,a],i) => `<div class="q6">
+    <div class="qh"><span class="qn">${String(i+1).padStart(2,'0')}</span><span>${q}</span></div>
+    <div class="qa">${a}</div>
+  </div>`).join('')}
+  <div style="margin-top:16px;display:flex;gap:9px;flex-wrap:wrap">
+    <button class="btn btn-primary" data-print="1">导出为一页纸</button>
+    <button class="btn btn-ghost" data-reset="1">重置演示数据</button>
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   渲染与事件
+   ══════════════════════════════════════════════════════════════ */
+function render(){
+  renderNav();
+  const map = {day:screenDay, board:screenBoard, decide:screenDecide, revenue:screenRevenue, cash:screenCash, weekly:screenWeekly};
+  $('#main').innerHTML = (map[state.screen] || screenDay)();
+  window.scrollTo({top:0, behavior:'instant'});
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-scr],[data-role],[data-submit],[data-attach],[data-accept],[data-reject],[data-dec],[data-proj],[data-closeproj],[data-print],[data-reset]');
+  if(!t) return;
+
+  if(t.dataset.scr){ state.screen = t.dataset.scr; state.selectedProject = null; return render(); }
+
+  if(t.dataset.role){
+    state.role = t.dataset.role;
+    state.screen = isJY() ? 'board' : 'day';
+    state.selectedProject = null;
+    toast(state.role==='JY' ? '已切换到 JY（老板）视图 — 可见全部' : `已切换到 ${state.role} 视图 — 只看得到自己那一栏`);
+    return render();
+  }
+
+  if(t.dataset.attach){
+    const el = document.getElementById('att-' + t.dataset.attach);
+    el.innerHTML = '<span class="attachchip">✓ 已附 2 个文件</span>';
+    return;
+  }
+
+  if(t.dataset.submit){
+    const id = +t.dataset.submit;
+    const ta = document.getElementById('ta-' + id);
+    const txt = ta && ta.value.trim();
+    if(!txt){ toast('请先写一句话说明你交了什么'); ta && ta.focus(); return; }
+    const d = state.deliverables.find(x => x.id === id);
+    d.status = 'submitted';
+    d.evidence = txt + '（附 2 个文件）';
+    toast('已提交 — JY 会在交付看板上验收');
+    return render();
+  }
+
+  if(t.dataset.accept){
+    const d = state.deliverables.find(x => x.id === +t.dataset.accept);
+    d.status = 'accepted';
+    const l = LINES.find(l => l.id === d.line);
+    if(d.id === 3){ l.received += 2000; }
+    toast('已验收 — 会出现在「每周六问」第 5 题');
+    return render();
+  }
+
+  if(t.dataset.reject){
+    const d = state.deliverables.find(x => x.id === +t.dataset.reject);
+    d.status = 'rejected';
+    toast('已打回 — ' + d.who + ' 会在「我的今天」看到，可重新提交');
+    return render();
+  }
+
+  if(t.dataset.dec){
+    const d = state.decisions.find(x => x.id === +t.dataset.dec);
+    d.done = t.dataset.opt;
+    toast(`已决策：选项 ${t.dataset.opt} — 提出人 ${d.by} 会收到通知`);
+    return render();
+  }
+
+  if(t.dataset.proj){ state.selectedProject = t.dataset.proj; return render(); }
+  if(t.dataset.closeproj){ state.selectedProject = null; return render(); }
+  if(t.dataset.print){ toast('实际系统会生成 PDF 并存入证据室 07 Projects'); return; }
+  if(t.dataset.reset){ location.reload(); return; }
+});
+
+document.addEventListener('input', e => {
+  if(e.target.id === 'expslider'){
+    state.expense = +e.target.value;
+    const m = state.money, burn = (m.burnLow + m.burnHigh)/2;
+    const after = m.cash + m.fd - state.expense;
+    const above = after - m.cashLine, months = above > 0 ? above/burn : 0;
+    const breach = after < m.cashLine;
+    const g = $('.gauge');
+    g.querySelector('.runway').innerHTML = `${months.toFixed(1)} <span style="font-size:.42em;font-weight:600;letter-spacing:0">个月</span>`;
+    g.querySelector('.runway').style.color = months<=0 ? 'var(--fail)' : months<3 ? 'var(--warn)' : 'var(--pass)';
+    const fill = g.querySelector('.fill');
+    fill.style.width = Math.max(0, Math.min(100, after/1200000*100)) + '%';
+    fill.classList.toggle('breach', breach);
+    const figs = g.querySelectorAll('.slider ~ div > span');
+    figs[0].textContent = rm(state.expense);
+    figs[1].textContent = state.expense ? `跑道减少 ${(state.expense/burn*30).toFixed(0)} 天 · 防线以下 ${rm(Math.max(0, m.cashLine - after))}` : '拖动看这笔钱对防线的影响';
+    figs[1].style.color = state.expense ? 'var(--fail)' : 'var(--muted)';
+  }
+});
+
+$('#themebtn').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const sysDark = matchMedia('(prefers-color-scheme:dark)').matches;
+  const next = cur ? (cur === 'dark' ? 'light' : 'dark') : (sysDark ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('jyos-theme', next); }catch(e){}
+});
+try{
+  const saved = localStorage.getItem('jyos-theme');
+  if(saved) document.documentElement.setAttribute('data-theme', saved);
+}catch(e){}
+
+render();
+</script>
