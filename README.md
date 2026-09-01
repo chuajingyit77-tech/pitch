@@ -4,6 +4,13 @@
 
 两份可分享的在线 Pitch，以及支撑它们的研究底稿。
 
+## PDF（拿去开会用的版本）
+
+| 文件 | 内容 |
+|---|---|
+| `dist/三丰智能马来西亚合作提案-讨论稿.pdf` | 封面 + 内部讨论议程（五个决策点）+ 对内提案全文 + 附录四篇研究底稿，A4 横向，43 页 |
+| `dist/Smart-Factory-Malaysia-客户方案.pdf` | 对外客户方案（中英双语，含 ROI 测算页），A4 横向，13 页 |
+
 ## 在线版本
 
 | 用途 | 链接 |
@@ -27,6 +34,10 @@ decks/
   src/*.template.html                 可编辑源文件，图片以 {{img:name}} 占位
   assets/img/*.jpg                    从三丰画册裁切的产品实景图
   build.py                            把占位符替换成内联图片，生成上面两个 HTML
+  build_pdf.py                        组装打印稿（议程 + 提案 + 附录）并调用 print_pdf.js 输出 PDF
+  print_pdf.js                        用 Chromium 把打印稿渲染成带页码的 A4 横向 PDF
+dist/
+  *.pdf                               生成的 PDF
 ```
 
 ## 改内容怎么做
@@ -38,6 +49,15 @@ python3 decks/build.py
 ```
 
 `decks/` 下的两个 `.html` 是生成物，不要直接改（会被覆盖）。改完把同一个文件路径重新发布，在线链接不变。
+
+重新生成 PDF（需要 Chromium、`pip install markdown`、`npm i playwright-core`）：
+
+```bash
+python3 decks/build.py
+NODE_PATH=./node_modules python3 decks/build_pdf.py
+```
+
+Chromium 路径默认取 Playwright 的安装位置，可用环境变量 `CHROMIUM` 指定；讨论议程页的文字在 `decks/build_pdf.py` 里。
 
 ## 待补齐的信息
 

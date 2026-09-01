@@ -325,8 +325,33 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
 .src{font-size:var(--f-micro);color:var(--ink-3);line-height:1.7}
 .src a{color:var(--ink-3)}
 
-@media print{.topbar{display:none}.slide{break-inside:avoid}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ── 打印 / PDF ───────────────────────────── */
+@page{size:A4 landscape;margin:13mm 14mm 15mm}
+@media print{
+  :root,:root[data-theme="dark"]{
+    --ground:#FFFFFF;--surface:#FFFFFF;--surface-2:#F4F7FA;
+    --ink:#0E1D31;--ink-2:#3B4C61;--ink-3:#6B7C90;
+    --line:#D2DAE3;--line-strong:#AEBCCB;
+    --accent:#D0540A;--accent-ink:#8A3705;--accent-soft:#FBE7D8;
+    --signal:#A67A00;--signal-soft:#FBF0CF;--good:#1A6B4A;--bad:#A32E1C;
+    --grid:rgba(14,29,49,.055);--shadow:none;
+  }
+  html{font-size:12.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background:#fff}
+  .topbar{display:none}
+  .wrap{max-width:none;padding:0}
+  .slide{break-before:page;border-bottom:0;padding:0 0 1.5rem}
+  .slide.cover{break-before:auto;padding:2.5rem 0 1rem}
+  .slide-head{break-after:avoid;margin-bottom:1.3rem}
+  .lede{margin-bottom:1.2rem}
+  .card,.phase,.node,.stat,.ask-item,.rule,.shot,.callout,.stats,.flow,.gantt,.cover-art,tr,.not-ask{break-inside:avoid}
+  .cards,.gallery,.rule-list,.ask,.phases{break-inside:auto}
+  *{box-shadow:none!important}
+  a{color:inherit;text-decoration:none}
+  footer{padding:1.5rem 0 0;break-before:avoid}
+}
 </style>
 
 <div class="topbar">
