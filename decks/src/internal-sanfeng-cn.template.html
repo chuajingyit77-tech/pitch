@@ -1,0 +1,989 @@
+<title>三丰智能马来西亚提案</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --ground:#EDF0F4;
+  --surface:#FFFFFF;
+  --surface-2:#F4F7FA;
+  --ink:#0E1D31;
+  --ink-2:#3B4C61;
+  --ink-3:#6B7C90;
+  --line:#D2DAE3;
+  --line-strong:#AEBCCB;
+  --accent:#D0540A;
+  --accent-ink:#8A3705;
+  --accent-soft:#FBE7D8;
+  --signal:#A67A00;
+  --signal-soft:#FBF0CF;
+  --good:#1A6B4A;
+  --bad:#A32E1C;
+  --grid:rgba(14,29,49,.055);
+  --shadow:0 1px 2px rgba(14,29,49,.05),0 8px 24px -14px rgba(14,29,49,.30);
+
+  --f-display:clamp(2.05rem,4.4vw,3.25rem);
+  --f-h2:clamp(1.5rem,2.6vw,2.05rem);
+  --f-h3:1.115rem;
+  --f-body:1rem;
+  --f-small:.875rem;
+  --f-micro:.75rem;
+
+  --measure:1140px;
+  --pad:clamp(1.15rem,4vw,3rem);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0A131D;
+    --surface:#101C29;
+    --surface-2:#152332;
+    --ink:#E5ECF4;
+    --ink-2:#B0C1D3;
+    --ink-3:#7F91A5;
+    --line:#22323F;
+    --line-strong:#374B5F;
+    --accent:#FF823A;
+    --accent-ink:#FFC49B;
+    --accent-soft:#3A1E0E;
+    --signal:#F0BE3C;
+    --signal-soft:#33280A;
+    --good:#45B182;
+    --bad:#E77157;
+    --grid:rgba(255,255,255,.055);
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0A131D;
+  --surface:#101C29;
+  --surface-2:#152332;
+  --ink:#E5ECF4;
+  --ink-2:#B0C1D3;
+  --ink-3:#7F91A5;
+  --line:#22323F;
+  --line-strong:#374B5F;
+  --accent:#FF823A;
+  --accent-ink:#FFC49B;
+  --accent-soft:#3A1E0E;
+  --signal:#F0BE3C;
+  --signal-soft:#33280A;
+  --good:#45B182;
+  --bad:#E77157;
+  --grid:rgba(255,255,255,.055);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -16px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"Archivo","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:var(--f-body);
+  line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-weight:700;line-height:1.25;text-wrap:balance;margin:0}
+p{margin:0}
+a{color:var(--accent);text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+img{display:block;width:100%;height:100%;object-fit:cover}
+
+/* ── 顶部进度条 ───────────────────────────── */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:.9rem;
+  padding:.55rem var(--pad);
+  background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:var(--f-micro);
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);
+}
+.topbar b{color:var(--ink);font-weight:600;letter-spacing:.05em}
+.topbar .spacer{flex:1}
+.progress{position:absolute;left:0;bottom:-1px;height:2px;background:var(--accent);width:0}
+
+/* ── 版式骨架 ─────────────────────────────── */
+.wrap{max-width:var(--measure);margin:0 auto;padding:0 var(--pad)}
+.slide{padding:clamp(2.6rem,5.5vw,4.6rem) 0;border-bottom:1px solid var(--line)}
+.slide:last-of-type{border-bottom:0}
+.slide-head{
+  display:flex;align-items:baseline;gap:1rem;
+  padding-bottom:1.15rem;margin-bottom:1.9rem;
+  border-bottom:1px solid var(--line);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px);
+  background-size:100% 12px;background-position:0 -1px;
+}
+.slide-no{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  font-weight:600;letter-spacing:.12em;color:var(--accent);
+  padding-top:.55rem;flex:none;
+}
+.slide-head h2{font-size:var(--f-h2);flex:1}
+.slide-head .kicker{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  padding-top:.6rem;text-align:right;flex:none;display:none;
+}
+@media(min-width:840px){.slide-head .kicker{display:block}}
+.lede{font-size:1.06rem;color:var(--ink-2);max-width:64ch;margin-bottom:1.9rem}
+.stack{display:flex;flex-direction:column;gap:1.15rem}
+
+/* ── 封面 ─────────────────────────────────── */
+.cover{padding:clamp(2.4rem,6vw,4.4rem) 0 clamp(2.4rem,5vw,3.6rem)}
+.cover-grid{display:grid;gap:clamp(1.6rem,3vw,2.6rem)}
+@media(min-width:900px){.cover-grid{grid-template-columns:1.15fr .85fr;align-items:center}}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;
+}
+.cover h1{font-size:var(--f-display);margin:.85rem 0 1rem;letter-spacing:-.015em}
+.cover .sub{font-size:1.08rem;color:var(--ink-2);max-width:52ch}
+.cover-meta{
+  margin-top:1.7rem;padding-top:1.1rem;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:.5rem 2rem;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.05em;color:var(--ink-3);
+}
+.cover-art{
+  position:relative;border:1px solid var(--line);border-radius:3px;overflow:hidden;
+  aspect-ratio:16/11;background:var(--surface-2);box-shadow:var(--shadow);
+}
+.cover-art img{filter:saturate(.94)}
+.cover-art figcaption{
+  position:absolute;left:0;right:0;bottom:0;padding:.5rem .75rem;
+  background:linear-gradient(transparent,rgba(6,14,24,.82));color:#EAF0F7;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);letter-spacing:.05em;
+}
+
+/* ── 卡片与网格 ───────────────────────────── */
+.cards{display:grid;gap:1rem}
+.cards>*,.cover-grid>*,.flow>*,.phases>*,.ask>*,.stats>*{min-width:0}
+.cards.two{grid-template-columns:1fr}
+.cards.three{grid-template-columns:1fr}
+.cards.four{grid-template-columns:repeat(2,1fr)}
+@media(min-width:760px){
+  .cards.two{grid-template-columns:repeat(2,1fr)}
+  .cards.three{grid-template-columns:repeat(3,1fr)}
+  .cards.four{grid-template-columns:repeat(4,1fr)}
+}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:3px;
+  padding:1.15rem 1.2rem;box-shadow:var(--shadow);
+}
+.card h3{font-size:var(--f-h3);margin-bottom:.45rem}
+.card p{font-size:var(--f-small);color:var(--ink-2)}
+.card .tag{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:.5rem;
+}
+
+/* ── 数字标注 ─────────────────────────────── */
+.stats{display:grid;gap:0;border:1px solid var(--line);border-radius:3px;background:var(--surface);overflow:hidden}
+@media(min-width:760px){.stats{grid-template-columns:repeat(var(--n,4),1fr)}}
+.stat{padding:1.05rem 1.15rem;border-bottom:1px solid var(--line)}
+.stat:last-child{border-bottom:0}
+@media(min-width:760px){
+  .stat{border-bottom:0;border-right:1px solid var(--line)}
+  .stat:last-child{border-right:0}
+}
+.stat .v{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;
+  font-size:1.62rem;font-weight:600;letter-spacing:-.02em;line-height:1.15;color:var(--ink);
+}
+.stat .v.pos{color:var(--good)}
+.stat .v.neg{color:var(--bad)}
+.stat .v.acc{color:var(--accent)}
+.stat .k{font-size:var(--f-small);color:var(--ink-2);margin-top:.3rem}
+.stat .n{font-size:var(--f-micro);color:var(--ink-3);margin-top:.2rem}
+
+/* ── 表格 ─────────────────────────────────── */
+.tablewrap{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:var(--f-small)}
+th,td{padding:.62rem .85rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{
+  background:var(--surface-2);color:var(--ink-3);font-weight:600;white-space:nowrap;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.08em;text-transform:uppercase;
+}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.total td{background:var(--surface-2);font-weight:600;color:var(--ink)}
+td strong{color:var(--ink)}
+
+/* ── 图集 ─────────────────────────────────── */
+.gallery{display:grid;gap:.65rem;grid-template-columns:repeat(2,1fr)}
+@media(min-width:700px){.gallery{grid-template-columns:repeat(4,1fr)}}
+.shot{position:relative;border:1px solid var(--line);border-radius:2px;overflow:hidden;aspect-ratio:4/3;background:var(--surface-2)}
+.shot span{
+  position:absolute;left:0;right:0;bottom:0;padding:.95rem .5rem .38rem;
+  background:linear-gradient(rgba(6,14,24,0),rgba(6,14,24,.92));color:#EDF2F8;
+  font-size:var(--f-micro);line-height:1.35;
+}
+
+/* ── 流程 / 阶段 ──────────────────────────── */
+.phases{display:grid;gap:1rem}
+@media(min-width:880px){.phases{grid-template-columns:repeat(3,1fr)}}
+.phase{
+  background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--line-strong);
+  border-radius:3px;padding:1.15rem 1.2rem;box-shadow:var(--shadow);
+}
+.phase.now{border-top-color:var(--accent)}
+.phase .when{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+}
+.phase h3{font-size:var(--f-h3);margin:.4rem 0 .55rem}
+.phase ul{margin:.55rem 0 0;padding-left:1.05rem;font-size:var(--f-small);color:var(--ink-2)}
+.phase li{margin-bottom:.28rem}
+
+.flow{display:grid;gap:.6rem;align-items:stretch}
+@media(min-width:860px){.flow{grid-template-columns:1fr auto 1fr auto 1fr}}
+.node{
+  background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:.95rem 1rem;
+  box-shadow:var(--shadow);
+}
+.node.mid{border-color:var(--accent);background:var(--accent-soft)}
+.node .role{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+}
+.node .who{font-weight:600;margin:.25rem 0 .3rem}
+.node p{font-size:var(--f-small);color:var(--ink-2)}
+.arrow{
+  display:flex;align-items:center;justify-content:center;color:var(--ink-3);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.06em;padding:.2rem 0;text-align:center;
+}
+.arrow::before{content:"▼"}
+@media(min-width:860px){.arrow::before{content:"▶"}}
+
+/* ── 要点条 ───────────────────────────────── */
+.rule-list{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:3px;background:var(--surface);overflow:hidden}
+.rule{display:grid;gap:.15rem .9rem;padding:.85rem 1.05rem;border-bottom:1px solid var(--line)}
+@media(min-width:720px){.rule{grid-template-columns:minmax(150px,190px) 1fr}}
+.rule:last-child{border-bottom:0}
+.rule dt{font-weight:600;font-size:var(--f-small);color:var(--ink)}
+.rule dd{margin:0;font-size:var(--f-small);color:var(--ink-2)}
+
+.callout{
+  border-left:3px solid var(--accent);background:var(--accent-soft);
+  padding:.95rem 1.15rem;border-radius:0 3px 3px 0;color:var(--accent-ink);
+}
+.callout.quiet{border-left-color:var(--line-strong);background:var(--surface-2);color:var(--ink-2)}
+.callout strong{color:inherit}
+.callout p+p{margin-top:.5rem}
+
+.pill{
+  display:inline-block;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:var(--f-micro);letter-spacing:.06em;padding:.12rem .5rem;border-radius:999px;
+  border:1px solid var(--line-strong);color:var(--ink-2);white-space:nowrap;
+}
+.pill.acc{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.pill.warn{border-color:var(--signal);color:var(--signal);background:var(--signal-soft)}
+
+.fill{margin-top:.15rem;font-size:var(--f-micro);color:var(--signal);font-family:"IBM Plex Mono",ui-monospace,monospace}
+mark{background:var(--signal-soft);color:var(--ink);padding:0 .2em;border-radius:2px}
+
+/* ── 甘特 ─────────────────────────────────── */
+.gantt{border:1px solid var(--line);border-radius:3px;background:var(--surface);overflow-x:auto}
+.gantt-inner{min-width:640px}
+.gantt-row{display:grid;grid-template-columns:190px 1fr;align-items:center;border-bottom:1px solid var(--line)}
+.gantt-row:last-child{border-bottom:0}
+.gantt-row .task{padding:.6rem .85rem;font-size:var(--f-small);border-right:1px solid var(--line)}
+.gantt-track{position:relative;height:2.35rem;background-image:linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc(100%/12) 100%}
+.bar{position:absolute;top:.62rem;height:1.1rem;border-radius:2px;background:var(--accent);opacity:.9}
+.bar.alt{background:var(--ink-3)}
+.gantt-head{display:grid;grid-template-columns:190px 1fr;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.gantt-head .task{padding:.45rem .85rem;border-right:1px solid var(--line)}
+.gantt-head .weeks{display:grid;grid-template-columns:repeat(12,1fr)}
+.gantt-head .weeks span{
+  padding:.45rem 0;text-align:center;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:var(--f-micro);color:var(--ink-3);border-left:1px solid var(--line);
+}
+.gantt-head .weeks span:first-child{border-left:0}
+.gantt-head .task{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ── Ask ──────────────────────────────────── */
+.ask{display:grid;gap:1rem}
+@media(min-width:880px){.ask{grid-template-columns:repeat(2,1fr)}}
+.ask-item{display:flex;gap:.9rem;background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1.05rem 1.15rem;box-shadow:var(--shadow)}
+.ask-item .n{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:1.15rem;font-weight:600;
+  color:var(--accent);line-height:1.3;flex:none;
+}
+.ask-item h3{font-size:var(--f-h3);margin-bottom:.3rem}
+.ask-item p{font-size:var(--f-small);color:var(--ink-2)}
+
+.not-ask{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.15rem}
+.not-ask span{
+  font-size:var(--f-small);padding:.32rem .7rem;border-radius:3px;
+  border:1px dashed var(--line-strong);color:var(--ink-3);text-decoration:line-through;
+}
+
+footer{padding:2.4rem 0 3.2rem;color:var(--ink-3);font-size:var(--f-small)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-between}
+.src{font-size:var(--f-micro);color:var(--ink-3);line-height:1.7}
+.src a{color:var(--ink-3)}
+
+@media print{.topbar{display:none}.slide{break-inside:avoid}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="topbar">
+  <b>三丰智能 × 马来西亚</b>
+  <span class="spacer"></span>
+  <span id="pos">01 / 18</span>
+  <div class="progress" id="prog"></div>
+</div>
+
+<main>
+
+<!-- 封面 -->
+<section class="slide cover" id="s1">
+  <div class="wrap cover-grid">
+    <div>
+      <div class="eyebrow">合作提案 · 机密 · 仅供三丰智能内部讨论</div>
+      <h1>马来西亚市场进入<br>与本地落地合作提案</h1>
+      <p class="sub">一个对三丰<strong>零现金投入、零市场费用、零坏账风险</strong>的海外增量试点：由我方在马来西亚出资金、出团队、出牌照、出售后，三丰只做一件事——按出口合同供货。</p>
+      <div class="cover-meta">
+        <span>提交方：【待填：我方公司名称】</span>
+        <span>致：三丰智能装备集团股份有限公司（300276）</span>
+        <span>版本 v1 · 2026-09</span>
+      </div>
+    </div>
+    <figure class="cover-art">
+      <img src="{{img:cover-wheel}}" alt="三丰智能装备产品全景">
+      <figcaption>资料来源：三丰智能集团画册（2025-03）</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 01 一页结论 -->
+<section class="slide" id="s2">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">01</span>
+      <h2>一页结论</h2>
+      <span class="kicker">Executive Summary</span>
+    </div>
+
+    <div class="stack">
+      <div class="cards four">
+        <div class="card"><span class="tag">我们提议</span><h3>灯塔项目优先</h3><p>先用 1–2 个真实项目跑通"三丰供货 + 我方交付"的完整闭环，不谈独家、不设合资、不收授权费。</p></div>
+        <div class="card"><span class="tag">三丰投入</span><h3>零现金</h3><p>不出资、不设境外公司、不派驻团队、不承担市场费用与坏账风险。只需按出口合同供货。</p></div>
+        <div class="card"><span class="tag">我方投入</span><h3>全额自担</h3><p>本地实体、营运资金、销售与工程团队、安装调试、备件库、售后 SLA、补贴申报。</p></div>
+        <div class="card"><span class="tag">时间表</span><h3>90 天启动</h3><p>会谈 → MOU → 锁定首个项目。达成约定指标后，自动进入独家代理阶段。</p></div>
+      </div>
+
+      <div class="callout">
+        <p><strong>一句话总结：</strong>三丰用一份出口合同的成本，换一个已经有本地实体、本地人脉与数字化转型专业团队的马来西亚落地伙伴，以及一条三年累计约 <strong>6,000 万人民币</strong>（基准情景）的高毛利出口增量曲线。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 为什么是现在 -->
+<section class="slide" id="s3">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">02</span>
+      <h2>为什么是现在</h2>
+      <span class="kicker">Timing</span>
+    </div>
+    <p class="lede">国内智能装备市场正在经历一轮以价格为核心的竞争，项目周期拉长、实施成本上升，行业整体毛利承压。在这样的周期里，增量与毛利只能从海外市场获得——而东南亚是中国装备出海确定性最高、文化与供应链距离最短的方向。</p>
+
+    <div class="stats" style="--n:4">
+      <div class="stat"><div class="v">17.69<span style="font-size:.62em"> 亿元</span></div><div class="k">2025 年营业收入</div><div class="n">同比 −8.69%</div></div>
+      <div class="stat"><div class="v neg">−1.86<span style="font-size:.62em"> 亿元</span></div><div class="k">2025 年归母净利润</div><div class="n">含商誉减值影响</div></div>
+      <div class="stat"><div class="v acc">1,600<span style="font-size:.62em"> 余人</span></div><div class="k">集团员工</div><div class="n">高工 51 / 教授级高工 16</div></div>
+      <div class="stat"><div class="v acc">400<span style="font-size:.62em"> 余项</span></div><div class="k">授权专利</div><div class="n">其中发明专利 60 余项</div></div>
+    </div>
+
+    <div class="cards two" style="margin-top:1.15rem">
+      <div class="card">
+        <span class="tag">结论一</span>
+        <h3>需要的是毛利，不是又一个国内订单</h3>
+        <p>海外同类项目的毛利率通常高于国内 10–20 个百分点。一条马来西亚的稳定出口通道，对综合毛利率的修复作用远大于同等规模的国内订单。</p>
+      </div>
+      <div class="card">
+        <span class="tag">结论二</span>
+        <h3>方案必须是零投入的</h3>
+        <p>在当前资产负债表状况下，任何"先设厂、先垫资、先派驻"的出海方案都难以通过决策。本提案因此被设计成三丰零现金投入——这是它最重要的特征。</p>
+      </div>
+    </div>
+
+    <p class="src" style="margin-top:1rem">数据来源：三丰智能 2025 年度报告摘要（深交所，2026-04-28）；员工与专利数据来自集团画册（2025-03）。</p>
+  </div>
+</section>
+
+<!-- 03 为什么是马来西亚 -->
+<section class="slide" id="s4">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">03</span>
+      <h2>为什么是马来西亚</h2>
+      <span class="kicker">Market Pull</span>
+    </div>
+    <p class="lede">马来西亚的自动化需求不是企业自发的技术追求，而是被<strong>产业政策、税务激励与劳动力政策三股力量同时推出来的</strong>。这意味着需求有确定性、有预算、有时间窗。</p>
+
+    <div class="cards three">
+      <div class="card">
+        <span class="tag">政策拉力</span>
+        <h3>NIMP 2030：3,000 家智能工厂</h3>
+        <p>新工业大蓝图以任务导向设计，21 项策略、62 个行动计划；旗舰项目之一是 2030 年前改造 <strong>3,000 家智能工厂</strong>，并设 Intervention Fund 补贴中小企业采用工业 4.0 技术。</p>
+      </div>
+      <div class="card">
+        <span class="tag">财税推力</span>
+        <h3>自动化设备 200% 资本减免</h3>
+        <p>Automation CA：自动化设备支出首 <strong>1,000 万令吉可享 200% 资本减免</strong>（2023–2027 课税年度），须 MIDA 事先批准并经 SIRIM 技术核验。2026 年预算案另给设备与软件投资 20% 初始 + 40% 年度加速折旧。</p>
+      </div>
+      <div class="card">
+        <span class="tag">劳动力压力</span>
+        <h3>外劳越来越贵、越来越难请</h3>
+        <p>第十三大马计划目标：2030 年前把外劳占比从约 15% 降到 <strong>10%</strong>；多层次征费机制（MTLM）2026 年全面实施，用自动化的企业征费更低。西马制造业外劳人头税约 <strong>RM 1,850/人/年</strong>。</p>
+      </div>
+    </div>
+
+    <div class="callout quiet" style="margin-top:1.15rem">
+      <p>换句话说：在马来西亚，我们不需要教育客户"为什么要自动化"。政府已经替我们做完了这件事，并且用税务优惠替客户付掉了约四分之一的设备成本。我们要做的只是<strong>把方案、报价和补贴申报一起端到他面前</strong>。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 四个行业 -->
+<section class="slide" id="s5">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">04</span>
+      <h2>四个目标行业与进入次序</h2>
+      <span class="kicker">Segments</span>
+    </div>
+    <p class="lede">四个行业的技术匹配度都很高，但进入难度差异极大。正确的次序是：<strong>用传统制造与配电做现金流和案例，用 E&amp;E 做品牌，用汽车做终局</strong>——而不是一上来就冲整车厂。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>行业</th><th>主打三丰能力</th><th class="num">单项目规模</th><th class="num">决策周期</th><th>市场依据</th><th>优先级</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>本地传统制造</strong><br><span style="color:var(--ink-3)">手套 / 食品 / 家具 / 铝材 / 五金</span></td>
+            <td>汉巍机器人工作站、进出口板块输送线、码垛机器人</td>
+            <td class="num">RM 30 万–300 万</td>
+            <td class="num">1–3 个月</td>
+            <td>外劳依赖度最高，征费压力最直接；老板一人拍板</td>
+            <td><span class="pill acc">先打</span></td>
+          </tr>
+          <tr>
+            <td><strong>仓储物流与数据中心</strong><br><span style="color:var(--ink-3)">柔佛 / 巴生港 / 雪兰莪</span></td>
+            <td>小松堆垛机、四向穿梭车、WMS；久丰高低压成套与预装式变电站</td>
+            <td class="num">RM 200 万–2,000 万</td>
+            <td class="num">3–6 个月</td>
+            <td>柔佛数据中心投资 RM 403 亿，已建成 850MW、在建 1,800MW、储备 2,700MW</td>
+            <td><span class="pill acc">现金流</span></td>
+          </tr>
+          <tr>
+            <td><strong>E&amp;E / 半导体</strong><br><span style="color:var(--ink-3)">槟城 / 居林 / Batu Kawan</span></td>
+            <td>三丰机器人 AMR、小松料箱库、汉巍上下料工作站</td>
+            <td class="num">RM 100 万–1,500 万</td>
+            <td class="num">4–9 个月</td>
+            <td>槟城目标 2030 年吸引约 1,150 亿美元投资；已获批 RM 413 亿数字投资</td>
+            <td><span class="pill">品牌</span></td>
+          </tr>
+          <tr>
+            <td><strong>汽车与新能源</strong><br><span style="color:var(--ink-3)">Proton / Perodua / 零部件供应链</span></td>
+            <td>鑫燕隆焊装线、总装输送、电池 PACK 线、底盘举升 AGV</td>
+            <td class="num">RM 1,000 万–1 亿+</td>
+            <td class="num">9–24 个月</td>
+            <td>2025 年全国销量 820,752 辆创新高；Proton 丹绒马林 EV 厂已投产并扩产至年产 4.2 万辆</td>
+            <td><span class="pill">终局</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout" style="margin-top:1.15rem">
+      <p><strong>被低估的入口：数据中心配电。</strong>数据中心本身不需要输送线，但它需要海量的中低压配电柜、预装式变电站与配电房——正是黄石久丰的主业。这条线订单频率高、可复制、复购强，是养活本地团队的最佳现金流产品，不像整线项目一年只能做一两个。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 05 能力矩阵 -->
+<section class="slide" id="s6">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">05</span>
+      <h2>三丰七大板块 × 马来西亚场景</h2>
+      <span class="kicker">Capability Map</span>
+    </div>
+    <p class="lede">集团现有产品线几乎不需要为马来西亚做任何改造——需要改造的只是<strong>交付方式</strong>。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>子公司</th><th>核心产品</th><th>马来西亚对应场景</th></tr></thead>
+        <tbody>
+          <tr><td><strong>湖北三丰智能装备</strong></td><td>EMS 单轨/双轨自行小车、积放链、悬挂链、地拖链、摩擦式、滑橇、滑板、板链输送、新能源电池 PACK 线、KBK、翻转机、辊道、机械式立体停车</td><td>整车总装与涂装线改造；EV 电池 PACK 产线；工程机械与农机组装；吉隆坡与新山的立体停车</td></tr>
+          <tr><td><strong>上海鑫燕隆</strong></td><td>焊装线总承包、Small Pallet / Geo Pallet 柔性夹具、Flexible Framer 总拼线、滚边机器人、激光焊</td><td>白车身焊装线——投资额最大、门槛最高，也是建立品牌信任的敲门砖；商用车与农机车架焊接</td></tr>
+          <tr><td><strong>湖北三丰小松物流</strong></td><td>WMS、堆垛机（标准/重载/弯轨/料箱）、四向穿梭车、RGV、提升机、拆码垛机器人、自动装车系统</td><td>3PL 与快消立体库；电子厂料箱库；数据中心备件库；手套与食品成品自动装车</td></tr>
+          <tr><td><strong>湖北三丰机器人</strong></td><td>潜伏式 / 重载 / 激光导引 / 平板承载 AGV、双车联动 AGV/RGV、底盘与电池举升装配 AGV、AMR</td><td>槟城封测与电子制造的车间物流（预算小、见效快、无需停产）；EV 电池与底盘装配</td></tr>
+          <tr><td><strong>黄石久丰智能机电</strong></td><td>KYN28-12 / HXGN-12 高压柜、YBW-12 预装式变电站、MNS/GCK/GDD 低压柜、PLC 柜、光伏配电柜；电力工程施工总承包贰级等资质</td><td>数据中心配电与配电房；工业园区供电；屋顶光伏配套<br><span class="pill warn">中国电力资质在马不互认，需配本地 CIDB / ST 持牌承包商</span></td></tr>
+          <tr><td><strong>湖北三丰汉巍</strong></td><td>PCB 转线、电芯上料、拆垛、涂胶、打磨、喷漆、焊接机器人工作站</td><td>电子与半导体上下料；柔佛家具带打磨喷涂；五金卫浴；食品罐装码垛<br><span class="pill acc">报价低、周期短，最适合做第一批成交</span></td></tr>
+          <tr><td><strong>湖北三丰智能进出口</strong></td><td>进出口贸易与项目集成；KEWEI 品牌 PLC、运动控制器、快速门伺服；制鞋线、铝型材线、木材辊道线、小家电输送线</td><td>制鞋、家具、铝材、小家电、食品输送线——标准化程度最高、最容易起量<br><span class="pill acc">本案背靠背合同的建议签约主体</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 06 图集 -->
+<section class="slide" id="s7">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">06</span>
+      <h2>现有产品能力（画册实景）</h2>
+      <span class="kicker">Portfolio</span>
+    </div>
+    <p class="lede">以下全部为三丰现有产品的实景照片。对马来西亚客户而言，这些照片本身就是最有力的资质证明——但对外使用前需取得贵司书面授权。</p>
+
+    <div class="gallery">
+      <figure class="shot"><img src="{{img:framer}}" alt="车身柔性总拼线"><span>车身柔性总拼线 Flexible Framer</span></figure>
+      <figure class="shot"><img src="{{img:geo-pallet}}" alt="焊装线柔性随行夹具"><span>焊装柔性随行夹具 Geo Pallet</span></figure>
+      <figure class="shot"><img src="{{img:battery-pack}}" alt="电池 PACK 自动化生产线"><span>新能源电池 PACK 线</span></figure>
+      <figure class="shot"><img src="{{img:chassis-agv}}" alt="底盘电池举升装配 AGV"><span>底盘 / 电池举升装配 AGV</span></figure>
+      <figure class="shot"><img src="{{img:ems-body}}" alt="EMS 单轨自行小车"><span>EMS 单轨自行小车</span></figure>
+      <figure class="shot"><img src="{{img:stacker-crane}}" alt="堆垛机"><span>标准双立柱堆垛机</span></figure>
+      <figure class="shot"><img src="{{img:fourway-shuttle}}" alt="四向穿梭车"><span>料箱式四向穿梭车</span></figure>
+      <figure class="shot"><img src="{{img:amr-carton}}" alt="智能搬运机器人 AMR"><span>智能搬运机器人 AMR</span></figure>
+      <figure class="shot"><img src="{{img:hv-cabinet}}" alt="高压开关柜"><span>KYN28-12 高压开关柜</span></figure>
+      <figure class="shot"><img src="{{img:ybw-substation}}" alt="预装式变电站"><span>YBW-12 预装式变电站</span></figure>
+      <figure class="shot"><img src="{{img:welding-robot}}" alt="焊接机器人工作站"><span>焊接机器人工作站</span></figure>
+      <figure class="shot"><img src="{{img:alu-line}}" alt="铝型材输送线"><span>铝型材输送线</span></figure>
+    </div>
+  </div>
+</section>
+
+<!-- 07 我方 -->
+<section class="slide" id="s8">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">07</span>
+      <h2>我方带来什么</h2>
+      <span class="kicker">What We Bring</span>
+    </div>
+    <p class="lede">三丰缺的从来不是产品，而是<strong>把 4,000 公里的售后半径缩到 400 公里的能力</strong>。以下每一项都直接对应一个三丰自建海外体系时必须付出的成本。</p>
+
+    <dl class="rule-list">
+      <div class="rule">
+        <dt>本地实体与牌照</dt>
+        <dd>合同主体与收款主体设在马来西亚，三丰无需设立境外公司，不产生常设机构风险。若我方为本地持股 ≥51%，可豁免 WRT 执照——三丰自行落地则需 RM 100 万实缴资本与约 2–3 个月审批。<span class="fill">【待填：我方公司名称、成立年份、注册资本、现有业务与团队规模】</span></dd>
+      </div>
+      <div class="rule">
+        <dt>数字化转型博士团队</dt>
+        <dd>不是头衔，是一项可交付、可收费的售前服务：<strong>工厂数字化成熟度诊断 → 工艺与物流方案论证 → 投资回报测算 → 补贴申报路径</strong>。这是三丰海外目前最缺的环节——设备卖得出去，但没有人能在客户内部把项目"论证立项"。<span class="fill">【待填：博士专业方向、代表项目经历】</span></dd>
+      </div>
+      <div class="rule">
+        <dt>本地客户与政府资源</dt>
+        <dd>覆盖整车与零部件厂、E&amp;E 制造商、园区管委会、总包与本地集成商、政府机构、银行与融资租赁。作用是缩短获客周期、预判客户资信、降低坏账风险。<span class="fill">【待填：可覆盖的客户与机构类型清单】</span></dd>
+      </div>
+      <div class="rule">
+        <dt>本地交付与售后</dt>
+        <dd>安装调试团队、常用备件本地库存、明确的响应 SLA（远程 4 小时 / 现场 48 小时）、客户操作与维护培训（可申请 HRD Corp 培训报销）。</dd>
+      </div>
+      <div class="rule">
+        <dt>补贴与合规代办</dt>
+        <dd>代客户申请 Automation CA（MIDA 批准 + SIRIM 核验），处理清关、SST、CIDB / ST 相关分包与设备检验。直接提高签约率。</dd>
+      </div>
+      <div class="rule">
+        <dt>营运资金</dt>
+        <dd>项目垫资由我方承担。三丰按"预付 + 发货前付款"收款，不承担账期与坏账风险。</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<!-- 08 三阶段 -->
+<section class="slide" id="s9">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">08</span>
+      <h2>合作路径：三个阶段，逐级解锁</h2>
+      <span class="kicker">Partnership Model</span>
+    </div>
+    <p class="lede">每个阶段都有明确的进入条件与退出机制。<strong>我们不要求现在就决定第二、第三阶段</strong>——只要求把第一阶段做起来。</p>
+
+    <div class="phases">
+      <div class="phase now">
+        <div class="when">第 0–9 个月 · 现在讨论的就是这一格</div>
+        <h3>Phase 1 · 灯塔验证</h3>
+        <p style="font-size:var(--f-small);color:var(--ink-2)">不签独家、不设合资、不收授权费。我方以本地总集成主体承接 1–2 个项目，三丰背靠背供货。</p>
+        <ul>
+          <li>三丰：按出口合同供货 + 1 名工程师远程支持</li>
+          <li>我方：资金、销售、清关、安装、调试、售后</li>
+          <li>项目来源优先级：关丹产业园与柔佛的中资工厂 → 本地传统制造 → 配电类小项目</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="when">第 9–24 个月</div>
+        <h3>Phase 2 · 独家代理</h3>
+        <p style="font-size:var(--f-small);color:var(--ink-2)">Phase 1 指标达成后<strong>自动</strong>升级，无需重新谈判。</p>
+        <ul>
+          <li>马来西亚独家；新加坡、印尼、文莱优先权（非独家）</li>
+          <li>年度最低采购额按 Phase 1 实绩的 1.5–2 倍设定</li>
+          <li>阶梯折扣 + 最惠代理价条款</li>
+          <li>客户归属条款：我方开发的客户不被绕开直供</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="when">第 24 个月起</div>
+        <h3>Phase 3 · 本地实体化</h3>
+        <p style="font-size:var(--f-small);color:var(--ink-2)">当需要投标政府/GLC 项目、或需满足本地成分要求时才启动。</p>
+        <ul>
+          <li>路线 A：我方独资本地组装 + 三丰技术授权（三丰仍零投入）</li>
+          <li>路线 B：合资公司，三丰以技术、品牌、供货作价入少数股权</li>
+          <li>关联交易按独立交易原则定价，留存转让定价文档</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 背靠背结构 -->
+<section class="slide" id="s10">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">09</span>
+      <h2>Phase 1 的合同结构</h2>
+      <span class="kicker">Back-to-Back</span>
+    </div>
+    <p class="lede">两份合同的<strong>技术规格、交期、验收标准与质保条款逐条对齐</strong>，风险不在中间环节堆积。</p>
+
+    <div class="flow">
+      <div class="node">
+        <div class="role">最终业主</div>
+        <div class="who">马来西亚客户</div>
+        <p>与我方签订本地主合同（MYR/USD），付款节奏 30 / 30 / 30 / 10。</p>
+      </div>
+      <div class="arrow"></div>
+      <div class="node mid">
+        <div class="role">总集成与责任主体</div>
+        <div class="who">【待填：我方公司名称】</div>
+        <p>清关、内陆运输、安装、调试、验收、售后、备件、培训、ACA 补贴代办、CIDB / ST 分包管理。</p>
+      </div>
+      <div class="arrow"></div>
+      <div class="node">
+        <div class="role">供货方</div>
+        <div class="who">湖北三丰智能进出口有限公司</div>
+        <p>出口合同（USD, CIF Port Klang / Penang），30% 预付 + 发货前付款 + 10% 质保金。<strong>无账期风险、无坏账风险。</strong></p>
+      </div>
+    </div>
+
+    <h3 style="margin:1.9rem 0 .75rem;font-size:var(--f-h3)">Phase 1 的达标条件（建议写入 MOU）</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>指标</th><th>门槛</th><th>为什么是这个数</th></tr></thead>
+        <tbody>
+          <tr><td>累计签约合同额</td><td class="num">≥ RM 300 万</td><td>约 ¥510 万，足以证明获客能力，又不至于让第一年不可达成</td></tr>
+          <tr><td>我方交付端毛利率</td><td class="num">≥ 20%</td><td>证明这条通道在扣除本地成本后依然成立</td></tr>
+          <tr><td>交付与验收</td><td>按期交付并取得客户最终验收（FAC）</td><td>验证的是交付能力，不只是签单能力</td></tr>
+          <tr><td>回款</td><td class="num">≥ 90%，无坏账</td><td>验证本地资信判断与合同条款的有效性</td></tr>
+          <tr><td>售后</td><td>质保期内达成承诺 SLA</td><td>售后是这个市场真正的竞争壁垒</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout" style="margin-top:1.15rem">
+      <p><strong>"自动升级"这四个字必须写进 MOU。</strong>否则我方在完成全部验证后仍需重新谈判一轮，这会显著降低我方在 Phase 1 的投入意愿——也就降低了三丰拿到这条通道的概率。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 商务与合规 -->
+<section class="slide" id="s11">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">10</span>
+      <h2>商务条款与跨境合规</h2>
+      <span class="kicker">Terms &amp; Compliance</span>
+    </div>
+    <p class="lede">这一节是主动提出的，不是被要求的。跨境架构没搭好，海外业务赚的钱会在税务与合规上还回去。</p>
+
+    <div class="cards two">
+      <div class="card">
+        <span class="tag">商务框架</span>
+        <h3>定价与付款</h3>
+        <p>三丰按出厂价 / FOB 或 CIF 报价，我方按落地价对客户报价，价差覆盖清关、运输、安装、调试、售后与补贴代办成本。建议锁定 12 个月价格有效期，并设阶梯折扣与最惠代理价条款。争取首个项目的账期支持（20/50/30）——这不花三丰的钱，只是节奏。</p>
+      </div>
+      <div class="card">
+        <span class="tag">商务框架</span>
+        <h3>知识产权与客户归属</h3>
+        <p>技术资料授权范围限定为销售、方案设计、安装调试与售后所需；品牌使用限定为"授权马来西亚合作伙伴"表述。我方开发并书面登记的客户，在授权期内及终止后 24 个月内不被绕开直供。</p>
+      </div>
+      <div class="card">
+        <span class="tag">合规</span>
+        <h3>税务结构（回应境外经验教训）</h3>
+        <p>Phase 1 / 2 的款项尽量设计为<strong>设备货款</strong>而非服务费或授权费，避免触发预提税；三丰工程师以短期出差方式支持，按中马税收协定控制停留天数，避免构成常设机构；Phase 3 若设关联实体，按独立交易原则定价并留存转让定价文档。</p>
+      </div>
+      <div class="card">
+        <span class="tag">合规</span>
+        <h3>设备准入</h3>
+        <p>马来西亚采用 IEC 标准（415V / 240V, 50Hz）；配电设备通常要求 SIRIM 或等效第三方认证；起重与压力设备须经 JKKP（DOSH）检验；安装工程需 CIDB 注册承包商，电气工程受能源委员会（ST）监管。采购合同须写明标准符合性责任归属。</p>
+      </div>
+    </div>
+
+    <div class="callout quiet" style="margin-top:1.15rem">
+      <p>关税提示：中国—东盟自贸协定与 RCEP 下多数机电产品可享优惠关税，正确申领原产地证（Form E / RCEP）能显著降低客户的到岸成本。这一项应在报价时主动算给客户看，是一个不花钱的竞争优势。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 11 财务：我方视角 -->
+<section class="slide" id="s12">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">11</span>
+      <h2>三年业务规划（我方口径）</h2>
+      <span class="kicker">Plan · Base Case</span>
+    </div>
+    <p class="lede">基准情景。全部为假设模型，非预测；汇率按 <strong>1 MYR ≈ 1.70 CNY</strong> 计算，签约时需按实际汇率复核。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>单位：RM 万</th><th class="num">Y1</th><th class="num">Y2</th><th class="num">Y3</th><th>假设说明</th></tr></thead>
+        <tbody>
+          <tr><td>签约合同额</td><td class="num">500</td><td class="num">1,800</td><td class="num">4,000</td><td>Y1 签 3–4 个项目，均价 RM 130 万</td></tr>
+          <tr><td>确认收入</td><td class="num">450</td><td class="num">1,650</td><td class="num">3,800</td><td>按交付进度确认</td></tr>
+          <tr><td>设备采购成本（付三丰）</td><td class="num">279</td><td class="num">1,006</td><td class="num">2,318</td><td>设备占收入 61–62%</td></tr>
+          <tr><td>本地交付成本</td><td class="num">72</td><td class="num">231</td><td class="num">532</td><td>清关、运输、安装分包、调试、检验、备件计提</td></tr>
+          <tr class="total"><td>毛利</td><td class="num">99</td><td class="num">413</td><td class="num">950</td><td>毛利率 22% → 25%</td></tr>
+          <tr><td>经营费用</td><td class="num">94</td><td class="num">211</td><td class="num">388</td><td>团队 5 → 11 → 20 人；含坏账计提 1.5%</td></tr>
+          <tr class="total"><td>EBIT</td><td class="num">5</td><td class="num">202</td><td class="num">562</td><td>EBIT 率 1.1% → 12.2% → 14.8%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="stats" style="--n:3;margin-top:1.15rem">
+      <div class="stat"><div class="v">RM 3,200<span style="font-size:.62em"> 万</span></div><div class="k">保守情景 · 三年累计收入</div><div class="n">只做小项目，无大单</div></div>
+      <div class="stat"><div class="v acc">RM 5,900<span style="font-size:.62em"> 万</span></div><div class="k">基准情景 · 三年累计收入</div><div class="n">累计 EBIT 约 RM 769 万</div></div>
+      <div class="stat"><div class="v">RM 9,500<span style="font-size:.62em"> 万</span></div><div class="k">乐观情景 · 三年累计收入</div><div class="n">Y2 拿下 E&amp;E 框架协议</div></div>
+    </div>
+
+    <p class="src" style="margin-top:.9rem">我方启动资金需求约 RM 180–230 万（约 ¥310–390 万），其中营运资金占 RM 100–150 万。<span class="fill">【待填：实际可投入资金与团队规模】</span></p>
+  </div>
+</section>
+
+<!-- 12 财务：三丰视角 -->
+<section class="slide" id="s13">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">12</span>
+      <h2>同一份计划，三丰口径</h2>
+      <span class="kicker">What It Means For Sanfeng</span>
+    </div>
+    <p class="lede">这是整份提案唯一需要贵司财务口径确认的一张表。左边是收益，右边是成本——右边全部是零。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>单位：¥ 万</th><th class="num">Y1</th><th class="num">Y2</th><th class="num">Y3</th><th class="num">三年累计</th></tr></thead>
+        <tbody>
+          <tr><td><strong>三丰出口收入</strong></td><td class="num">474</td><td class="num">1,710</td><td class="num">3,941</td><td class="num"><strong>6,125</strong></td></tr>
+          <tr><td>三丰现金投入</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num"><strong>0</strong></td></tr>
+          <tr><td>三丰市场费用</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num"><strong>0</strong></td></tr>
+          <tr><td>三丰承担的坏账风险</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num"><strong>0</strong></td></tr>
+          <tr><td>三丰人力投入</td><td>1 名工程师部分工时</td><td>1–2 名</td><td>2–3 名</td><td>远程为主</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout" style="margin-top:1.15rem">
+      <p><strong>零现金投入、零市场费用、零坏账风险，三年新增约 6,000 万人民币出口收入。</strong></p>
+      <p>相对贵司 2025 年 17.69 亿元的营收规模，这是约 3.5% 的增量——而且是结构性毛利更高的增量。海外项目毛利率通常高于国内同类项目 10–20 个百分点，具体数值请以贵司内部成本口径测算为准。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 13 风险 -->
+<section class="slide" id="s14">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">13</span>
+      <h2>风险与对策</h2>
+      <span class="kicker">Risk Register</span>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>风险</th><th>影响</th><th>对策</th><th>承担方</th></tr></thead>
+        <tbody>
+          <tr><td>贵司在马已有代理商或在谈合作方</td><td><span class="pill warn">高</span></td><td>第一次会议即确认。若已有，改为行业补位（例如只做 E&amp;E 与配电，避开汽车），或承接其交付分包</td><td>双方</td></tr>
+          <tr><td>背靠背条款不对齐，中间方赔付</td><td><span class="pill warn">高</span></td><td>规格、交期、验收、质保逐条对齐；主合同加入"因供方原因延期则工期顺延"条款</td><td>我方</td></tr>
+          <tr><td>设备不符合马来西亚标准导致验收失败</td><td><span class="pill warn">高</span></td><td>采购合同写明标准符合性责任；开工前电气规格评审；关键部件选用国际品牌降低认证风险</td><td>三丰</td></tr>
+          <tr><td>客户账期与坏账</td><td><span class="pill warn">高</span></td><td>预付不低于 30%；本地私企要求银行保函或信用证；用本地人脉做资信预判</td><td>我方</td></tr>
+          <tr><td>汇率波动（MYR / USD / CNY）</td><td><span class="pill">中</span></td><td>采购合同以 USD 计价并锁汇；报价含 3–5% 汇率缓冲；大额项目做远期结汇</td><td>我方</td></tr>
+          <tr><td>常设机构与预提税</td><td><span class="pill">中</span></td><td>款项设计为货款；工程师短期出差并控制停留天数；重要合同签前经本地税务顾问审阅</td><td>双方</td></tr>
+          <tr><td>售后响应不到位导致口碑受损</td><td><span class="pill warn">高</span></td><td>Phase 1 即建本地备件库与 2 名调试工程师；SLA 写进合同并留缓冲</td><td>我方</td></tr>
+          <tr><td>关税与本地成分政策变化</td><td><span class="pill">中</span></td><td>关注 MITI / NIMP 政策；Phase 3 的本地组装本身即是对冲</td><td>双方</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="src" style="margin-top:.9rem">注意：本表中标注"我方"的风险共 5 项，标注"三丰"的仅 1 项，且可通过合同条款前置化解。这正是本方案设计的核心。</p>
+  </div>
+</section>
+
+<!-- 14 Ask -->
+<section class="slide" id="s15">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">14</span>
+      <h2>我们请求的四件事</h2>
+      <span class="kicker">The Ask</span>
+    </div>
+    <p class="lede">全部可在 90 天内完成，全部不涉及贵司出资。</p>
+
+    <div class="ask">
+      <div class="ask-item"><div class="n">1</div><div><h3>技术资料与案例授权</h3><p>目标行业的技术方案资料、参数表、参考案例照片与视频，授权用于马来西亚市场的方案设计与商务提案。</p></div></div>
+      <div class="ask-item"><div class="n">2</div><div><h3>报价体系与折扣政策</h3><p>主要产品线的出厂价 / FOB 或 CIF 报价基准，以及合作伙伴折扣政策与报价响应时效。</p></div></div>
+      <div class="ask-item"><div class="n">3</div><div><h3>一名对接工程师</h3><p>远程即可。负责技术答疑、方案配置确认与关键节点支持，不需要常驻马来西亚。</p></div></div>
+      <div class="ask-item"><div class="n">4</div><div><h3>灯塔项目合作意向书</h3><p>确认背靠背合作方式、Phase 1 达标条件，以及达标后自动进入 Phase 2 的约定。</p></div></div>
+    </div>
+
+    <p style="margin-top:1.6rem;font-weight:600">本次<strong>不</strong>请求的事项：</p>
+    <div class="not-ask">
+      <span>资金投入</span><span>派驻团队</span><span>设立境外公司</span><span>先行授予独家代理</span><span>合资与股权安排</span><span>市场推广预算</span><span>账期与坏账承担</span>
+    </div>
+  </div>
+</section>
+
+<!-- 15 90 天 -->
+<section class="slide" id="s16">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">15</span>
+      <h2>90 天行动计划</h2>
+      <span class="kicker">Next 90 Days</span>
+    </div>
+
+    <div class="gantt">
+      <div class="gantt-inner">
+        <div class="gantt-head">
+          <div class="task">工作项</div>
+          <div class="weeks"><span>W1</span><span>W2</span><span>W3</span><span>W4</span><span>W5</span><span>W6</span><span>W7</span><span>W8</span><span>W9</span><span>W10</span><span>W11</span><span>W12</span></div>
+        </div>
+        <div class="gantt-row"><div class="task">首次会谈（进出口公司 + 集团海外分管）</div><div class="gantt-track"><div class="bar" style="left:0%;width:8.33%"></div></div></div>
+        <div class="gantt-row"><div class="task">信息确认：现有代理、认证、报价体系</div><div class="gantt-track"><div class="bar" style="left:8.33%;width:8.33%"></div></div></div>
+        <div class="gantt-row"><div class="task">MOU 草拟与往返</div><div class="gantt-track"><div class="bar" style="left:16.67%;width:25%"></div></div></div>
+        <div class="gantt-row"><div class="task">本地获客：中资园区 3 家 + 本地制造 5 家 + E&amp;E 2 家</div><div class="gantt-track"><div class="bar alt" style="left:16.67%;width:50%"></div></div></div>
+        <div class="gantt-row"><div class="task">免费数字化诊断（博士团队）</div><div class="gantt-track"><div class="bar alt" style="left:25%;width:41.67%"></div></div></div>
+        <div class="gantt-row"><div class="task">MOU 签署 · 技术资料与报价交付 · 指定对接工程师</div><div class="gantt-track"><div class="bar" style="left:41.67%;width:16.67%"></div></div></div>
+        <div class="gantt-row"><div class="task">锁定灯塔项目：方案、报价、合同谈判</div><div class="gantt-track"><div class="bar" style="left:58.33%;width:33.33%"></div></div></div>
+        <div class="gantt-row"><div class="task">ACA 补贴申报材料准备（MIDA / SIRIM）</div><div class="gantt-track"><div class="bar alt" style="left:66.67%;width:33.33%"></div></div></div>
+        <div class="gantt-row"><div class="task">第一份主合同签署</div><div class="gantt-track"><div class="bar" style="left:91.67%;width:8.33%"></div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 16 首次会议 -->
+<section class="slide" id="s17">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">16</span>
+      <h2>首次会议怎么开</h2>
+      <span class="kicker">Meeting Script</span>
+    </div>
+    <p class="lede">建议同时接触<strong>进出口公司总经理</strong>（执行口）与<strong>集团分管海外的副总</strong>（决策口）。三分钟讲完，只讲三件事。</p>
+
+    <div class="cards three">
+      <div class="card"><span class="tag">开场 · 30 秒</span><h3>先说结论</h3><p>"我们在马来西亚有本地实体和交付能力，想提一个对贵司零投入、零风险的海外增量试点方案。"</p></div>
+      <div class="card"><span class="tag">中段 · 3 分钟</span><h3>只讲三件事</h3><p>① 马来西亚有一个被政策推出来的需求窗口；② 我们不要贵司出钱、出人、出独家；③ 我们先做一个项目给贵司看。</p></div>
+      <div class="card"><span class="tag">收尾 · 30 秒</span><h3>只要四样东西</h3><p>技术资料授权、报价体系、一名对接工程师、一份灯塔项目意向书。</p></div>
+    </div>
+
+    <div class="callout" style="margin-top:1.15rem">
+      <p><strong>第一次会议绝不要提：</strong>独家代理、合资公司、股权、区域授权费。这些属于 Phase 2 / 3。提早了，会把一次"低风险试点"的对话变成一次"重大战略决策"的对话——后者要上董事会，而周期会长得多。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 17 待确认 -->
+<section class="slide" id="s18">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">17</span>
+      <h2>需要贵司确认的七个问题</h2>
+      <span class="kicker">Open Questions</span>
+    </div>
+    <ol style="padding-left:1.3rem;color:var(--ink-2);font-size:var(--f-small);line-height:1.9">
+      <li>贵司在马来西亚 / 东南亚是否已有代理商、经销商或在谈合作方？是否有排他约定？</li>
+      <li>年报披露的境外子公司设在何处、经营什么？这决定跨境架构如何搭建才能避开旧问题。</li>
+      <li>各产品线的出厂价体系与合作伙伴折扣政策？可否接受 FOB / CIF / DDP 报价？</li>
+      <li>海外项目的技术支持模式：可否派工程师短期出差？费用如何分担？远程调试能力如何？</li>
+      <li>设备是否已有 CE 认证？电气件可否按 IEC 标准选型（415V / 240V, 50Hz）？</li>
+      <li>标准质保期、备件交期、是否支持本地备件寄售？</li>
+      <li>可否书面授权我方在提案与市场材料中使用贵司品牌与项目案例照片？</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 18 结尾 -->
+<section class="slide" id="s19">
+  <div class="wrap">
+    <div class="slide-head">
+      <span class="slide-no">18</span>
+      <h2>下一步</h2>
+      <span class="kicker">Contact</span>
+    </div>
+    <p class="lede">我们希望在两周内安排一次 60 分钟的会谈，带着上述四项请求与第一批本地客户线索清单。</p>
+    <div class="cards two">
+      <div class="card">
+        <span class="tag">联系方式</span>
+        <h3>【待填：我方公司名称】</h3>
+        <p>【待填：联系人 / 职务 / 电话 / 邮箱 / 公司地址】</p>
+      </div>
+      <div class="card">
+        <span class="tag">附件</span>
+        <h3>可随时提供</h3>
+        <p>马来西亚市场与政策研究底稿、合作架构与合规方案、三年财务模型明细、面向马来西亚客户的方案样本。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="src">
+      <strong>资料来源</strong>：三丰智能集团画册（2025-03）；三丰智能 2025 年度报告摘要（深交所，2026-04-28）；
+      MIDA Automation Capital Allowance 指南；NIMP 2030（nimp2030.gov.my）；
+      第十三大马计划外劳政策报道（The Edge Malaysia）；马来西亚汽车工业协会 MAA 2025 年销量数据；
+      PROTON 官方新闻稿；柔佛数据中心投资数据（EdgeProp / DataCenterDynamics）。<br>
+      财务数字除注明的公开财报外，均为标注假设的模型测算，非预测。画册图片版权归三丰智能所有，对外使用前需取得书面授权。
+    </div>
+    <div class="src">机密文件 · 仅供内部讨论 · v1 · 2026-09</div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var pos=document.getElementById('pos');
+  var prog=document.getElementById('prog');
+  var total=slides.length;
+  function pad(n){return n<10?'0'+n:''+n}
+  function update(){
+    var y=window.scrollY+window.innerHeight*0.35;
+    var i=0;
+    for(var k=0;k<slides.length;k++){ if(slides[k].offsetTop<=y) i=k; }
+    pos.textContent=pad(i+1)+' / '+pad(total);
+    var max=document.documentElement.scrollHeight-window.innerHeight;
+    prog.style.width=(max>0?Math.min(100,(window.scrollY/max)*100):0)+'%';
+  }
+  var ticking=false;
+  window.addEventListener('scroll',function(){
+    if(!ticking){ticking=true;requestAnimationFrame(function(){update();ticking=false})}
+  },{passive:true});
+  window.addEventListener('resize',update);
+  update();
+})();
+</script>

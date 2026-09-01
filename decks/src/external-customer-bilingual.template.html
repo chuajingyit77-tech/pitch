@@ -1,0 +1,716 @@
+<title>Smart Factory Malaysia</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --ground:#EDF1F0;
+  --surface:#FFFFFF;
+  --surface-2:#F3F7F6;
+  --ink:#0A2724;
+  --ink-2:#33504C;
+  --ink-3:#61807B;
+  --line:#D0DDDA;
+  --line-strong:#A9BFBA;
+  --accent:#0B6B5F;
+  --accent-soft:#DDEDEA;
+  --accent-ink:#064A41;
+  --money:#96660A;
+  --money-soft:#FAF0D8;
+  --bad:#A32E1C;
+  --grid:rgba(10,39,36,.055);
+  --shadow:0 1px 2px rgba(10,39,36,.05),0 8px 24px -14px rgba(10,39,36,.28);
+
+  --f-display:clamp(1.95rem,4.1vw,2.9rem);
+  --f-h2:clamp(1.45rem,2.6vw,2rem);
+  --f-h3:1.1rem;
+  --f-small:.875rem;
+  --f-micro:.75rem;
+
+  --measure:1140px;
+  --pad:clamp(1.15rem,4vw,3rem);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#061513;
+    --surface:#0C201D;
+    --surface-2:#112825;
+    --ink:#E2EFEC;
+    --ink-2:#AEC7C2;
+    --ink-3:#7C9993;
+    --line:#1E3733;
+    --line-strong:#325049;
+    --accent:#39C0AB;
+    --accent-soft:#0C302B;
+    --accent-ink:#8FE0D3;
+    --money:#EFB63F;
+    --money-soft:#33270B;
+    --bad:#E77157;
+    --grid:rgba(255,255,255,.05);
+    --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px -16px rgba(0,0,0,.85);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#061513;
+  --surface:#0C201D;
+  --surface-2:#112825;
+  --ink:#E2EFEC;
+  --ink-2:#AEC7C2;
+  --ink-3:#7C9993;
+  --line:#1E3733;
+  --line-strong:#325049;
+  --accent:#39C0AB;
+  --accent-soft:#0C302B;
+  --accent-ink:#8FE0D3;
+  --money:#EFB63F;
+  --money-soft:#33270B;
+  --bad:#E77157;
+  --grid:rgba(255,255,255,.05);
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px -16px rgba(0,0,0,.85);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);color:var(--ink);
+  font-family:"Archivo","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:1rem;line-height:1.7;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-weight:700;line-height:1.24;text-wrap:balance;margin:0}
+p{margin:0}
+a{color:var(--accent);text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+img{display:block;width:100%;height:100%;object-fit:cover}
+.cn{font-size:var(--f-small);color:var(--ink-3);display:block;font-weight:400;line-height:1.65}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+.topbar{
+  position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:.75rem;
+  padding:.55rem var(--pad);background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);
+}
+.topbar b{color:var(--ink);font-weight:600}
+.topbar .spacer{flex:1}
+.topbar a.cta{
+  color:var(--accent);border:1px solid var(--accent);border-radius:3px;
+  padding:.22rem .6rem;text-decoration:none;letter-spacing:.06em;
+}
+
+.wrap{max-width:var(--measure);margin:0 auto;padding:0 var(--pad)}
+.slide{padding:clamp(2.6rem,5.5vw,4.4rem) 0;border-bottom:1px solid var(--line)}
+.slide:last-of-type{border-bottom:0}
+.slide-head{
+  display:flex;align-items:baseline;gap:1rem;padding-bottom:1.1rem;margin-bottom:1.8rem;
+  border-bottom:1px solid var(--line);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px);
+  background-size:100% 12px;background-position:0 -1px;
+}
+.slide-no{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);font-weight:600;
+  letter-spacing:.12em;color:var(--accent);padding-top:.5rem;flex:none;
+}
+.slide-head h2{font-size:var(--f-h2);flex:1}
+.lede{font-size:1.05rem;color:var(--ink-2);max-width:66ch;margin-bottom:1.8rem}
+.lede .cn{margin-top:.45rem}
+
+/* Cover */
+.cover{padding:clamp(2.2rem,6vw,4rem) 0 clamp(2.2rem,5vw,3.4rem)}
+.cover-grid{display:grid;gap:clamp(1.5rem,3vw,2.4rem)}
+@media(min-width:900px){.cover-grid{grid-template-columns:1.1fr .9fr;align-items:center}}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;
+}
+.cover h1{font-size:var(--f-display);margin:.8rem 0 .3rem;letter-spacing:-.015em}
+.cover h1 em{font-style:normal;color:var(--accent)}
+.cover .h1cn{font-size:1.12rem;color:var(--ink-2);font-weight:500;margin-bottom:1rem}
+.cover .sub{color:var(--ink-2);max-width:54ch}
+.cover-meta{
+  margin-top:1.6rem;padding-top:1rem;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:.45rem 1.8rem;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);color:var(--ink-3);
+}
+.cover-art{position:relative;border:1px solid var(--line);border-radius:3px;overflow:hidden;aspect-ratio:16/11;background:var(--surface-2);box-shadow:var(--shadow)}
+.cover-art figcaption{
+  position:absolute;inset:auto 0 0 0;padding:.5rem .75rem;
+  background:linear-gradient(transparent,rgba(3,20,18,.85));color:#E8F4F1;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);
+}
+
+.cards{display:grid;gap:1rem}
+.cards.two{grid-template-columns:1fr}
+.cards.three{grid-template-columns:1fr}
+@media(min-width:760px){
+  .cards.two{grid-template-columns:repeat(2,1fr)}
+  .cards.three{grid-template-columns:repeat(3,1fr)}
+}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1.15rem 1.2rem;box-shadow:var(--shadow)}
+.card h3{font-size:var(--f-h3);margin-bottom:.35rem}
+.card p{font-size:var(--f-small);color:var(--ink-2)}
+.card .tag{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:.5rem}
+.card .big{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:1.75rem;font-weight:600;color:var(--money);line-height:1.2;margin-bottom:.2rem}
+
+/* Solution packs */
+.pack{display:grid;gap:1.15rem;background:var(--surface);border:1px solid var(--line);border-radius:3px;overflow:hidden;box-shadow:var(--shadow)}
+@media(min-width:820px){.pack{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:0}}
+.pack .body{padding:1.3rem 1.35rem}
+.pack h3{font-size:1.22rem;margin-bottom:.15rem}
+.pack .who{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:.75rem}
+.pack ul{margin:.85rem 0 0;padding-left:1.05rem;font-size:var(--f-small);color:var(--ink-2)}
+.pack li{margin-bottom:.28rem}
+.pack .shots{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);align-content:start}
+.pack .shots figure{position:relative;margin:0;aspect-ratio:4/3;background:var(--surface-2)}
+.pack .shots span{position:absolute;inset:auto 0 0 0;padding:.85rem .45rem .32rem;background:linear-gradient(rgba(3,20,18,0),rgba(3,20,18,.92));color:#EAF5F2;font-size:var(--f-micro);line-height:1.3}
+.packs{display:flex;flex-direction:column;gap:1.15rem}
+
+/* Calculator */
+.calc{display:grid;gap:1.15rem}
+.calc>*,.pack>*,.cards>*,.cover-grid>*,.steps>*,.packs>*{min-width:0}
+@media(min-width:900px){.calc{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);align-items:start}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1.2rem 1.25rem;box-shadow:var(--shadow)}
+.panel h3{font-size:var(--f-h3);margin-bottom:.9rem}
+.field{display:grid;gap:.25rem;margin-bottom:.85rem}
+.field label{font-size:var(--f-small);font-weight:500}
+.field label .cn{display:inline;font-size:var(--f-micro);color:var(--ink-3);margin-left:.35rem}
+.field input{
+  width:100%;min-width:0;padding:.5rem .65rem;border:1px solid var(--line-strong);border-radius:3px;
+  background:var(--surface-2);color:var(--ink);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:.9rem;
+}
+.field input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px var(--accent-soft)}
+.field .hint{font-size:var(--f-micro);color:var(--ink-3)}
+.checkline{display:flex;gap:.55rem;align-items:flex-start;font-size:var(--f-small);margin:.2rem 0 .3rem}
+.checkline input{margin-top:.35rem;accent-color:var(--accent)}
+
+.result-hero{
+  border:1px solid var(--accent);background:var(--accent-soft);border-radius:3px;
+  padding:1.15rem 1.25rem;margin-bottom:1rem;
+}
+.result-hero .k{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink)}
+.result-hero .v{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:clamp(2.1rem,5.5vw,3rem);font-weight:600;color:var(--accent-ink);line-height:1.1;letter-spacing:-.02em}
+.result-hero .n{font-size:var(--f-small);color:var(--accent-ink);opacity:.85;margin-top:.3rem}
+
+.bars{display:flex;flex-direction:column;gap:.55rem;margin:1rem 0 .3rem}
+.barrow{display:grid;grid-template-columns:minmax(140px,190px) 1fr auto;gap:.7rem;align-items:center;font-size:var(--f-small)}
+.barrow .lab{color:var(--ink-2)}
+.bartrack{height:.85rem;background:var(--surface-2);border-radius:2px;overflow:hidden}
+.barfill{height:100%;background:var(--accent);border-radius:0 4px 4px 0;transition:width .25s ease}
+.barrow .val{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+@media(prefers-reduced-motion:reduce){.barfill{transition:none}}
+
+.tablewrap{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:var(--f-small)}
+th,td{padding:.6rem .85rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--surface-2);color:var(--ink-3);font-weight:600;white-space:nowrap;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);letter-spacing:.08em;text-transform:uppercase}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.total td{background:var(--surface-2);font-weight:600}
+
+.steps{display:grid;gap:.6rem}
+@media(min-width:900px){.steps{grid-template-columns:repeat(6,1fr)}}
+.step{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:3px;padding:.9rem .95rem;box-shadow:var(--shadow)}
+.step .n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:var(--f-micro);color:var(--accent);letter-spacing:.1em}
+.step h3{font-size:.98rem;margin:.3rem 0 .25rem}
+.step p{font-size:var(--f-micro);color:var(--ink-3);line-height:1.55}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:.95rem 1.15rem;border-radius:0 3px 3px 0;color:var(--accent-ink)}
+.callout.money{border-left-color:var(--money);background:var(--money-soft);color:var(--ink)}
+.callout.quiet{border-left-color:var(--line-strong);background:var(--surface-2);color:var(--ink-2)}
+.callout p+p{margin-top:.5rem}
+
+.gallery{display:grid;gap:.6rem;grid-template-columns:repeat(2,1fr)}
+@media(min-width:700px){.gallery{grid-template-columns:repeat(4,1fr)}}
+.shot{position:relative;border:1px solid var(--line);border-radius:2px;overflow:hidden;aspect-ratio:4/3;background:var(--surface-2)}
+.shot span{position:absolute;inset:auto 0 0 0;padding:.9rem .5rem .35rem;background:linear-gradient(rgba(3,20,18,0),rgba(3,20,18,.92));color:#EAF5F2;font-size:var(--f-micro);line-height:1.35}
+
+.finalcta{background:var(--surface);border:1px solid var(--accent);border-radius:3px;padding:1.5rem 1.4rem;box-shadow:var(--shadow)}
+.finalcta h3{font-size:1.3rem;margin-bottom:.3rem}
+
+footer{padding:2.2rem 0 3rem;color:var(--ink-3);font-size:var(--f-small)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-between}
+.src{font-size:var(--f-micro);color:var(--ink-3);line-height:1.75}
+.src a{color:var(--ink-3)}
+@media print{.topbar{display:none}.slide{break-inside:avoid}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+
+<div class="topbar">
+  <b>Smart Factory Malaysia</b>
+  <span class="spacer"></span>
+  <a class="cta" href="#calc">ROI Calculator</a>
+</div>
+
+<main>
+
+<!-- Cover -->
+<section class="slide cover">
+  <div class="wrap cover-grid">
+    <div>
+      <div class="eyebrow">Industrial Automation · Delivered locally in Malaysia</div>
+      <h1>Fewer workers on the line.<br><em>200% tax relief</em> on the equipment.<br>Payback in under two years.</h1>
+      <p class="h1cn">产线少用人，设备享 200% 税务减免，两年内回本。</p>
+      <p class="sub">We design, supply, install and service automated production, welding, warehouse and power-distribution systems — engineered by a Shenzhen-listed equipment group, delivered and maintained by a Malaysian team.
+        <span class="cn">我们提供自动化产线、焊装、仓储与配电系统的方案设计、供货、安装与售后：设备来自深交所上市的智能装备集团，交付与维护由本地团队负责。</span></p>
+      <div class="cover-meta">
+        <span>【待填：我方公司名称】</span>
+        <span>Authorised partner of Sanfeng Intelligent (SZSE: 300276)</span>
+        <span>2026</span>
+      </div>
+    </div>
+    <figure class="cover-art">
+      <img src="{{img:cover-wheel}}" alt="Automated production lines, robots and warehouse systems">
+      <figcaption>Sanfeng Intelligent Equipment Group · project photography</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 01 The pressure -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">01</span><h2>Three costs that are rising whether you automate or not<span class="cn">不论你是否自动化，这三项成本都在上升</span></h2></div>
+
+    <div class="cards three">
+      <div class="card">
+        <span class="tag">Labour cost</span>
+        <div class="big">RM 1,850</div>
+        <h3>per foreign worker, per year — levy alone</h3>
+        <p>The Multi-Tiered Levy Mechanism takes full effect in 2026: companies that keep relying on foreign labour pay more, companies that invest in automation pay less.
+          <span class="cn">西马制造业外劳人头税约 RM 1,850/人/年。多层次征费机制 2026 年全面实施——继续依赖外劳的企业成本更高，投资自动化的企业征费更低。</span></p>
+      </div>
+      <div class="card">
+        <span class="tag">Headcount policy</span>
+        <div class="big">15% → 10%</div>
+        <h3>foreign workers as a share of the workforce, by 2030</h3>
+        <p>Under the 13th Malaysia Plan the government is pushing companies toward automation rather than cheaper labour. Quotas get tighter every year.
+          <span class="cn">第十三大马计划目标：2030 年前把外劳占劳动力比例从约 15% 降到 10%，并推动企业转向自动化。配额只会越来越紧。</span></p>
+      </div>
+      <div class="card">
+        <span class="tag">Floor space</span>
+        <div class="big">↑</div>
+        <h3>Industrial land and rent keep climbing</h3>
+        <p>When you cannot expand sideways, you expand upward — high-bay racking with stacker cranes or four-way shuttles stores 3–5× more in the same footprint.
+          <span class="cn">厂房与地价持续上涨。横向扩不了，就要向上要空间——高位货架配堆垛机或四向穿梭车，同样占地可多存 3–5 倍。</span></p>
+      </div>
+    </div>
+
+    <div class="callout money" style="margin-top:1.15rem">
+      <p><strong>And one that is falling: the cost of automating.</strong> Automation Capital Allowance gives <strong>200% capital allowance on the first RM 10 million</strong> of qualifying automation spending (YA 2023–2027), subject to MIDA approval and SIRIM verification.
+        <span class="cn"><strong>同时有一项成本在下降：自动化本身。</strong>自动化资本减免（Automation CA）对首 1,000 万令吉合格自动化支出给予 200% 资本减免（2023–2027 课税年度），须经 MIDA 批准与 SIRIM 技术核验。</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 02 Who we are -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">02</span><h2>Who you are buying from<span class="cn">你的供应商是谁</span></h2></div>
+    <p class="lede">Two companies, one contract. You sign one local contract, in Ringgit, with a Malaysian entity that is responsible for the whole job — including the parts that go wrong.
+      <span class="cn">两家公司，一份合同。你只与一家马来西亚本地实体签订令吉合同，由它对整个项目负责——包括出问题的时候。</span></p>
+
+    <div class="cards two">
+      <div class="card">
+        <span class="tag">Your contract party</span>
+        <h3>【待填：我方公司名称】</h3>
+        <p>Malaysian company. Responsible for engineering, importation and customs, installation, commissioning, acceptance, training, spare parts and after-sales response — plus preparing your Automation CA application.
+          <span class="cn">马来西亚本地公司。负责方案工程、进口清关、安装、调试、验收、培训、备件与售后响应，并代办自动化资本减免申报。</span></p>
+        <p style="margin-top:.6rem"><span class="cn">【待填：成立年份、团队规模、既有业绩、数字化转型博士团队介绍】</span></p>
+      </div>
+      <div class="card">
+        <span class="tag">Equipment maker</span>
+        <h3>Sanfeng Intelligent Equipment Group · 三丰智能</h3>
+        <p>Listed on the Shenzhen Stock Exchange since 2011 (code 300276). Over 1,600 staff including 51 senior engineers and 16 professor-level senior engineers; more than 400 granted patents, over 60 of them invention patents. R&amp;D and manufacturing bases in Shanghai, Wuhan and Huangshi.
+          <span class="cn">2011 年深交所上市（300276）。员工 1,600 余人，含高级工程师 51 人、教授级高工 16 人；授权专利 400 余项，其中发明专利 60 余项。上海、武汉、黄石三地研发制造基地。</span></p>
+      </div>
+    </div>
+
+    <div class="callout quiet" style="margin-top:1.15rem">
+      <p>Seven specialist subsidiaries cover conveying and assembly lines, automotive welding lines, warehouse automation, AGV/AMR, robot workstations, and high- and low-voltage switchgear — which is why one supplier can handle a paint-shop conveyor, a case-shuttle warehouse and a substation for the same site.
+        <span class="cn">七家专业子公司分别覆盖输送与总装线、汽车焊装线、仓储自动化、AGV/AMR、机器人工作站、高低压成套设备——因此同一个工地的涂装输送线、料箱库和配电房可以由同一家供应商完成。</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 Solution packs -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">03</span><h2>Four solution packages<span class="cn">四类标准化方案</span></h2></div>
+
+    <div class="packs">
+
+      <article class="pack">
+        <div class="body">
+          <div class="who">Manufacturing · Furniture, aluminium, food, gloves, hardware</div>
+          <h3>Line automation for established factories<span class="cn">传统制造：产线自动化</span></h3>
+          <p style="font-size:var(--f-small);color:var(--ink-2)">The fastest project to justify. A single robot cell or a conveying line removes the most labour-intensive, most injury-prone stations without stopping the rest of the plant.
+            <span class="cn">最容易立项的一类。一个机器人工作站或一条输送线，就能替掉最耗人力、工伤风险最高的工位，且不必停掉整厂生产。</span></p>
+          <ul>
+            <li>Palletising / de-palletising robots, grinding, gluing, spray-painting and welding cells<span class="cn">拆码垛、打磨、涂胶、喷漆、焊接机器人工作站</span></li>
+            <li>Standard conveying lines: footwear, aluminium profile, timber roller, small appliance<span class="cn">标准输送线：制鞋、铝型材、木材辊道、小家电</span></li>
+            <li>Typical contract RM 300k – RM 3m · delivery 3–6 months<span class="cn">典型合同 RM 30 万–300 万，交期 3–6 个月</span></li>
+          </ul>
+        </div>
+        <div class="shots">
+          <figure><img src="{{img:alu-line}}" alt="Aluminium profile conveyor line"><span>Aluminium profile line 铝型材输送线</span></figure>
+          <figure><img src="{{img:palletizing}}" alt="Palletising robot"><span>Palletising robot 码垛机器人</span></figure>
+          <figure><img src="{{img:gluing-robot}}" alt="Gluing robot"><span>Gluing robot 涂胶机器人</span></figure>
+          <figure><img src="{{img:shoe-line}}" alt="Footwear production line"><span>Footwear line 制鞋生产线</span></figure>
+        </div>
+      </article>
+
+      <article class="pack">
+        <div class="body">
+          <div class="who">Warehousing &amp; Data Centres · Johor, Port Klang, Selangor</div>
+          <h3>Store more in the same footprint — and power it<span class="cn">仓储与数据中心：向上要空间，并解决供电</span></h3>
+          <p style="font-size:var(--f-small);color:var(--ink-2)">High-bay automated storage plus the electrical infrastructure to run it. Malaysia's data-centre build-out has made switchgear and compact substations a repeat-order business, not a one-off.
+            <span class="cn">高位自动化仓储，加上支撑它的电气基础设施。马来西亚数据中心的建设浪潮，让成套开关设备与预装式变电站成为可复购的常规业务，而非一次性项目。</span></p>
+          <ul>
+            <li>Stacker cranes, four-way shuttles, RGV, elevators, conveyors, automatic truck loading<span class="cn">堆垛机、四向穿梭车、有轨穿梭车、提升机、输送机、自动装车系统</span></li>
+            <li>WMS software and system integration with your existing ERP<span class="cn">WMS 仓储管理系统与既有 ERP 的系统集成</span></li>
+            <li>HV/LV switchgear, YBW compact substations, PLC and PV distribution cabinets<span class="cn">高低压开关柜、YBW 预装式变电站、PLC 柜与光伏配电柜</span></li>
+          </ul>
+        </div>
+        <div class="shots">
+          <figure><img src="{{img:stacker-crane}}" alt="Double mast stacker crane"><span>Stacker crane 堆垛机</span></figure>
+          <figure><img src="{{img:multi-shuttle}}" alt="Four-way shuttle"><span>Four-way shuttle 四向穿梭车</span></figure>
+          <figure><img src="{{img:auto-loading}}" alt="Automatic truck loading system"><span>Auto loading 自动装车</span></figure>
+          <figure><img src="{{img:ybw-substation}}" alt="YBW compact substation"><span>Compact substation 预装式变电站</span></figure>
+        </div>
+      </article>
+
+      <article class="pack">
+        <div class="body">
+          <div class="who">E&amp;E / Semiconductor · Penang, Kulim, Batu Kawan</div>
+          <h3>Move material without stopping production<span class="cn">E&amp;E / 半导体：不停产的车间物流</span></h3>
+          <p style="font-size:var(--f-small);color:var(--ink-2)">AMRs and case-handling systems are the easiest automation to approve in an electronics plant: modest budget, no line shutdown, measurable within a quarter.
+            <span class="cn">在电子厂里，AMR 与料箱搬运系统是最容易获批的自动化：预算可控、无需停线、一个季度内即可看到效果。</span></p>
+          <ul>
+            <li>AMR fleets for inter-process transfer and cleanroom-adjacent material flow<span class="cn">工序间转运与洁净区周边物流的 AMR 机群</span></li>
+            <li>Case-type four-way shuttle buffer stores for WIP<span class="cn">在制品缓存：料箱式四向穿梭车库</span></li>
+            <li>PCB transfer, cell feeding and machine-tending robot cells<span class="cn">PCB 转线、电芯上料与机床上下料机器人工作站</span></li>
+          </ul>
+        </div>
+        <div class="shots">
+          <figure><img src="{{img:amr-carton}}" alt="Intelligent carry robot AMR"><span>AMR 智能搬运机器人</span></figure>
+          <figure><img src="{{img:fourway-shuttle}}" alt="Case-type four-way shuttle"><span>Case shuttle 料箱四向穿梭车</span></figure>
+          <figure><img src="{{img:pcb-robot}}" alt="PCB line transfer robot"><span>PCB transfer 转线机器人</span></figure>
+          <figure><img src="{{img:cell-feeding}}" alt="Battery cell feeding robot"><span>Cell feeding 电芯上料</span></figure>
+        </div>
+      </article>
+
+      <article class="pack">
+        <div class="body">
+          <div class="who">Automotive &amp; EV · OEM and tier-1 suppliers</div>
+          <h3>Body shop, final assembly and battery pack<span class="cn">汽车与新能源：焊装、总装与电池 PACK</span></h3>
+          <p style="font-size:var(--f-small);color:var(--ink-2)">The group's original business: flexible body-in-white welding lines, overhead and floor conveying for trim and final, and battery pack assembly for EV programmes.
+            <span class="cn">集团起家的主业：白车身柔性焊装线、内饰与总装的空中与地面输送系统，以及新能源电池 PACK 装配线。</span></p>
+          <ul>
+            <li>Flexible framer, geo pallets, small pallets, roller hemming, laser welding<span class="cn">柔性总拼线、随行夹具、滚边机器人、激光焊</span></li>
+            <li>EMS monorail, power &amp; free chain, skid, skillet and slat conveying for trim/final<span class="cn">EMS 自行小车、积放链、滑橇、滑板、板链输送</span></li>
+            <li>Battery pack lines and chassis / battery lifting assembly AGVs<span class="cn">电池 PACK 线与底盘/电池举升装配 AGV</span></li>
+          </ul>
+        </div>
+        <div class="shots">
+          <figure><img src="{{img:framer}}" alt="Flexible framer body welding line"><span>Flexible framer 柔性总拼线</span></figure>
+          <figure><img src="{{img:roller-hemming}}" alt="Roller hemming robot"><span>Roller hemming 滚边机器人</span></figure>
+          <figure><img src="{{img:battery-pack}}" alt="Battery pack production line"><span>Battery PACK 电池线</span></figure>
+          <figure><img src="{{img:chassis-agv}}" alt="Chassis and battery lifting AGV"><span>Chassis AGV 底盘举升</span></figure>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- 04 ROI calculator -->
+<section class="slide" id="calc">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">04</span><h2>What it is worth on your line<span class="cn">在你的产线上值多少钱</span></h2></div>
+    <p class="lede">Change the numbers to match your plant. Everything is calculated live — nothing is hidden.
+      <span class="cn">把数字改成你工厂的实际情况，结果实时计算，没有隐藏假设。</span></p>
+
+    <div class="calc">
+      <form class="panel" id="roi" onsubmit="return false">
+        <h3>Your inputs<span class="cn">输入你的数据</span></h3>
+
+        <div class="field">
+          <label for="workers">Workers the line replaces<span class="cn">该产线可替代的工人数</span></label>
+          <input id="workers" type="number" min="0" step="1" value="12">
+        </div>
+        <div class="field">
+          <label for="foreign">Of which foreign workers<span class="cn">其中外劳人数</span></label>
+          <input id="foreign" type="number" min="0" step="1" value="8">
+        </div>
+        <div class="field">
+          <label for="wage">Fully loaded cost per worker<span class="cn">单个工人的综合月成本 (RM/月)</span></label>
+          <input id="wage" type="number" min="0" step="50" value="2200">
+          <span class="hint">Wages, overtime, EPF and SOCSO 含工资、加班、EPF 与 SOCSO</span>
+        </div>
+        <div class="field">
+          <label for="output">Annual output value of the line<span class="cn">该产线年产值 (RM)</span></label>
+          <input id="output" type="number" min="0" step="100000" value="20000000">
+        </div>
+        <div class="field">
+          <label for="scrap">Scrap &amp; rework reduction<span class="cn">不良与返工降低比例 (%)</span></label>
+          <input id="scrap" type="number" min="0" max="20" step="0.1" value="1.5">
+        </div>
+        <div class="field">
+          <label for="capex">Equipment investment<span class="cn">设备投资额 (RM)</span></label>
+          <input id="capex" type="number" min="0" step="50000" value="1300000">
+        </div>
+        <div class="field">
+          <label for="tax">Corporate tax rate<span class="cn">企业所得税率 (%)</span></label>
+          <input id="tax" type="number" min="0" max="40" step="1" value="24">
+        </div>
+        <label class="checkline"><input id="aca" type="checkbox" checked><span>Apply Automation CA (200% on first RM 10m)<span class="cn">计入自动化资本减免（首 1,000 万令吉 200%）</span></span></label>
+      </form>
+
+      <div>
+        <div class="result-hero">
+          <div class="k">Simple payback 静态回收期</div>
+          <div class="v" id="payback">1.5 years</div>
+          <div class="n" id="paybackNote">Effective investment RM 988,000 ÷ annual benefit RM 643,600</div>
+        </div>
+
+        <div class="panel">
+          <h3>Where the money comes from<span class="cn">收益来自哪里</span></h3>
+          <div class="bars" id="bars">
+            <div class="barrow"><span class="lab">Wages 工资<span class="cn"></span></span><div class="bartrack"><div class="barfill" id="b-wage" style="width:0%"></div></div><span class="val" id="v-wage">—</span></div>
+            <div class="barrow"><span class="lab">Foreign worker levy 外劳征费</span><div class="bartrack"><div class="barfill" id="b-levy" style="width:0%"></div></div><span class="val" id="v-levy">—</span></div>
+            <div class="barrow"><span class="lab">Recruitment &amp; housing 招募与宿舍</span><div class="bartrack"><div class="barfill" id="b-rec" style="width:0%"></div></div><span class="val" id="v-rec">—</span></div>
+            <div class="barrow"><span class="lab">Scrap &amp; rework 不良与返工</span><div class="bartrack"><div class="barfill" id="b-scrap" style="width:0%"></div></div><span class="val" id="v-scrap">—</span></div>
+          </div>
+
+          <div class="tablewrap" style="margin-top:1rem">
+            <table>
+              <tbody>
+                <tr><td>Annual benefit <span class="cn">年化收益合计</span></td><td class="num" id="t-benefit">—</td></tr>
+                <tr><td>Equipment investment <span class="cn">设备投资额</span></td><td class="num" id="t-capex">—</td></tr>
+                <tr><td>Automation CA tax shield <span class="cn">自动化资本减免带来的税盾</span></td><td class="num" id="t-shield">—</td></tr>
+                <tr class="total"><td>Effective investment <span class="cn">有效投资额</span></td><td class="num" id="t-net">—</td></tr>
+                <tr class="total"><td>5-year net benefit <span class="cn">五年净收益</span></td><td class="num" id="t-five">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p class="src" style="margin-top:.8rem">Automation CA is not automatic: the applicant must be incorporated and tax-resident in Malaysia, have carried on manufacturing or services activity for at least 36 months, obtain MIDA approval in advance and pass SIRIM technical verification. Figures here are an estimate for discussion, not a tax opinion.
+          <span class="cn">自动化资本减免并非自动享有：申请公司须在马来西亚注册并为税务居民、从事制造或服务业满 36 个月、事先取得 MIDA 批准并通过 SIRIM 技术核验。本页测算仅供讨论，不构成税务意见。</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 Incentives -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">05</span><h2>The grants and allowances — we prepare them<span class="cn">补贴与税务减免，由我们代办</span></h2></div>
+    <p class="lede">Most factories never claim what they are entitled to, because the paperwork sits with a finance team that is already busy. We prepare the technical documentation as part of the project.
+      <span class="cn">多数工厂拿不到本该属于自己的补贴，因为申报材料压在本就繁忙的财务团队手里。我们把技术材料的准备作为项目的一部分。</span></p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Programme 项目</th><th>What you get 内容</th><th>Key conditions 关键条件</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Automation Capital Allowance</strong><span class="cn">自动化资本减免</span></td>
+            <td>200% capital allowance on the first RM 10 million of qualifying automation expenditure, YA 2023–2027<span class="cn">首 1,000 万令吉合格自动化支出享 200% 资本减免（2023–2027 课税年度）</span></td>
+            <td>Applications to MIDA between 1 Jan 2023 and 31 Dec 2027; prior MIDA approval; SIRIM technical verification; ≥36 months of operations; at least one qualifying item with Industry 4.0 elements<span class="cn">2023-01-01 至 2027-12-31 期间向 MIDA 申请；需事先获批并经 SIRIM 核验；经营满 36 个月；至少一项合格设备含工业 4.0 要素</span></td>
+          </tr>
+          <tr>
+            <td><strong>Budget 2026 Accelerated CA</strong><span class="cn">2026 预算案加速资本减免</span></td>
+            <td>20% initial and 40% annual allowance on approved plant, machinery, ICT systems and licensed software<span class="cn">对已批准的厂房、机器、ICT 系统与授权软件给予 20% 初始 + 40% 年度扣除</span></td>
+            <td>Investment made between 11 Oct 2025 and 31 Dec 2026<span class="cn">投资发生在 2025-10-11 至 2026-12-31 期间</span></td>
+          </tr>
+          <tr>
+            <td><strong>NIMP 2030 Intervention Fund</strong><span class="cn">NIMP 2030 干预基金</span></td>
+            <td>Financial assistance for SMEs adopting Industry 4.0 technologies, under the plan's goal of transforming 3,000 smart factories by 2030<span class="cn">支持中小企业采用工业 4.0 技术；蓝图目标为 2030 年前改造 3,000 家智能工厂</span></td>
+            <td>Per the programme's published criteria<span class="cn">以官方公布的适用条件为准</span></td>
+          </tr>
+          <tr>
+            <td><strong>HRD Corp</strong><span class="cn">人力资源发展基金</span></td>
+            <td>Claimable operator and maintenance training delivered as part of commissioning<span class="cn">调试阶段的操作与维护培训可申请报销</span></td>
+            <td>Registered employer; approved training scheme<span class="cn">须为注册雇主并使用获批培训计划</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 06 Delivery -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">06</span><h2>How we deliver, and what we commit to<span class="cn">我们怎么交付，承诺什么</span></h2></div>
+
+    <div class="steps">
+      <div class="step"><div class="n">STEP 1</div><h3>Diagnostic<span class="cn">现场诊断</span></h3><p>2–3 days on site. Line balance, material flow, headcount and bottleneck mapping by our digital transformation team. 现场 2–3 天，节拍、物流、人力与瓶颈盘点。</p></div>
+      <div class="step"><div class="n">STEP 2</div><h3>Concept<span class="cn">概念方案</span></h3><p>Layout, equipment list, throughput calculation and investment case within 30 days. 30 天内出布局、设备清单、产能测算与投资测算。</p></div>
+      <div class="step"><div class="n">STEP 3</div><h3>Quotation<span class="cn">报价</span></h3><p>Fixed-price local contract in Ringgit, including duties, delivery and commissioning. 令吉固定价本地合同，含关税、运输与调试。</p></div>
+      <div class="step"><div class="n">STEP 4</div><h3>Build<span class="cn">制造与验厂</span></h3><p>Factory acceptance test before shipment — you are invited to attend. 发运前工厂验收测试，欢迎到场。</p></div>
+      <div class="step"><div class="n">STEP 5</div><h3>Install<span class="cn">安装调试</span></h3><p>Local installation crew, commissioning, operator training, site acceptance. 本地安装队伍、调试、操作培训与现场验收。</p></div>
+      <div class="step"><div class="n">STEP 6</div><h3>Service<span class="cn">运维</span></h3><p>Warranty, local spare parts stock, preventive maintenance contract. 质保、本地备件库、预防性维护合约。</p></div>
+    </div>
+
+    <div class="cards three" style="margin-top:1.3rem">
+      <div class="card"><span class="tag">Commitment</span><h3>Remote response in 4 hours</h3><p>Any production-stopping fault gets an engineer on a call within four working hours.<span class="cn">任何停产故障，4 个工作小时内有工程师接入远程支持。</span></p></div>
+      <div class="card"><span class="tag">Commitment</span><h3>On site within 48 hours</h3><p>If it cannot be solved remotely, our engineer is at your plant within 48 hours.<span class="cn">远程无法解决的，48 小时内工程师到达现场。</span></p></div>
+      <div class="card"><span class="tag">Commitment</span><h3>Spare parts held locally</h3><p>Wear parts and common electrical components stocked in Malaysia, not shipped from China per order.<span class="cn">易损件与常用电气件在马来西亚本地备货，不必每次从中国发货。</span></p></div>
+    </div>
+
+    <p class="src" style="margin-top:.9rem">Equipment is supplied to IEC standards for the Malaysian grid (415 V / 240 V, 50 Hz). Lifting and pressure equipment is presented for JKKP (DOSH) inspection; electrical installation work is carried out through CIDB-registered and Energy Commission–licensed contractors.
+      <span class="cn">设备按马来西亚电网适用的 IEC 标准供货（415V/240V, 50Hz）；起重与压力设备提交 JKKP（DOSH）检验；电气安装工程由 CIDB 注册及能源委员会持牌承包商实施。</span></p>
+  </div>
+</section>
+
+<!-- 07 Why us -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">07</span><h2>Compared with the alternatives<span class="cn">与其他选择相比</span></h2></div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>You could buy from…</th><th>Where it works</th><th>Where it hurts</th></tr></thead>
+        <tbody>
+          <tr><td><strong>A Japanese or European integrator</strong><span class="cn">日欧一线集成商</span></td><td>Proven, well documented, trusted by MNC headquarters<span class="cn">可靠、文档完整、跨国总部认可</span></td><td>Typically 40–100% higher price, longer lead time, slow response to scope changes<span class="cn">价格通常高 40–100%，交期长，变更响应慢</span></td></tr>
+          <tr><td><strong>A trading agent for Chinese equipment</strong><span class="cn">中国设备的贸易代理</span></td><td>Lowest headline price<span class="cn">报价最低</span></td><td>Sells boxes, not systems. No engineering, no commissioning responsibility, no one accountable at acceptance<span class="cn">卖的是设备不是系统。不做工程、不担调试责任、验收时没人负责</span></td></tr>
+          <tr><td><strong>Buying direct from China</strong><span class="cn">直接从中国采购</span></td><td>No middleman margin<span class="cn">没有中间加价</span></td><td>You carry importation, standards compliance, installation and every warranty claim across a 4,000 km service radius<span class="cn">清关、标准符合性、安装与所有质保索赔都由你承担，售后半径 4,000 公里</span></td></tr>
+          <tr class="total"><td><strong>Us</strong><span class="cn">我们</span></td><td>Listed-manufacturer equipment, one local Ringgit contract, local engineering and service, incentive applications prepared for you<span class="cn">上市厂商的设备、一份本地令吉合同、本地工程与售后、补贴代办</span></td><td>We are not the cheapest line item — we are the lowest total cost of ownership<span class="cn">我们不是单价最低的，而是总拥有成本最低的</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 08 References -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">08</span><h2>Delivered systems<span class="cn">已交付系统</span></h2></div>
+    <p class="lede">Reference projects executed by Sanfeng Intelligent in China. Client names are disclosed on request, subject to the manufacturer's authorisation and the end client's consent.
+      <span class="cn">以下为三丰智能在中国已实施的参考项目。客户名称可应要求披露，需取得制造商授权与终端客户同意。</span></p>
+
+    <div class="gallery">
+      <figure class="shot"><img src="{{img:ems-body}}" alt="Electric monorail conveying line"><span>Electric monorail 单轨自行小车</span></figure>
+      <figure class="shot"><img src="{{img:skid-body}}" alt="Car body skid conveying line"><span>Skid conveying 滑橇输送</span></figure>
+      <figure class="shot"><img src="{{img:floor-spot-weld}}" alt="Floor assembly spot welding"><span>Spot welding 地板合拼焊接</span></figure>
+      <figure class="shot"><img src="{{img:drag-tractor}}" alt="Tractor assembly line"><span>Tractor assembly 拖拉机装配线</span></figure>
+      <figure class="shot"><img src="{{img:slat-excavator}}" alt="Slat conveying line for excavators"><span>Slat conveying 板链输送线</span></figure>
+      <figure class="shot"><img src="{{img:wms-warehouse}}" alt="Automated warehouse"><span>Automated warehouse 立体仓库</span></figure>
+      <figure class="shot"><img src="{{img:laser-agv}}" alt="Laser guided AGV"><span>Laser-guided AGV 激光导引</span></figure>
+      <figure class="shot"><img src="{{img:heavy-agv-tractor}}" alt="Heavy loaded AGV"><span>Heavy-load AGV 重载 AGV</span></figure>
+      <figure class="shot"><img src="{{img:hv-cabinet}}" alt="Medium voltage switchgear"><span>MV switchgear 高压开关柜</span></figure>
+      <figure class="shot"><img src="{{img:lv-distribution}}" alt="Low voltage distribution cabinets"><span>LV distribution 低压配电柜</span></figure>
+      <figure class="shot"><img src="{{img:spray-robot}}" alt="Spray painting robot"><span>Spray painting 喷漆机器人</span></figure>
+      <figure class="shot"><img src="{{img:wood-line}}" alt="Timber roller conveyor line"><span>Timber roller line 木材辊道线</span></figure>
+    </div>
+  </div>
+</section>
+
+<!-- 09 CTA -->
+<section class="slide">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">09</span><h2>Start with a free diagnostic<span class="cn">从一次免费诊断开始</span></h2></div>
+
+    <div class="finalcta">
+      <h3>Two days on your floor. A concept and an investment case in 30 days.<span class="cn">在你的车间两天，30 天内交出概念方案与投资测算。</span></h3>
+      <p style="color:var(--ink-2);margin-top:.6rem;max-width:62ch">No obligation and no charge for the first assessment. You get a written report covering line balance, material flow, headcount impact, a proposed scope and an indicative budget — useful even if you decide to do nothing.
+        <span class="cn">首次评估不收费、无附加条件。你会拿到一份书面报告：节拍与物流分析、人力影响、建议范围与投资区间——即使最后决定什么都不做，这份报告仍然有用。</span></p>
+      <div class="cover-meta" style="border-top-color:var(--line)">
+        <span>【待填：联系人 / 职务】</span>
+        <span>【待填：电话 / WhatsApp】</span>
+        <span>【待填：邮箱】</span>
+        <span>【待填：公司地址】</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="src">
+      <strong>Sources</strong> · Automation Capital Allowance: MIDA guideline; Crowe Malaysia. Budget 2026 accelerated capital allowance: ASEAN Briefing.
+      NIMP 2030 and the 3,000 smart factory target: MIDA and nimp2030.gov.my. Foreign worker share target and Multi-Tiered Levy Mechanism: 13th Malaysia Plan reporting, The Edge Malaysia and HR Asia. Levy rate: published employer guidance.
+      Manufacturer profile: Sanfeng Intelligent group brochure (March 2025) and Shenzhen Stock Exchange filings.<br>
+      All photographs are of Sanfeng Intelligent projects and remain the property of the manufacturer; used with authorisation.
+      Calculations on this page are estimates for discussion and do not constitute tax, legal or engineering advice.
+      <span class="cn">本页所有测算仅供讨论，不构成税务、法律或工程意见。图片版权归三丰智能所有。</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var ids=['workers','foreign','wage','output','scrap','capex','tax'];
+  var el={};
+  ids.concat(['aca']).forEach(function(i){el[i]=document.getElementById(i)});
+  var out={
+    payback:document.getElementById('payback'),
+    paybackNote:document.getElementById('paybackNote'),
+    bWage:document.getElementById('b-wage'), vWage:document.getElementById('v-wage'),
+    bLevy:document.getElementById('b-levy'), vLevy:document.getElementById('v-levy'),
+    bRec:document.getElementById('b-rec'),  vRec:document.getElementById('v-rec'),
+    bScrap:document.getElementById('b-scrap'),vScrap:document.getElementById('v-scrap'),
+    benefit:document.getElementById('t-benefit'),
+    capex:document.getElementById('t-capex'),
+    shield:document.getElementById('t-shield'),
+    net:document.getElementById('t-net'),
+    five:document.getElementById('t-five')
+  };
+  var LEVY=1850;          // RM per foreign worker per year, West Malaysia manufacturing
+  var ANCILLARY=1500;     // RM per foreign worker per year: recruitment, hostel, medical, agent
+  var ACA_CAP=10000000;   // RM 10m cap on the 200% allowance
+
+  function num(x){var v=parseFloat(x.value);return isFinite(v)&&v>0?v:0}
+  function rm(v){return 'RM '+Math.round(v).toLocaleString('en-MY')}
+
+  function calc(){
+    var workers=num(el.workers);
+    var foreign=Math.min(num(el.foreign),workers);
+    var wage=num(el.wage);
+    var output=num(el.output);
+    var scrapPct=num(el.scrap)/100;
+    var capex=num(el.capex);
+    var taxRate=num(el.tax)/100;
+
+    var sWage=workers*wage*12;
+    var sLevy=foreign*LEVY;
+    var sRec=foreign*ANCILLARY;
+    var sScrap=output*scrapPct;
+    var benefit=sWage+sLevy+sRec+sScrap;
+
+    // Automation CA gives 200% instead of the normal 100% capital allowance:
+    // the extra 100% on qualifying spend, valued at the corporate tax rate.
+    var shield=el.aca.checked?Math.min(capex,ACA_CAP)*1.0*taxRate:0;
+    var net=Math.max(capex-shield,0);
+
+    var max=Math.max(sWage,sLevy,sRec,sScrap,1);
+    out.bWage.style.width=(sWage/max*100)+'%';   out.vWage.textContent=rm(sWage);
+    out.bLevy.style.width=(sLevy/max*100)+'%';   out.vLevy.textContent=rm(sLevy);
+    out.bRec.style.width=(sRec/max*100)+'%';     out.vRec.textContent=rm(sRec);
+    out.bScrap.style.width=(sScrap/max*100)+'%'; out.vScrap.textContent=rm(sScrap);
+
+    out.benefit.textContent=rm(benefit);
+    out.capex.textContent=rm(capex);
+    out.shield.textContent=shield>0?'− '+rm(shield):rm(0);
+    out.net.textContent=rm(net);
+    out.five.textContent=rm(benefit*5-net);
+
+    if(benefit<=0||net<=0){
+      out.payback.textContent='—';
+      out.paybackNote.textContent='Enter an investment amount and at least one source of saving. 请输入投资额与至少一项节省。';
+      return;
+    }
+    var yrs=net/benefit;
+    out.payback.textContent = yrs<1
+      ? Math.round(yrs*12)+' months 个月'
+      : yrs.toFixed(1)+' years 年';
+    out.paybackNote.textContent='Effective investment '+rm(net)+' ÷ annual benefit '+rm(benefit);
+  }
+
+  ids.concat(['aca']).forEach(function(i){
+    el[i].addEventListener('input',calc);
+    el[i].addEventListener('change',calc);
+  });
+  calc();
+})();
+</script>
