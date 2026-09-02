@@ -2,9 +2,12 @@
 """生成两份 PDF：
 
   dist/Sanfeng-Malaysia-Proposal-Discussion.pdf
-      封面 + 讨论议程 + 对内提案全文 + 附录（research/ 四篇底稿）
+      封面 + 讨论议程 + 对内提案 + 附录（research/ 四篇底稿）
   dist/Smart-Factory-Malaysia-Customer.pdf
       对外客户方案（中英双语；交互计算器换成静态算例）
+
+两份 PDF 都是"市场版"：只保留市场进入、行业、方案与合作路径，
+去掉双方公司资料（我方占位信息与联系方式、三丰公司简介与财务数据）。网页版保留完整内容。
 
 页面为 1024×768（4:3），iPad 横屏全屏阅读正好一页。
 
@@ -42,11 +45,11 @@ AGENDA_HTML = """
       <div class="card"><span class="tag">决策 3 · MOU 的数字</span><h3>Phase 1 达标条件与 Phase 2 底线</h3><p>累计签约 ≥ RM 300 万、交付端毛利 ≥ 20%、回款 ≥ 90%、按期验收——这组数字是否接受？进入独家代理后，<strong>我们能承受的年度最低采购额上限</strong>是多少？</p></div>
       <div class="card"><span class="tag">决策 4 · 投入与分工</span><h3>钱、人、博士的服务怎么定</h3><p>启动资金 RM 180–230 万由谁出、比例多少；首批 5 人团队谁负责组建；数字化诊断服务是否独立收费、定价多少（建议 RM 2–5 万/次）。</p></div>
       <div class="card"><span class="tag">决策 5 · 怎么接触三丰</span><h3>走哪条线、谁去谈、什么时候</h3><p>执行口是<strong>进出口公司总经理</strong>，决策口是<strong>集团分管海外的副总</strong>。谁有渠道？先约哪一位？第一次会议目标日期定在哪一周？</p></div>
-      <div class="card"><span class="tag">会前各自准备</span><h3>带来这次讨论的材料</h3><p>① 各自的客户 / 园区 / 政府线索清单；② 我方公司资料（名称、注册、团队、业绩）用于替换文中【待填】；③ 对三丰内部情况的了解：是否已有马来西亚代理、境外子公司在哪；④ 可投入资金区间。</p></div>
+      <div class="card"><span class="tag">会前各自准备</span><h3>带来这次讨论的材料</h3><p>① 各自的客户 / 园区 / 政府线索清单；② 对三丰内部情况的了解：是否已有马来西亚代理、境外子公司在哪；③ 可投入资金区间。</p></div>
     </div>
 
     <div class="callout quiet" style="margin-top:1.15rem">
-      <p><strong>讨论后 7 天内的动作：</strong>补齐【待填】内容并定稿对三丰的版本 → 按决策 2 的名单启动 3–5 家客户的免费诊断预约 → 按决策 5 发出第一次会议邀请。</p>
+      <p><strong>讨论后 7 天内的动作：</strong>定稿给三丰的版本 → 按决策 2 的名单启动 3–5 家客户的免费诊断预约 → 按决策 5 发出第一次会议邀请。</p>
     </div>
   </div>
 </section>
@@ -85,7 +88,7 @@ APPENDIX_CSS = """
 
 
 def md_to_html(path: pathlib.Path) -> str:
-    text = path.read_text(encoding="utf-8")
+    text = strip_appendix_md(path.read_text(encoding="utf-8"))
     return markdown.markdown(text, extensions=["tables", "fenced_code", "sane_lists"])
 
 
@@ -99,6 +102,84 @@ def split_deck(html: str):
     return head, m_main.group(1), (m_footer.group(1) if m_footer else ""), tail
 
 
+FILL_SPAN = re.compile(r'<span class="fill">【待填：[^】]*】</span>')
+
+
+def strip_common(main: str) -> str:
+    """PDF 为"市场版"：去掉未填的公司占位信息。"""
+    main = FILL_SPAN.sub("", main)
+    main = main.replace('<div class="who"></div>', '<div class="who">我方马来西亚公司</div>')
+    return main
+
+
+def strip_internal_company(main: str) -> str:
+    """对内提案：去掉双方公司资料，保留市场与合作路径内容。"""
+    main = strip_common(main)
+    # 封面：不写提交方 / 收件方
+    main = re.sub(r"<span>提交方：.*?</span>\s*<span>致：.*?</span>",
+                  "<span>三丰智能 × 马来西亚 · 市场进入与合作路径</span>", main, count=1, flags=re.S)
+    # 02 为什么是现在：去掉三丰财务与规模数据块及来源行，措辞改为行业通用
+    start = main.find('<div class="stats" style="--n:4">')
+    if start != -1:
+        end = main.find('<div class="cards two"', start)
+        main = main[:start] + main[end:]
+    main = re.sub(r'<p class="src" style="margin-top:1rem">数据来源：三丰智能 2025 年度报告摘要.*?</p>', "", main, count=1, flags=re.S)
+    main = main.replace("在当前资产负债表状况下，任何", "对装备企业而言，任何")
+    # 12 三丰口径：去掉引用其营收规模的句子
+    main = re.sub(r"相对贵司 2025 年 17\.69 亿元的营收规模，这是约 3\.5% 的增量——而且是结构性毛利更高的增量。", "", main, count=1)
+    # 18 下一步：去掉联系方式卡片
+    main = re.sub(r'<div class="card">\s*<span class="tag">联系方式</span>.*?</div>\s*', "", main, count=1, flags=re.S)
+    return main
+
+
+def renumber_slides(main: str) -> str:
+    n = 0
+
+    def sub(match: re.Match[str]) -> str:
+        nonlocal n
+        n += 1
+        return f'<span class="slide-no">{n:02d}</span>'
+
+    return re.sub(r'<span class="slide-no">\d\d</span>', sub, main)
+
+
+def strip_customer_company(main: str) -> str:
+    """客户方案：去掉"我们是谁"整节、封面署名和联系方式。"""
+    main = strip_common(main)
+    # 封面署名
+    main = re.sub(r'<div class="cover-meta">.*?</div>', '<div class="cover-meta"><span>Smart Factory Malaysia · 2026</span></div>',
+                  main, count=1, flags=re.S)
+    # 02 Who you are buying from
+    main = re.sub(r'<section class="slide">\s*<div class="wrap">\s*<div class="slide-head"><span class="slide-no">02</span>.*?</section>',
+                  "", main, count=1, flags=re.S)
+    # 结尾联系方式
+    main = re.sub(r'<div class="cover-meta" style="border-top-color:var\(--line\)">.*?</div>', "", main, count=1, flags=re.S)
+    return renumber_slides(main)
+
+
+PDF_MD_STRIPS = [
+    # 03：谈判逻辑里引用的三丰财务数字
+    (r"我 2025 年亏 1\.86 亿、刚计提商誉减值、还在处理境外子公司税务问题，现在出海投钱？", "现在出海投钱？"),
+    (r"\*\*核心洞察\*\*：三丰 2025 年营收 17\.69 亿（−8\.69%）、归母净利 −1\.86 亿，主因是国内价格战导致毛利下滑、项目周期延长、商誉减值。",
+     "**核心洞察**：国内价格战导致毛利下滑、项目周期延长。"),
+    # 04：三丰口径段落里的营收对比
+    (r"对一家 2025 年营收 17\.69 亿、正在为毛利率发愁的公司，这相当于用零成本换来约 \*\*3\.5% 的营收增量\*\*，且是\*\*结构性更高毛利的增量\*\*。", ""),
+]
+
+
+def strip_appendix_md(md: str) -> str:
+    for pat, rep in PDF_MD_STRIPS:
+        md = re.sub(pat, rep, md)
+    return md
+
+
+def strip_appendix_profile(md_html: str, doc_name: str) -> str:
+    """附录 01 去掉"集团基本盘"（三丰公司资料与财务）一节。"""
+    if doc_name.startswith("01"):
+        md_html = re.sub(r"<h2>1\. 集团基本盘</h2>.*?(?=<h2>2\.)", "", md_html, count=1, flags=re.S)
+    return md_html
+
+
 def build_discussion_pack() -> pathlib.Path:
     deck = (ROOT / "internal-sanfeng-cn.html").read_text(encoding="utf-8")
     head, main, footer, tail = split_deck(deck)
@@ -106,6 +187,8 @@ def build_discussion_pack() -> pathlib.Path:
     # 封面文案改成"讨论稿"
     main = main.replace("合作提案 · 机密 · 仅供三丰智能内部讨论", "合作提案 · 内部讨论稿 · 机密")
     main = main.replace("<span>版本 v1 · 2026-09</span>", "<span>讨论稿 v2 · 2026-09</span>")
+
+    main = strip_internal_company(main)
 
     # 在封面之后插入议程
     first_end = main.index("</section>") + len("</section>")
@@ -122,7 +205,7 @@ def build_discussion_pack() -> pathlib.Path:
         appendix.append(f"<li>{title}</li>")
     appendix.append("</ol></div></section>")
     for d in docs:
-        appendix.append(f'<article class="doc wrap">{md_to_html(d)}</article>')
+        appendix.append(f'<article class="doc wrap">{strip_appendix_profile(md_to_html(d), d.name)}</article>')
 
     html = (
         head.replace("<title>三丰智能马来西亚提案</title>", "<title>三丰智能马来西亚合作提案 · 讨论稿</title>")
@@ -237,8 +320,9 @@ def static_roi_section() -> str:
 def build_customer_print() -> pathlib.Path:
     deck = (ROOT / "external-customer-bilingual.html").read_text(encoding="utf-8")
     head, main, footer, tail = split_deck(deck)
-    # PDF 里没有交互，把计算器换成静态算例
+    # PDF 里没有交互，把计算器换成静态算例；再去掉公司资料
     main = re.sub(r'<section class="slide" id="calc">.*?</section>', static_roi_section(), main, count=1, flags=re.S)
+    main = strip_customer_company(main)
     html = head + "<main>" + main + "</main><footer>" + footer + "</footer>" + tail
     out = PRINT_DIR / "customer-bilingual.html"
     out.write_text(html, encoding="utf-8")
