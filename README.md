@@ -8,12 +8,12 @@
 
 | 文件 | 内容 |
 |---|---|
-| `dist/Sanfeng-Malaysia-Proposal-Discussion.pdf` | 封面 + 内部讨论议程（五个决策点）+ 对内提案全文 + 附录四篇研究底稿 |
+| `dist/Sanfeng-Malaysia-Partnership-Proposal.pdf` | 给合作方（三丰）看的合作提案 + 附录（01 能力地图、02 市场研判） |
 | `dist/Smart-Factory-Malaysia-Customer.pdf` | 对外客户方案（中英双语）。网页版的交互计算器在 PDF 里换成了四个典型项目的静态 ROI 算例 |
 
 页面为 1024×768（4:3），iPad 横屏全屏阅读正好一页一屏；文件名用英文，避免部分设备对中文文件名的兼容问题。
 
-两份 PDF 都是**市场版**：只保留市场进入、行业、方案与合作路径，去掉了双方公司资料——我方的公司信息与联系方式、三丰的公司简介与财务数据、客户方案里的"我们是谁"一节。剥离规则在 `decks/build_pdf.py`。网页版保留完整内容（公司信息由 `decks/company.json` 填充）。
+两份 PDF 都是**给合作方看的对外版**：只保留市场进入、行业、方案与合作路径。去掉的内容：双方公司资料与联系方式、三丰财务数据、内部讨论议程、我方口径的三年损益与启动资金、首次会议话术、附录 03（谈判策略）与 04（财务模型）、客户方案里的"我们是谁"一节。剥离规则在 `decks/build_pdf.py`。网页版保留完整内容（公司信息由 `decks/company.json` 填充），内部讨论请用网页版和 `research/03`、`research/04`。
 
 ## 在线版本
 
@@ -38,8 +38,8 @@ decks/
   src/*.template.html                 可编辑源文件，图片以 {{img:name}} 占位
   assets/img/*.jpg                    从三丰画册裁切的产品实景图
   build.py                            把占位符替换成内联图片，生成上面两个 HTML
-  build_pdf.py                        组装打印稿（议程 + 提案 + 附录）并调用 print_pdf.js 输出 PDF
-  print_pdf.js                        用 Chromium 把打印稿渲染成带页码的 A4 横向 PDF
+  build_pdf.py                        组装合作方版打印稿（剥离内部内容）并调用 print_pdf.js 输出 PDF
+  print_pdf.js                        用 Chromium 把打印稿渲染成带页码的 4:3 PDF
 dist/
   *.pdf                               生成的 PDF
 ```
@@ -61,7 +61,7 @@ python3 decks/build.py
 NODE_PATH=./node_modules python3 decks/build_pdf.py
 ```
 
-Chromium 路径默认取 Playwright 的安装位置，可用环境变量 `CHROMIUM` 指定；讨论议程页的文字在 `decks/build_pdf.py` 里。
+Chromium 路径默认取 Playwright 的安装位置，可用环境变量 `CHROMIUM` 指定。
 
 ## 公司资料怎么填
 

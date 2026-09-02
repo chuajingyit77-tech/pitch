@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """生成两份 PDF：
 
-  dist/Sanfeng-Malaysia-Proposal-Discussion.pdf
-      封面 + 讨论议程 + 对内提案 + 附录（research/ 四篇底稿）
+  dist/Sanfeng-Malaysia-Partnership-Proposal.pdf
+      给合作方（三丰）看的合作提案 + 附录（01 能力地图、02 市场研判）
   dist/Smart-Factory-Malaysia-Customer.pdf
       对外客户方案（中英双语；交互计算器换成静态算例）
 
-两份 PDF 都是"市场版"：只保留市场进入、行业、方案与合作路径，
-去掉双方公司资料（我方占位信息与联系方式、三丰公司简介与财务数据）。网页版保留完整内容。
+两份 PDF 都是给合作方看的对外版：只保留市场进入、行业、方案与合作路径。
+去掉的内容：双方公司资料与联系方式、三丰财务数据、内部讨论议程、我方口径的损益与启动资金、
+首次会议话术、附录 03（谈判策略）与 04（财务模型）。网页版保留完整内容。
 
 页面为 1024×768（4:3），iPad 横屏全屏阅读正好一页。
 
@@ -28,32 +29,6 @@ REPO = ROOT.parent
 DIST = REPO / "dist"
 PRINT_DIR = ROOT / ".print"
 RESEARCH = REPO / "research"
-
-AGENDA_HTML = """
-<section class="slide" id="agenda">
-  <div class="wrap">
-    <div class="slide-head">
-      <span class="slide-no">议程</span>
-      <h2>这次讨论要定下来的五件事</h2>
-      <span class="kicker">Internal Discussion</span>
-    </div>
-    <p class="lede">这份文件是我们<strong>内部讨论用的底稿</strong>，不是给三丰的最终版。建议 90 分钟：前 20 分钟对齐结论（先读第 01、08、12、14 节），后 70 分钟逐项把下面五个决策定下来。定不下来的，记录分歧和需要补的信息。</p>
-
-    <div class="cards two">
-      <div class="card"><span class="tag">决策 1 · 定位</span><h3>是否接受"零投入灯塔项目"路线</h3><p>由我方以本地总集成主体承接，三丰背靠背供货；<strong>不先要独家、不谈合资</strong>。如果不接受，替代方案是什么，代价是什么？</p></div>
-      <div class="card"><span class="tag">决策 2 · 第一单从哪来</span><h3>目标客户池与具体线索</h3><p>建议次序：关丹产业园 / 柔佛中资工厂 → 本地传统制造（家具、铝材、食品、五金）→ 配电类小项目。<strong>各自手里现在有哪些能叫得出名字的线索？</strong>今天列出名单。</p></div>
-      <div class="card"><span class="tag">决策 3 · MOU 的数字</span><h3>Phase 1 达标条件与 Phase 2 底线</h3><p>累计签约 ≥ RM 300 万、交付端毛利 ≥ 20%、回款 ≥ 90%、按期验收——这组数字是否接受？进入独家代理后，<strong>我们能承受的年度最低采购额上限</strong>是多少？</p></div>
-      <div class="card"><span class="tag">决策 4 · 投入与分工</span><h3>钱、人、博士的服务怎么定</h3><p>启动资金 RM 180–230 万由谁出、比例多少；首批 5 人团队谁负责组建；数字化诊断服务是否独立收费、定价多少（建议 RM 2–5 万/次）。</p></div>
-      <div class="card"><span class="tag">决策 5 · 怎么接触三丰</span><h3>走哪条线、谁去谈、什么时候</h3><p>执行口是<strong>进出口公司总经理</strong>，决策口是<strong>集团分管海外的副总</strong>。谁有渠道？先约哪一位？第一次会议目标日期定在哪一周？</p></div>
-      <div class="card"><span class="tag">会前各自准备</span><h3>带来这次讨论的材料</h3><p>① 各自的客户 / 园区 / 政府线索清单；② 对三丰内部情况的了解：是否已有马来西亚代理、境外子公司在哪；③ 可投入资金区间。</p></div>
-    </div>
-
-    <div class="callout quiet" style="margin-top:1.15rem">
-      <p><strong>讨论后 7 天内的动作：</strong>定稿给三丰的版本 → 按决策 2 的名单启动 3–5 家客户的免费诊断预约 → 按决策 5 发出第一次会议邀请。</p>
-    </div>
-  </div>
-</section>
-"""
 
 APPENDIX_CSS = """
 <style>
@@ -89,7 +64,32 @@ APPENDIX_CSS = """
 
 def md_to_html(path: pathlib.Path) -> str:
     text = strip_appendix_md(path.read_text(encoding="utf-8"))
+    if path.name.startswith("01"):
+        # 去掉"集团基本盘"（三丰公司资料与财务）一节，并把后续章节编号前移
+        text = re.sub(r"## 1\. 集团基本盘.*?(?=## 2\.)", "", text, count=1, flags=re.S)
+        text = re.sub(r"^(#{2,3}) (\d+)(\.\d+)?\. ", lambda m: f"{m.group(1)} {int(m.group(2)) - 1}{m.group(3) or ''}. ", text, flags=re.M)
+    text = text.replace("销售话术", "销售材料").replace("（详见 03 号文件）", "")
+    if path.name.startswith("01"):
+        text = drop_asset_column(text)
     return markdown.markdown(text, extensions=["tables", "fenced_code", "sane_lists"])
+
+
+def drop_asset_column(md: str) -> str:
+    """去掉 01 号文件里的"图片素材"列和"图片素材："行（内部素材文件名，对外无意义）。"""
+    out, in_asset_table = [], False
+    for line in md.splitlines():
+        if line.startswith("图片素材："):
+            continue
+        if line.startswith("|"):
+            cells = line.strip().strip("|").split("|")
+            if "图片素材" in line and not in_asset_table:
+                in_asset_table = True
+            if in_asset_table:
+                line = "| " + " | ".join(c.strip() for c in cells[:-1]) + " |"
+        else:
+            in_asset_table = False
+        out.append(line)
+    return "\n".join(out)
 
 
 def split_deck(html: str):
@@ -118,6 +118,21 @@ def strip_internal_company(main: str) -> str:
     # 封面：不写提交方 / 收件方
     main = re.sub(r"<span>提交方：.*?</span>\s*<span>致：.*?</span>",
                   "<span>三丰智能 × 马来西亚 · 市场进入与合作路径</span>", main, count=1, flags=re.S)
+    main = main.replace("合作提案 · 机密 · 仅供三丰智能内部讨论", "合作提案 · 机密")
+    main = main.replace("<span>版本 v1 · 2026-09</span>", "<span>v2 · 2026-09</span>")
+    # 内部内容整节删除：11 三年业务规划（我方口径，含启动资金）、16 首次会议话术
+    main = re.sub(r'<section class="slide" id="s12">.*?</section>\s*', "", main, count=1, flags=re.S)
+    main = re.sub(r'<section class="slide" id="s17">.*?</section>\s*', "", main, count=1, flags=re.S)
+    # 12 三丰口径：标题不再指向已删除的表
+    main = main.replace("<h2>同一份计划，三丰口径</h2>", "<h2>这套方案对三丰意味着什么</h2>")
+    main = main.replace("这是整份提案唯一需要贵司财务口径确认的一张表。", "这是整份提案中需要贵司按自身财务口径确认的一张表。")
+    # 偏内部语气的句子改为面向合作方
+    main = main.replace("争取首个项目的账期支持（20/50/30）——这不花三丰的钱，只是节奏。",
+                        "建议首个项目采用 20/50/30 的付款节奏，以降低双方的资金占用。")
+    main = re.sub(r"<p><strong>\"自动升级\"这四个字必须写进 MOU。</strong>.*?</p>",
+                  "<p><strong>建议把\"达标后自动升级\"写进 MOU。</strong>这让我方敢于在 Phase 1 全力投入，也让贵司在验证完成后无需再谈一轮。</p>",
+                  main, count=1, flags=re.S)
+    main = re.sub(r'<p class="src" style="margin-top:\.9rem">注意：本表中标注"我方"的风险共 5 项.*?</p>', "", main, count=1, flags=re.S)
     # 02 为什么是现在：去掉三丰财务与规模数据块及来源行，措辞改为行业通用
     start = main.find('<div class="stats" style="--n:4">')
     if start != -1:
@@ -129,7 +144,7 @@ def strip_internal_company(main: str) -> str:
     main = re.sub(r"相对贵司 2025 年 17\.69 亿元的营收规模，这是约 3\.5% 的增量——而且是结构性毛利更高的增量。", "", main, count=1)
     # 18 下一步：去掉联系方式卡片
     main = re.sub(r'<div class="card">\s*<span class="tag">联系方式</span>.*?</div>\s*', "", main, count=1, flags=re.S)
-    return main
+    return renumber_slides(main)
 
 
 def renumber_slides(main: str) -> str:
@@ -175,8 +190,6 @@ def strip_appendix_md(md: str) -> str:
 
 def strip_appendix_profile(md_html: str, doc_name: str) -> str:
     """附录 01 去掉"集团基本盘"（三丰公司资料与财务）一节。"""
-    if doc_name.startswith("01"):
-        md_html = re.sub(r"<h2>1\. 集团基本盘</h2>.*?(?=<h2>2\.)", "", md_html, count=1, flags=re.S)
     return md_html
 
 
@@ -184,21 +197,14 @@ def build_discussion_pack() -> pathlib.Path:
     deck = (ROOT / "internal-sanfeng-cn.html").read_text(encoding="utf-8")
     head, main, footer, tail = split_deck(deck)
 
-    # 封面文案改成"讨论稿"
-    main = main.replace("合作提案 · 机密 · 仅供三丰智能内部讨论", "合作提案 · 内部讨论稿 · 机密")
-    main = main.replace("<span>版本 v1 · 2026-09</span>", "<span>讨论稿 v2 · 2026-09</span>")
-
     main = strip_internal_company(main)
 
-    # 在封面之后插入议程
-    first_end = main.index("</section>") + len("</section>")
-    main = main[:first_end] + AGENDA_HTML + main[first_end:]
-
-    docs = sorted(RESEARCH.glob("0*.md"))
+    # 附录只放能力地图与市场研判；03 谈判策略、04 财务模型属内部资料，不进合作方版本
+    docs = [RESEARCH / "01-sanfeng-capability-map.md", RESEARCH / "02-malaysia-market.md"]
     appendix = ['<section class="appendix"><div class="wrap divider">',
                 '<div class="eyebrow">附录 · 研究底稿</div>',
                 '<h2>附录</h2>',
-                '<p>以下四篇是提案背后的完整研究与测算。正文里每一个数字都能在这里找到出处或假设。</p>',
+                '<p>以下两篇是提案背后的研究底稿。正文里的市场与政策数字都能在这里找到出处。</p>',
                 '<ol>']
     for d in docs:
         title = d.read_text(encoding="utf-8").splitlines()[0].lstrip("# ").strip()
@@ -208,13 +214,13 @@ def build_discussion_pack() -> pathlib.Path:
         appendix.append(f'<article class="doc wrap">{strip_appendix_profile(md_to_html(d), d.name)}</article>')
 
     html = (
-        head.replace("<title>三丰智能马来西亚提案</title>", "<title>三丰智能马来西亚合作提案 · 讨论稿</title>")
+        head.replace("<title>三丰智能马来西亚提案</title>", "<title>三丰智能马来西亚合作提案</title>")
         + APPENDIX_CSS
         + "<main>" + main + "</main>"
         + "\n".join(appendix)
-        + "<footer>" + footer + "</footer>" + tail
+        + "<footer>" + footer.replace("机密文件 · 仅供内部讨论 · v1 · 2026-09", "机密文件 · v2 · 2026-09") + "</footer>" + tail
     )
-    out = PRINT_DIR / "discussion-pack-cn.html"
+    out = PRINT_DIR / "partnership-proposal-cn.html"
     out.write_text(html, encoding="utf-8")
     return out
 
@@ -341,8 +347,8 @@ def main() -> int:
     pack = build_discussion_pack()
     cust = build_customer_print()
 
-    render(pack, DIST / "Sanfeng-Malaysia-Proposal-Discussion.pdf",
-           "三丰智能 × 马来西亚 · 合作提案内部讨论稿 · 机密")
+    render(pack, DIST / "Sanfeng-Malaysia-Partnership-Proposal.pdf",
+           "三丰智能 × 马来西亚 · 合作提案 · 机密")
     render(cust, DIST / "Smart-Factory-Malaysia-Customer.pdf",
            "Smart Factory Malaysia · Proposal for discussion · 仅供讨论")
     return 0
