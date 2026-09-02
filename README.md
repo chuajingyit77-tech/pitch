@@ -8,8 +8,10 @@
 
 | 文件 | 内容 |
 |---|---|
-| `dist/三丰智能马来西亚合作提案-讨论稿.pdf` | 封面 + 内部讨论议程（五个决策点）+ 对内提案全文 + 附录四篇研究底稿，A4 横向，43 页 |
-| `dist/Smart-Factory-Malaysia-客户方案.pdf` | 对外客户方案（中英双语，含 ROI 测算页），A4 横向，13 页 |
+| `dist/Sanfeng-Malaysia-Proposal-Discussion.pdf` | 封面 + 内部讨论议程（五个决策点）+ 对内提案全文 + 附录四篇研究底稿 |
+| `dist/Smart-Factory-Malaysia-Customer.pdf` | 对外客户方案（中英双语）。网页版的交互计算器在 PDF 里换成了四个典型项目的静态 ROI 算例 |
+
+页面为 1024×768（4:3），iPad 横屏全屏阅读正好一页一屏；文件名用英文，避免部分设备对中文文件名的兼容问题。
 
 ## 在线版本
 

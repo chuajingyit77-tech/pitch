@@ -328,7 +328,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* ── 打印 / PDF ───────────────────────────── */
-@page{size:A4 landscape;margin:13mm 14mm 15mm}
+@page{size:1024px 768px;margin:40px 44px 46px}
 @media print{
   :root,:root[data-theme="dark"]{
     --ground:#FFFFFF;--surface:#FFFFFF;--surface-2:#F4F7FA;
@@ -342,7 +342,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
   body{background:#fff}
   .topbar{display:none}
   .wrap{max-width:none;padding:0}
-  .slide{break-before:page;border-bottom:0;padding:0 0 1.5rem}
+  .slide{break-before:page;border-bottom:0;padding:0}
   .slide.cover{break-before:auto;padding:2.5rem 0 1rem}
   .slide-head{break-after:avoid;margin-bottom:1.3rem}
   .lede{margin-bottom:1.2rem}

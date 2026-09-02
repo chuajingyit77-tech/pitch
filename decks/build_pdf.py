@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """生成两份 PDF：
 
-  dist/三丰智能马来西亚合作提案-讨论稿.pdf
+  dist/Sanfeng-Malaysia-Proposal-Discussion.pdf
       封面 + 讨论议程 + 对内提案全文 + 附录（research/ 四篇底稿）
-  dist/Smart-Factory-Malaysia-客户方案.pdf
-      对外客户方案（中英双语）
+  dist/Smart-Factory-Malaysia-Customer.pdf
+      对外客户方案（中英双语；交互计算器换成静态算例）
+
+页面为 1024×768（4:3），iPad 横屏全屏阅读正好一页。
 
 先运行 build.py 生成自包含的 HTML，本脚本再把它们组装成打印稿，交给 print_pdf.js 渲染。
 
@@ -134,9 +136,109 @@ def build_discussion_pack() -> pathlib.Path:
     return out
 
 
+LEVY = 1850        # RM / 外劳 / 年（西马制造业）
+ANCILLARY = 1500   # RM / 外劳 / 年：招募、宿舍、体检、中介（假设）
+TAX = 0.24
+ACA_CAP = 10_000_000
+
+ROI_CASES = [
+    # 名称(EN, CN), 投资, 替代工人, 其中外劳, 月综合成本, 年产值, 不良改善
+    ("Robot cell (palletising / grinding)", "单站机器人工作站（码垛 / 打磨）", 450_000, 6, 5, 2_200, 8_000_000, 0.010),
+    ("Conveying line (footwear / aluminium / appliance)", "标准输送线（制鞋 / 铝材 / 小家电）", 1_300_000, 12, 8, 2_200, 20_000_000, 0.015),
+    ("AMR fleet, electronics plant", "AMR 车间物流（电子厂）", 2_500_000, 18, 12, 2_400, 60_000_000, 0.005),
+    ("High-bay warehouse (stacker cranes + WMS)", "立体库（堆垛机 + WMS）", 6_000_000, 30, 22, 2_300, 80_000_000, 0.008),
+]
+
+
+def roi(capex, workers, foreign, wage, output, scrap):
+    """与网页版计算器完全相同的算法。"""
+    s_wage = workers * wage * 12
+    s_levy = foreign * LEVY
+    s_rec = foreign * ANCILLARY
+    s_scrap = output * scrap
+    benefit = s_wage + s_levy + s_rec + s_scrap
+    shield = min(capex, ACA_CAP) * TAX
+    net = capex - shield
+    return dict(wage=s_wage, levy=s_levy, rec=s_rec, scrap=s_scrap, benefit=benefit,
+                shield=shield, net=net, payback=net / benefit)
+
+
+def rm(v):
+    return f"RM {v:,.0f}"
+
+
+def static_roi_section() -> str:
+    rows = []
+    for en, cn, capex, workers, foreign, wage, output, scrap in ROI_CASES:
+        r = roi(capex, workers, foreign, wage, output, scrap)
+        rows.append(
+            f"<tr><td><strong>{en}</strong><span class=\"cn\">{cn}</span></td>"
+            f"<td class=\"num\">{rm(capex)}</td>"
+            f"<td class=\"num\">{workers} <span style=\"color:var(--ink-3)\">({foreign} foreign 外劳)</span></td>"
+            f"<td class=\"num\">{rm(r['benefit'])}</td>"
+            f"<td class=\"num\">− {rm(r['shield'])}</td>"
+            f"<td class=\"num\">{rm(r['net'])}</td>"
+            f"<td class=\"num\"><strong>{r['payback']:.1f} yrs 年</strong></td></tr>"
+        )
+    ex = ROI_CASES[1]
+    e = roi(*ex[2:])
+    return f"""
+<section class="slide" id="calc">
+  <div class="wrap">
+    <div class="slide-head"><span class="slide-no">04</span><h2>What it is worth on your line<span class="cn">在你的产线上值多少钱</span></h2></div>
+    <p class="lede">Four typical projects, one set of arithmetic. Bring your own headcount and wage figures and we run it live on site.
+      <span class="cn">四个典型项目，同一套算法。带上你的人数和工资数据，我们现场帮你算。</span></p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>Project<br>项目</th><th class="num">Investment<br>投资</th><th class="num">Workers replaced<br>替代工人</th>
+          <th class="num">Annual benefit<br>年化收益</th><th class="num">Automation CA shield<br>税盾</th>
+          <th class="num">Net investment<br>有效投资</th><th class="num">Payback<br>回收期</th>
+        </tr></thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>
+    </div>
+
+    <div class="cards two" style="margin-top:1rem">
+      <div class="card">
+        <span class="tag">Worked example 完整算例 · {ex[0]}</span>
+        <div class="tablewrap" style="border:0"><table style="min-width:0">
+          <tbody>
+            <tr><td>Wages: {ex[3]} workers × RM {ex[5]:,}/month × 12 <span class="cn">工资：{ex[3]} 人 × RM {ex[5]:,}/月 × 12</span></td><td class="num">{rm(e['wage'])}</td></tr>
+            <tr><td>Foreign worker levy: {ex[4]} × RM {LEVY:,} <span class="cn">外劳征费：{ex[4]} 人 × RM {LEVY:,}</span></td><td class="num">{rm(e['levy'])}</td></tr>
+            <tr><td>Recruitment, hostel, medical: {ex[4]} × RM {ANCILLARY:,} <span class="cn">招募、宿舍、体检：{ex[4]} 人 × RM {ANCILLARY:,}（假设）</span></td><td class="num">{rm(e['rec'])}</td></tr>
+            <tr><td>Scrap &amp; rework: RM {ex[6]/1e6:.0f}m output × {ex[7]*100:.1f}% <span class="cn">不良与返工：年产值 RM {ex[6]/1e6:.0f}m × {ex[7]*100:.1f}%</span></td><td class="num">{rm(e['scrap'])}</td></tr>
+            <tr class="total"><td>Annual benefit <span class="cn">年化收益合计</span></td><td class="num">{rm(e['benefit'])}</td></tr>
+            <tr><td>Investment <span class="cn">设备投资</span></td><td class="num">{rm(ex[2])}</td></tr>
+            <tr><td>Automation CA: extra 100% × 24% tax <span class="cn">自动化资本减免：额外 100% × 24% 所得税</span></td><td class="num">− {rm(e['shield'])}</td></tr>
+            <tr class="total"><td>Effective investment ÷ annual benefit <span class="cn">有效投资 ÷ 年化收益</span></td><td class="num"><strong>{e['payback']:.1f} years 年</strong></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <span class="tag">What is and is not counted 算了什么、没算什么</span>
+        <p><strong>Counted:</strong> fully loaded wages, the annual levy, recruitment and hostel costs per foreign worker, and a modest scrap/rework improvement on the line's output. Tax shield assumes the 24% corporate rate and the 200% Automation Capital Allowance on the first RM 10 million.
+          <span class="cn"><strong>已计入：</strong>综合工资、年度外劳征费、每名外劳的招募与宿舍成本、产线产值上小幅的不良与返工改善。税盾按 24% 企业所得税率和首 1,000 万令吉 200% 自动化资本减免计算。</span></p>
+        <p style="margin-top:.6rem"><strong>Not counted:</strong> floor space released, overtime and shift premiums, output gains from a faster line, lower injury and insurance costs, and the multi-tier levy increases due from 2026. All of these make the case better, not worse.
+          <span class="cn"><strong>未计入：</strong>释放的厂房面积、加班与夜班溢价、产线提速带来的增产、工伤与保险成本下降、2026 年起的多层次征费加价。这些只会让账更好看，不会更差。</span></p>
+        <p style="margin-top:.6rem"><strong>Live version:</strong> the web edition of this proposal has an interactive calculator — we can change every number with you in the meeting.
+          <span class="cn"><strong>可交互版本：</strong>本方案的网页版带可修改的计算器，开会时可以当场按你的数字重算。</span></p>
+      </div>
+    </div>
+
+    <p class="src" style="margin-top:.8rem">Automation CA is not automatic: the applicant must be incorporated and tax-resident in Malaysia, have carried on manufacturing or services activity for at least 36 months, obtain MIDA approval in advance and pass SIRIM technical verification. Figures are estimates for discussion, not tax advice.
+      <span class="cn">自动化资本减免并非自动享有：申请公司须在马来西亚注册并为税务居民、从事制造或服务业满 36 个月、事先取得 MIDA 批准并通过 SIRIM 技术核验。本页测算仅供讨论，不构成税务意见。</span></p>
+  </div>
+</section>
+"""
+
+
 def build_customer_print() -> pathlib.Path:
     deck = (ROOT / "external-customer-bilingual.html").read_text(encoding="utf-8")
     head, main, footer, tail = split_deck(deck)
+    # PDF 里没有交互，把计算器换成静态算例
+    main = re.sub(r'<section class="slide" id="calc">.*?</section>', static_roi_section(), main, count=1, flags=re.S)
     html = head + "<main>" + main + "</main><footer>" + footer + "</footer>" + tail
     out = PRINT_DIR / "customer-bilingual.html"
     out.write_text(html, encoding="utf-8")
@@ -155,9 +257,9 @@ def main() -> int:
     pack = build_discussion_pack()
     cust = build_customer_print()
 
-    render(pack, DIST / "三丰智能马来西亚合作提案-讨论稿.pdf",
+    render(pack, DIST / "Sanfeng-Malaysia-Proposal-Discussion.pdf",
            "三丰智能 × 马来西亚 · 合作提案内部讨论稿 · 机密")
-    render(cust, DIST / "Smart-Factory-Malaysia-客户方案.pdf",
+    render(cust, DIST / "Smart-Factory-Malaysia-Customer.pdf",
            "Smart Factory Malaysia · Proposal for discussion · 仅供讨论")
     return 0
 
