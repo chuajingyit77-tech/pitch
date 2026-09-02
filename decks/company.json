@@ -1,0 +1,20 @@
+{
+  "_说明": "公司资料。留空的字段在 Pitch 里显示为【待填：…】。改完运行 python3 decks/build.py 重新打包。",
+  "name": "",
+  "name_cn": "",
+  "website": "prospekcerah.com",
+  "reg_no": "",
+  "founded": "",
+  "team_size": "",
+  "profile_cn": "",
+  "profile_en": "",
+  "phd_cn": "",
+  "network_cn": "",
+  "funding_cn": "",
+  "contact_name": "",
+  "contact_title": "",
+  "phone": "",
+  "whatsapp": "",
+  "email": "",
+  "address": ""
+}

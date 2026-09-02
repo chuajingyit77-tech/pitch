@@ -371,7 +371,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
       <h1>马来西亚市场进入<br>与本地落地合作提案</h1>
       <p class="sub">一个对三丰<strong>零现金投入、零市场费用、零坏账风险</strong>的海外增量试点：由我方在马来西亚出资金、出团队、出牌照、出售后，三丰只做一件事——按出口合同供货。</p>
       <div class="cover-meta">
-        <span>提交方：【待填：我方公司名称】</span>
+        <span>提交方：{{co:name|我方公司名称}}</span>
         <span>致：三丰智能装备集团股份有限公司（300276）</span>
         <span>版本 v1 · 2026-09</span>
       </div>
@@ -600,15 +600,15 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
     <dl class="rule-list">
       <div class="rule">
         <dt>本地实体与牌照</dt>
-        <dd>合同主体与收款主体设在马来西亚，三丰无需设立境外公司，不产生常设机构风险。若我方为本地持股 ≥51%，可豁免 WRT 执照——三丰自行落地则需 RM 100 万实缴资本与约 2–3 个月审批。<span class="fill">【待填：我方公司名称、成立年份、注册资本、现有业务与团队规模】</span></dd>
+        <dd>合同主体与收款主体设在马来西亚，三丰无需设立境外公司，不产生常设机构风险。若我方为本地持股 ≥51%，可豁免 WRT 执照——三丰自行落地则需 RM 100 万实缴资本与约 2–3 个月审批。{{co:profile_cn|我方公司名称、成立年份、注册资本、现有业务与团队规模}}</dd>
       </div>
       <div class="rule">
         <dt>数字化转型博士团队</dt>
-        <dd>不是头衔，是一项可交付、可收费的售前服务：<strong>工厂数字化成熟度诊断 → 工艺与物流方案论证 → 投资回报测算 → 补贴申报路径</strong>。这是三丰海外目前最缺的环节——设备卖得出去，但没有人能在客户内部把项目"论证立项"。<span class="fill">【待填：博士专业方向、代表项目经历】</span></dd>
+        <dd>不是头衔，是一项可交付、可收费的售前服务：<strong>工厂数字化成熟度诊断 → 工艺与物流方案论证 → 投资回报测算 → 补贴申报路径</strong>。这是三丰海外目前最缺的环节——设备卖得出去，但没有人能在客户内部把项目"论证立项"。{{co:phd_cn|博士专业方向、代表项目经历}}</dd>
       </div>
       <div class="rule">
         <dt>本地客户与政府资源</dt>
-        <dd>覆盖整车与零部件厂、E&amp;E 制造商、园区管委会、总包与本地集成商、政府机构、银行与融资租赁。作用是缩短获客周期、预判客户资信、降低坏账风险。<span class="fill">【待填：可覆盖的客户与机构类型清单】</span></dd>
+        <dd>覆盖整车与零部件厂、E&amp;E 制造商、园区管委会、总包与本地集成商、政府机构、银行与融资租赁。作用是缩短获客周期、预判客户资信、降低坏账风险。{{co:network_cn|可覆盖的客户与机构类型清单}}</dd>
       </div>
       <div class="rule">
         <dt>本地交付与售后</dt>
@@ -691,7 +691,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
       <div class="arrow"></div>
       <div class="node mid">
         <div class="role">总集成与责任主体</div>
-        <div class="who">【待填：我方公司名称】</div>
+        <div class="who">{{co:name|我方公司名称}}</div>
         <p>清关、内陆运输、安装、调试、验收、售后、备件、培训、ACA 补贴代办、CIDB / ST 分包管理。</p>
       </div>
       <div class="arrow"></div>
@@ -792,7 +792,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
       <div class="stat"><div class="v">RM 9,500<span style="font-size:.62em"> 万</span></div><div class="k">乐观情景 · 三年累计收入</div><div class="n">Y2 拿下 E&amp;E 框架协议</div></div>
     </div>
 
-    <p class="src" style="margin-top:.9rem">我方启动资金需求约 RM 180–230 万（约 ¥310–390 万），其中营运资金占 RM 100–150 万。<span class="fill">【待填：实际可投入资金与团队规模】</span></p>
+    <p class="src" style="margin-top:.9rem">我方启动资金需求约 RM 180–230 万（约 ¥310–390 万），其中营运资金占 RM 100–150 万。{{co:funding_cn|实际可投入资金与团队规模}}</p>
   </div>
 </section>
 
@@ -962,8 +962,8 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:.6rem 2rem;justify-content:space-be
     <div class="cards two">
       <div class="card">
         <span class="tag">联系方式</span>
-        <h3>【待填：我方公司名称】</h3>
-        <p>【待填：联系人 / 职务 / 电话 / 邮箱 / 公司地址】</p>
+        <h3>{{co:name|我方公司名称}}</h3>
+        <p>{{co:contact_name|联系人}} · {{co:contact_title|职务}}<br>{{co:phone|电话}} · {{co:email|邮箱}} · {{co:website|网站}}<br>{{co:address|公司地址}}</p>
       </div>
       <div class="card">
         <span class="tag">附件</span>

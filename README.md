@@ -61,9 +61,18 @@ NODE_PATH=./node_modules python3 decks/build_pdf.py
 
 Chromium 路径默认取 Playwright 的安装位置，可用环境变量 `CHROMIUM` 指定；讨论议程页的文字在 `decks/build_pdf.py` 里。
 
-## 待补齐的信息
+## 公司资料怎么填
 
-两份 Pitch 里所有 `【待填：…】` 都需要你提供后替换：
+两份 Pitch 里所有 `【待填：…】` 都来自 `decks/company.json`。把对应字段填上，再运行 `python3 decks/build.py`，正文、封面、联系方式会自动替换；留空的字段继续显示为【待填】。字段：
+
+- `name` / `name_cn` / `website` / `reg_no` / `founded` / `team_size`
+- `profile_cn` / `profile_en`：公司介绍（业务、团队、既有业绩）
+- `phd_cn`：数字化转型博士的专业方向与代表项目
+- `network_cn`：可覆盖的客户 / 园区 / 政府机构类型
+- `funding_cn`：可投入的启动资金与团队规模
+- `contact_name` / `contact_title` / `phone` / `whatsapp` / `email` / `address`
+
+原本需要你提供的信息：
 
 1. 我方公司中英文名称、注册地、成立年份、团队规模、既有业绩
 2. 数字化转型博士的专业方向与代表项目
