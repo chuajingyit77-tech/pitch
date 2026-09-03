@@ -32,6 +32,7 @@ research/
   02-malaysia-market.md          政策与市场研判（NIMP 2030 / Automation CA / 外劳征费 / 四大行业），含来源链接
   03-business-model.md           三阶段合作路径、背靠背合同结构、商务条款、跨境合规、风险登记册、首次会议话术
   04-financial-model.md          单项目经济模型、三年三情景损益、三丰口径测算、客户 ROI 算法
+  05-professor-brief.md          与教授的谈话提纲：把 SME 数字化业务接到三丰自动化上（内部）
 decks/
   internal-sanfeng-cn.html            对内提案（自包含，图片已内联，可直接双击打开或邮件发送）
   external-customer-bilingual.html    对外方案（同上）
