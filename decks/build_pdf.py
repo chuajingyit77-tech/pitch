@@ -5,8 +5,10 @@
       给合作方（三丰）看的合作提案 + 附录（01 能力地图、02 市场研判）
   dist/Smart-Factory-Malaysia-Customer.pdf
       对外客户方案（中英双语；交互计算器换成静态算例）
+  dist/Professor-Brief-Onepager.pdf
+      与教授谈话的一页纸（内部，单页）
 
-两份 PDF 都是给合作方看的对外版：只保留市场进入、行业、方案与合作路径。
+前两份 PDF 都是给合作方看的对外版：只保留市场进入、行业、方案与合作路径。
 去掉的内容：双方公司资料与联系方式、三丰财务数据、内部讨论议程、我方口径的损益与启动资金、
 首次会议话术、附录 03（谈判策略）与 04（财务模型）。网页版保留完整内容。
 
@@ -335,8 +337,10 @@ def build_customer_print() -> pathlib.Path:
     return out
 
 
-def render(html_path: pathlib.Path, pdf_path: pathlib.Path, footer_left: str) -> None:
+def render(html_path: pathlib.Path, pdf_path: pathlib.Path, footer_left: str, bare: bool = False) -> None:
     cmd = ["node", str(ROOT / "print_pdf.js"), str(html_path), str(pdf_path), footer_left]
+    if bare:
+        cmd.append("--bare")
     subprocess.run(cmd, check=True, cwd=REPO)
 
 
@@ -351,6 +355,8 @@ def main() -> int:
            "三丰智能 × 马来西亚 · 合作提案 · 机密")
     render(cust, DIST / "Smart-Factory-Malaysia-Customer.pdf",
            "Smart Factory Malaysia · Proposal for discussion · 仅供讨论")
+    # 与教授谈话的一页纸（内部）：单页、无页脚
+    render(ROOT / "professor-onepager.html", DIST / "Professor-Brief-Onepager.pdf", "", bare=True)
     return 0
 
 

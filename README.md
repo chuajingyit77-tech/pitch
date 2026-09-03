@@ -10,6 +10,7 @@
 |---|---|
 | `dist/Sanfeng-Malaysia-Partnership-Proposal.pdf` | 给合作方（三丰）看的合作提案 + 附录（01 能力地图、02 市场研判） |
 | `dist/Smart-Factory-Malaysia-Customer.pdf` | 对外客户方案（中英双语）。网页版的交互计算器在 PDF 里换成了四个典型项目的静态 ROI 算例 |
+| `dist/Professor-Brief-Onepager.pdf` | **内部**：与教授谈话的一页纸（单页），详细版在 `research/05-professor-brief.md` |
 
 页面为 1024×768（4:3），iPad 横屏全屏阅读正好一页一屏；文件名用英文，避免部分设备对中文文件名的兼容问题。
 

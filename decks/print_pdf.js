@@ -1,11 +1,12 @@
 // 用本机 Chromium 把打印用 HTML 渲染成 PDF（1024×768 的 4:3 页面，适合 iPad 全屏阅读，带页码页脚）。
-// 用法： node decks/print_pdf.js <in.html> <out.pdf> "<页脚左侧文字>"
+// 用法： node decks/print_pdf.js <in.html> <out.pdf> "<页脚左侧文字>" [--bare]
 // 依赖： playwright-core（npm i playwright-core），Chromium 路径来自 CHROMIUM 环境变量
 //        或 Playwright 的默认安装位置。Google Fonts 需要网络；走代理时设置 HTTPS_PROXY。
 const path = require('path');
 const { chromium } = require('playwright-core');
 
-const [, , inHtml, outPdf, footerLeft = ''] = process.argv;
+const [, , inHtml, outPdf, footerLeft = '', mode = ''] = process.argv;
+const bare = mode === '--bare'; // 单页文档：无页边距、无页脚，由页面自身排版
 if (!inHtml || !outPdf) {
   console.error('用法: node decks/print_pdf.js <in.html> <out.pdf> "<页脚左侧文字>"');
   process.exit(1);
@@ -46,10 +47,11 @@ const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
     height: '768px',
     printBackground: true,
     preferCSSPageSize: true,
-    displayHeaderFooter: true,
+    displayHeaderFooter: !bare,
     headerTemplate: '<div></div>',
     footerTemplate,
-    margin: { top: '40px', right: '44px', bottom: '46px', left: '44px' },
+    margin: bare ? { top: '0', right: '0', bottom: '0', left: '0' }
+                 : { top: '40px', right: '44px', bottom: '46px', left: '44px' },
   });
   await browser.close();
   console.log('PDF 已生成:', outPdf);

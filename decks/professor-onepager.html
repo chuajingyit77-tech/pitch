@@ -1,0 +1,176 @@
+<title>教授谈话一页纸</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --ground:#EDF0F4;--surface:#FFFFFF;--surface-2:#F4F7FA;
+  --ink:#0E1D31;--ink-2:#3B4C61;--ink-3:#6B7C90;--line:#D2DAE3;--line-strong:#AEBCCB;
+  --accent:#D0540A;--accent-ink:#8A3705;--accent-soft:#FBE7D8;--signal:#A67A00;--signal-soft:#FBF0CF;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0A131D;--surface:#101C29;--surface-2:#152332;
+    --ink:#E5ECF4;--ink-2:#B0C1D3;--ink-3:#7F91A5;--line:#22323F;--line-strong:#374B5F;
+    --accent:#FF823A;--accent-ink:#FFC49B;--accent-soft:#3A1E0E;--signal:#F0BE3C;--signal-soft:#33280A;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0A131D;--surface:#101C29;--surface-2:#152332;
+  --ink:#E5ECF4;--ink-2:#B0C1D3;--ink-3:#7F91A5;--line:#22323F;--line-strong:#374B5F;
+  --accent:#FF823A;--accent-ink:#FFC49B;--accent-soft:#3A1E0E;--signal:#F0BE3C;--signal-soft:#33280A;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--ground);color:var(--ink);font-family:"Archivo","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.page{max-width:1024px;margin:0 auto;padding:28px 32px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;font-size:9.5px;color:var(--ink-3)}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:10px;
+  background-image:linear-gradient(rgba(14,29,49,.055) 1px,transparent 1px);background-size:100% 12px;background-position:0 -1px}
+header h1{font-size:19px;margin:2px 0 0;line-height:1.25}
+header .thesis{font-size:11.5px;color:var(--ink-2);max-width:52ch;text-align:right}
+header .thesis strong{color:var(--accent-ink)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:7px 10px 6px}
+.card.hot{border-color:var(--accent);background:var(--accent-soft)}
+.card .t{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px}
+.card .t h2{font-size:12.5px;margin:0;line-height:1.3}
+.card .t .n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;color:var(--accent);font-weight:600;white-space:nowrap;margin-left:6px}
+.card ul{margin:0;padding-left:13px;font-size:10.8px;color:var(--ink-2);line-height:1.42}
+.card li{margin-bottom:1px}
+.card .d{margin-top:4px;font-size:10.5px;color:var(--ink);border-top:1px dashed var(--line-strong);padding-top:3px}
+.card .d b{color:var(--accent-ink)}
+.bottom{display:grid;grid-template-columns:1.25fr .75fr;gap:7px;margin-top:7px}
+.strip{background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:7px 10px}
+.strip h3{font-size:11.5px;margin:0 0 3px}
+.strip ol,.strip ul{margin:0;padding-left:15px;font-size:10.6px;color:var(--ink-2);line-height:1.42}
+.strip.no{background:var(--signal-soft);border-color:var(--signal)}
+.strip.no h3{color:var(--signal)}
+footer{margin-top:5px;font-size:8.5px;color:var(--ink-3);line-height:1.35}
+@page{size:1024px 768px;margin:0}
+@media print{
+  :root,:root[data-theme="dark"]{--ground:#FFFFFF;--surface:#FFFFFF;--surface-2:#F4F7FA;--ink:#0E1D31;--ink-2:#3B4C61;--ink-3:#6B7C90;--line:#D2DAE3;--line-strong:#AEBCCB;--accent:#D0540A;--accent-ink:#8A3705;--accent-soft:#FBE7D8;--signal:#A67A00;--signal-soft:#FBF0CF}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background:#fff}
+  html,body{height:768px;overflow:hidden}
+  .page{padding:22px 32px 12px;height:768px;overflow:hidden}
+}
+</style>
+
+<div class="page">
+<header>
+  <div>
+    <div class="mono">与教授的谈话 · 一页纸 · 90 分钟 · 内部</div>
+    <h1>把 SME 数字化业务接到三丰自动化上</h1>
+  </div>
+  <p class="thesis">一句话：<strong>数字化是入口，自动化是变现，是同一个客户的前后两步。</strong>三丰的合作已定，缺的不是设备，是把设备卖进 SME 的前端——就是教授现在做的诊断。</p>
+</header>
+
+<div class="grid">
+  <div class="card hot">
+    <div class="t"><h2>1 · 现有 SME 客户池 = 第一批线索</h2><span class="n">20 分钟</span></div>
+    <ul>
+      <li>拉清单：行业、州、员工数、<b>外劳占比</b>、年产值、已做的 ERP/MES/WMS、诊断里最耗人的工序、老板决策与预算周期</li>
+      <li>按"外劳占比 × 决策速度 × 项目规模"排序</li>
+    </ul>
+    <div class="d"><b>定：</b>前 10 家名单；两周内回访 3 家</div>
+  </div>
+  <div class="card">
+    <div class="t"><h2>2 · 诊断做成标准化收费产品</h2><span class="n">15 分钟</span></div>
+    <ul>
+      <li>交付：成熟度评估、节拍与物流瓶颈、人力结构、自动化方案概念、ROI、补贴路径</li>
+      <li>2–3 天现场；RM 2–5 万；目标客户首次免费但写明市场价</li>
+      <li>报告最后一页永远是"建议方案 + 预算 + 回收期"</li>
+    </ul>
+    <div class="d"><b>定：</b>评估框架；模板两周内出；诊断收入怎么分</div>
+  </div>
+  <div class="card">
+    <div class="t"><h2>3 · 数字化 ↔ 自动化双向转化</h2><span class="n">10 分钟</span></div>
+    <ul>
+      <li>正向：做过 ERP/MES 的客户，数据已指出哪道工序浪费人</li>
+      <li>反向：自动化上线后 PLC / WMS / AGV 数据 → 看板、MES、预测性维护，是二次收入</li>
+      <li>与客户 ERP/MES 的<b>系统集成层</b>：毛利最高，最难被中国供应商替代</li>
+    </ul>
+    <div class="d"><b>定：</b>教授团队是否承担集成层；缺几个人、什么技能</div>
+  </div>
+
+  <div class="card hot">
+    <div class="t"><h2>4 · 补贴的技术文件谁来做</h2><span class="n">15 分钟</span></div>
+    <ul>
+      <li><b>Automation CA</b> 200% 减免：MIDA 事先批准 + SIRIM 技术核验 + 工业 4.0 要素</li>
+      <li><b>Industry4WRD RA</b>（MPC）：评估维度可作诊断框架；能否成为或对接认可评估方</li>
+      <li><b>Intervention Fund</b>：制造业 SME 70:30 配对、上限 RM 50 万，RA 后 6 个月内申请 → 买设备</li>
+      <li><b>HRD Corp</b>：注册培训机构，培训费可报销</li>
+    </ul>
+    <div class="d"><b>定：</b>教授负责哪几项申报；RA 对接路径</div>
+  </div>
+  <div class="card">
+    <div class="t"><h2>5 · 大学与政府资源</h2><span class="n">10 分钟</span></div>
+    <ul>
+      <li>大学放一条三丰小型<b>示范线</b>（工作站 + AMR）：SME 老板看真机比看画册有效</li>
+      <li>研究生做诊断数据采集，降低成本</li>
+      <li>MPC / MIDA / SME Corp / 行业公会的"智能工厂"分享：一场一批线索</li>
+      <li>产学研经费覆盖示范线；教授是否愿意署名</li>
+    </ul>
+    <div class="d"><b>定：</b>示范线可行性与设备来源；第一场分享的公会与周次</div>
+  </div>
+  <div class="card">
+    <div class="t"><h2>6 · 灯塔项目怎么一起做</h2><span class="n">10 分钟</span></div>
+    <ul>
+      <li>从前 10 家选 1–2 家：外劳多、老板肯拍板、工序清晰的传统制造</li>
+      <li>教授：诊断与 ROI → 我方：方案报价（三丰供货）→ 教授：补贴申报 → 我方：交付 → 教授：数据看板 + <b>案例研究</b></li>
+    </ul>
+    <div class="d"><b>定：</b>灯塔候选 2 家；案例研究格式与发表渠道</div>
+  </div>
+
+  <div class="card">
+    <div class="t"><h2>7 · 合作机制与利益分配</h2><span class="n">10 分钟</span></div>
+    <ul>
+      <li>角色：技术总监 / 首席顾问 / 合伙人；兼职或全职；大学兼职规定</li>
+      <li>报酬组合：诊断分成 + 项目提成 + 顾问费或股权</li>
+      <li>IP：诊断方法论、模板、集成软件归属（大学有政策）；官方评估身份与商业角色划清边界</li>
+    </ul>
+    <div class="d"><b>定：</b>角色、报酬框架、IP 原则；细节留给书面协议</div>
+  </div>
+  <div class="card">
+    <div class="t"><h2>8 · 团队与 90 天</h2><span class="n">5 分钟</span></div>
+    <ul>
+      <li>W1–2 客户清单 + 诊断产品与模板 · W2–4 回访 3 家免费诊断</li>
+      <li>W3–6 补贴路径确认 · W4–8 灯塔方案与报价</li>
+      <li>W6–10 示范线与第一场分享 · W8–12 灯塔签约、案例计划</li>
+      <li>人：诊断 2 + 工程师 2 + 销售 1；教授团队缺 PLC / 仿真 / 集成？</li>
+    </ul>
+    <div class="d"><b>定：</b>各周负责人</div>
+  </div>
+  <div class="card">
+    <div class="t"><h2>9 · 先讲清楚为什么找他</h2><span class="n">开场 5 分钟</span></div>
+    <ul>
+      <li>三丰卖硬件：输送线、机器人工作站、AGV、立体库、配电柜，RM 30 万到几千万</li>
+      <li>SME 老板不为设备目录买单，他买的是"少请几个外劳、多久回本、补贴拿不拿得到"</li>
+      <li>回答这三个问题的人，就是教授团队</li>
+    </ul>
+    <div class="d"><b>给他看：</b>客户方案 PDF 的方案包与 ROI 两节，不是画册</div>
+  </div>
+</div>
+
+<div class="bottom">
+  <div class="strip">
+    <h3>会谈结束要带走的五样东西</h3>
+    <ol>
+      <li>前 10 家 SME 客户排序清单（或一周内给）</li>
+      <li>诊断产品的定义、价格、交付内容；报告模板两周内出</li>
+      <li>教授团队负责的补贴申报清单，以及 Industry4WRD RA 的对接方式</li>
+      <li>示范线与第一场行业分享的初步意向</li>
+      <li>教授的角色、报酬框架、IP 原则</li>
+    </ol>
+  </div>
+  <div class="strip no">
+    <h3>三件别做的事</h3>
+    <ul>
+      <li>别把画册甩给他就完了</li>
+      <li>别一开始谈分成比例，先让他看到诊断 → 自动化 → 数据服务的完整收入链</li>
+      <li>别承诺他团队做安装调试，那是我方与三丰的事</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Industry4WRD Intervention Fund 与 RA 条件来自 MIDA 2023 指南、MITI；Automation CA 来自 MIDA 指南。金额与条件以申请时官方当期公布为准。详细版见 research/05-professor-brief.md。</footer>
+</div>
