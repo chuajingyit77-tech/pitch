@@ -1,342 +1,553 @@
 <title>LLM 议会</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&display=swap">
 <style>
-/* Layout: a chamber — the question at the lectern, five seats in a row that light up as they speak, the chair's verdict below. */
+/* Layout: a night-time council chamber. Single committed dark look — velvet ground, brass fittings, parchment text.
+   Procedure rail on top, lectern, a semicircle of five seats, the chair's bench below, and a gallery for the audience (you). */
 :root{
-  --bg:#eef0f3; --paper:#ffffff; --fg:#1b1f2a; --muted:#5b6170; --line:#d6d9e0;
-  --accent:#3b4c9b; --accent-ink:#ffffff;
-  --c1:#b23a3a; --c2:#2d6a8f; --c3:#c57b1f; --c4:#5d7f3a; --c5:#6b4fa3; --chair:#1b1f2a;
+  --bg:#17131a; --velvet:#211a24; --panel:#2a2130; --panel-2:#342a3b; --line:#4a3d52; --line-soft:#3a3042;
+  --fg:#f1e9dc; --muted:#a79b92; --faint:#7d7270;
+  --brass:#d2a85a; --brass-ink:#1a1410; --brass-dim:#8f7340;
+  --c1:#e2625c; --c2:#5fb0e0; --c3:#f0a33a; --c4:#8ccf63; --c5:#b48be8;
+  --ok:#8ccf63; --warn:#f0a33a; --bad:#e2625c;
   --display:"Noto Serif SC",Georgia,"Songti SC",serif;
   --body:"Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
   --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#14171e; --paper:#1d212b; --fg:#e8eaf0; --muted:#9aa1b3; --line:#2f3545;
-  --accent:#8e9ce8; --accent-ink:#14171e;
-  --c1:#e07070; --c2:#6bb0d9; --c3:#e6a24a; --c4:#93c25f; --c5:#b298e6; --chair:#e8eaf0; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#14171e; --paper:#1d212b; --fg:#e8eaf0; --muted:#9aa1b3; --line:#2f3545;
-  --accent:#8e9ce8; --accent-ink:#14171e;
-  --c1:#e07070; --c2:#6bb0d9; --c3:#e6a24a; --c4:#93c25f; --c5:#b298e6; --chair:#e8eaf0; color-scheme:dark}
-
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.65;margin:0}
-.wrap{max-width:1100px;margin:0 auto;padding-block:28px 64px;padding-inline:16px}
-header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;margin-bottom:22px}
-h1{font-family:var(--display);font-size:clamp(26px,4vw,34px);margin:0;letter-spacing:.02em;text-wrap:balance}
-h1 small{font-family:var(--body);font-size:13px;color:var(--muted);font-weight:400;margin-left:10px;letter-spacing:.08em}
-.sub{color:var(--muted);font-size:13px;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.7;margin:0;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(210,168,90,.18),transparent 60%),
+                   radial-gradient(ellipse 60% 40% at 50% 110%,rgba(90,40,70,.35),transparent 60%)}
+.wrap{max-width:1180px;margin:0 auto;padding-block:22px 80px;padding-inline:16px}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:9px 16px;transition:border-color .15s,background .15s,transform .08s}
+button:hover{border-color:var(--brass)}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button:disabled{opacity:.45;cursor:default;transform:none}
+button.brass{background:var(--brass);color:var(--brass-ink);border-color:var(--brass);font-weight:700;letter-spacing:.06em}
+button.brass:hover{background:#e6bb6b}
+button.ghost{background:transparent}
+button.sm{padding:5px 10px;font-size:12.5px}
+textarea,select,input{font:inherit;color:var(--fg);background:var(--velvet);border:1px solid var(--line);border-radius:6px}
+textarea:focus,select:focus,input:focus{outline:2px solid var(--brass);outline-offset:1px}
+[hidden]{display:none!important}
+
+/* masthead */
+.mast{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px;margin-bottom:18px;border-bottom:1px solid var(--line-soft);padding-bottom:14px}
+.mast h1{font-family:var(--display);font-weight:900;font-size:clamp(28px,4.6vw,40px);margin:0;letter-spacing:.06em;line-height:1.1}
+.mast h1 em{font-style:normal;color:var(--brass)}
+.mast .tag{font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass-dim);margin:0 0 6px}
+.mast .sub{color:var(--muted);font-size:13px;margin:0;max-width:46ch}
+.sess{font-family:var(--mono);font-size:12px;color:var(--faint);text-align:right;line-height:1.5}
+
+/* procedure rail */
+.rail{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:0 0 18px;counter-reset:step}
+.step{position:relative;padding:8px 6px 8px;text-align:center;font-size:12.5px;letter-spacing:.14em;color:var(--faint);border-top:2px solid var(--line-soft)}
+.step b{display:block;font-family:var(--display);font-size:14px;letter-spacing:.2em;color:inherit;font-weight:600}
+.step small{display:block;font-size:10.5px;letter-spacing:.08em;margin-top:2px}
+.step.on{color:var(--brass);border-top-color:var(--brass)}
+.step.on b::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--brass);margin-left:6px;vertical-align:middle;animation:blink 1s infinite}
+.step.done{color:var(--fg);border-top-color:var(--brass-dim)}
+@keyframes blink{50%{opacity:.2}}
+@media (max-width:560px){.step small{display:none}.step b{font-size:12px;letter-spacing:.1em}}
 
 /* lectern */
-.lectern{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px}
-.lectern label{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-textarea{width:100%;min-height:110px;resize:vertical;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;padding:12px;line-height:1.6}
-textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.lectern{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;position:relative}
+.lectern::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,transparent,var(--brass),transparent);border-radius:10px 10px 0 0}
+.lectern label{display:block;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass-dim);margin-bottom:8px}
+#q{width:100%;min-height:104px;resize:vertical;padding:12px 14px;line-height:1.65;font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:12px;padding:4px 11px;border-radius:999px;border:1px solid var(--line-soft);background:transparent;color:var(--muted)}
+.chip:hover{color:var(--fg);border-color:var(--brass)}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
-.row .grow{flex:1 1 200px}
-button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--fg);padding:9px 16px}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700;padding-inline:22px}
-button:disabled{opacity:.5;cursor:default}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.chip{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted)}
-.chip:hover{color:var(--fg);border-color:var(--fg)}
-select{font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--fg);padding:8px 10px}
+.grow{flex:1 1 180px;min-width:0}
 .status{font-size:13px;color:var(--muted);min-height:1.4em}
-.status.err{color:var(--c1)}
+.status.err{color:var(--bad)}
+.opt{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.opt select{padding:7px 10px;font-size:13px}
 
-/* seats */
-.seats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:22px}
-@media (max-width:860px){.seats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:480px){.seats{grid-template-columns:1fr}}
-.seat{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0;display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--sc)}
-.seat h2{font-family:var(--display);font-size:17px;margin:0;color:var(--sc);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.seat h2 span{font-family:var(--body);font-size:11px;color:var(--muted);font-weight:400;letter-spacing:.06em}
-.seat .stance{font-size:12px;color:var(--muted);margin:0;line-height:1.5}
-.seat .out{font-size:13.5px;min-width:0;overflow-wrap:anywhere}
-.seat .state{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;min-height:1.4em}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--line);display:inline-block}
-.seat.thinking .dot{background:var(--sc);animation:pulse 1.2s ease-in-out infinite}
-.seat.done .dot{background:var(--c4)}
-.seat.failed .dot{background:var(--c1)}
-@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.seat.thinking .dot{animation:none;opacity:1}}
+/* the chamber */
+.chamber{margin-top:22px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.chamber{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.chamber{grid-template-columns:1fr}}
+.seat{--sc:var(--brass);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden;transition:box-shadow .3s,border-color .3s}
+.seat.speaking{border-color:var(--sc);box-shadow:0 0 0 1px var(--sc),0 0 36px -8px var(--sc)}
+.seat.done{border-color:var(--line)}
+.seat .head{display:flex;gap:10px;align-items:center;padding:12px 12px 8px;border-bottom:1px solid var(--line-soft);background:linear-gradient(180deg,rgba(255,255,255,.03),transparent)}
+.avatar{width:44px;height:44px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--velvet);border:2px solid var(--sc);color:var(--sc);position:relative}
+.avatar svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.seat.speaking .avatar::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--sc);opacity:.6;animation:ring 1.4s ease-out infinite}
+@keyframes ring{0%{transform:scale(.8);opacity:.7}100%{transform:scale(1.25);opacity:0}}
+.seat .who{min-width:0}
+.seat .who h2{font-family:var(--display);font-size:16px;margin:0;color:var(--sc);line-height:1.2;letter-spacing:.04em}
+.seat .who p{margin:2px 0 0;font-size:11px;color:var(--muted);line-height:1.4;letter-spacing:.02em}
+.seat .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;flex:1}
+.seat .state{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;min-height:1.3em}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block;flex:none}
+.seat.speaking .dot{background:var(--sc);animation:blink 1s infinite}
+.seat.done .dot{background:var(--ok)}.seat.failed .dot{background:var(--bad)}
+.seat .out{font-size:13.5px;min-width:0;overflow-wrap:anywhere;max-height:420px;overflow:auto;padding-right:4px}
+.seat .out::-webkit-scrollbar{width:6px}.seat .out::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.seat .cue{font-family:var(--display);font-size:13.5px;color:var(--fg);border-left:3px solid var(--sc);padding:4px 10px;margin:0;background:rgba(255,255,255,.03);text-wrap:balance}
+.seat .cue:empty{display:none}
+.ballot{display:none;align-items:center;gap:8px;font-size:12px;margin-top:auto;padding-top:8px;border-top:1px dashed var(--line-soft)}
+.seat.voted .ballot{display:flex}
+.stamp{font-family:var(--display);font-weight:900;font-size:12px;letter-spacing:.14em;padding:2px 8px;border:1.5px solid;border-radius:3px;transform:rotate(-4deg);animation:stampin .35s cubic-bezier(.2,1.4,.4,1)}
+.stamp.yes{color:var(--ok);border-color:var(--ok)}.stamp.no{color:var(--bad);border-color:var(--bad)}.stamp.fix{color:var(--warn);border-color:var(--warn)}
+@keyframes stampin{0%{transform:scale(2.2) rotate(-14deg);opacity:0}100%{transform:scale(1) rotate(-4deg);opacity:1}}
+.conf{flex:1;height:5px;background:var(--line-soft);border-radius:3px;overflow:hidden;min-width:40px}
+.conf i{display:block;height:100%;background:var(--sc);width:0;transition:width .8s ease}
+.ballot small{color:var(--muted);font-variant-numeric:tabular-nums}
+.rebut{font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line-soft);padding-top:8px;margin:0}
+.rebut:empty{display:none}
+.rebut b{color:var(--fg);font-weight:500}
+.rebut .to{color:var(--sc)}
+.seat .ask{align-self:flex-end}
 
-/* chair */
-.chair{margin-top:22px;background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--chair);border-radius:10px;padding:20px 22px}
-.chair h2{font-family:var(--display);font-size:20px;margin:0 0 4px}
-.chair .stance{color:var(--muted);font-size:13px;margin:0 0 12px}
-.chair .out{max-width:70ch;overflow-wrap:anywhere}
-.chair[hidden]{display:none}
+/* tally */
+.tally{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px;display:grid;grid-template-columns:auto 1fr;gap:10px 18px;align-items:center}
+@media (max-width:560px){.tally{grid-template-columns:1fr}}
+.tally h3{font-family:var(--display);font-size:15px;margin:0;letter-spacing:.14em;color:var(--brass)}
+.bar{display:flex;height:22px;border-radius:5px;overflow:hidden;background:var(--line-soft)}
+.bar span{display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--bg);transition:flex .8s ease;flex:0 0 0;overflow:hidden;white-space:nowrap}
+.bar .yes{background:var(--ok)}.bar .fix{background:var(--warn)}.bar .no{background:var(--bad)}
 
-/* rendered markdown */
-.md h1,.md h2,.md h3,.md h4{font-family:var(--display);line-height:1.3;margin:14px 0 6px;text-wrap:balance}
-.md h1{font-size:1.25em}.md h2{font-size:1.15em}.md h3{font-size:1.05em}.md h4{font-size:1em}
-.md p{margin:6px 0}.md ul,.md ol{margin:6px 0;padding-left:1.4em}.md li{margin:3px 0}
-.md strong{font-weight:700}.md code{font-family:var(--mono);font-size:.9em;background:var(--bg);padding:1px 5px;border-radius:4px}
-.md blockquote{margin:8px 0;padding-left:12px;border-left:3px solid var(--line);color:var(--muted)}
-.md hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+/* bench */
+.bench{margin-top:18px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:0;position:relative;overflow:hidden}
+.bench::before{content:"";position:absolute;inset:0 0 auto;height:4px;background:var(--brass)}
+.bench .bh{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:18px 22px 12px;border-bottom:1px solid var(--line-soft)}
+.bench h2{font-family:var(--display);font-size:22px;margin:0;letter-spacing:.1em;display:flex;align-items:center;gap:12px}
+.gavel{width:30px;height:30px;color:var(--brass);transform-origin:80% 80%}
+.gavel svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bench.strike .gavel{animation:strike .6s cubic-bezier(.3,0,.2,1)}
+@keyframes strike{0%{transform:rotate(0)}35%{transform:rotate(-38deg)}60%{transform:rotate(8deg)}100%{transform:rotate(0)}}
+.verdict{font-family:var(--display);font-weight:900;font-size:clamp(20px,3vw,26px);letter-spacing:.2em;padding:4px 16px;border:2px solid var(--brass);color:var(--brass);border-radius:4px;transform:rotate(-2deg);display:inline-block}
+.verdict.yes{color:var(--ok);border-color:var(--ok)}.verdict.no{color:var(--bad);border-color:var(--bad)}.verdict.fix{color:var(--warn);border-color:var(--warn)}
+.verdict.pop{animation:stampin .45s cubic-bezier(.2,1.4,.4,1)}
+.bench .bb{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:22px;padding:16px 22px 20px}
+@media (max-width:800px){.bench .bb{grid-template-columns:1fr}}
+.bench .out{max-width:70ch;overflow-wrap:anywhere;min-width:0}
+.bench .state{font-size:13px;color:var(--muted);min-height:1.4em}
+.meters{display:flex;flex-direction:column;gap:12px;align-self:start;background:var(--velvet);border:1px solid var(--line-soft);border-radius:8px;padding:14px}
+.meters h4{margin:0 0 2px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass-dim);font-weight:500}
+.meter{display:grid;grid-template-columns:5.5em 1fr 2.2em;gap:8px;align-items:center;font-size:12.5px}
+.meter .m{height:8px;background:var(--line-soft);border-radius:4px;overflow:hidden}
+.meter .m i{display:block;height:100%;width:0;transition:width 1s ease;background:var(--brass)}
+.meter .n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--muted)}
+.meter.risk .m i{background:var(--bad)}.meter.up .m i{background:var(--c3)}.meter.clear .m i{background:var(--c2)}.meter.feas .m i{background:var(--ok)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:0 22px 18px}
+
+/* follow-up gallery */
+.gallery{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.gallery h3{font-family:var(--display);font-size:16px;margin:0 0 4px;letter-spacing:.12em;color:var(--brass)}
+.gallery p.hint{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+.thread{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.msg{display:flex;gap:10px;align-items:flex-start;min-width:0}
+.msg .avatar{width:32px;height:32px}.msg .avatar svg{width:18px;height:18px}
+.msg .bub{background:var(--velvet);border:1px solid var(--line-soft);border-radius:8px;padding:8px 12px;font-size:13.5px;min-width:0;max-width:72ch;overflow-wrap:anywhere;flex:1}
+.msg.me{flex-direction:row-reverse}.msg.me .bub{background:var(--panel-2);border-color:var(--line)}
+.msg .nm{font-size:11px;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
+.askrow{display:flex;flex-wrap:wrap;gap:8px}
+.askrow select{padding:8px 10px;font-size:13px}
+.askrow input{flex:1 1 220px;padding:8px 12px;min-width:0}
 
 /* history */
-.history{margin-top:30px}
-.history h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:500}
+.history{margin-top:28px}
+.history h3{font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--brass-dim);margin:0 0 8px;font-weight:500}
 .hlist{display:flex;flex-direction:column;gap:6px}
-.hitem{display:flex;gap:10px;align-items:baseline;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;min-width:0}
+.hitem{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;min-width:0}
 .hitem .q{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hitem time{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
-.hitem:hover{border-color:var(--fg)}
-.unavail{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;color:var(--muted);margin-top:16px}
-details summary{cursor:pointer;color:var(--muted);font-size:13px}
+.hitem .v{font-family:var(--display);font-size:11.5px;letter-spacing:.1em;padding:1px 6px;border:1px solid;border-radius:3px;flex:none}
+.hitem time{color:var(--faint);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap;font-family:var(--mono)}
+.hitem:hover{border-color:var(--brass)}
+.unavail{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;color:var(--muted);margin-top:16px}
+
+/* markdown */
+.md h1,.md h2,.md h3,.md h4{font-family:var(--display);line-height:1.3;margin:14px 0 6px;text-wrap:balance;color:var(--fg)}
+.md h1{font-size:1.2em}.md h2{font-size:1.12em}.md h3{font-size:1.04em;color:var(--brass)}.md h4{font-size:1em}
+.md p{margin:6px 0}.md ul,.md ol{margin:6px 0;padding-left:1.4em}.md li{margin:3px 0}
+.md strong{font-weight:700;color:#fff}.md code{font-family:var(--mono);font-size:.9em;background:var(--velvet);padding:1px 5px;border-radius:4px}
+.md blockquote{margin:8px 0;padding-left:12px;border-left:3px solid var(--line);color:var(--muted)}
+.md hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+.md em{color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--brass);color:var(--brass-ink);padding:8px 16px;border-radius:6px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .25s}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
 <div class="wrap">
-<header>
-  <h1>LLM 议会 <small>FIVE SEATS · ONE CHAIR</small></h1>
-  <p class="sub">把一个问题交给五位立场不同的议员同时审议，再由主席裁决。</p>
+<header class="mast">
+  <div>
+    <p class="tag">Council of Five · In Session</p>
+    <h1>LLM <em>议会</em></h1>
+    <p class="sub">把一个难题交给五位立场互斥的议员。他们各自陈词、互相交锋、投票表决，最后由主席敲槌定案。</p>
+  </div>
+  <div class="sess" id="sess">第 — 次会议<br>— 位议员在席</div>
 </header>
 
+<nav class="rail" id="rail">
+  <div class="step" data-s="0"><b>开庭</b><small>提交议题</small></div>
+  <div class="step" data-s="1"><b>陈词</b><small>五位独立发言</small></div>
+  <div class="step" data-s="2"><b>交锋</b><small>互相反驳</small></div>
+  <div class="step" data-s="3"><b>表决</b><small>做 / 改 / 不做</small></div>
+  <div class="step" data-s="4"><b>裁决</b><small>主席定案</small></div>
+</nav>
+
 <section class="lectern">
-  <label for="q">议题</label>
-  <textarea id="q" placeholder="写下你正在纠结的事：一个决定、一个计划、一个想法。背景越具体，议会的意见越有用。&#10;例：我想辞职全职做自媒体，现在有 8 个月的存款，粉丝 3000。该不该现在就辞？"></textarea>
+  <label for="q">呈交议会的议题</label>
+  <textarea id="q" placeholder="写下你正在纠结的事：一个决定、一个计划、一段关系、一笔钱。背景越具体（数字、时限、你已经试过什么），议会吵得越有价值。"></textarea>
   <div class="chips" id="chips"></div>
   <div class="row">
-    <select id="tier" title="思考深度">
-      <option value="default">标准（约 30 秒）</option>
-      <option value="complex">深思（更慢，更周全）</option>
-      <option value="quick">快速（几秒，较浅）</option>
-    </select>
-    <div class="grow status" id="status"></div>
-    <button id="stop" hidden>停止</button>
-    <button id="go" class="primary">召开议会</button>
+    <div class="opt"><span>深度</span><select id="tier" title="思考深度">
+      <option value="default">标准 · 约 1 分钟</option>
+      <option value="complex">深思 · 更慢更周全</option>
+      <option value="quick">速审 · 几十秒</option>
+    </select></div>
+    <div class="grow status" id="status">⌘/Ctrl + Enter 直接开庭</div>
+    <button id="stop" hidden>休庭</button>
+    <button id="go" class="brass">开 庭</button>
   </div>
 </section>
 
-<div id="unavail" class="unavail" hidden>这个页面需要在 claude.ai 里打开才能召唤议员。请用 Claude 给你的链接打开它。</div>
+<div id="unavail" class="unavail" hidden>议员只能在 claude.ai 里被召唤。请用 Claude 给你的链接打开这个页面。</div>
 
-<section class="seats" id="seats"></section>
+<section class="chamber" id="chamber"></section>
 
-<section class="chair" id="chair" hidden>
-  <h2>🏛️ 主席裁决</h2>
-  <p class="stance">综合五位议员的发言，找出共识与分歧，给出结论和下一步。</p>
-  <div class="state" id="chairState"></div>
-  <div class="out md" id="chairOut"></div>
+<section class="tally" id="tally" hidden>
+  <h3>表决结果</h3>
+  <div class="bar" id="bar"><span class="yes"></span><span class="fix"></span><span class="no"></span></div>
+</section>
+
+<section class="bench" id="bench" hidden>
+  <div class="bh">
+    <h2><span class="gavel"><svg viewBox="0 0 24 24"><path d="M14 4l6 6M10 8l6 6M6.5 11.5l6 6M3 21l7-7M14 4l-4 4 6 6 4-4z"/></svg></span>主席裁决</h2>
+    <span class="verdict" id="verdict" hidden></span>
+  </div>
+  <div class="bb">
+    <div>
+      <div class="state" id="chairState"></div>
+      <div class="out md" id="chairOut"></div>
+    </div>
+    <aside class="meters" id="meters">
+      <h4>议会评分</h4>
+      <div class="meter risk"><span>风险</span><div class="m"><i></i></div><span class="n">—</span></div>
+      <div class="meter up"><span>上行空间</span><div class="m"><i></i></div><span class="n">—</span></div>
+      <div class="meter clear"><span>清晰度</span><div class="m"><i></i></div><span class="n">—</span></div>
+      <div class="meter feas"><span>可执行性</span><div class="m"><i></i></div><span class="n">—</span></div>
+    </aside>
+  </div>
+  <div class="toolbar">
+    <button class="sm" id="copyBtn">复制判决书</button>
+    <button class="sm" id="dlBtn" hidden>下载判决书 .md</button>
+    <button class="sm ghost" id="againBtn">同一议题重审</button>
+  </div>
+</section>
+
+<section class="gallery" id="gallery" hidden>
+  <h3>旁听席 · 追问</h3>
+  <p class="hint">裁决之后你可以继续质询。选一位对象，追问细节、反驳他的观点、或补充议员不知道的背景。</p>
+  <div class="thread" id="thread"></div>
+  <form class="askrow" id="askForm">
+    <select id="askWho"></select>
+    <input id="askText" placeholder="例：反对者说我的成本算错了，但我已经拿到了供应商报价……" autocomplete="off">
+    <button class="brass sm" id="askBtn" type="submit">质询</button>
+  </form>
 </section>
 
 <section class="history" id="history" hidden>
-  <h3>往期议程</h3>
+  <h3>会议记录</h3>
   <div class="hlist" id="hlist"></div>
 </section>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
+// ---------- cast ----------
+const ICONS = {
+  contrarian:'<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>',
+  first:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/></svg>',
+  expand:'<svg viewBox="0 0 24 24"><path d="M4 20L20 4M20 4h-7M20 4v7M4 20h7M4 20v-7"/></svg>',
+  outsider:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5M9 9a2 2 0 0 1 4 0c0 1.5-2 1.5-2 3M11 15v.5"/></svg>',
+  exec:'<svg viewBox="0 0 24 24"><path d="M4 12h10M10 6l6 6-6 6M18 5v14"/></svg>',
+  chair:'<svg viewBox="0 0 24 24"><path d="M14 4l6 6M10 8l6 6M6.5 11.5l6 6M3 21l7-7M14 4l-4 4 6 6 4-4z"/></svg>',
+};
+const VOTE_RULE = `
+最后单独一行，严格按这个格式写你的表决票（这一行不要用 Markdown，不要加任何别的字）：
+<<VOTE|做|75|一句话说明你投票的理由>>
+其中第二项只能是 做、改了再做、不做 三者之一；第三项是 0–100 的把握度。`;
+
 const MEMBERS = [
-  {id:'contrarian', num:'①', name:'反对者', en:'CONTRARIAN', color:'var(--c1)',
+  {id:'contrarian', num:'①', name:'反对者', title:'专找漏洞', color:'var(--c1)',
    stance:'先假设计划有漏洞，直接抓出来。',
-   prompt:`你是议会里的「反对者」。先假设这个计划一定有漏洞，你的工作是把它们直接抓出来。不要先夸再批评，不要给平衡的观点。
-请输出：
-1. 最可能让这件事失败的 3–5 个原因，按致命程度排序，每个说清楚具体怎么出问题、什么信号说明它正在发生。
-2. 计划里没被验证就被当成事实的假设。
-3. 如果有更便宜/更简单的替代方案，点名它。
-4. 最后一句：「如果只能改一件事，改 ___」。
-只批评，不鼓励；具体，不空泛。400 字以内，用小标题和列表。`},
-  {id:'first', num:'②', name:'第一性原理者', en:'FIRST PRINCIPLES', color:'var(--c2)',
+   prompt:`你是议会里的「反对者」。先假设这个计划一定有漏洞，你的工作是把它们直接抓出来。不要先夸再批评，不要给平衡的观点，不要客气。
+请输出（Markdown，360 字以内）：
+### 最可能让它失败的原因
+按致命程度排 3–4 条，每条说清具体怎么出问题、什么信号说明它正在发生。
+### 没被验证就当成事实的假设
+### 更便宜的替代方案
+如果有，点名它。
+最后用一行加粗写：**如果只能改一件事，改 ___**`},
+  {id:'first', num:'②', name:'第一性原理者', title:'追问本质', color:'var(--c2)',
    stance:'不评价方案，追问你到底想解决什么问题。',
    prompt:`你是议会里的「第一性原理者」。你不评价方案好不好，只问：这个人到底想解决什么问题？
-请输出：
-1. 把诉求剥到底，写三层：表面诉求 → 真实目标 → 根本需求。
-2. 这个问题的基本事实/约束（不可改变的时间、金钱、人性、物理约束），区分「真约束」和「习惯性假设」。
-3. 只基于基本事实，从零推导：解决根本需求最直接的路径是什么？
-4. 对比：现在的方案和从零推导的路径差在哪？
-5. 最后一句：「你真正要解决的问题是 ___」。
-不沿用对方的框架和措辞；不谈风险、不谈执行。400 字以内。`},
-  {id:'expand', num:'③', name:'扩张者', en:'EXPANSIONIST', color:'var(--c3)',
+请输出（Markdown，360 字以内）：
+### 剥到底
+表面诉求 → 真实目标 → 根本需求，三层各一句。
+### 真约束 vs 习惯性假设
+不可改变的（时间、金钱、人性、物理）归真约束；其余归习惯性假设。
+### 从零推导
+只基于真约束，解决根本需求最直接的路径是什么？和现在的方案差在哪？
+最后用一行加粗写：**你真正要解决的问题是 ___**
+不沿用对方的框架和措辞；不谈风险、不谈执行。`},
+  {id:'expand', num:'③', name:'扩张者', title:'只看上限', color:'var(--c3)',
    stance:'不管风险，只想成功了能做到多大。',
    prompt:`你是议会里的「扩张者」。完全不管风险。你只思考：如果这件事成功了，最大能做到多大？这个人是不是想得太小了？
-请输出：
-1. 成功后的最大版本：10 倍是什么样？100 倍呢？
-2. 对方没看到的上行空间：相邻领域、二次用途、复利效应、可以积累的资产。
-3. 现在计划里哪一个小改动能解锁更大的天花板？
-4. 1–2 个真实世界里「从小切口做成大事」的类比。
-5. 最后一句：「最大的机会其实是 ___」。
-不提风险不泼冷水；大胆但具体到可描述的场景。400 字以内。`},
-  {id:'outsider', num:'④', name:'局外人', en:'OUTSIDER', color:'var(--c4)',
+请输出（Markdown，360 字以内）：
+### 10 倍版本 / 100 倍版本
+各描绘成具体场景。
+### 对方没看到的上行空间
+相邻领域、二次用途、复利效应、能积累的资产。
+### 一个小改动，解锁更大天花板
+### 一个真实类比
+从小切口做成大事的真实例子。
+最后用一行加粗写：**最大的机会其实是 ___**
+不提风险不泼冷水；大胆但具体。`},
+  {id:'outsider', num:'④', name:'局外人', title:'假装不懂', color:'var(--c4)',
    stance:'假装不懂这个领域，抓出你觉得理所当然但别人看不懂的地方。',
-   prompt:`你是议会里的「局外人」。假装你完全不懂这个领域，你是一个聪明但外行的普通人（可能是潜在客户、投资人、对方的家人）。你专门抓出对方觉得理所当然、但外人根本看不懂的东西。
-请输出：
-1. 用外行的话复述你理解到的计划（一两句）。复述不出来就直接说「我看不懂」并指出卡在哪。
-2. 所有术语、缩写、行话，以及你读到时的困惑。
-3. 对方默认读者知道、但其实没说清楚的背景。
-4. 3–5 个外行会问的「蠢问题」。
-5. 最后一句：「一个外人看完最大的疑问是 ___」。
-不用专业知识帮对方圆场；只评价能不能被理解，不评价好坏。400 字以内。`},
-  {id:'exec', num:'⑤', name:'执行者', en:'EXECUTOR', color:'var(--c5)',
+   prompt:`你是议会里的「局外人」。假装你完全不懂这个领域：一个聪明但外行的普通人，可能是潜在客户、投资人、对方的家人。你专门抓出对方觉得理所当然、但外人根本看不懂的东西。
+请输出（Markdown，360 字以内）：
+### 我听懂的版本
+用大白话复述一两句。复述不出来就直接说「我看不懂」并指出卡在哪。
+### 让我困惑的词
+术语、缩写、行话，以及你读到时的困惑。
+### 你以为我知道、其实没说的事
+### 三个蠢问题
+外行会问、但往往最要命的问题。
+最后用一行加粗写：**一个外人看完最大的疑问是 ___**
+不用专业知识帮对方圆场；只评价能不能被理解。`},
+  {id:'exec', num:'⑤', name:'执行者', title:'只谈落地', color:'var(--c5)',
    stance:'不谈方向和理论，只谈执行层面。',
    prompt:`你是议会里的「执行者」。你不谈方向、不谈理论、不谈愿景。假设方向已经定了，只谈怎么落地。
-请输出：
-1. 明天早上第一步：一个具体、30 分钟内能开始的动作。
-2. 前 7 天 / 前 30 天行动清单（每项可验证、有产出物）。
-3. 需要的资源：人、钱、工具、技能——哪些现在就有，哪些缺。
-4. 最可能卡住的环节和绕过办法。
-5. 最小可验证版本：用最少投入验证最关键的假设，怎么做、怎么判断成败。
-6. 最后一句：「现在就去做 ___」。
-每个动作具体到动词+对象+产出。不讨论该不该做。400 字以内。`},
+请输出（Markdown，360 字以内）：
+### 明天早上第一步
+一个 30 分钟内能开始的具体动作。
+### 前 7 天 / 前 30 天
+每项可验证、有产出物。
+### 缺什么
+人、钱、工具、技能——哪些有，哪些缺。
+### 最可能卡住的地方和绕法
+### 最小可验证版本
+最少投入验证最关键的假设；怎么判断成败。
+最后用一行加粗写：**现在就去做 ___**
+每个动作具体到动词+对象+产出。`},
 ];
-const CHAIR_PROMPT = `你是议会的「主席」。你收到了一个人的问题，以及五位议员的独立意见：① 反对者 ② 第一性原理者 ③ 扩张者 ④ 局外人 ⑤ 执行者。
-你是裁判，不是复读机：综合、取舍、下判断。某位议员的观点站不住就直接说并忽略。
-请按以下结构输出（用提问者的语言，800 字以内，Markdown）：
+const CHAIR = {id:'chair', name:'主席', color:'var(--brass)'};
+
+const CHAIR_PROMPT = `你是议会的「主席」。你收到了一个人的议题、五位议员的独立陈词、他们互相的交锋和表决票。
+你是裁判，不是复读机：综合、取舍、下判断。站不住的观点直接说并忽略。用提问者的语言。
+请按以下结构输出（Markdown，700 字以内）：
 ### 一句话裁决
 做 / 不做 / 改了再做，以及核心理由。
-### 重新定义的问题
-采纳第一性原理者的洞察，一句话说清真正要解决的问题。
+### 真正的问题
+采纳第一性原理者的洞察，一句话。
 ### 议会共识
-多位议员独立指向同一结论的地方（最可信）。
-### 关键分歧
-议员冲突的地方（如扩张者 vs 反对者），你站哪边、为什么。
-### 必须先解决的致命问题
-从反对者和局外人中挑 1–3 个，不解决就不要往下走。
-### 被低估的机会
-从扩张者中挑 1 个值得保留的。
-### 行动计划
+多位议员独立指向同一结论的地方。
+### 关键分歧与我的判断
+谁和谁冲突、你站哪边、为什么。表决票可以参考但不必服从。
+### 不解决就别往下走
+从反对者和局外人中挑 1–3 个致命问题。
+### 值得保留的野心
+从扩张者中挑 1 个。
+### 行动令
 - 今天就做
 - 本周
-- 验证标准（什么结果说明方向对 / 该放弃）`;
+- 验证标准（什么结果说明方向对 / 该放弃）
+
+全部写完后，最后单独一行，严格按这个格式输出（不要 Markdown，不要别的字）：
+<<SCORES|做或改了再做或不做|风险0-100|上行空间0-100|清晰度0-100|可执行性0-100>>
+风险越高分越高；清晰度指议题本身被说清楚的程度；可执行性指以现有资源能否马上动手。`;
+
+const CROSSFIRE_PROMPT = `下面是一场议会里五位议员对同一议题的独立陈词。现在进入「交锋」环节：每位议员读完其他人的发言后，挑出一位他最不同意的议员，用两三句话反驳或追问对方的一个具体观点，语气符合各自性格（反对者尖锐、第一性原理者冷静、扩张者热切、局外人直白、执行者务实）。
+只回复一个 JSON 数组，五个元素，顺序为 contrarian, first, expand, outsider, exec：
+[{"from":"contrarian","to":"expand","text":"..."}, ...]
+"to" 只能是五个 id 之一且不能等于 from。不要输出任何其他文字。`;
 
 const EXAMPLES = [
   '我想辞职全职做自媒体，有 8 个月存款，粉丝 3000，现在辞合适吗？',
-  '要不要花 20 万报一个一年的海外硕士？',
-  '我和合伙人在公司方向上分歧很大，是继续磨合还是拆伙？',
-  '想给小餐馆做一个会员小程序，预算 3 万，值得吗？',
+  '要不要花 20 万去读一年的海外硕士？',
+  '和合伙人在方向上分歧很大，继续磨合还是拆伙？',
+  '想给小餐馆做会员小程序，预算 3 万，值得吗？',
   '30 岁转行学编程，还来得及吗？',
+  '爸妈想让我回老家考公，我想留在大城市，怎么选？',
 ];
 
-const $ = s => document.querySelector(s);
-const seatsEl = $('#seats'), status = $('#status'), goBtn = $('#go'), stopBtn = $('#stop');
-let sample = null, ctl = null;
+// ---------- helpers ----------
+const $=s=>document.querySelector(s);
+const status=$('#status'), goBtn=$('#go'), stopBtn=$('#stop');
+let sample=null, ctl=null, downloads=null;
+let session=null; // current session data
+const VC={'做':'yes','改了再做':'fix','不做':'no'};
 
-// --- tiny markdown renderer (headings, bold/italic, lists, quotes, code, hr) ---
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function inline(s){
-  return esc(s)
-    .replace(/`([^`]+)`/g,'<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>');
-}
+function inline(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>')}
 function md(src){
-  const lines = src.replace(/\r/g,'').split('\n'); let out='', list=null, para=[];
-  const flushP=()=>{ if(para.length){out+='<p>'+inline(para.join(' '))+'</p>';para=[]} };
-  const flushL=()=>{ if(list){out+='</'+list+'>';list=null} };
-  for(let raw of lines){
-    const l = raw.trimEnd();
-    let m;
-    if(!l.trim()){flushP();flushL();continue}
-    if(m=l.match(/^(#{1,6})\s+(.*)$/)){flushP();flushL();const n=Math.min(m[1].length,4);out+=`<h${n}>${inline(m[2].replace(/^[#\s]+/,''))}</h${n}>`;continue}
-    if(/^(-{3,}|\*{3,})$/.test(l.trim())){flushP();flushL();out+='<hr>';continue}
-    if(m=l.match(/^\s*>\s?(.*)$/)){flushP();flushL();out+='<blockquote>'+inline(m[1])+'</blockquote>';continue}
-    if(m=l.match(/^\s*([-*•])\s+(.*)$/)){flushP();if(list!=='ul'){flushL();list='ul';out+='<ul>'}out+='<li>'+inline(m[2])+'</li>';continue}
-    if(m=l.match(/^\s*(\d+)[.、)]\s+(.*)$/)){flushP();if(list!=='ol'){flushL();list='ol';out+='<ol>'}out+='<li>'+inline(m[2])+'</li>';continue}
-    flushL(); para.push(l.trim());
-  }
-  flushP();flushL();return out;
-}
+  const lines=src.replace(/\r/g,'').split('\n');let out='',list=null,para=[];
+  const fp=()=>{if(para.length){out+='<p>'+inline(para.join(' '))+'</p>';para=[]}};
+  const fl=()=>{if(list){out+='</'+list+'>';list=null}};
+  for(const raw of lines){const l=raw.trimEnd();let m;
+    if(!l.trim()){fp();fl();continue}
+    if(m=l.match(/^(#{1,6})\s+(.*)$/)){fp();fl();const n=Math.min(m[1].length,4);out+=`<h${n}>${inline(m[2])}</h${n}>`;continue}
+    if(/^(-{3,}|\*{3,})$/.test(l.trim())){fp();fl();out+='<hr>';continue}
+    if(m=l.match(/^\s*>\s?(.*)$/)){fp();fl();out+='<blockquote>'+inline(m[1])+'</blockquote>';continue}
+    if(m=l.match(/^\s*([-*•])\s+(.*)$/)){fp();if(list!=='ul'){fl();list='ul';out+='<ul>'}out+='<li>'+inline(m[2])+'</li>';continue}
+    if(m=l.match(/^\s*(\d+)[.、)]\s+(.*)$/)){fp();if(list!=='ol'){fl();list='ol';out+='<ol>'}out+='<li>'+inline(m[2])+'</li>';continue}
+    fl();para.push(l.trim())}
+  fp();fl();return out}
+// strip the machine line(s) from streamed text
+function stripTags(t){return t.replace(/<<(VOTE|SCORES)\|[^\n]*?(>>|$)/g,'').replace(/<<[^\n]*$/,'').trimEnd()}
+function parseVote(t){const m=t.match(/<<VOTE\|([^|]+)\|(\d+)\|([^>]*)>>/);if(!m)return null;const v=m[1].trim();return{v:VC[v]?v:'改了再做',conf:Math.max(0,Math.min(100,+m[2]||50)),why:m[3].trim()}}
+function parseScores(t){const m=t.match(/<<SCORES\|([^|]+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)>>/);if(!m)return null;const v=m[1].trim();return{v:VC[v]?v:'改了再做',risk:+m[2],up:+m[3],clear:+m[4],feas:+m[5]}}
+function pullCue(t){const m=t.match(/\*\*([^*]{6,80})\*\*\s*$/);return m?m[1]:''}
+function toast(s){const t=$('#toast');t.textContent=s;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),1800)}
+function setStep(n){document.querySelectorAll('.step').forEach(s=>{const k=+s.dataset.s;s.className='step'+(k<n?' done':k===n?' on':'')})}
+const HIDE=new Set(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed']);
+function copyFor(code){switch(code){
+  case 'rate_limited':return '调用太频繁或用量到顶了，缓一缓再开庭。';
+  case 'session_expired':return '登录过期，请重新登录 claude.ai。';
+  case 'refused':return 'Claude 拒绝审议这个议题，换个说法试试。';
+  case 'prompt_too_large':return '议题太长，精简一下。';
+  case 'empty_completion':return '没有得到回答，换个说法。';
+  case 'invalid_json':return '议员的交锋记录没能解析。';
+  case 'cancelled':return '已休庭。';
+  default:return '连接出了问题，再试一次。'}}
 
-// --- seats ---
+// ---------- seats ----------
 function buildSeats(){
-  seatsEl.innerHTML='';
+  const c=$('#chamber');c.innerHTML='';
   for(const m of MEMBERS){
     const el=document.createElement('article');el.className='seat';el.id='seat-'+m.id;el.style.setProperty('--sc',m.color);
-    el.innerHTML=`<h2>${m.num} ${m.name}<span>${m.en}</span></h2><p class="stance">${m.stance}</p><div class="state"><i class="dot"></i><span>等待议题</span></div><div class="out md"></div>`;
-    seatsEl.appendChild(el);
-  }
+    el.innerHTML=`<div class="head"><div class="avatar">${ICONS[m.id]}</div><div class="who"><h2>${m.num} ${m.name}</h2><p>${m.stance}</p></div></div>
+    <div class="body"><div class="state"><i class="dot"></i><span>候席</span></div><p class="cue"></p><div class="out md"></div><p class="rebut"></p>
+    <div class="ballot"><span class="stamp"></span><div class="conf"><i></i></div><small></small></div></div>`;
+    c.appendChild(el)}
+  $('#sess').innerHTML=`第 ${loadHistory().length+1} 次会议<br>${MEMBERS.length} 位议员在席`;
 }
-function setSeat(id,cls,label,html){
-  const el=$('#seat-'+id);el.className='seat'+(cls?' '+cls:'');
-  el.querySelector('.state span').textContent=label;
-  if(html!==undefined) el.querySelector('.out').innerHTML=html;
-}
+function seat(id){return $('#seat-'+id)}
+function setSeat(id,cls,label,text){const el=seat(id);el.className='seat'+(cls?' '+cls:'')+(el.classList.contains('voted')?' voted':'');el.querySelector('.state span').textContent=label;
+  if(text!==undefined){el.querySelector('.out').innerHTML=md(stripTags(text));el.querySelector('.cue').textContent=pullCue(stripTags(text))}}
+function showVote(id,vote){const el=seat(id);if(!vote)return;el.classList.add('voted');const st=el.querySelector('.stamp');st.className='stamp '+VC[vote.v];st.textContent=vote.v;
+  el.querySelector('.ballot small').textContent=vote.conf+'%';el.querySelector('.ballot small').title=vote.why;requestAnimationFrame(()=>el.querySelector('.conf i').style.width=vote.conf+'%')}
+function showRebut(id,r){const el=seat(id);const to=MEMBERS.find(m=>m.id===r.to);el.querySelector('.rebut').innerHTML=`<span class="to">⟶ 对 ${to?to.name:r.to}：</span><b>${esc(r.text||'')}</b>`}
+function resetSeats(){for(const m of MEMBERS){const el=seat(m.id);el.className='seat';el.querySelector('.state span').textContent='候席';el.querySelector('.out').innerHTML='';el.querySelector('.cue').textContent='';el.querySelector('.rebut').innerHTML='';el.querySelector('.conf i').style.width='0'}}
+function showTally(votes){const n={yes:0,fix:0,no:0};Object.values(votes).forEach(v=>{if(v)n[VC[v.v]]++});const tot=n.yes+n.fix+n.no;$('#tally').hidden=!tot;
+  for(const k of ['yes','fix','no']){const s=$('#bar .'+k);s.style.flex=n[k]+' 0 0';s.textContent=n[k]?`${{yes:'做',fix:'改了再做',no:'不做'}[k]} ${n[k]}`:''}}
+function showScores(sc){const map={risk:'risk',up:'up',clear:'clear',feas:'feas'};for(const k in map){const m=$('#meters .meter.'+map[k]);const v=Math.max(0,Math.min(100,sc[k]||0));m.querySelector('.n').textContent=v;requestAnimationFrame(()=>m.querySelector('.m i').style.width=v+'%')}}
+function showVerdict(v){const el=$('#verdict');el.hidden=false;el.className='verdict '+VC[v]+' pop';el.textContent=v;const b=$('#bench');b.classList.remove('strike');void b.offsetWidth;b.classList.add('strike')}
+function resetBench(){$('#bench').hidden=true;$('#verdict').hidden=true;$('#chairOut').innerHTML='';$('#chairState').textContent='';document.querySelectorAll('#meters .m i').forEach(i=>i.style.width='0');document.querySelectorAll('#meters .n').forEach(n=>n.textContent='—');$('#tally').hidden=true;$('#gallery').hidden=true;$('#thread').innerHTML=''}
 
-// --- errors → copy ---
-const HIDE = new Set(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed']);
-function copyFor(code){
-  switch(code){
-    case 'rate_limited': return '调用太频繁或用量已达上限，稍等一会再试。';
-    case 'session_expired': return '登录已过期，请重新登录 claude.ai。';
-    case 'refused': return 'Claude 拒绝回答这个议题，换个说法再试。';
-    case 'prompt_too_large': return '议题太长，请精简后再试。';
-    case 'empty_completion': return '没有得到回答，请换个说法。';
-    case 'cancelled': return '已停止。';
-    default: return '连接出了问题，请再试一次。';
-  }
-}
-
-// --- the session ---
-function brief(q){ return `【议题】\n${q}\n\n请严格按你的角色设定输出，用提问者使用的语言回答，不要自我介绍，直接进入内容。`; }
+// ---------- the sitting ----------
+function brief(q){return `【议题】\n${q}\n\n请严格按你的角色设定输出，用提问者使用的语言回答，不要自我介绍，直接进入内容。`}
 
 async function convene(){
-  const q=$('#q').value.trim(); if(!q){status.textContent='先写下你的议题。';$('#q').focus();return}
+  const q=$('#q').value.trim();if(!q){status.textContent='先把议题写下来。';$('#q').focus();return}
   if(!sample){status.textContent='这个页面需要在 claude.ai 里打开。';return}
-  const tier=$('#tier').value;
-  ctl=new AbortController(); goBtn.disabled=true; stopBtn.hidden=false; status.className='status';
-  status.textContent='议员正在独立审议…（首次使用会询问你是否允许此页面调用 Claude）';
-  $('#chair').hidden=true; $('#chairOut').innerHTML=''; $('#chairState').textContent='';
-  const texts={};
+  const tier=$('#tier').value;ctl=new AbortController();goBtn.disabled=true;stopBtn.hidden=false;status.className='status';
+  resetSeats();resetBench();setStep(1);
+  status.textContent='五位议员正在独立陈词…（首次使用会询问你是否允许此页面调用 Claude）';
+  session={q,tier,texts:{},votes:{},rebuts:{},verdict:'',scores:null,at:Date.now()};
+  const S=session;
+
+  // Phase 1: speeches, in parallel
   const jobs=MEMBERS.map(async m=>{
-    setSeat(m.id,'thinking','思考中…','');
-    try{
-      const {text}=await sample(m.prompt+'\n\n'+brief(q),{signal:ctl.signal,modelTier:tier,cache:false,
-        onText:({text})=>{ setSeat(m.id,'thinking','发言中…',md(text)); }});
-      texts[m.id]=text; setSeat(m.id,'done','发言完毕',md(text));
-    }catch(e){
-      if(e.text){texts[m.id]=e.text; setSeat(m.id,'failed','发言中断',md(e.text));}
-      else setSeat(m.id,'failed',copyFor(e.code),'');
-      if(HIDE.has(e.code)){ $('#unavail').hidden=false; }
-      if(e.code==='cancelled') throw e;
-    }
-  });
-  try{ await Promise.all(jobs); }catch(e){ finish('已停止。'); return; }
+    setSeat(m.id,'speaking','起身发言…','');
+    try{const {text}=await sample(m.prompt+VOTE_RULE+'\n\n'+brief(q),{signal:ctl.signal,modelTier:tier,cache:false,onText:({text})=>setSeat(m.id,'speaking','发言中…',text)});
+      S.texts[m.id]=stripTags(text);S.votes[m.id]=parseVote(text);setSeat(m.id,'done','陈词完毕',text)}
+    catch(e){if(e.text){S.texts[m.id]=stripTags(e.text);S.votes[m.id]=parseVote(e.text);setSeat(m.id,'failed','发言中断',e.text)}else setSeat(m.id,'failed',copyFor(e.code),'');
+      if(HIDE.has(e.code))$('#unavail').hidden=false;if(e.code==='cancelled')throw e}});
+  try{await Promise.all(jobs)}catch(e){finish('已休庭。');return}
+  const spoken=MEMBERS.filter(m=>S.texts[m.id]);
+  if(spoken.length<2){finish('发言的议员不足，无法继续。',true);return}
+  const transcript=spoken.map(m=>`## ${m.num} ${m.name}（id: ${m.id}）\n${S.texts[m.id]}`).join('\n\n');
 
-  const spoken=MEMBERS.filter(m=>texts[m.id]);
-  if(spoken.length<2){ finish('议员发言不足，主席无法裁决。',true); return; }
+  // Phase 2: crossfire — one quick JSON call
+  setStep(2);status.textContent='交锋环节：议员们在互相反驳…';
+  spoken.forEach(m=>setSeat(m.id,'speaking','准备反驳…'));
+  try{const arr=await sample.json(`${CROSSFIRE_PROMPT}\n\n【议题】\n${q}\n\n【陈词】\n${transcript}`,{signal:ctl.signal,modelTier:'quick',cache:false});
+    if(Array.isArray(arr))for(const r of arr){if(r&&S.texts[r.from]){S.rebuts[r.from]=r;showRebut(r.from,r)}}}
+  catch(e){if(e.code==='cancelled'){finish('已休庭。');return}/* crossfire is a flourish; carry on without it */}
+  spoken.forEach(m=>setSeat(m.id,'done','陈词完毕'));
 
-  $('#chair').hidden=false; $('#chairState').textContent='主席正在汇总…'; status.textContent='主席正在汇总五位议员的意见…';
-  const transcript=spoken.map(m=>`## ${m.num} ${m.name}\n${texts[m.id]}`).join('\n\n');
-  let verdict='';
-  try{
-    const {text}=await sample(`${CHAIR_PROMPT}\n\n【议题】\n${q}\n\n【议员发言】\n${transcript}`,{signal:ctl.signal,modelTier:tier,cache:false,
-      onText:({text})=>{ $('#chairState').textContent='裁决中…'; $('#chairOut').innerHTML=md(text); }});
-    verdict=text; $('#chairState').textContent=''; $('#chairOut').innerHTML=md(text);
-    saveHistory({q,tier,texts,verdict,at:Date.now()}); finish('议会结束。');
-  }catch(e){
-    if(e.text){verdict=e.text; $('#chairOut').innerHTML=md(e.text);}
-    $('#chairState').textContent=e.code==='cancelled'?'已停止。':copyFor(e.code);
-    finish(e.code==='cancelled'?'已停止。':'主席裁决失败。',e.code!=='cancelled');
-  }
+  // Phase 3: ballots
+  setStep(3);status.textContent='表决中…';
+  for(const m of spoken){showVote(m.id,S.votes[m.id]);await new Promise(r=>setTimeout(r,220))}
+  showTally(S.votes);
+
+  // Phase 4: the chair
+  setStep(4);$('#bench').hidden=false;$('#chairState').textContent='主席正在阅卷…';status.textContent='主席正在综合陈词、交锋与表决…';
+  const ballots=spoken.map(m=>{const v=S.votes[m.id];return v?`${m.name}：${v.v}（把握 ${v.conf}%）— ${v.why}`:`${m.name}：弃权`}).join('\n');
+  const cross=Object.values(S.rebuts).map(r=>{const f=MEMBERS.find(m=>m.id===r.from),t=MEMBERS.find(m=>m.id===r.to);return `${f?.name} → ${t?.name}：${r.text}`}).join('\n')||'（无）';
+  try{const {text}=await sample(`${CHAIR_PROMPT}\n\n【议题】\n${q}\n\n【陈词】\n${transcript}\n\n【交锋】\n${cross}\n\n【表决】\n${ballots}`,{signal:ctl.signal,modelTier:tier,cache:false,
+      onText:({text})=>{$('#chairState').textContent='';$('#chairOut').innerHTML=md(stripTags(text))}});
+    S.verdict=stripTags(text);S.scores=parseScores(text);$('#chairOut').innerHTML=md(S.verdict);
+    if(S.scores){showScores(S.scores);showVerdict(S.scores.v)}
+    saveHistory(S);$('#sess').innerHTML=`第 ${loadHistory().length} 次会议 · 已闭庭<br>${spoken.length} 位议员发言`;
+    finish('闭庭。你可以在旁听席继续质询。');$('#gallery').hidden=false;buildAskWho(spoken)}
+  catch(e){if(e.text){S.verdict=stripTags(e.text);$('#chairOut').innerHTML=md(S.verdict)}
+    $('#chairState').textContent=e.code==='cancelled'?'已休庭。':copyFor(e.code);finish(e.code==='cancelled'?'已休庭。':'主席裁决失败。',e.code!=='cancelled')}
 }
-function finish(msg,err){ status.textContent=msg; status.className='status'+(err?' err':''); goBtn.disabled=false; stopBtn.hidden=true; ctl=null; }
+function finish(msg,err){status.textContent=msg;status.className='status'+(err?' err':'');goBtn.disabled=false;stopBtn.hidden=true;ctl=null;
+  if(!err&&session&&session.verdict)setStep(5);}
 
-// --- history (this browser only) ---
-function loadHistory(){ try{return JSON.parse(localStorage.getItem('council.history')||'[]')}catch{return []} }
-function saveHistory(item){ try{const h=loadHistory();h.unshift(item);localStorage.setItem('council.history',JSON.stringify(h.slice(0,20)));}catch{} renderHistory(); }
-function renderHistory(){
-  const h=loadHistory(); $('#history').hidden=!h.length; const list=$('#hlist'); list.innerHTML='';
-  h.forEach((it,i)=>{
-    const d=document.createElement('div');d.className='hitem';d.setAttribute('role','button');d.tabIndex=0;
-    const t=new Date(it.at);
-    d.innerHTML=`<span class="q"></span><time>${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}</time>`;
+// ---------- follow-up ----------
+function buildAskWho(spoken){const s=$('#askWho');s.innerHTML='';const add=(v,t)=>{const o=document.createElement('option');o.value=v;o.textContent=t;s.appendChild(o)};
+  add('chair','主席');(spoken||MEMBERS).forEach(m=>add(m.id,m.num+' '+m.name))}
+function sessionDigest(S){const parts=[`【议题】\n${S.q}`];for(const m of MEMBERS)if(S.texts[m.id])parts.push(`【${m.name}的陈词】\n${S.texts[m.id].slice(0,2500)}`);if(S.verdict)parts.push(`【主席裁决】\n${S.verdict.slice(0,3500)}`);return parts.join('\n\n')}
+const threads={}; // who -> turns
+function addMsg(who,text,me){const t=$('#thread');const d=document.createElement('div');d.className='msg'+(me?' me':'');
+  const m=who==='chair'?CHAIR:MEMBERS.find(x=>x.id===who);
+  d.innerHTML=me?`<div class="bub"><div class="nm">你</div><div class="md"></div></div>`:`<div class="avatar" style="--sc:${m.color};border-color:${m.color};color:${m.color}">${ICONS[who]}</div><div class="bub"><div class="nm">${m.name}</div><div class="md"></div></div>`;
+  d.querySelector('.md').innerHTML=md(text);t.appendChild(d);d.scrollIntoView({block:'nearest',behavior:'smooth'});return d.querySelector('.md')}
+$('#askForm').onsubmit=async e=>{e.preventDefault();const who=$('#askWho').value,txt=$('#askText').value.trim();if(!txt||!session||!sample)return;
+  const m=who==='chair'?CHAIR:MEMBERS.find(x=>x.id===who);$('#askText').value='';addMsg(who,txt,true);const out=addMsg(who,'…');$('#askBtn').disabled=true;
+  const rules=who==='chair'?`你是刚才这场议会的主席，裁决已经做出。现在旁听席上的提问者向你追问或反驳。保持裁判的立场：该坚持的坚持，被说服了就明确改判并说明原因。用提问者的语言，200 字以内，直接回答。`
+    :`你是刚才这场议会里的「${m.name}」。${MEMBERS.find(x=>x.id===who).prompt.split('\n')[0]}现在提问者向你追问或反驳。保持你的性格和立场，但对方给出新事实时要诚实面对。用提问者的语言，200 字以内，直接回答，不要重复陈词。`;
+  threads[who]=threads[who]||[];threads[who].push({role:'user',content:txt});
+  const input=[{role:'user',content:rules+'\n\n以下是会议记录：\n\n'+sessionDigest(session)},...threads[who].slice(-8)];
+  const c=new AbortController();
+  try{const {text}=await sample(input,{signal:c.signal,modelTier:'default',cache:false,onText:({text})=>out.innerHTML=md(text)});threads[who].push({role:'assistant',content:text});out.innerHTML=md(text)}
+  catch(err){out.innerHTML=md(err.text||('*'+copyFor(err.code)+'*'));threads[who].pop()}
+  finally{$('#askBtn').disabled=false;$('#askText').focus()}}
+
+// ---------- export ----------
+function judgement(S){const d=new Date(S.at);const lines=[`# 议会判决书`,`议题：${S.q}`,`日期：${d.toLocaleString()}`,''];
+  if(S.scores)lines.push(`**裁决：${S.scores.v}** · 风险 ${S.scores.risk} / 上行 ${S.scores.up} / 清晰度 ${S.scores.clear} / 可执行性 ${S.scores.feas}`,'');
+  lines.push('## 主席裁决',S.verdict||'（无）','','## 表决');for(const m of MEMBERS){const v=S.votes[m.id];if(v)lines.push(`- ${m.name}：${v.v}（${v.conf}%）— ${v.why}`)}
+  lines.push('','## 议员陈词');for(const m of MEMBERS)if(S.texts[m.id])lines.push(`### ${m.num} ${m.name}`,S.texts[m.id],'');
+  if(Object.keys(S.rebuts).length){lines.push('## 交锋');for(const r of Object.values(S.rebuts)){const f=MEMBERS.find(m=>m.id===r.from),t=MEMBERS.find(m=>m.id===r.to);lines.push(`- ${f?.name} → ${t?.name}：${r.text}`)}}
+  return lines.join('\n')}
+$('#copyBtn').onclick=async()=>{if(!session)return;const txt=judgement(session);try{await navigator.clipboard.writeText(txt);toast('判决书已复制')}catch{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();toast('请按 Ctrl/⌘+C 复制');setTimeout(()=>ta.remove(),4000)}}
+$('#dlBtn').onclick=async()=>{if(!session||!downloads)return;try{await downloads.save({filename:`议会判决书-${new Date(session.at).toISOString().slice(0,10)}.md`,data:judgement(session)});toast('已保存')}catch(e){if(e?.code!=='cancelled')toast('没有保存')}}
+$('#againBtn').onclick=()=>{if(session)$('#q').value=session.q;convene()}
+
+// ---------- history ----------
+function loadHistory(){try{return JSON.parse(localStorage.getItem('council.history.v2')||'[]')}catch{return []}}
+function saveHistory(S){try{const h=loadHistory().filter(x=>x.at!==S.at);h.unshift(S);localStorage.setItem('council.history.v2',JSON.stringify(h.slice(0,20)))}catch{}renderHistory()}
+function renderHistory(){const h=loadHistory();$('#history').hidden=!h.length;const list=$('#hlist');list.innerHTML='';
+  h.forEach(it=>{const d=document.createElement('div');d.className='hitem';d.setAttribute('role','button');d.tabIndex=0;const t=new Date(it.at);const v=it.scores?.v;
+    d.innerHTML=`<span class="q"></span>${v?`<span class="v" style="color:var(--${VC[v]==='yes'?'ok':VC[v]==='no'?'bad':'warn'})">${v}</span>`:''}<time>${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}</time>`;
     d.querySelector('.q').textContent=it.q;
-    const open=()=>{ $('#q').value=it.q; for(const m of MEMBERS){ it.texts[m.id]?setSeat(m.id,'done','往期发言',md(it.texts[m.id])):setSeat(m.id,'','未发言',''); }
-      $('#chair').hidden=false; $('#chairState').textContent=''; $('#chairOut').innerHTML=md(it.verdict||''); window.scrollTo({top:0,behavior:'smooth'}); };
-    d.onclick=open; d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}};
-    list.appendChild(d);
-  });
-}
+    const open=()=>{session=it;$('#q').value=it.q;resetSeats();resetBench();for(const m of MEMBERS){if(it.texts[m.id]){setSeat(m.id,'done','会议记录',it.texts[m.id]);showVote(m.id,it.votes?.[m.id]);if(it.rebuts?.[m.id])showRebut(m.id,it.rebuts[m.id])}}
+      showTally(it.votes||{});$('#bench').hidden=false;$('#chairOut').innerHTML=md(it.verdict||'');if(it.scores){showScores(it.scores);showVerdict(it.scores.v)}
+      setStep(5);$('#gallery').hidden=!sample;buildAskWho(MEMBERS.filter(m=>it.texts[m.id]));window.scrollTo({top:0,behavior:'smooth'})};
+    d.onclick=open;d.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}};list.appendChild(d)})}
 
-// --- boot ---
-buildSeats(); renderHistory();
+// ---------- boot ----------
+buildSeats();renderHistory();setStep(0);buildAskWho();
 for(const ex of EXAMPLES){const b=document.createElement('button');b.className='chip';b.textContent=ex;b.onclick=()=>{$('#q').value=ex;$('#q').focus()};$('#chips').appendChild(b)}
-goBtn.onclick=convene; stopBtn.onclick=()=>ctl?.abort();
+goBtn.onclick=convene;stopBtn.onclick=()=>ctl?.abort();
 $('#q').addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')convene()});
-(async()=>{
-  const c=window.claude?.use ? await window.claude.use('sample') : null;
-  sample=c; if(!c){ $('#unavail').hidden=false; goBtn.disabled=true; }
-})();
+(async()=>{const use=window.claude?.use;if(!use){$('#unavail').hidden=false;goBtn.disabled=true;return}
+  const [s,d]=await Promise.all([window.claude.use('sample'),window.claude.use('downloads')]);
+  sample=s;downloads=d;if(!s){$('#unavail').hidden=false;goBtn.disabled=true}if(d)$('#dlBtn').hidden=false})();
 </script>
