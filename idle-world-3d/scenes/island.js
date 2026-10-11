@@ -112,20 +112,20 @@ export default {
       // sky
       const su = sky.uniforms;
       su.sunPosition.value.copy(sunDir);
-      su.turbidity.value = lerp(2.3, 7.5, golden);
+      su.turbidity.value = lerp(2.2, 4.6, golden);
       su.rayleigh.value = lerp(1.15, 2.4, golden) + night * 0.5;
       su.mieCoefficient.value = lerp(0.0035, 0.009, golden);
       su.mieDirectionalG.value = lerp(0.8, 0.86, golden);
       su.uNight.value = smoothstep(0.0, 1.0, night * 1.1);
       su.uMoonDir.value.copy(moonDir);
-      su.uSunGlow.value.copy(C.sunCol).multiplyScalar(golden * 0.9);
+      su.uSunGlow.value.copy(C.sunCol).multiplyScalar(golden * 0.3);
       su.uSkyGain.value = lerp(0.46, 0.6, golden);
       su.uLowTint.value.setRGB(1, 1, 1).lerp(C.tmp.setRGB(1.25, 0.95, 1.05), golden * 0.6);
-      su.uArtZen.value.copy(s.zenith);
-      su.uArtHor.value.copy(s.horizon);
+      su.uArtZen.value.copy(s.zenith).lerp(C.tmp.set('#1f6fd6'), 0.45 * day * (1 - golden));
+      su.uArtHor.value.copy(s.horizon).lerp(C.tmp.set('#86c4ee'), 0.55 * day * (1 - golden));
       su.uArtSun.value.copy(C.sunCol).multiplyScalar(1.1);
       const twi = smoothstep(2, -4, s.elevationDeg);
-      su.uArtMix.value = lerp(lerp(0.55, 0.32, golden), 0.88, twi);
+      su.uArtMix.value = lerp(lerp(0.68, 0.5, golden), 0.88, twi);
       su.uArtGain.value = lerp(1.18, 1.35, Math.max(golden, twi)) * (1 - night * 0.5);
       su.uSkySat.value = 1.25;
 
@@ -154,7 +154,7 @@ export default {
       wu.uFoamCol.value.copy(C.sunCol).multiplyScalar(sunI * 0.26).add(C.tmp.copy(s.skyAmbient).multiplyScalar(s.ambientIntensity * 0.5));
       wu.uGlow.value.setRGB(0.04, 0.5, 1.6).multiplyScalar(1.6 * smoothstep(0.35, 0.95, night));
       wu.uNight.value = night;
-      C.horizon.copy(s.horizon).lerp(C.tmp.copy(s.zenith), 0.18).multiplyScalar(lerp(1.05, 0.8, golden) * (1 - night * 0.7));
+      C.horizon.copy(su.uArtHor.value).lerp(C.tmp.copy(su.uArtZen.value), 0.15).multiplyScalar(lerp(1.05, 0.85, golden) * (1 - night * 0.7));
       wu.uHorizon.value.copy(C.horizon);
       wu.uSkyFallback.value.copy(C.horizon);
 
@@ -162,21 +162,21 @@ export default {
       const cu = sky.clouds.uniforms;
       cu.uSunDir.value.copy(sunVis > 0.02 ? sunDir : moonDir);
       cu.uLit.value.copy(C.sunCol).multiplyScalar(sunI * 0.42 + 0.05).add(C.tmp.copy(s.skyAmbient).multiplyScalar(0.35 * s.ambientIntensity));
-      if (sunVis <= 0.02) cu.uLit.value.copy(C.moon).multiplyScalar(0.07 + 0.05 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.35));
+      if (sunVis <= 0.02) cu.uLit.value.copy(C.moon).multiplyScalar(0.1 + 0.12 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.5));
       cu.uShade.value.copy(s.skyAmbient).multiplyScalar(0.55 * s.ambientIntensity).lerp(C.tmp.copy(s.horizon).multiplyScalar(0.55), 0.35);
       if (golden > 0) cu.uShade.value.lerp(C.tmp.setRGB(0.42, 0.26, 0.36), golden * 0.5);
-      cu.uShade.value.multiplyScalar(1 - night * 0.6);
+      cu.uShade.value.multiplyScalar(1 - night * 0.35);
       cu.uRim.value.copy(C.sunCol).multiplyScalar(sunI * 0.45 + 0.02);
       cu.uHaze.value.copy(C.horizon);
-      cu.uOpacity.value = lerp(1, 0.75, night);
+      cu.uOpacity.value = lerp(1, 0.6, night);
 
       // lights on the dock come on at dusk
       tod.lantern = smoothstep(3, -3, s.elevationDeg);
 
       // post
-      post.exposure = lerp(1.0, 1.45, night) * lerp(1, 1.04, golden);
-      post.bloom.strength = lerp(0.3, 0.8, Math.max(night, golden * 0.6));
-      post.bloom.threshold = lerp(1.15, 0.5, night);
+      post.exposure = lerp(1.0, 1.45, night) * lerp(1, 0.94, golden);
+      post.bloom.strength = lerp(0.3, 0.8, night) + golden * 0.12;
+      post.bloom.threshold = lerp(1.2, 0.5, night) + golden * 0.4;
       post.saturation = lerp(1.13, 1.04, night) + golden * 0.05;
       post.contrast = lerp(1.06, 1.03, night);
       post.lift = [lerp(0.0, 0.006, night), lerp(0.004, 0.012, night), lerp(0.012, 0.035, night)];

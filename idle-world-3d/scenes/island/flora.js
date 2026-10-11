@@ -9,7 +9,7 @@ const V3 = THREE.Vector3;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new V3(), _p = new V3(), _e = new THREE.Euler();
 const UP = new V3(0, 1, 0);
 const WHITE = new THREE.Color(1, 1, 1);
-const CORAL = ['#b0587e', '#7e5aa8', '#c47f45', '#5f9a8e', '#c9a14a'].map(c => new THREE.Color(c).multiplyScalar(1.6));
+const CORAL = ['#d07a9a', '#a07ccc', '#e09a5a', '#7fbfb0', '#e6c26a'].map(c => new THREE.Color(c).multiplyScalar(1.5));
 
 /** Foliage seen from behind keeps its (outward/up) normal instead of flipping dark. */
 function noFlip(material) {
@@ -462,7 +462,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
         float rkTop = smoothstep(0.55, 0.85, vRkN.y);
         vec3 mossC = mix(vec3(0.62, 0.55, 0.38), vec3(0.24, 0.36, 0.12), smoothstep(0.6, 1.4, vRkPos.y));
         diffuseColor.rgb = mix(diffuseColor.rgb, mossC, rkTop * 0.75 * smoothstep(0.25, 0.6, vRkPos.y));
-        float rkWet = 1.0 - smoothstep(0.02, 0.32, vRkPos.y);
+        float rkWet = (1.0 - smoothstep(0.02, 0.32, vRkPos.y)) * smoothstep(-0.5, -0.1, vRkPos.y);
         diffuseColor.rgb *= mix(1.0, 0.55, rkWet);
         // barnacle speckles near the waterline
         float sp = step(0.82, fract(sin(dot(floor(vRkPos.xz * 22.0 + vRkPos.y * 9.0), vec2(12.9898, 78.233))) * 43758.5453));

@@ -79,9 +79,9 @@ void RE_Direct_Meadow( const in IncidentLight directLight, const in vec3 geometr
 
 export function makeGrassColorUniforms() {
   return {
-    uRootCol: { value: new THREE.Color('#2c2a14') },
-    uMidCol: { value: new THREE.Color('#9a7432') },
-    uTipCol: { value: new THREE.Color('#e6cf92') },
+    uRootCol: { value: new THREE.Color('#4a4220') },
+    uMidCol: { value: new THREE.Color('#b08a40') },
+    uTipCol: { value: new THREE.Color('#ecd79c') },
     uPlumeCol: { value: new THREE.Color('#f2e4c8') },
     uGustBright: { value: 0.4 },
   };
@@ -122,7 +122,7 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
           float hv = vInst.x;
           c *= mix(vec3(1.0), hv > 0.0 ? vec3(0.78, 0.95, 0.6) : vec3(1.1, 0.78, 0.58), abs(hv) * 0.65);
           c *= 0.78 + 0.44 * vInst.y;
-          c *= mix(0.38, 1.0, smoothstep(0.0, 0.6, h));
+          c *= mix(0.55, 1.0, smoothstep(0.0, 0.55, h));
           c *= 1.0 + 0.22 * (1.0 - smoothstep(0.0, 0.35, abs(vSide))) * smoothstep(0.1, 0.5, h);
           c *= 1.0 + vGust * uGustBright * h;
           ${plume ? `

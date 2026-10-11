@@ -35,6 +35,8 @@ export function createShared() {
     uWaterY: { value: -0.25 },
     uCaustic: { value: 1 },
     uMossColor: { value: new THREE.Color('#4d6b22') },
+    uAbsorb: { value: new THREE.Vector3(1.1, 0.3, 0.42) },
+    uWaterScatter: { value: new THREE.Color('#1d5a48') },
   };
 }
 
@@ -50,6 +52,15 @@ const HEADER_COMMON = /* glsl */`
   uniform float uFogDensity, uFogFalloff, uFogBase;
   uniform vec4 uGlowPts[${GLOW_N}];
   uniform vec3 uGlowColor, uMossColor;
+  uniform vec3 uAbsorb, uWaterScatter;
+  vec3 jgUnderwater(vec3 col, vec3 wp){
+    float dw = uWaterY - wp.y;
+    if (dw <= 0.0) return col;
+    vec3 V = normalize(cameraPosition - wp);
+    float path = dw / max(V.y, 0.12) + dw * 0.6;
+    vec3 T = exp(-uAbsorb * path);
+    return col * T + uWaterScatter * (1.0 - T);
+  }
   float jgCookie(vec3 wp){
     vec3 L = uLightDirW;
     float ly = max(L.y, 0.25);
@@ -204,7 +215,11 @@ export function jungleMaterial(material, shared, opts = {}) {
         }
         #endif
       `,
-      '#include <fog_fragment>': 'gl_FragColor.rgb = jgFog(gl_FragColor.rgb, vWorldP);',
+      '#include <fog_fragment>': `
+        #ifdef JG_CAUSTICS
+          gl_FragColor.rgb = jgUnderwater(gl_FragColor.rgb, vWorldP);
+        #endif
+        gl_FragColor.rgb = jgFog(gl_FragColor.rgb, vWorldP);`,
     },
   });
   return material;

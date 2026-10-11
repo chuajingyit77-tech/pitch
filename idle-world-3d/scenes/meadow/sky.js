@@ -214,27 +214,27 @@ export function createSkyMaterial(fogU) {
 export function buildMountains({ noise, rng, fogU, sunsetAz }) {
   const group = new THREE.Group();
   const layers = [
-    { R: 330, hmin: 6, hmax: 44, base: '#2e3a2a', alt: '#5a3420', a0: -1.95, a1: 1.95, seg: 260 },
-    { R: 520, hmin: 18, hmax: 95, base: '#34443e', alt: '#4a3a30', a0: -2.0, a1: 2.0, seg: 220 },
-    { R: 800, hmin: 40, hmax: 170, base: '#3c4c56', alt: '#3c4c56', a0: -2.05, a1: 2.05, seg: 200 },
-    { R: 1250, hmin: 80, hmax: 300, base: '#46566a', alt: '#46566a', a0: -2.1, a1: 2.1, seg: 160 },
+    { R: 330, hmin: 3, hmax: 30, base: '#28332b', alt: '#5a3420', a0: -1.95, a1: 1.95, seg: 260 },
+    { R: 520, hmin: 10, hmax: 68, base: '#2f3d3c', alt: '#4a3a30', a0: -2.0, a1: 2.0, seg: 220 },
+    { R: 800, hmin: 26, hmax: 135, base: '#394a54', alt: '#394a54', a0: -2.05, a1: 2.05, seg: 200 },
+    { R: 1250, hmin: 60, hmax: 250, base: '#45566a', alt: '#45566a', a0: -2.1, a1: 2.1, seg: 160 },
   ];
   const ridgeAt = [];
   layers.forEach((L, li) => {
-    const rows = 7;
+    const rows = 9;
     const pos = [], col = [], idx = [];
     const cA = new THREE.Color(L.base), cB = new THREE.Color(L.alt), c = new THREE.Color();
     const ph = rng.range(0, 100);
     const ridge = [];
     for (let j = 0; j <= L.seg; j++) {
       const a = L.a0 + (L.a1 - L.a0) * j / L.seg;
-      let n = noise.ridged2(a * (2.2 + li * 0.6) + ph, li * 7.3, 5);
-      n = Math.pow(n, 1.6);
-      let h = lerp(L.hmin, L.hmax, n);
+      let n = noise.fbm2(a * (1.5 + li * 0.45) + ph, li * 7.3, 5) * 0.5 + 0.5;
+      n = n * 0.78 + noise.ridged2(a * (4.0 + li) + ph * 0.7, li * 3.1, 4) * 0.22;
+      let h = lerp(L.hmin, L.hmax, smoothstep(0.18, 0.92, n));
       // low saddle where the sun sets, taller shoulders around it
       const dA = a - sunsetAz;
-      h *= 1 - 0.78 * Math.exp(-(dA * dA) / (2 * 0.16 * 0.16));
-      h *= 0.75 + 0.5 * smoothstep(0.2, 1.4, Math.abs(dA));
+      h *= 1 - 0.75 * Math.exp(-(dA * dA) / (2 * 0.17 * 0.17));
+      h *= 0.72 + 0.5 * smoothstep(0.2, 1.4, Math.abs(dA));
       ridge.push(h);
     }
     ridgeAt.push({ R: L.R, a0: L.a0, a1: L.a1, ridge });
@@ -244,12 +244,14 @@ export function buildMountains({ noise, rng, fogU, sunsetAz }) {
       for (let i = 0; i <= rows; i++) {
         const v = i / rows;
         const h = ridge[j];
-        const y = lerp(-45 - li * 10, h, Math.pow(v, 0.85)) + noise.noise2(a * 30 + li, v * 3) * h * 0.06 * (1 - v);
-        const r = L.R - (1 - v) * (h * 2.2 + 60) + noise.noise2(a * 18 + 3 + li, v * 4) * 14;
+        const prof = 1 - Math.pow(1 - v, 2.2);
+        const y = lerp(-45 - li * 10, h, prof) + noise.noise2(a * 40 + li, v * 3) * h * 0.05 * (1 - v);
+        const r = L.R - (1 - v) * (h * 2.6 + 70) + noise.noise2(a * 14 + 3 + li, v * 3) * 18;
         pos.push(sx * r, y, sz * r);
-        const tex = noise.fbm2(a * 40 + li * 5, v * 6, 3) * 0.5 + 0.5;
-        c.copy(cA).lerp(cB, smoothstep(0.55, 0.85, tex) * 0.7).multiplyScalar(0.8 + 0.4 * tex);
-        c.multiplyScalar(lerp(0.75, 1.1, v));
+        const tex = noise.fbm2(a * 60 + li * 5, v * 8, 3) * 0.5 + 0.5;
+        const speck = noise.noise2(a * 260 + li, v * 30) * 0.5 + 0.5;
+        c.copy(cA).lerp(cB, smoothstep(0.5, 0.8, tex) * 0.75).multiplyScalar(0.72 + 0.5 * tex * (0.7 + 0.6 * speck));
+        c.multiplyScalar(lerp(0.8, 1.08, v));
         col.push(c.r, c.g, c.b);
       }
     }

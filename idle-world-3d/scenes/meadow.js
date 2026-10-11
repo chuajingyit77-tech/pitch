@@ -3,6 +3,7 @@
 // Art direction inspired by Ghost of Tsushima; all assets procedural except the CC0 Fox / Stork models.
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains } from './meadow/sky.js';
 import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, WIND_GLSL } from './meadow/flora.js';
@@ -73,12 +74,12 @@ export default {
     const pathPoint = (t, out = new THREE.Vector3()) => { const p = pathCurve.getPointAt(clamp(t, 0, 1)); return out.set(p.x, heightAt(p.x, p.z), p.z); };
     const tPathTorii = 0.9 / pathCurve.getLength();
 
-    const TARGET = new THREE.Vector3(0.9, 1.55, 0.6);
+    const TARGET = new THREE.Vector3(1.7, 1.45, 0.2);
     const LANTERNS = [new THREE.Vector3(-1.8, 0, 2.6), new THREE.Vector3(1.8, 0, 2.6)];
     LANTERNS.forEach(l => { l.y = heightAt(l.x, l.z); });
     // maples: hero tree beside the torii, others layered behind
     const treeSpots = [
-      { x: lay.range(-6.8, -5.0), z: lay.range(-2.5, 0.5), s: lay.range(1.05, 1.2) },
+      { x: lay.range(-5.6, -4.4), z: lay.range(-3.6, -1.6), s: lay.range(1.05, 1.2) },
       { x: lay.range(5.5, 8.0), z: lay.range(-9.5, -6.0), s: lay.range(0.9, 1.05) },
       { x: lay.range(-17, -12), z: lay.range(-20, -12), s: lay.range(1.0, 1.25) },
       { x: lay.range(13, 19), z: lay.range(-30, -20), s: lay.range(1.1, 1.3) },
@@ -236,9 +237,9 @@ export default {
         return false;
       };
       const regions = [
-        { r0: 0, r1: 24, step: 0.5, geo: buildClump(grng, { blades: 13, segs: 4, width: 0.034 }), pgeo: buildPlumeStalk({ planes: 3, segs: 3 }), xz: 1.0, y: 1.0, pp: 0.3 },
-        { r0: 24, r1: 72, step: 0.95, geo: buildClump(grng, { blades: 10, segs: 3, width: 0.042 }), pgeo: buildPlumeStalk({ planes: 3, segs: 2 }), xz: 1.3, y: 1.06, pp: 0.32 },
-        { r0: 72, r1: 200, step: 1.9, geo: buildClump(grng, { blades: 7, segs: 2, width: 0.06 }), pgeo: buildPlumeStalk({ planes: 2, segs: 2, width: 0.1 }), xz: 1.75, y: 1.14, pp: 0.26 },
+        { r0: 0, r1: 24, step: 0.48, geo: buildClump(grng, { blades: 15, segs: 4, width: 0.024 }), pgeo: buildPlumeStalk({ planes: 3, segs: 3, plumeFrom: 0.72, width: 0.07 }), xz: 1.0, y: 1.0, pp: 0.34 },
+        { r0: 24, r1: 72, step: 0.92, geo: buildClump(grng, { blades: 11, segs: 3, width: 0.032 }), pgeo: buildPlumeStalk({ planes: 3, segs: 2, plumeFrom: 0.72, width: 0.075 }), xz: 1.3, y: 1.06, pp: 0.36 },
+        { r0: 72, r1: 200, step: 1.8, geo: buildClump(grng, { blades: 8, segs: 2, width: 0.05 }), pgeo: buildPlumeStalk({ planes: 2, segs: 2, plumeFrom: 0.7, width: 0.095 }), xz: 1.75, y: 1.14, pp: 0.3 },
       ];
       const camDefault = new THREE.Vector2(TARGET.x, TARGET.z + 16);
       for (const R of regions) {
@@ -373,12 +374,17 @@ export default {
     /* Foxes                                                             */
     /* ================================================================ */
     const foxG = await env.loadGLTF('models/Fox.glb');
-    let baseFoxMat = null;
-    foxG.scene.traverse(o => { if (o.isMesh && !baseFoxMat) baseFoxMat = o.material; });
+    let baseFoxMat = null, foxGeo = null;
+    foxG.scene.traverse(o => { if (o.isMesh && !baseFoxMat) { baseFoxMat = o.material; foxGeo = o.geometry; } });
+    // the glTF fox ships without normals (flat-shaded via derivatives); build smooth normals so any material works
+    foxGeo = own(mergeVertices(foxGeo.clone(), 1e-3));
+    foxGeo.computeVertexNormals();
     const foxMat = addFog(baseFoxMat.clone(), fogU, 'mfogFox');
+    foxMat.flatShading = false;
     foxMat.envMapIntensity = 0.6;
     const whiteU = { uGlow: { value: 0 } };
     const whiteMat = baseFoxMat.clone();
+    whiteMat.flatShading = false;
     whiteMat.envMapIntensity = 0.7;
     patchMaterial(whiteMat, {
       key: 'whiteFox', uniforms: whiteU, fragmentHeader: 'uniform float uGlow;',
@@ -398,7 +404,7 @@ export default {
       const bibMat = addFog(new THREE.MeshStandardMaterial({ color: '#c0281c', roughness: 0.8, side: THREE.DoubleSide }), fogU, 'mfogBib');
       for (const s of [-1, 1]) {
         const st = SkeletonUtils.clone(foxG.scene);
-        st.traverse(o => { if (o.isMesh) { o.material = statueMat; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+        st.traverse(o => { if (o.isMesh) { o.geometry = foxGeo; o.material = statueMat; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
         const ped = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.62), stoneMat);
         const px2 = SHRINE.x + s * 1.15, pz2 = SHRINE.z + 0.75;
         const py = heightAt(px2, pz2);
@@ -430,7 +436,7 @@ export default {
         this.white = member.kind === 'whiteFox';
         this.rng = rng.fork('fox:' + member.id);
         this.root = SkeletonUtils.clone(foxG.scene);
-        this.root.traverse(o => { if (o.isMesh) { o.material = this.white ? whiteMat : foxMat; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+        this.root.traverse(o => { if (o.isMesh) { o.geometry = foxGeo; o.material = this.white ? whiteMat : foxMat; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
         this.obj = new THREE.Group();
         this.obj.add(this.root);
         scene.add(this.obj);
@@ -794,9 +800,9 @@ export default {
       target: TARGET.clone(),
       dist: 16, distRange: [8, 26],
       yaw: 0.05, yawRange: [-0.8, 0.8],
-      pitch: 0.11, pitchRange: [0.03, 0.55],
+      pitch: 0.07, pitchRange: [0.02, 0.55],
       drift: 0.03,
-      idlePitch: 0.1, idleDist: 16.5,
+      idlePitch: 0.065, idleDist: 16.5,
       fov: 38,
     };
     {
@@ -859,7 +865,7 @@ export default {
       su.uTime.value = t;
       su.uCloudOff.value.x += dt * 0.004 * baseWind.x;
       su.uCloudOff.value.y += dt * 0.004 * baseWind.y;
-      su.uCloudCover.value = 0.5 + 0.08 * Math.sin(t * 0.01 + env.seed % 10);
+      su.uCloudCover.value = 0.57 + 0.06 * Math.sin(t * 0.01 + env.seed % 10);
       // lanterns / shrine glow
       const lampOn = smoothstep(-1, -7, el);
       lanternLights.forEach(l => { l.intensity = 9 * lampOn * (0.92 + 0.08 * Math.sin(t * 9.0 + l.position.x)); });

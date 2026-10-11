@@ -154,8 +154,10 @@ void main() {
   float F = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
   F = clamp(F * uReflStrength, 0.0, 1.0);
 
-  vec2 ruv = vMirror.xy / vMirror.w + N.xz * (0.045 / (1.0 + dist * 0.012));
-  vec3 refl = mix(uSkyFallback, texture2D(tMirror, ruv).rgb, uMirrorOn);
+  // rougher, blurrier reflections over the open swell; crisp over the calm lagoon
+  float rough = smoothstep(1.0, 6.0, depth);
+  vec2 ruv = vMirror.xy / vMirror.w + N.xz * mix(0.03, 0.075, rough) / (1.0 + dist * 0.006);
+  vec3 refl = mix(uSkyFallback, texture2D(tMirror, ruv, mix(0.5, 3.2, rough)).rgb, uMirrorOn);
 
   // sun + moon speculars and a glittering path made of discrete sparkles
   vec3 R = reflect(-V, N);
@@ -262,8 +264,7 @@ export function createWater(env, camera, { normalTex }) {
     return [Math.max(64, Math.round(s.x * k)), Math.max(64, Math.round(s.y * k))];
   };
   const [rw, rh] = rtSize();
-  const rt = new THREE.WebGLRenderTarget(rw, rh, { type: THREE.HalfFloatType });
-  rt.texture.generateMipmaps = false;
+  const rt = new THREE.WebGLRenderTarget(rw, rh, { type: THREE.HalfFloatType, minFilter: THREE.LinearMipmapLinearFilter, generateMipmaps: true });
   uniforms.tMirror.value = rt.texture;
   const mirrorCam = new THREE.PerspectiveCamera();
   mirrorCam.layers.set(0);

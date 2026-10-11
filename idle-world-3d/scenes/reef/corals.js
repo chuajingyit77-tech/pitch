@@ -115,7 +115,7 @@ function brainGeo(seed) {
 }
 
 /** Plate coral: a slightly cupped, uneven disc with a rim, optionally on a stalk. */
-function tableGeo(seed, { stalk = true, NS = 56, NR = 9, top = '#7a6c44', rim = '#c9b98a', under = '#45392a' } = {}) {
+function tableGeo(seed, { stalk = true, NS = 56, NR = 9, top = '#6a5c3a', rim = '#a89870', under = '#3a3024' } = {}) {
   const n = createNoise(seed);
   const R = [];
   for (let k = 0; k <= NS; k++) { const a = (k / NS) * TAU; R.push(1 + n.noise2(Math.cos(a) * 1.3, Math.sin(a) * 1.3) * 0.13 + n.noise2(Math.cos(a) * 4, Math.sin(a) * 4) * 0.04); }
@@ -376,13 +376,18 @@ vec3 detailCol(vec3 p, float h, vec3 c){ return c * (0.88 + h * 50.0); }
 const TABLE_GLSL = /* glsl */`
 float detailH(vec3 p){
   float a = atan(p.z, p.x);
-  float r = length(p.xz);
-  float st = sin(a * 90.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5;
-  vec2 c = cell2(p.xz * 30.0);
+  float st = sin(a * 70.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5;
+  vec2 c = cell2(p.xz * 22.0);
+  float aa = 1.0 - smoothstep(0.3, 0.7, length(fwidth(p.xz * 22.0)));
   float d = length(vUwPos - cameraPosition);
-  return (st * 0.002 + smoothstep(0.0, 0.4, c.x) * 0.003) * (1.0 - smoothstep(6.0, 20.0, d));
+  return (st * 0.003 + smoothstep(0.05, 0.4, c.x) * 0.006 * aa) * (1.0 - smoothstep(8.0, 24.0, d));
 }
-vec3 detailCol(vec3 p, float h, vec3 c){ return c * (0.85 + h * 50.0); }
+vec3 detailCol(vec3 p, float h, vec3 c){
+  float r = length(p.xz);
+  vec3 col = c * (0.7 + h * 60.0);
+  col *= 0.75 + 0.35 * snoise(p * 2.5) * 0.5 + 0.2;
+  return col;
+}
 `;
 const STAR_GLSL = /* glsl */`
 float detailH(vec3 p){
@@ -606,11 +611,11 @@ export function buildReef(ctx) {
   const tableG = tableGeo(env.seed ^ 31);
   const shelfG = tableGeo(env.seed ^ 57, { stalk: false, top: '#7b5e78', rim: '#d9b8d8', under: '#4a3448' });
   const tables = [], shelves = [];
-  const tableCols = [C('#ffffff'), C('#d8e8c8'), C('#f0dcc0'), C('#e0d0f0')];
-  for (let i = N(9); i > 0; i--) {
+  const tableCols = [C('#c8b898'), C('#a8b888'), C('#b8a0b8'), C('#98a8a0')];
+  for (let i = N(7); i > 0; i--) {
     const s = take(reefSpots, s2 => nrm(s2).y > 0.75 && s2.h > 0.5, 1.0);
     if (!s) break;
-    const r = rng.range(0.7, 1.15), lift = 0.42 * r;
+    const r = rng.range(0.6, 1.0), lift = 0.42 * r;
     tables.push({ pos: new THREE.Vector3(s.x, s.y + lift, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), rng.range(0, TAU), rng.range(-0.08, 0.08))).clone(), scale: new THREE.Vector3(r, r * 0.9, r), color: rng.pick(tableCols) });
     hm.addDisc(s.x, s.z, r, s.y + lift + 0.12);
   }

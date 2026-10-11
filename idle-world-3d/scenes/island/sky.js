@@ -120,7 +120,7 @@ function createClouds(env, rng) {
     const cx = Math.cos(a) * dist, cz = Math.sin(a) * dist;
     const big = rng.range(0, 1);
     const size = (far ? 55 + big * 95 : 30 + big * 45);
-    const cy = far ? rng.range(28, 70) + dist * 0.035 + size * 0.15 : rng.range(70, 120);
+    const cy = far ? rng.range(12, 34) + dist * 0.022 + size * 0.1 : rng.range(70, 120);
     const n = Math.round((11 + big * 10) * lerp(0.75, 1, q));
     const rot = rng.range(0, TAU), cr = Math.cos(rot), sr = Math.sin(rot);
     const stretch = rng.range(1.1, 2.0);

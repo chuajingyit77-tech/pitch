@@ -2,49 +2,55 @@
 import * as THREE from 'three';
 import { canvasTexture, makeCanvas, makeRng, createNoise, normalMapFromHeight, clamp, lerp } from '../../lib/util.js';
 
-/** Pampas plume (susuki) card: white/cream silky strands, alpha. A thin opaque column at u<0.03 is the stem. */
+/** Pampas plume (susuki) card: a loose brush of silky racemes fanning up and drooping to one side.
+ * White with alpha; a thin opaque column at u<0.03 is reused for the stem. */
 export function plumeTexture(seed = 7) {
   const rng = makeRng(seed);
   return canvasTexture(128, 256, (g, w, h) => {
     g.clearRect(0, 0, w, h);
     g.fillStyle = '#ffffff';
-    g.fillRect(0, 0, 4, h); // stem column
-    const cx = 70;
-    const rach = s => [cx + Math.sin(s * 2.2) * 6 + s * s * 10, h - 6 - s * (h - 14)];
-    // soft body
-    for (let i = 0; i < 26; i++) {
-      const s = 0.12 + 0.8 * (i / 25);
-      const [x, y] = rach(s);
-      const prof = Math.pow(Math.sin(Math.PI * Math.pow(s, 0.85)), 0.8);
-      const r = 6 + prof * 20;
+    g.fillRect(0, 0, 4, h);
+    const bx = 62, by = h - 3;
+    // faint core so the plume survives mip-mapping at a distance
+    for (let i = 0; i < 18; i++) {
+      const s = i / 17;
+      const x = bx + s * s * 18, y = by - s * (h - 30);
+      const r = 5 + Math.sin(Math.PI * Math.min(1, s * 1.1)) * 13;
       const grd = g.createRadialGradient(x, y, 0, x, y, r);
-      grd.addColorStop(0, 'rgba(255,250,240,0.55)');
-      grd.addColorStop(1, 'rgba(255,250,240,0)');
+      grd.addColorStop(0, 'rgba(255,248,236,0.42)');
+      grd.addColorStop(1, 'rgba(255,248,236,0)');
       g.fillStyle = grd;
-      g.beginPath(); g.ellipse(x, y, r * 0.9, r * 1.3, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.ellipse(x, y, r, r * 1.6, 0, 0, Math.PI * 2); g.fill();
     }
-    // silky strands
     g.lineCap = 'round';
-    for (let i = 0; i < 900; i++) {
-      const s = Math.pow(rng.next(), 0.75) * 0.96 + 0.03;
-      const [x, y] = rach(s);
-      const prof = Math.pow(Math.sin(Math.PI * Math.pow(s, 0.85)), 0.75);
-      const side = rng.sign();
-      const len = (10 + 44 * prof) * rng.range(0.55, 1.05);
-      const ang = -Math.PI / 2 + side * rng.range(0.18, 0.75) * (0.5 + prof * 0.7);
-      const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
-      const mx = x + Math.cos(ang - side * 0.25) * len * 0.5, my = y + Math.sin(ang - side * 0.25) * len * 0.5;
-      const a = rng.range(0.45, 0.95);
-      const warm = rng.range(0, 1);
-      g.strokeStyle = `rgba(${255},${Math.round(lerp(252, 236, warm))},${Math.round(lerp(246, 214, warm))},${a})`;
-      g.lineWidth = rng.range(0.7, 1.7);
-      g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+    const nR = 22;
+    for (let k = 0; k < nR; k++) {
+      const spread = k / (nR - 1) - 0.5;
+      const len = (h - 26) * rng.range(0.62, 1.0) * (1 - Math.abs(spread) * 0.55);
+      let a = -Math.PI / 2 + spread * 0.55 + rng.range(-0.08, 0.08);
+      const curl = rng.range(0.5, 1.3);
+      let x = bx + rng.range(-2, 2), y = by - rng.range(0, 40);
+      const steps = 26, pts = [];
+      for (let i = 0; i <= steps; i++) {
+        pts.push([x, y, a]);
+        x += Math.cos(a) * len / steps; y += Math.sin(a) * len / steps;
+        a += curl * 0.075 * Math.pow(i / steps, 1.5);
+      }
+      for (let i = 3; i < pts.length; i++) {
+        const [px, py, pa] = pts[i];
+        const t = i / steps;
+        for (let j = 0; j < 3; j++) {
+          const ha = pa + rng.sign() * rng.range(0.25, 1.0);
+          const hl = rng.range(3, 10) * (0.45 + t * 0.8);
+          const warm = rng.next();
+          g.strokeStyle = `rgba(255,${Math.round(lerp(252, 232, warm))},${Math.round(lerp(244, 208, warm))},${rng.range(0.4, 0.9)})`;
+          g.lineWidth = rng.range(0.6, 1.25);
+          g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(ha) * hl, py + Math.sin(ha) * hl); g.stroke();
+        }
+      }
+      g.strokeStyle = 'rgba(236,224,200,0.95)'; g.lineWidth = 1.2;
+      g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
     }
-    // rachis
-    g.strokeStyle = 'rgba(235,225,205,0.9)'; g.lineWidth = 2;
-    g.beginPath();
-    for (let i = 0; i <= 20; i++) { const [x, y] = rach(i / 20 * 0.97); i ? g.lineTo(x, y) : g.moveTo(x, y); }
-    g.stroke();
   });
 }
 

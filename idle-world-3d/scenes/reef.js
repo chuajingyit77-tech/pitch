@@ -108,7 +108,7 @@ export default {
       return out.set((d.x / h) * hw, yw, (d.z / h) * hw);
     };
     const pal = {
-      day: { L0: lin(0.03, 0.26, 0.42), glow: lin(0.9, 1.0, 0.95), light: 4.8, lightCol: C('#f2fbff'), hemi: 1.05, sky: C('#b8dcdc'), gnd: C('#5c6658'), shaft: lin(0.55, 0.85, 0.9), caus: 1.0 },
+      day: { L0: lin(0.022, 0.21, 0.4), glow: lin(0.9, 1.0, 0.95), light: 5.2, lightCol: C('#f4fbff'), hemi: 0.9, sky: C('#b8dcdc'), gnd: C('#5c6658'), shaft: lin(0.55, 0.85, 0.95), caus: 1.0 },
       gold: { L0: lin(0.05, 0.16, 0.22), glow: lin(1.7, 0.85, 0.42), light: 2.2, lightCol: C('#ffd2a0'), hemi: 0.95, sky: C('#a6c4c4'), gnd: C('#45504c'), shaft: lin(1.0, 0.7, 0.4), caus: 0.75 },
       night: { L0: lin(0.002, 0.012, 0.04), glow: lin(0.25, 0.4, 0.8), light: 0.5, lightCol: C('#9db8ff'), hemi: 0.32, sky: C('#3a5c9a'), gnd: C('#0c1a2a'), shaft: lin(0.18, 0.3, 0.55), caus: 0.3 },
     };

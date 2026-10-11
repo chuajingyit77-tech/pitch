@@ -157,6 +157,16 @@ export function waterize(mat, W, { caustics = true, fog = 'full', tint = true, k
 const PERTURB = /* glsl */`
 #ifndef REEF_PERTURB
 #define REEF_PERTURB
+vec3 gWN = vec3(0.0, 1.0, 0.0);   // world normal of the fragment, set before detailH()
+vec3 cellid(vec2 p){
+  vec2 n = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0; vec2 id = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j)); vec2 o = hash22(n + g);
+    vec2 r = g + o - f; float d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; id = n + g; } else if (d < d2) d2 = d;
+  }
+  return vec3(sqrt(d1), sqrt(d2), hash12(id + 0.37));
+}
 // Mikkelsen bump with unnormalised screen derivatives: h in metres gives true geometric slope.
 vec3 reefPerturb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDir){
   vec3 sx = dFdx(surf_pos), sy = dFdy(surf_pos);
@@ -185,7 +195,7 @@ export function addDetail(mat, W, { glsl, space = 'world', bump = 1, key = 'd', 
     fragmentHeader: UW_FRAG + NOISE_GLSL + PERTURB + 'varying vec3 vDetP;\nuniform float uBump;\n' + glsl,
     vertex: vtx,
     fragment: {
-      '#include <color_fragment>': '$&\nfloat detH = detailH(vDetP);\ndiffuseColor.rgb = detailCol(vDetP, detH, diffuseColor.rgb);',
+      '#include <color_fragment>': '$&\n#ifndef FLAT_SHADED\ngWN = inverseTransformDirection(normalize(vNormal), viewMatrix);\n#endif\nfloat detH = detailH(vDetP);\ndiffuseColor.rgb = detailCol(vDetP, detH, diffuseColor.rgb);',
       '#include <normal_fragment_maps>': '$&\nnormal = reefPerturb(-vViewPosition, normal, vec2(dFdx(detH), dFdy(detH)) * uBump, faceDirection);',
     },
   });
