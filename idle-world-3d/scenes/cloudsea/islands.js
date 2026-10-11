@@ -1,6 +1,6 @@
 // 云海 · floating islets with ruins, grass, trees, a mist-fall and giant silhouettes in the haze.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, createNoise, addWind } from '../../lib/util.js';
 import { patchStd, SHARED_GLSL, CLOUD_TOP } from './common.js';
 
@@ -134,8 +134,8 @@ export function makeIslet(rng, { radius = 10, depth = 18, nT = 44, nA = 88, gras
 /* Ruins                                                               */
 /* ------------------------------------------------------------------ */
 function prep(geo, color, { ao = 0.35, jitter = 0.05, rng } = {}) {
-  geo = geo.index ? geo : geo;
   geo.deleteAttribute('uv');
+  if (!geo.index) { geo.deleteAttribute('normal'); geo = mergeVertices(geo); geo.computeVertexNormals(); }
   geo.computeBoundingBox();
   const bb = geo.boundingBox, p = geo.getAttribute('position');
   const n = p.count, c = new Float32Array(n * 3);
@@ -289,7 +289,9 @@ function taperedTube(curve, r0, r1, segs = 10, radial = 7) {
 }
 
 function blob(rng, noise, r, detail = 2) {
-  const g = new THREE.IcosahedronGeometry(r, detail);
+  let g = new THREE.IcosahedronGeometry(r, detail);
+  g.deleteAttribute('uv'); g.deleteAttribute('normal');
+  g = mergeVertices(g);
   const p = g.getAttribute('position');
   const o = rng.range(0, 100);
   for (let i = 0; i < p.count; i++) {
@@ -298,12 +300,9 @@ function blob(rng, noise, r, detail = 2) {
     const k = 1 + n * 0.22 - (_p.y < 0 ? 0.25 * (-_p.y / r) : 0);
     p.setXYZ(i, _p.x * k, _p.y * k * 0.85, _p.z * k);
   }
-  g.deleteAttribute('uv');
-  g.deleteAttribute('normal');
   g.computeVertexNormals();
-  return mergeVerticesSafe(g);
+  return g;
 }
-function mergeVerticesSafe(g) { return g; }
 
 /** Stylised tree: tapered trunk with branches and lumpy canopy clusters. */
 function makeTree(rng, noise, { h = 4.5, canopy = '#5f8f3c', canopy2 = '#9dbb54', bark = '#6b5446', clusters = 6, spread = 1.6 } = {}) {
@@ -453,7 +452,7 @@ function poolMaterial(shared, tex) {
 /* ------------------------------------------------------------------ */
 /* Build everything                                                    */
 /* ------------------------------------------------------------------ */
-export function createIslands(env, shared, tex) {
+export function createIslands(env, shared, tex, wind) {
   const rng = env.rng.fork('islands');
   const q = env.q;
   const group = new THREE.Group();
@@ -462,7 +461,6 @@ export function createIslands(env, shared, tex) {
   const colliders = [];   // spheres creatures steer around: { c: Vector3, r }
   const casters = [];     // big shadow casters for the cloud shader
   const bobbers = [];     // { obj, base, amp, speed, phase }
-  const wind = env.wind;
   const updaters = [];
 
   const rockMat = stoneMaterial(shared, tex, { key: 'rock', bump: 0.9, scale: 0.12, moss: 0.55 });
@@ -537,7 +535,7 @@ export function createIslands(env, shared, tex) {
     place(step, p.x, y, p.z, rng.range(-0.03, 0.03), -stairA + Math.PI / 2, rng.range(-0.03, 0.03));
     if (ground === null) {
       // floating step: give it a little rock underneath
-      const under = prep(new THREE.IcosahedronGeometry(0.55, 1), '#9a857a', { rng, ao: 0.4 });
+      const under = prep(new THREE.IcosahedronGeometry(0.55, 1), '#9a857a', { rng, ao: 0.4 });  // prep indexes it
       under.scale(1.4, 0.8, 0.9);
       place(under, p.x, y - 0.45, p.z, 0, rng.range(0, 3), 0);
       stoneGeos.push(under);
@@ -757,11 +755,13 @@ export function createIslands(env, shared, tex) {
 
   /* ---- floating debris rocks around the main islet ---- */
   const nDeb = Math.round(16 * q + 6);
-  const debGeo = new THREE.IcosahedronGeometry(1, 1);
+  let debGeo = new THREE.IcosahedronGeometry(1, 1);
+  debGeo.deleteAttribute('uv'); debGeo.deleteAttribute('normal');
+  debGeo = mergeVertices(debGeo);
   {
     const p = debGeo.getAttribute('position');
     for (let i = 0; i < p.count; i++) { _p.fromBufferAttribute(p, i); const k = 1 + noise.noise3(_p.x * 1.5, _p.y * 1.5, _p.z * 1.5) * 0.3; p.setXYZ(i, _p.x * k, _p.y * k * 0.8, _p.z * k); }
-    debGeo.deleteAttribute('uv'); debGeo.computeVertexNormals();
+    debGeo.computeVertexNormals();
     const c = new Float32Array(p.count * 3); const rc = new THREE.Color('#9b8478');
     for (let i = 0; i < p.count; i++) { const t = p.getY(i) > 0.3 ? 0.7 : 0; _c.copy(rc).lerp(new THREE.Color('#6f8f3e'), t); c[i * 3] = _c.r; c[i * 3 + 1] = _c.g; c[i * 3 + 2] = _c.b; }
     debGeo.setAttribute('color', new THREE.BufferAttribute(c, 3));
