@@ -205,7 +205,7 @@ export function patchStd(material, shared, opts = {}) {
   `;
   vertex['#include <fog_vertex>'] = (vertex['#include <fog_vertex>'] || '$&') + fogV;
   const fragment = Object.assign({}, opts.fragment || {});
-  fragment['#include <fog_fragment>'] = (fragment['#include <fog_fragment>'] || '') + `\n gl_FragColor.rgb = applyFog(gl_FragColor.rgb, vWPos);`;
+  fragment['#include <fog_fragment>'] = (fragment['#include <fog_fragment>'] || '') + `\n gl_FragColor.rgb = applyFog(min(gl_FragColor.rgb, vec3(24.0)), vWPos);`;
   return patchMaterial(material, {
     key: 'cs-' + (opts.key || 'std'),
     uniforms: Object.assign({}, shared, opts.uniforms || {}),

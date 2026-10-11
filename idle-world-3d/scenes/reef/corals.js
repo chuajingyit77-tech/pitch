@@ -64,12 +64,12 @@ function staghornGeo(rng, base, tip, maxD = 4) {
       grow(b, nd, len * rng.range(0.74, 0.92), r * 0.79, d + 1);
     }
   };
-  const trunks = rng.int(5, 8);
+  const trunks = rng.int(6, 9);
   for (let t = 0; t < trunks; t++) {
     const a = (t / trunks) * TAU + rng.range(-0.4, 0.4);
     const sp = rng.range(0.35, 1.0);
     const dir = new THREE.Vector3(Math.cos(a) * sp, 1, Math.sin(a) * sp).normalize();
-    grow(new THREE.Vector3(Math.cos(a) * 0.06, -0.06, Math.sin(a) * 0.06), dir, rng.range(0.24, 0.34), rng.range(0.036, 0.05), 0);
+    grow(new THREE.Vector3(Math.cos(a) * 0.06, -0.06, Math.sin(a) * 0.06), dir, rng.range(0.24, 0.34), rng.range(0.045, 0.06), 0);
   }
   const parts = [];
   const dir = new THREE.Vector3();
@@ -115,7 +115,7 @@ function brainGeo(seed) {
 }
 
 /** Plate coral: a slightly cupped, uneven disc with a rim, optionally on a stalk. */
-function tableGeo(seed, { stalk = true, NS = 56, NR = 9, top = '#9a8a5e', rim = '#ead9b4', under = '#5a4c3a' } = {}) {
+function tableGeo(seed, { stalk = true, NS = 56, NR = 9, top = '#7a6c44', rim = '#c9b98a', under = '#45392a' } = {}) {
   const n = createNoise(seed);
   const R = [];
   for (let k = 0; k <= NS; k++) { const a = (k / NS) * TAU; R.push(1 + n.noise2(Math.cos(a) * 1.3, Math.sin(a) * 1.3) * 0.13 + n.noise2(Math.cos(a) * 4, Math.sin(a) * 4) * 0.04); }
@@ -233,12 +233,12 @@ function anemoneTentacleGeo(len = 0.3) {
 
 function softCoralGeo(rng, stem, blossom) {
   const parts = [];
-  const trunkH = rng.range(0.3, 0.45);
-  const tr = strip(new THREE.CylinderGeometry(0.035, 0.07, trunkH, 8, 3, false));
+  const trunkH = rng.range(0.32, 0.5);
+  const tr = strip(new THREE.CylinderGeometry(0.045, 0.085, trunkH, 8, 3, false));
   tr.translate(0, trunkH / 2, 0);
   paint(tr, () => [stem, 0.1]);
   parts.push(tr);
-  const nb = rng.int(4, 7);
+  const nb = rng.int(5, 8);
   for (let b = 0; b < nb; b++) {
     const a = (b / nb) * TAU + rng.range(-0.3, 0.3);
     const h0 = trunkH * rng.range(0.5, 0.95);
@@ -251,11 +251,11 @@ function softCoralGeo(rng, stem, blossom) {
     paint(br, () => [stem, 0.1]);
     parts.push(br);
     const end = new THREE.Vector3(0, h0, 0).addScaledVector(dir, L);
-    const nc = rng.int(7, 12);
+    const nc = rng.int(11, 17);
     for (let k = 0; k < nc; k++) {
-      const r = rng.range(0.028, 0.05);
+      const r = rng.range(0.035, 0.062);
       const sp = strip(new THREE.SphereGeometry(r, 7, 5));
-      const o = rng.onSphere(new THREE.Vector3()).multiplyScalar(rng.range(0.02, 0.08));
+      const o = rng.onSphere(new THREE.Vector3()).multiplyScalar(rng.range(0.02, 0.1));
       o.y = Math.abs(o.y) * 0.8;
       sp.translate(end.x + o.x, end.y + o.y, end.z + o.z);
       const cc = blossom.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.08, 0.06));
@@ -347,18 +347,21 @@ function kelpTexture(seed) {
 /* ------------------------------------------------------------------ */
 const BRAIN_GLSL = /* glsl */`
 float detailH(vec3 p){
-  vec3 q = p * 3.2;
-  q += 0.5 * vec3(snoise(q * 0.5), snoise(q * 0.5 + 11.3), snoise(q * 0.5 + 23.1));
-  float n = snoise(q) + 0.3 * snoise(q * 2.3 + 5.0);
-  float g = abs(fract(n * 2.6) - 0.5) * 2.0;
-  float ridge = 1.0 - smoothstep(0.45, 0.9, g);
+  vec3 q = p * 2.1;
+  q += 0.6 * vec3(snoise(q * 0.45), snoise(q * 0.45 + 11.3), snoise(q * 0.45 + 23.1));
+  float n = snoise(q) + 0.22 * snoise(q * 2.1 + 5.0);
+  float k = n * 2.3;
+  float w = fwidth(k);
+  float g = abs(fract(k) - 0.5) * 2.0;
+  float ridge = 1.0 - smoothstep(0.35, 0.85, g);
+  ridge = mix(ridge, 0.6, smoothstep(0.12, 0.45, w));
   float d = length(vUwPos - cameraPosition);
-  return (ridge * 0.016 - 0.008) * (1.0 - smoothstep(10.0, 28.0, d));
+  return (ridge * 0.022 - 0.011) * (1.0 - smoothstep(12.0, 30.0, d));
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
-  float r = smoothstep(-0.006, 0.008, h);
-  vec3 groove = c * vec3(0.42, 0.5, 0.36);
-  vec3 ridge = c * 1.12 + vec3(0.02, 0.03, 0.01);
+  float r = smoothstep(-0.008, 0.01, h);
+  vec3 groove = c * vec3(0.5, 0.58, 0.42);
+  vec3 ridge = c * 1.1 + vec3(0.02, 0.03, 0.01);
   return mix(groove, ridge, r);
 }
 `;
@@ -470,7 +473,7 @@ export function buildReef(ctx) {
     tables.push({ pos: new THREE.Vector3(s.x, s.y + lift, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), rng.range(0, TAU), rng.range(-0.08, 0.08))).clone(), scale: new THREE.Vector3(r, r * 0.9, r), color: _c.setHSL(0.1, 0.1, rng.range(0.8, 1)).clone() });
     hm.addDisc(s.x, s.z, r, s.y + lift + 0.12);
   }
-  const nShelf = Math.round(8 * q);
+  const nShelf = Math.round(11 * q);
   for (let i = 0; i < nShelf; i++) {
     const s = takeSpot(s => s.n.y < 0.75 && s.n.y > 0.15 && s.h > 0.5, 0.35);
     if (!s) continue;
@@ -487,20 +490,20 @@ export function buildReef(ctx) {
 
   /* ---- staghorn thickets ---- */
   const stagPal = [
-    [C('#a7804f'), C('#f2e4c4')], [C('#7d5c7e'), C('#e2c0f0')], [C('#5f88a8'), C('#a8e0ff')], [C('#b07a6e'), C('#ffcfd6')],
+    [C('#9a6c3c'), C('#f6e2b0')], [C('#6a4a8e'), C('#dcb0ff')], [C('#3f6f98'), C('#86d8ff')], [C('#a85a72'), C('#ffb4cc')], [C('#77803a'), C('#dcf27e')],
   ];
   const stagGeos = stagPal.map(([b, t], i) => staghornGeo(rng.fork('stag' + i), b, t));
   const stagMat = stdMat(W, { vertexColors: true, roughness: 0.72 }, { key: 'stag' });
   addDetail(stagMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'polyp' });
   addFluor(stagMat, W, '#47ffb0', 0.9, 'stag');
   const stagLists = stagGeos.map(() => []);
-  const nStag = Math.round(13 * q);
+  const nStag = Math.round(22 * q);
   for (let i = 0; i < nStag; i++) {
     const onRock = i < nStag * 0.6;
     const s = onRock ? takeSpot(s => s.n.y > 0.55, 0.6) : sandSpot(0.2, 2.2, rng.pick(rocks.bommies));
     if (!s || (!onRock && !free(s.x, s.z, 0.6))) continue;
-    const sc = rng.range(0.85, 1.35);
-    occupy(s.x, s.z, 0.6 * sc);
+    const sc = rng.range(1.0, 1.6);
+    occupy(s.x, s.z, 0.55 * sc);
     const t = rng.int(0, stagGeos.length - 1);
     stagLists[t].push({ pos: new THREE.Vector3(s.x, s.y - 0.04, s.z), quat: standOn(s.n, rng.range(0, TAU), 0.6), scale: new THREE.Vector3(sc, sc * rng.range(0.85, 1.15), sc), color: _c.setHSL(0, 0, rng.range(0.85, 1.05)).clone() });
     hm.addDisc(s.x, s.z, 0.55 * sc, s.y + 0.85 * sc);
@@ -514,7 +517,7 @@ export function buildReef(ctx) {
   addFluor(brainMat, W, '#3dff8a', 0.55, 'brain');
   const brainCols = [C('#b9a36a'), C('#8fa06a'), C('#c08f72'), C('#a8b08a'), C('#d0b080')];
   const brains = [];
-  const nBrain = Math.round(9 * q);
+  const nBrain = Math.round(12 * q);
   for (let i = 0; i < nBrain; i++) {
     const onRock = i % 3 === 0;
     const s = onRock ? takeSpot(s => s.n.y > 0.75, 0.6) : sandSpot(0.1, 2.6, rng.pick(rocks.bommies));
@@ -536,7 +539,7 @@ export function buildReef(ctx) {
   fanG.translate(0, 0.68, 0);
   const fans = [];
   const fanCols = [C('#a03cb8'), C('#c94aa8'), C('#8f3fd0'), C('#e0a33a'), C('#d8503a')];
-  const nFan = Math.round(11 * q);
+  const nFan = Math.round(15 * q);
   for (let i = 0; i < nFan; i++) {
     const onRock = i % 2 === 0;
     const s = onRock ? takeSpot(s => s.n.y > 0.45, 0.4) : sandSpot(0.0, 2.0, rng.pick(rocks.bommies));
@@ -552,25 +555,52 @@ export function buildReef(ctx) {
   const softMat = stdMat(W, { vertexColors: true, roughness: 0.6 }, { key: 'soft' });
   addSway(softMat, W, { height: 0.6, amount: 0.06, stiff: 1.3, flutter: 0.01, key: 'soft' });
   addFluor(softMat, W, '#ff5aa0', 0.8, 'soft');
-  const softDefs = [[C('#f1d6dc'), C('#ff3f7f')], [C('#f3e3d0'), C('#ff7a2a')], [C('#e8d8f0'), C('#b44ae8')]];
+  const softDefs = [[C('#f1d6dc'), C('#ff3f7f')], [C('#f3e3d0'), C('#ff7a2a')], [C('#e8d8f0'), C('#b44ae8')], [C('#f6e8d8'), C('#ffcf3a')]];
   const softGeos = softDefs.map(([a, b], i) => softCoralGeo(rng.fork('soft' + i), a, b));
   const softLists = softGeos.map(() => []);
-  const nSoft = Math.round(12 * q);
+  const nSoft = Math.round(22 * q);
   for (let i = 0; i < nSoft; i++) {
     const s = takeSpot(s => s.n.y > 0.35, 0.3);
     if (!s) continue;
     occupy(s.x, s.z, 0.3);
-    const sc = rng.range(0.9, 1.5);
+    const sc = rng.range(1.0, 1.7);
     softLists[i % softGeos.length].push({ pos: new THREE.Vector3(s.x, s.y - 0.04, s.z), quat: standOn(s.n, rng.range(0, TAU), 0.55), scale: new THREE.Vector3(sc, sc, sc) });
   }
   softGeos.forEach((g, i) => group.add(instanced(g, softMat, softLists[i])));
+
+  /* ---- encrusting mound corals (Porites lumps) fill the gaps with colour ---- */
+  const moundG = (() => {
+    const g = strip(new THREE.SphereGeometry(1, 28, 14, 0, TAU, 0, Math.PI * 0.55));
+    const nn = createNoise(env.seed ^ 404), p = g.getAttribute('position'), v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const k = 1 + nn.fbm3(v.x * 1.8, v.y * 1.8, v.z * 1.8, 3) * 0.28;
+      p.setXYZ(i, v.x * k, (v.y * 0.75 - 0.05) * k, v.z * k);
+    }
+    g.computeVertexNormals();
+    paint(g, (x, y) => [_c.setRGB(1, 1, 1).multiplyScalar(lerp(0.7, 1.05, clamp(y * 1.4, 0, 1))).clone(), 0.5 + y * 0.5]);
+    return g;
+  })();
+  const moundMat = stdMat(W, { vertexColors: true, roughness: 0.7 }, { key: 'mound' });
+  addDetail(moundMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'mound' });
+  addFluor(moundMat, W, '#36ffd0', 0.7, 'mound');
+  const moundCols = [C('#b58cd8'), C('#d9b04a'), C('#8ccf9a'), C('#e8909c'), C('#7fb6e8'), C('#c9d46a'), C('#e09a5a')];
+  const mounds = [];
+  for (let i = Math.round(56 * q); i > 0; i--) {
+    const s = rng.chance(0.75) ? takeSpot(st => st.n.y > 0.2, 0.22) : sandSpot(0.0, 1.0, rng.pick(rocks.bommies));
+    if (!s) continue;
+    const r = rng.range(0.14, 0.36);
+    occupy(s.x, s.z, r * 0.8);
+    mounds.push({ pos: new THREE.Vector3(s.x, s.y - r * 0.15, s.z), quat: standOn(s.n, rng.range(0, TAU), 0.25), scale: new THREE.Vector3(r * rng.range(0.9, 1.4), r, r * rng.range(0.9, 1.4)), color: rng.pick(moundCols).clone().offsetHSL(0, 0, rng.range(-0.06, 0.04)) });
+  }
+  group.add(instanced(moundG, moundMat, mounds));
 
   /* ---- tube sponges ---- */
   const spongeMat = stdMat(W, { vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }, { key: 'sponge' });
   addDetail(spongeMat, W, { glsl: SPONGE_GLSL, space: 'object', bump: 1, key: 'sponge' });
   const spongeGeos = [spongeGeo(rng.fork('sp1'), C('#8a3fa8')), spongeGeo(rng.fork('sp2'), C('#e08a2c'))];
   const spongeLists = [[], []];
-  const nSponge = Math.round(7 * q);
+  const nSponge = Math.round(10 * q);
   for (let i = 0; i < nSponge; i++) {
     const s = i % 2 ? takeSpot(s => s.n.y > 0.5, 0.35) : sandSpot(0.0, 1.5, rng.pick(rocks.bommies));
     if (!s || !free(s.x, s.z, 0.3)) continue;

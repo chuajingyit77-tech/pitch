@@ -57,7 +57,7 @@ export function makeAtlas(seed, q) {
   put('banana', T.makeBanana(seed + 9));
   put('fern', T.makeFern(seed + 10));
   put('fern2', T.makeFern(seed + 11, 256, 1024, { color: ['#2f6a22', '#4a8a2e'], density: 1.25 }));
-  put('glowfern', T.makeFern(seed + 12, 256, 1024, { color: ['#2a5a3a', '#3a7a4a'], density: 0.9 }));
+  put('glowfern', T.makeFern(seed + 12, 256, 1024, { color: ['#2a5a3a', '#3a7a4a'], density: 0.9, vein: '#86f0dc', rachis: '#9af5e4' }));
   put('strap', T.makeStrap(seed + 13));
   put('strap2', T.makeStrap(seed + 14, 128, 512, { base: '#c8282a', mid: '#4a7a2a', tipC: '#5a8a30' }));
   put('vine', T.makeVineCard(seed + 15));

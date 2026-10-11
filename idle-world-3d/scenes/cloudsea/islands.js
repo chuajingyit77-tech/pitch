@@ -431,7 +431,7 @@ function mistFall(shared, tex, start, outward, height, width0, width1) {
 /* Pool water (the spring that feeds the mist-fall)                    */
 /* ------------------------------------------------------------------ */
 function poolMaterial(shared, tex) {
-  const m = new THREE.MeshStandardMaterial({ color: '#2d4f5e', roughness: 0.06, metalness: 0.1, envMapIntensity: 1.2 });
+  const m = new THREE.MeshStandardMaterial({ color: '#2d4f5e', roughness: 0.2, metalness: 0.1, envMapIntensity: 1.1 });
   return patchStd(m, shared, {
     key: 'pool',
     uniforms: { tNoise: { value: tex.noise } },

@@ -11,8 +11,8 @@ export function createWaterUniforms(surfY, refY) {
     uTime: { value: 0 },
     uSurfY: { value: surfY },
     uRefY: { value: refY },
-    uSigma: { value: new THREE.Vector3(0.1, 0.058, 0.05) },  // extinction per metre (r, g, b)
-    uKd: { value: new THREE.Vector3(0.075, 0.034, 0.024) },   // downwelling attenuation per metre
+    uSigma: { value: new THREE.Vector3(0.085, 0.05, 0.042) },  // extinction per metre (r, g, b)
+    uKd: { value: new THREE.Vector3(0.065, 0.032, 0.02) },    // downwelling attenuation per metre
     uL0: { value: new THREE.Vector3(0.03, 0.3, 0.4) },         // in-scatter radiance just below the surface
     uSunW: { value: new THREE.Vector3(0, 1, 0) },              // toward the light, underwater (refracted)
     uGlow: { value: new THREE.Vector3(1, 1, 1) },              // forward-scatter glow tint
@@ -102,12 +102,15 @@ vec3 uwScatter(vec3 dir, float y0, float d){
   float ph = 0.4 * mu * mu * mu + 1.2 * pow(mu, 18.0) + 2.5 * pow(mu, 90.0);
   return s * (1.0 + ph * uGlow);
 }
+// A few metres of clear water in front of the lens keep near colours vivid (stylised, like ABZU).
+#define UW_CLEAR 3.5
 vec3 uwFog(vec3 col, vec3 wp){
   vec3 v = wp - cameraPosition; float d = length(v);
   vec3 dir = v / max(d, 1e-4);
-  return col * exp(-uSigma * d) + uwScatter(dir, cameraPosition.y, d);
+  float de = max(d - UW_CLEAR, 0.0);
+  return col * exp(-uSigma * de) + uwScatter(dir, cameraPosition.y, de);
 }
-vec3 uwAtten(vec3 col, vec3 wp){ return col * exp(-uSigma * length(wp - cameraPosition)); }
+vec3 uwAtten(vec3 col, vec3 wp){ return col * exp(-uSigma * max(length(wp - cameraPosition) - UW_CLEAR, 0.0)); }
 // Light reaching a surface at height y relative to the reference depth the lights are tuned for.
 vec3 uwTint(float y){ return clamp(exp(uKd * (y - uRefY)), vec3(0.35), vec3(1.7)); }
 #endif
@@ -308,7 +311,7 @@ export function createSurface(W, n1, n2) {
         // bright filaments where the ripples focus light (seen from below)
         float foc = smoothstep(0.35, 1.0, length(nxy) / max(uRipple, 1e-3) * 0.55);
         col += uwLc(uSurfY) * foc * 0.6;
-        col = col * exp(-uSigma * d) + uwScatter(dir, cameraPosition.y, d);
+        col = uwFog(col, vWp);
         gl_FragColor = vec4(col, 1.0);
       }`,
   });

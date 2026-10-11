@@ -20,7 +20,7 @@ export const WORLDS = [
   { id: 'meadow', file: './scenes/meadow.js', name: '芒原', sub: '狐与鸟居', ref: 'inspired by Ghost of Tsushima', g: 'linear-gradient(160deg,#e3b46a 0%,#a8582f 60%,#5a2a2a 120%)' },
   { id: 'island', file: './scenes/island.js', name: '晴岛', sub: '热带海岛', ref: 'inspired by Sea of Thieves · Animal Crossing', g: 'linear-gradient(160deg,#5ec3e8 0%,#1d8fb0 50%,#f2d59a 110%)' },
   { id: 'jungle', file: './scenes/jungle.js', name: '雨林', sub: '瀑布与萤火', ref: 'inspired by Ori · Horizon', g: 'linear-gradient(160deg,#2f6b45 0%,#15331f 60%,#8fd06a 140%)' },
-  { id: 'cloudsea', file: './scenes/cloudsea.js', name: '云海', sub: '光之鳐', ref: 'inspired by Sky: Children of the Light · Journey', g: 'linear-gradient(160deg,#f5b6a0 0%,#8a6fb0 55%,#2b2f6a 110%)' },
+  { id: 'cloudsea', file: './scenes/cloudsea.js', name: '云海', sub: '蟠桃仙境', ref: 'inspired by Kung Fu Panda · Chinese celestial paintings', g: 'linear-gradient(160deg,#ffd1b8 0%,#f29bb0 45%,#6f7fc4 110%)' },
 ];
 
 const NAMES = ['年糕', '麻薯', '汤圆', '芝麻', '团子', '布丁', '奶盖', '可乐', '柚子', '椰椰', '栗子', '米粒', '小满', '豆豆', '泡泡', '阿橙',

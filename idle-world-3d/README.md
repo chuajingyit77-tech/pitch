@@ -10,7 +10,7 @@ screensaver, and anyone walking past can feed the residents.
 | 3 | 芒原 · 狐与鸟居 | Ghost of Tsushima | foxes, white foxes | 油豆腐 |
 | 4 | 晴岛 · 热带海岛 | Sea of Thieves, Animal Crossing | crabs, gulls, turtles, dolphins | 小鱼干 |
 | 5 | 雨林 · 瀑布与萤火 | Ori, Horizon | tree frogs, macaws, morpho butterflies | 热带水果 |
-| 6 | 云海 · 光之鳐 | Sky: Children of the Light, Journey | light mantas, sky jellies, light spirits | 星光 |
+| 6 | 云海 · 蟠桃仙境 | Kung Fu Panda, Chinese celestial paintings | tai-chi tortoise, cranes, blue spirit birds | 蟠桃 |
 
 ## What makes each computer's world its own
 

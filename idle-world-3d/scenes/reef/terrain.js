@@ -267,16 +267,16 @@ export function buildRocks(ground, hm, W, env, rng) {
     let cx, cz;
     if (b === 0) { cx = rng.range(-1, 1); cz = rng.range(-1, 1); }
     else { const a = angle0 + (b / (nB - 1)) * TAU * 0.92 + rng.range(-0.3, 0.3); const r = rng.range(5.2, 7.2); cx = Math.cos(a) * r; cz = Math.sin(a) * r; }
-    const big = b === 0 ? 1.15 : rng.range(0.8, 1.05);
-    const sx = rng.range(1.9, 2.5) * big, sy = rng.range(1.5, 1.95) * big, sz = rng.range(1.7, 2.3) * big;
+    const big = b === 0 ? 1.2 : rng.range(0.82, 1.05);
+    const sx = rng.range(1.9, 2.5) * big, sy = rng.range(1.8, 2.3) * big, sz = rng.range(1.7, 2.3) * big;
     const gy = ground.height(cx, cz);
     items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(cx, gy - sy * 0.3, cz), scale: new THREE.Vector3(sx, sy, sz), rotY: rng.range(0, TAU) });
-    const kids = rng.int(2, 4);
+    const kids = rng.int(3, 5);
     for (let k = 0; k < kids; k++) {
       const a = rng.range(0, TAU), r = rng.range(0.4, 1.3) * big;
       const kx = cx + Math.cos(a) * r, kz = cz + Math.sin(a) * r;
       const ks = rng.range(0.6, 1.1) * big;
-      items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(kx, gy + sy * rng.range(0.4, 0.8), kz), scale: new THREE.Vector3(ks * rng.range(0.9, 1.3), ks * rng.range(0.7, 1.0), ks * rng.range(0.9, 1.3)), rotY: rng.range(0, TAU) });
+      items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(kx, gy + sy * rng.range(0.45, 0.95), kz), scale: new THREE.Vector3(ks * rng.range(0.9, 1.3), ks * rng.range(0.7, 1.0), ks * rng.range(0.9, 1.3)), rotY: rng.range(0, TAU) });
     }
     bommies.push({ x: cx, z: cz, r: Math.max(sx, sz) * 1.25, main: b === 0 });
   }

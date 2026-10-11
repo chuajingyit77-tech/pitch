@@ -256,7 +256,7 @@ export function buildMountains({ noise, rng, fogU, sunsetAz }) {
     const R1 = rows + 1;
     for (let j = 0; j < L.seg; j++) for (let i = 0; i < rows; i++) {
       const a = j * R1 + i, b = (j + 1) * R1 + i;
-      idx.push(a, a + 1, b, b, a + 1, b + 1);
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

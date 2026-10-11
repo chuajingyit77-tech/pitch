@@ -62,23 +62,29 @@ export function makeCookie(seed, size = 256) {
   const g = c.getContext('2d');
   const img = g.createImageData(size, size);
   const R = new Float32Array(size * size), G = new Float32Array(size * size);
-  // cellular speckles for the A channel
+  // cellular speckles for the A channel, painted with radial gradients (wrapped)
   const rng = makeRng(seed + 5);
-  const cells = [];
-  for (let i = 0; i < 160; i++) cells.push([rng.next() * size, rng.next() * size, rng.range(1.2, 3.5)]);
+  const sc = makeCanvas(size, size);
+  const sg = sc.getContext('2d');
+  sg.fillStyle = '#000'; sg.fillRect(0, 0, size, size);
+  for (let i = 0; i < 160; i++) {
+    const cx = rng.next() * size, cy = rng.next() * size, cr = rng.range(1.2, 3.5);
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      const x = cx + ox, y = cy + oy;
+      if (x < -cr || y < -cr || x > size + cr || y > size + cr) continue;
+      const gr = sg.createRadialGradient(x, y, 0, x, y, cr);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      sg.fillStyle = gr; sg.fillRect(x - cr, y - cr, cr * 2, cr * 2);
+    }
+  }
+  const spk = sg.getImageData(0, 0, size, size).data;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
       const r = clamp(S(x, y, 4) * 0.95 + 0.5, 0, 1);
       const gg = clamp(S2(x, y, 3) * 1.1 + 0.5, 0, 1);
       const b = clamp(S3(x, y, 5) * 1.0 + 0.5, 0, 1);
-      let a = 0;
-      for (const [cx, cy, cr] of cells) {
-        let dx = Math.abs(x - cx), dy = Math.abs(y - cy);
-        if (dx > size / 2) dx = size - dx; if (dy > size / 2) dy = size - dy;
-        const d = Math.hypot(dx, dy) / cr;
-        if (d < 1) a = Math.max(a, 1 - d * d);
-      }
+      const a = spk[i * 4] / 255;
       R[i] = r; G[i] = gg;
       img.data[i * 4] = r * 255; img.data[i * 4 + 1] = gg * 255; img.data[i * 4 + 2] = b * 255; img.data[i * 4 + 3] = (0.5 + a * 0.5) * 255;
     }
@@ -381,7 +387,7 @@ export function makeElephantEar(seed, S = 512) {
 }
 
 /** Pinnate fern frond. */
-export function makeFern(seed, W = 256, H = 1024, { color = ['#3f7a26', '#5f9a34'], density = 1 } = {}) {
+export function makeFern(seed, W = 256, H = 1024, { color = ['#3f7a26', '#5f9a34'], density = 1, vein = '#3a5a1c', rachis = '#5a6a28' } = {}) {
   const rng = makeRng(seed);
   return canvasTexture(W, H, (g, w, h) => {
     const cx = w / 2, base = h * 0.995, tip = h * 0.01;
@@ -408,12 +414,12 @@ export function makeFern(seed, W = 256, H = 1024, { color = ['#3f7a26', '#5f9a34
           g.ellipse(px + s * 2, py + pl * 0.35, pl * 0.42, pl * 0.9, -s * 0.6 + Math.PI, 0, TAU);
           g.fill();
         }
-        g.strokeStyle = '#3a5a1c'; g.lineWidth = 1.6;
+        g.strokeStyle = vein; g.lineWidth = 1.6;
         g.beginPath(); g.moveTo(cx, y); g.lineTo(ex, ey); g.stroke();
       }
     }
     // rachis
-    g.strokeStyle = '#5a6a28'; g.lineWidth = 4;
+    g.strokeStyle = rachis; g.lineWidth = 4;
     g.beginPath(); g.moveTo(cx, base); g.lineTo(cx, tip + 10); g.stroke();
     // a little light variation toward the tip
     g.globalCompositeOperation = 'source-atop';

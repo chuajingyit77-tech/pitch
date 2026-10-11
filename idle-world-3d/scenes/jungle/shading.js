@@ -97,6 +97,7 @@ export function jungleMaterial(material, shared, opts = {}) {
   if (opts.glowAttr) defines.JG_GLOWATTR = '';
   if (opts.specks) defines.JG_SPECKS = '';
   if (opts.glowLight !== false) defines.JG_GLOWLIGHT = '';
+  if (opts.glowLeaf) defines.JG_GLOWLEAF = '';
   const uniforms = {
     ...shared,
     uTranslucency: { value: translucent },
@@ -154,6 +155,13 @@ export function jungleMaterial(material, shared, opts = {}) {
         #ifdef JG_GLOWATTR
           float pulse = 0.82 + 0.18 * sin(uTime * 1.3 + vWorldP.x * 2.1 + vWorldP.z * 1.7);
           totalEmissiveRadiance += uGlowAttrColor * vGlow * uNight * uGlowAttrGain * pulse;
+        #endif
+        #ifdef JG_GLOWLEAF
+        {
+          float vein = smoothstep(0.08, 0.3, diffuseColor.b - diffuseColor.r);
+          float pulse2 = 0.8 + 0.2 * sin(uTime * 0.9 + vWorldP.x * 1.3);
+          totalEmissiveRadiance += uGlowColor * uNight * (vein * 2.6 + 0.06) * pulse2;
+        }
         #endif
         #ifdef JG_SPECKS
         {

@@ -91,6 +91,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   const q = env.q;
   const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
   const fx = {};
+  const MOONFLUFF = new THREE.Color(0.6, 0.7, 0.9);
 
   /* ---------------- fluff + fireflies ---------------- */
   const fluff = driftPoints({ count: Math.round(520 * q), rng: rng.fork('fluff'), color: '#fff3dc', size: 34, box: [36, 5, 36], back: 3.5 });
@@ -241,7 +242,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     fluff.uniforms.uCenter.value.set(tmp.x, heightAt(tmp.x, tmp.z) + 2.4, tmp.z);
     flies.uniforms.uCenter.value.set(target.x * 0.6 + tmp.x * 0.4, heightAt(tmp.x, tmp.z) + 1.0, target.z * 0.5 + tmp.z * 0.5);
     fluff.uniforms.uSunDir.value.copy(sunDir);
-    fluff.uniforms.uColor.value.copy(light).multiplyScalar(0.35 + 0.25 * day).lerp(tmp2.set(0.6, 0.7, 0.9), night * 0.5);
+    fluff.uniforms.uColor.value.copy(light).multiplyScalar(0.35 + 0.25 * day).lerp(MOONFLUFF, night * 0.5);
     fluff.uniforms.uAlpha.value = lerp(0.85, 0.25, night);
     fluff.uniforms.uBack.value = 2 + golden * 6;
     flies.uniforms.uAlpha.value = smoothstep(0.25, 0.9, night);

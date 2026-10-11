@@ -134,8 +134,9 @@ export class FruitSystem {
     if (f.bites <= 0) { f.bites = 0; f.dying = true; }
   }
   update(dt, t, hooks) {
-    const counts = [0, 0, 0, 0];
-    const m4 = new THREE.Matrix4();
+    const counts = this._counts || (this._counts = [0, 0, 0, 0]);
+    counts.fill(0);
+    const m4 = _m4;
     for (const f of this.items) {
       if (f.dead) continue;
       f.age += dt;
@@ -174,4 +175,4 @@ export class FruitSystem {
   }
   dispose() { this.meshes.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); }
 }
-const _q = new THREE.Quaternion(), _ax = new THREE.Vector3(), _sv = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _ax = new THREE.Vector3(), _sv = new THREE.Vector3(), _m4 = new THREE.Matrix4();
