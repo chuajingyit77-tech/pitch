@@ -15,6 +15,9 @@ export function createLayout(seed) {
     h -= 1.25 * Math.exp(-Math.pow((x - FALL.x) / 1.9, 2)); // waterfall notch
     return Math.max(h, 3.5);
   };
+  // the waterfall lip sits on the rim of the notch
+  FALL.lipY = cliffH(FALL.x) - 0.28;
+  FALL.lipZ = cliffZ(FALL.x) - 0.08;
   const pondD = (x, z) => {
     const dx = (x - POND.cx) / POND.rx;
     const dz = (z - POND.cz) / (z < POND.cz ? POND.rzBack : POND.rzFront);

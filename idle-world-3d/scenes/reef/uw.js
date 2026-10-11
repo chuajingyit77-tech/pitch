@@ -77,7 +77,8 @@ vec3 reefSway(vec3 o, float h, float amt, float flut, float len){
   vec2 d = uCurDir * (surge + 0.22) * amt * uCurStr * h;
   vec2 pp = vec2(-uCurDir.y, uCurDir.x) * sin(t * 0.97 + ph * 2.3) * 0.3 * amt * uCurStr * h;
   vec3 disp = vec3(d.x + pp.x, 0.0, d.y + pp.y);
-  disp += vec3(sin(t * 2.6 + o.x * 7.0 + h * 5.0), 0.3 * sin(t * 2.2 + o.z * 6.0), cos(t * 2.3 + o.z * 7.0 + h * 4.0)) * flut * h;
+  float rp = fract(sin(dot(o, vec3(12.9898, 78.233, 37.719))) * 43758.5453) * 6.2831;
+  disp += vec3(sin(t * 2.1 + rp + h * 4.0), 0.3 * sin(t * 1.8 + rp * 1.3), cos(t * 1.9 + rp * 0.7 + h * 3.5)) * flut * h;
   disp.y -= dot(disp.xz, disp.xz) * 0.5 / max(len, 0.05);
   return disp;
 }

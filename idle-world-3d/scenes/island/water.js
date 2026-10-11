@@ -48,7 +48,7 @@ function polarGrid(nAng, r0, rMax) {
   for (let i = 0; i < nR - 1; i++) {
     for (let j = 0; j < nAng; j++) {
       const a = i * nAng + j, b = i * nAng + (j + 1) % nAng, c = (i + 1) * nAng + j, d = (i + 1) * nAng + (j + 1) % nAng;
-      idx.push(a, c, b, b, c, d);
+      idx.push(a, b, c, b, d, c);
     }
   }
   const geo = new THREE.BufferGeometry();

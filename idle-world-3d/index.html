@@ -66,7 +66,7 @@ body.noui .hud,body.noui .clock{display:none}
 .card .key{position:absolute;top:7px;right:9px;font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums}
 
 /* clock */
-.clock{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);text-align:right;pointer-events:none;text-shadow:0 2px 30px rgba(0,0,0,.45);transition:transform 4s ease}
+.clock{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);text-align:right;pointer-events:none;text-shadow:0 2px 30px rgba(0,0,0,.45);transition:transform 4s ease,bottom 1.2s ease}
 .clock .time{font-family:var(--serif);font-weight:300;font-size:clamp(56px,8.5vw,128px);line-height:.9;letter-spacing:.02em;font-variant-numeric:tabular-nums}
 .clock .date{margin-top:10px;font-size:14px;letter-spacing:.24em;color:var(--ink-2)}
 .clock .where{margin-top:6px;font-size:12px;letter-spacing:.18em;color:var(--ink-3)}
@@ -122,6 +122,10 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 .credits b{color:var(--ink-2);font-weight:500}
 .close{align-self:flex-end;margin-top:-8px}
 
+@media (max-width:1240px) and (min-width:721px){
+  body:not(.idle) .clock{bottom:calc(env(safe-area-inset-bottom,0px) + 170px)}
+  .clock .time{font-size:clamp(48px,7vw,96px)}
+}
 @media (max-width:720px){
   .clock{top:calc(env(safe-area-inset-top,0px) + 72px);bottom:auto;right:16px}
   .clock .time{font-size:52px}

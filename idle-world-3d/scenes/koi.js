@@ -140,9 +140,18 @@ function rockGeometry(rng, noise, detail = 3) {
 /* Textures                                                            */
 /* ------------------------------------------------------------------ */
 function groundDetail(seed) {
-  const c = noiseCanvas(256, 256, { seed, scale: 9, octaves: 5, map: v => { const g = 150 + (v - 0.5) * 200; return [g, g, g]; } });
+  // velvety moss: soft multi-scale speckle, tileable
+  const rng = makeRng(seed);
+  const c = makeCanvas(256, 256), g = c.getContext('2d');
+  const base = noiseCanvas(256, 256, { seed, scale: 5, octaves: 3, map: v => { const k = 175 + (v - 0.5) * 60; return [k, k, k]; } });
+  g.drawImage(base, 0, 0);
+  for (let i = 0; i < 5200; i++) {
+    const x = rng.range(0, 256), y = rng.range(0, 256), r = rng.range(0.6, 2.2), k = rng.range(120, 235);
+    g.fillStyle = `rgba(${k},${k},${k},${rng.range(0.25, 0.7)})`;
+    for (const [ox, oy] of [[0, 0], [256, 0], [-256, 0], [0, 256], [0, -256]]) { g.beginPath(); g.arc(x + ox, y + oy, r, 0, TAU); g.fill(); }
+  }
   const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace; map.wrapS = map.wrapT = THREE.RepeatWrapping; map.anisotropy = 8;
-  const normal = normalMapFromHeight(c, 2.5);
+  const normal = normalMapFromHeight(c, 1.2);
   return { map, normal };
 }
 function stoneTexture(seed) {
@@ -392,7 +401,7 @@ class KoiPond {
       scene, camera,
       view: {
         target: this.viewTarget.clone(),
-        dist: 10, distRange: [4.5, 22],
+        dist: 9.2, distRange: [4.5, 22],
         yaw: this.yaw0, yawRange: [this.yaw0 - 1.15, this.yaw0 + 1.15],
         pitch: 0.56, pitchRange: [0.22, 1.38],
         drift: 0.016, idlePitch: 0.52, fov: 42,
@@ -486,8 +495,8 @@ class KoiPond {
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.computeVertexNormals();
     const det = groundDetail(this.env.seed + 3);
-    det.map.repeat.set(44, 44); det.normal.repeat.set(44, 44);
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: det.map, normalMap: det.normal, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 0.95 });
+    det.map.repeat.set(70, 70); det.normal.repeat.set(70, 70);
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: det.map, normalMap: det.normal, normalScale: new THREE.Vector2(0.35, 0.35), roughness: 0.97 });
     addUnderwater(mat, this.U, { caustic: 1, tint: 1, key: 'ground' });
     const mesh = new THREE.Mesh(g, mat);
     mesh.receiveShadow = true;
@@ -722,7 +731,9 @@ class KoiPond {
       let x = L.x + Math.cos(a) * L.r, z = L.z + Math.sin(a) * L.r;
       for (let k = 0; k < 10; k++) { const d = this.sdf(x, z); this.sdfGrad(x, z, _v); x -= _v.x * (d - 0.3); z -= _v.z * (d - 0.3); }
       if (this.nearBridge(x, z, 1.6) || Math.abs(this.sdf(x, z) - 0.3) > 0.2) continue;
-      const sc = this.framing(x, z, 1) + r.range(0, 0.3);
+      const dx = x - this.viewTarget.x, dz = z - this.viewTarget.z;
+      const far = dx * this.farDir.x + dz * this.farDir.z, lat = dx * this.rightDir.x + dz * this.rightDir.z;
+      const sc = -Math.abs(far - 0.4) * 0.7 - Math.abs(lat - 3.1) * 0.6 + r.range(0, 0.2);
       if (sc > best) { best = sc; spot = new THREE.Vector3(x, this.height(x, z), z); }
     }
     spot = spot || new THREE.Vector3(this.lobes[0].x, 0.1, this.lobes[0].z + this.lobes[0].r);
@@ -760,7 +771,7 @@ class KoiPond {
     g.rotation.y = r.range(0, TAU);
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.scene.add(g);
-    this.lanternLight = new THREE.PointLight('#ffb062', 0, 9, 2);
+    this.lanternLight = new THREE.PointLight('#ffb062', 0, 12, 1.6);
     this.lanternLight.position.copy(spot).add(new THREE.Vector3(0, 0.77 * S, 0));
     this.scene.add(this.lanternLight);
     this.lanternPos = this.lanternLight.position.clone();
@@ -1006,7 +1017,7 @@ class KoiPond {
   /* ---------- clipped azalea mounds, ferns, iris ---------- */
   buildShrubs() {
     const r = this.rng.fork('shrubs');
-    const leafy = leafyTexture(this.env.seed + 61, [58, 92, 38]);
+    const leafy = leafyTexture(this.env.seed + 61, [74, 112, 46]);
     leafy.map.repeat.set(3, 3); leafy.normal.repeat.set(3, 3);
     const mat = new THREE.MeshStandardMaterial({ map: leafy.map, normalMap: leafy.normal, normalScale: new THREE.Vector2(1.4, 1.4), roughness: 0.85 });
     const geo = new THREE.IcosahedronGeometry(1, 4);
@@ -1020,7 +1031,7 @@ class KoiPond {
     }
     geo.computeVertexNormals();
     const list = [];
-    for (let i = 0; i < 200 && list.length < Math.round(lerp(8, 16, this.q)); i++) {
+    for (let i = 0; i < 300 && list.length < Math.round(lerp(12, 22, this.q)); i++) {
       const a = r.range(0, TAU), rr = r.range(6.5, 12.5);
       const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
       if (this.sdf(x, z) < 0.9 || this.nearBridge(x, z, 1.5)) continue;
@@ -1034,7 +1045,7 @@ class KoiPond {
     list.forEach((o, i) => {
       _m.compose(_v.set(o.x, this.height(o.x, o.z) + 0.15 * o.s, o.z), _q.setFromEuler(_e.set(0, r.range(0, TAU), 0)), _s.set(o.s * r.range(1.1, 1.5), o.s * r.range(0.62, 0.8), o.s * r.range(1.0, 1.3)));
       im.setMatrixAt(i, _m);
-      col.setHSL(r.range(0.22, 0.3), r.range(0.3, 0.5), r.range(0.42, 0.62));
+      col.setHSL(r.range(0.2, 0.3), r.range(0.35, 0.55), r.range(0.55, 0.8));
       im.setColorAt(i, col);
     });
     im.castShadow = true; im.receiveShadow = true;
@@ -1226,7 +1237,7 @@ class KoiPond {
     this.scene.add(this.petalMesh);
     this.petals = [];
     // pre-seed floating petals so the pond already looks lived in
-    for (let i = 0; i < this.petalMax * 0.55; i++) {
+    for (let i = 0; i < this.petalMax * 0.3; i++) {
       const p = this.spawnPetal(r);
       const c = this.randomInPond(r, 0.3, _v);
       if (r.chance(0.6) && this.canopy.length) { const t = r.pick(this.canopy); c.set(t.x + r.gauss() * 1.6, 0, t.z + r.gauss() * 1.6); }
@@ -1380,11 +1391,11 @@ class KoiPond {
     const center = new THREE.Vector3(0, 0, 0);
     this.sun.position.copy(center).addScaledVector(dir, 40);
     this.sun.target.position.copy(center);
-    this.sun.color.copy(useMoon ? new THREE.Color('#9fb6ff') : S.sunColor);
-    this.sun.intensity = useMoon ? 0.35 : S.sunIntensity * 1.15 + S.golden * 0.6;
-    this.hemi.color.copy(S.skyAmbient);
+    this.sun.color.copy(useMoon ? new THREE.Color('#a9bfff') : S.sunColor);
+    this.sun.intensity = useMoon ? 0.95 : S.sunIntensity * 1.15 + S.golden * 0.6;
+    this.hemi.color.copy(S.skyAmbient).lerp(new THREE.Color('#3a5288'), night * 0.6);
     this.hemi.groundColor.copy(S.groundAmbient).lerp(new THREE.Color('#3a4a22'), 0.4);
-    this.hemi.intensity = Math.max(0.45, S.ambientIntensity) * 0.95 + night * 0.2;
+    this.hemi.intensity = Math.max(0.45, S.ambientIntensity) * 0.95 + night * 0.75;
     const u = this.skyMat.uniforms;
     u.uZenith.value.copy(S.zenith); u.uHorizon.value.copy(S.horizon);
     u.uSunDir.value.copy(S.dir); u.uSunColor.value.copy(S.sunColor);
@@ -1397,8 +1408,8 @@ class KoiPond {
     this.U.uWaterColor.value.copy(new THREE.Color('#1d3a2b')).lerp(new THREE.Color('#06121a'), night).multiplyScalar(lerp(1, 0.5, night));
     // lantern
     const glow = smoothstep(0.15, 0.7, night);
-    this.lanternGlow.emissiveIntensity = glow * 2.4;
-    this.lanternLight.intensity = glow * 3.2;
+    this.lanternGlow.emissiveIntensity = glow * 3.2;
+    this.lanternLight.intensity = glow * 14;
     this.flyMat.uniforms.uNight.value = glow;
     // env map from the sky, refreshed when the light changes
     const key = Math.round(S.hours * 6);
@@ -1490,7 +1501,7 @@ class KoiPond {
     const night = this.sunState ? this.sunState.night : 0;
     for (const k of this.koi) {
       const sw = k.sw, m = k.member;
-      k.scale = 0.64 * (m.size || 1) * (k.mesh.geometry === this.butterflyGeo ? 1.08 : 1);
+      k.scale = 0.7 * (m.size || 1) * (k.mesh.geometry === this.butterflyGeo ? 1.08 : 1);
       const hungry = this.env.fullness(m) < 0.3;
       // nearest food
       let food = null, fd = 7.5;
