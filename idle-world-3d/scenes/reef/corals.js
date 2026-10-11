@@ -139,7 +139,7 @@ function tableGeo(seed, { stalk = true, NS = 56, NR = 9, top = '#9a8a5e', rim = 
     }
     for (let j = 0; j < NR; j++) for (let k = 0; k < NS; k++) {
       const a = base + j * (NS + 1) + k, b = a + 1, c = a + NS + 1, d = c + 1;
-      if (!under) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+      if (!under) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d);
     }
   }
   // rim band
@@ -254,7 +254,7 @@ function softCoralGeo(rng, stem, blossom) {
     const nc = rng.int(7, 12);
     for (let k = 0; k < nc; k++) {
       const r = rng.range(0.028, 0.05);
-      const sp = strip(new THREE.IcosahedronGeometry(r, 1));
+      const sp = strip(new THREE.SphereGeometry(r, 7, 5));
       const o = rng.onSphere(new THREE.Vector3()).multiplyScalar(rng.range(0.02, 0.08));
       o.y = Math.abs(o.y) * 0.8;
       sp.translate(end.x + o.x, end.y + o.y, end.z + o.z);
@@ -453,6 +453,38 @@ export function buildReef(ctx) {
     anemones.push({ pos: new THREE.Vector3(s.x, s.y - 0.04, s.z), r: k === 0 ? 0.5 : 0.42, n: s.n.clone() });
   }
 
+  /* ---- table and shelf corals ---- */
+  const tableMat = stdMat(W, { vertexColors: true, roughness: 0.75, side: THREE.DoubleSide }, { key: 'table' });
+  addDetail(tableMat, W, { glsl: TABLE_GLSL, space: 'object', bump: 1, key: 'table' });
+  addFluor(tableMat, W, '#7dff6a', 0.7, 'table');
+  const tableG = tableGeo(env.seed ^ 31);
+  const shelfG = tableGeo(env.seed ^ 57, { stalk: false, top: '#7b5e78', rim: '#d9b8d8', under: '#4a3448' });
+  const tables = [], shelves = [];
+  const nTable = Math.round(5 * q);
+  for (let i = 0; i < nTable; i++) {
+    const s = takeSpot(s => s.n.y > 0.7 && s.h > 0.6, 1.0);
+    if (!s) continue;
+    const r = rng.range(0.75, 1.25);
+    occupy(s.x, s.z, r * 0.8);
+    const lift = 0.42 * r;
+    tables.push({ pos: new THREE.Vector3(s.x, s.y + lift, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), rng.range(0, TAU), rng.range(-0.08, 0.08))).clone(), scale: new THREE.Vector3(r, r * 0.9, r), color: _c.setHSL(0.1, 0.1, rng.range(0.8, 1)).clone() });
+    hm.addDisc(s.x, s.z, r, s.y + lift + 0.12);
+  }
+  const nShelf = Math.round(8 * q);
+  for (let i = 0; i < nShelf; i++) {
+    const s = takeSpot(s => s.n.y < 0.75 && s.n.y > 0.15 && s.h > 0.5, 0.35);
+    if (!s) continue;
+    const r = rng.range(0.35, 0.6);
+    const out = new THREE.Vector3(s.n.x, 0, s.n.z).normalize();
+    const pos = new THREE.Vector3(s.x, s.y - 0.08, s.z).addScaledVector(out, r * 0.45);
+    const yaw = Math.atan2(-out.z, out.x);
+    shelves.push({ pos, quat: _q.setFromEuler(_e.set(rng.range(-0.1, 0.1), yaw, rng.range(0.05, 0.25))).clone(), scale: new THREE.Vector3(r, r * 0.8, r), color: rng.pick([C('#ffffff'), C('#c8e0c0'), C('#f0d0b0')]) });
+  }
+  group.add(instanced(tableG, tableMat, tables));
+  group.add(instanced(shelfG, tableMat, shelves));
+
+  rng.shuffle(spots);
+
   /* ---- staghorn thickets ---- */
   const stagPal = [
     [C('#a7804f'), C('#f2e4c4')], [C('#7d5c7e'), C('#e2c0f0')], [C('#5f88a8'), C('#a8e0ff')], [C('#b07a6e'), C('#ffcfd6')],
@@ -495,36 +527,6 @@ export function buildReef(ctx) {
   }
   group.add(instanced(brainG, brainMat, brains));
 
-  /* ---- table and shelf corals ---- */
-  const tableMat = stdMat(W, { vertexColors: true, roughness: 0.75, side: THREE.DoubleSide }, { key: 'table' });
-  addDetail(tableMat, W, { glsl: TABLE_GLSL, space: 'object', bump: 1, key: 'table' });
-  addFluor(tableMat, W, '#7dff6a', 0.7, 'table');
-  const tableG = tableGeo(env.seed ^ 31);
-  const shelfG = tableGeo(env.seed ^ 57, { stalk: false, top: '#7b5e78', rim: '#d9b8d8', under: '#4a3448' });
-  const tables = [], shelves = [];
-  const nTable = Math.round(5 * q);
-  for (let i = 0; i < nTable; i++) {
-    const s = takeSpot(s => s.n.y > 0.7 && s.h > 0.6, 1.0);
-    if (!s) continue;
-    const r = rng.range(0.75, 1.25);
-    occupy(s.x, s.z, r * 0.8);
-    const lift = 0.42 * r;
-    tables.push({ pos: new THREE.Vector3(s.x, s.y + lift, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), rng.range(0, TAU), rng.range(-0.08, 0.08))).clone(), scale: new THREE.Vector3(r, r * 0.9, r), color: _c.setHSL(0.1, 0.1, rng.range(0.8, 1)).clone() });
-    hm.addDisc(s.x, s.z, r, s.y + lift + 0.12);
-  }
-  const nShelf = Math.round(8 * q);
-  for (let i = 0; i < nShelf; i++) {
-    const s = takeSpot(s => s.n.y < 0.75 && s.n.y > 0.15 && s.h > 0.5, 0.35);
-    if (!s) continue;
-    const r = rng.range(0.35, 0.6);
-    const out = new THREE.Vector3(s.n.x, 0, s.n.z).normalize();
-    const pos = new THREE.Vector3(s.x, s.y - 0.08, s.z).addScaledVector(out, r * 0.45);
-    const yaw = Math.atan2(-out.z, out.x);
-    shelves.push({ pos, quat: _q.setFromEuler(_e.set(rng.range(-0.1, 0.1), yaw, rng.range(0.05, 0.25))).clone(), scale: new THREE.Vector3(r, r * 0.8, r), color: rng.pick([C('#ffffff'), C('#c8e0c0'), C('#f0d0b0')]) });
-  }
-  group.add(instanced(tableG, tableMat, tables));
-  group.add(instanced(shelfG, tableMat, shelves));
-
   /* ---- sea fans (face the surge) ---- */
   const fanTex = fanTexture(env.seed ^ 99);
   const fanMat = new THREE.MeshStandardMaterial({ map: fanTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, envMapIntensity: 0.35 });
@@ -541,8 +543,8 @@ export function buildReef(ctx) {
     if (!s || (!onRock && !free(s.x, s.z, 0.4))) continue;
     occupy(s.x, s.z, 0.35);
     const sc = rng.range(0.8, 1.35);
-    const yaw = Math.atan2(curDir.y, curDir.x) + Math.PI / 2 + rng.range(-0.35, 0.35);
-    fans.push({ pos: new THREE.Vector3(s.x, s.y - 0.05, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.12, 0.12), -yaw + Math.PI / 2, rng.range(-0.1, 0.1))).clone(), scale: new THREE.Vector3(sc, sc * rng.range(0.85, 1.15), sc), color: i % 4 === 3 ? rng.pick(fanCols.slice(3)) : rng.pick(fanCols.slice(0, 3)) });
+    const yaw = Math.atan2(curDir.x, curDir.y) + rng.range(-0.35, 0.35);
+    fans.push({ pos: new THREE.Vector3(s.x, s.y - 0.05, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.12, 0.12), yaw, rng.range(-0.1, 0.1))).clone(), scale: new THREE.Vector3(sc, sc * rng.range(0.85, 1.15), sc), color: i % 4 === 3 ? rng.pick(fanCols.slice(3)) : rng.pick(fanCols.slice(0, 3)) });
   }
   group.add(instanced(fanG, fanMat, fans));
 
@@ -676,9 +678,9 @@ export function buildReef(ctx) {
   /* ---- urchins ---- */
   const urchinBodyG = strip(new THREE.SphereGeometry(0.09, 14, 10));
   paint(urchinBodyG, () => [C('#2a1830'), 0]);
-  const spineG = strip(new THREE.ConeGeometry(0.0055, 1, 4, 1));
+  const spineG = strip(new THREE.ConeGeometry(0.011, 1, 4, 1));
   spineG.translate(0, 0.5, 0);
-  paint(spineG, (x, y) => [_c.copy(C('#1c1024')).lerp(C('#5a3a6a'), y + 0.5).clone(), 0]);
+  paint(spineG, (x, y) => [_c.copy(C('#1c1024')).lerp(C('#5a3a6a'), clamp(y, 0, 1)).clone(), 0]);
   const urchinMat = stdMat(W, { vertexColors: true, roughness: 0.4, envMapIntensity: 0.6 }, { key: 'urchin' });
   const urchins = [], spines = [];
   for (let i = Math.round(7 * q); i > 0; i--) {

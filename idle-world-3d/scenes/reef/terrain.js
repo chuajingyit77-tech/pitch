@@ -101,7 +101,7 @@ export function buildTerrain(ground, W, env, { rings = 130, segs = 180, rMax = 1
   g.computeBoundingSphere();
   const tex = sandTexture(env.seed ^ 0x5a5d);
   tex.anisotropy = 8;
-  const mat = new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color('#e9dcc0'), roughness: 0.96, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color('#d2c3a2'), roughness: 0.96, metalness: 0, envMapIntensity: 0.25 });
   waterize(mat, W, { key: 'sand' });
   addDetail(mat, W, { glsl: SAND_GLSL, space: 'world', bump: 1.0, key: 'sand' });
   const mesh = new THREE.Mesh(g, mat);
@@ -268,15 +268,15 @@ export function buildRocks(ground, hm, W, env, rng) {
     if (b === 0) { cx = rng.range(-1, 1); cz = rng.range(-1, 1); }
     else { const a = angle0 + (b / (nB - 1)) * TAU * 0.92 + rng.range(-0.3, 0.3); const r = rng.range(5.2, 7.2); cx = Math.cos(a) * r; cz = Math.sin(a) * r; }
     const big = b === 0 ? 1.15 : rng.range(0.8, 1.05);
-    const sx = rng.range(1.9, 2.5) * big, sy = rng.range(1.15, 1.5) * big, sz = rng.range(1.7, 2.3) * big;
+    const sx = rng.range(1.9, 2.5) * big, sy = rng.range(1.5, 1.95) * big, sz = rng.range(1.7, 2.3) * big;
     const gy = ground.height(cx, cz);
-    items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(cx, gy - sy * 0.22, cz), scale: new THREE.Vector3(sx, sy, sz), rotY: rng.range(0, TAU) });
+    items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(cx, gy - sy * 0.3, cz), scale: new THREE.Vector3(sx, sy, sz), rotY: rng.range(0, TAU) });
     const kids = rng.int(2, 4);
     for (let k = 0; k < kids; k++) {
       const a = rng.range(0, TAU), r = rng.range(0.4, 1.3) * big;
       const kx = cx + Math.cos(a) * r, kz = cz + Math.sin(a) * r;
-      const ks = rng.range(0.55, 1.05) * big;
-      items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(kx, gy + sy * rng.range(0.35, 0.7), kz), scale: new THREE.Vector3(ks * rng.range(0.9, 1.3), ks * rng.range(0.7, 1.0), ks * rng.range(0.9, 1.3)), rotY: rng.range(0, TAU) });
+      const ks = rng.range(0.6, 1.1) * big;
+      items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(kx, gy + sy * rng.range(0.4, 0.8), kz), scale: new THREE.Vector3(ks * rng.range(0.9, 1.3), ks * rng.range(0.7, 1.0), ks * rng.range(0.9, 1.3)), rotY: rng.range(0, TAU) });
     }
     bommies.push({ x: cx, z: cz, r: Math.max(sx, sz) * 1.25, main: b === 0 });
   }
@@ -317,7 +317,7 @@ export function buildRocks(ground, hm, W, env, rng) {
     hm.addSolid(it.pos.x, it.pos.z, R, it.pos.y + it.scale.y * 1.7, it.inside);
   }
 
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, envMapIntensity: 0.3 });
   waterize(mat, W, { key: 'rock' });
   addDetail(mat, W, { glsl: ROCK_GLSL, space: 'world', bump: 1.0, key: 'rock' });
   addFluor(mat, W, '#ff6fb0', 0.35, 'rock');
@@ -333,7 +333,7 @@ export function buildRocks(ground, hm, W, env, rng) {
     im.computeBoundingSphere();
     group.add(im); meshes.push(im);
   }
-  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, envMapIntensity: 0.3 });
   waterize(farMat, W, { caustics: false, key: 'far' });
   const fim = new THREE.InstancedMesh(farT.geometry, farMat, far.length);
   far.forEach((it, i) => { q.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, q, it.scale); fim.setMatrixAt(i, m4); });

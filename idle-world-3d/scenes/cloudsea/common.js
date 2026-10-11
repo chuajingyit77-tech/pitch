@@ -1,7 +1,7 @@
 // 云海 · shared state: time-of-day palette, uniforms shared by every material, sky-matched fog,
 // material patching and procedural textures (billow height field, detail, cirrus, noise).
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, invLerp, makeRng, patchMaterial } from '../../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, invLerp, makeRng, patchMaterial, sunState } from '../../lib/util.js';
 
 export const CLOUD_TOP = -26;          // nominal height of the cloud-sea tops (billows rise ~10 m above)
 
@@ -99,7 +99,8 @@ export function createTimeOfDay(env, shared) {
     const h = env.hours();
     if (!force && Math.abs(h - st.hours) < 0.0015) return st;
     st.hours = h;
-    const s = env.sun();
+    // The sun runs ~15 min late so that 18:00 is golden hour rather than a half-sunk sun.
+    const s = sunState(h - 0.25);
     st.sun = s;
     st.elev = s.elevationDeg;
     st.sunDir.copy(s.dir);
@@ -382,6 +383,34 @@ export function makeNoiseTexture(seed, size = 256) {
     data[i + 1] = Math.round(clamp(tileFbm(p, u + 0.3, v + 0.6, 8, 4) * 0.75 + 0.5, 0, 1) * 255);
     data[i + 2] = Math.round(clamp(tileFbm(p, u + 0.7, v + 0.1, 16, 3) * 0.75 + 0.5, 0, 1) * 255);
     data[i + 3] = Math.round(clamp(tileFbm(p, u + 0.2, v + 0.9, 32, 2) * 0.75 + 0.5, 0, 1) * 255);
+  }
+  return dataTex(data, size, size);
+}
+
+/** Rock surface: RGB tangent-space normal, A height (fbm + ridges + pits), tileable. */
+export function makeRockTexture(seed, size = 256) {
+  const p = makePerlin(seed ^ 0x3c3c), p2 = makePerlin(seed ^ 0x5a5a);
+  const H = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = x / size, v = y / size;
+    const base = tileFbm(p, u, v, 4, 5, 0.55);
+    let ridge = 0, a = 0.5, f = 6, n = 0;
+    for (let o = 0; o < 3; o++) { const r = 1 - Math.abs(p2(u * f, v * f, f)); ridge += a * r * r; n += a; a *= 0.5; f *= 2; }
+    H[y * size + x] = base * 0.6 + (ridge / n) * 0.55;
+  }
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < H.length; i++) { mn = Math.min(mn, H[i]); mx = Math.max(mx, H[i]); }
+  const data = new Uint8Array(size * size * 4);
+  const at = (x, y) => (H[((y + size) % size) * size + ((x + size) % size)] - mn) / (mx - mn);
+  const k = 2.2;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const dx = (at(x + 1, y) - at(x - 1, y)) * k, dy = (at(x, y + 1) - at(x, y - 1)) * k;
+    const l = Math.hypot(dx, dy, 1 / 6);
+    const i = (y * size + x) * 4;
+    data[i] = Math.round((-dx / l * 0.5 + 0.5) * 255);
+    data[i + 1] = Math.round((-dy / l * 0.5 + 0.5) * 255);
+    data[i + 2] = Math.round(((1 / 6) / l * 0.5 + 0.5) * 255);
+    data[i + 3] = Math.round(at(x, y) * 255);
   }
   return dataTex(data, size, size);
 }

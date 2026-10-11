@@ -799,7 +799,7 @@ class KoiPond {
     const baseMat = new THREE.MeshStandardMaterial({ color: '#3b2a1c', roughness: 0.8 });
     this.floaters = [];
     for (let i = 0; i < n; i++) {
-      const mat = new THREE.MeshStandardMaterial({ map: paper, emissiveMap: paper, emissive: '#ffb468', emissiveIntensity: 0, roughness: 0.9 });
+      const mat = new THREE.MeshStandardMaterial({ map: paper, emissiveMap: paper, emissive: '#ff9f4a', emissiveIntensity: 0, roughness: 0.9 });
       const g = new THREE.Group();
       g.add(new THREE.Mesh(baseGeo, baseMat), new THREE.Mesh(boxGeo, mat));
       const p = this.randomInPond(r, 0.8, new THREE.Vector3());
@@ -840,7 +840,7 @@ class KoiPond {
       g.rotation.y += f.spin * dt;
       g.rotation.x = Math.sin(time * 0.9 + f.ph) * 0.03;
       g.scale.setScalar(Math.max(0.001, vis));
-      f.mat.emissiveIntensity = vis * (2.4 + Math.sin(time * 11 + f.ph * 7) * 0.12 + Math.sin(time * 23 + f.ph) * 0.08);
+      f.mat.emissiveIntensity = vis * (1.6 + Math.sin(time * 11 + f.ph * 7) * 0.1 + Math.sin(time * 23 + f.ph) * 0.06);
       c.add(P); count++;
     }
     if (count) {

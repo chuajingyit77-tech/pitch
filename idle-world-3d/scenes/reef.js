@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { clamp, lerp, smoothstep, damp, TAU } from '../lib/util.js';
 import { createWaterUniforms, createBackground, createSurface, createShafts, createSnow, createBubbles, createEnvBuilder } from './reef/uw.js';
 import { createGround, buildTerrain, buildRocks, HeightMap } from './reef/terrain.js';
+import { buildReef } from './reef/corals.js';
 
 const SURF_Y = 12;
 const REF_Y = 0.5;
@@ -37,6 +38,8 @@ export default {
     scene.add(terrain);
     const rocks = buildRocks(ground, hm, W, env, rng.fork('rocks'));
     scene.add(rocks.group);
+    const reef = buildReef({ W, env, hm, ground, rocks, rng: rng.fork('reef') });
+    scene.add(reef.group);
 
     /* ---------------- water volume ---------------- */
     const bg = createBackground(W);
