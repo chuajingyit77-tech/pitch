@@ -47,8 +47,9 @@ export default {
     scene.add(reef.group);
     const mainB = rocks.bommies.find(b => b.main) || rocks.bommies[0];
     const an0 = reef.anemones[0];
-    const center = new THREE.Vector3(mainB.x, 0, mainB.z);
-    center.y = ground.height(center.x, center.z);
+    const center = new THREE.Vector3(0, 0, 0);
+    center.y = ground.height(0, 0);
+    const floorAt = (x, z) => hm.at(x, z);
 
     /* ---------------- water volume ---------------- */
     const bg = createBackground(W);
@@ -88,15 +89,17 @@ export default {
     const envB = createEnvBuilder(env.pmrem, W);
 
     /* ---------------- life ---------------- */
-    const life = await createLife({ W, env, hm, scene, anemones: reef.anemones, bommies: rocks.bommies, surfY: SURF_Y, camera, center });
+    const tod = { hours: -99, envHours: -99, sunW: new THREE.Vector3(0, 1, 0), axis: new THREE.Vector3(0, -1, 0), night: 0, day: 1, golden: 0 };
+    const life = await createLife({ W, env, hm, scene, anemones: reef.anemones, bommies: rocks.bommies, surfY: SURF_Y, camera, center, thickets: reef.thickets, tod });
     scene.add(life.group);
     const manta = new Manta(W, rng.fork('manta'), center);
     scene.add(manta.mesh);
+    const eagle = new Manta(W, rng.fork('eagle'), center, { eagle: true });
+    scene.add(eagle.mesh);
     const jellies = new Jellies(W, rng.fork('jelly'), Math.round(9 * Math.max(0.5, env.q)), center);
     scene.add(jellies.group);
 
     /* ---------------- time of day ---------------- */
-    const tod = { hours: -99, envHours: -99, sunW: new THREE.Vector3(0, 1, 0), axis: new THREE.Vector3(0, -1, 0), night: 0, day: 1, golden: 0 };
     const _c1 = new THREE.Color(), _c2 = new THREE.Color(), _v = new THREE.Vector3(), _v2 = new THREE.Vector2();
     const refract = (d, out) => {
       const h = Math.hypot(d.x, d.z);
@@ -163,9 +166,9 @@ export default {
     applyTod(true);
 
     /* ---------------- camera + post ---------------- */
-    const tgtY = clamp((an0 ? an0.pos.y : 0.8) + 0.5, 1.0, 2.6);
+    const tgtY = clamp(hm.at(0, 0) + 0.2, 1.6, 3.4);
     const view = {
-      target: new THREE.Vector3(center.x * 0.6, tgtY, center.z * 0.6), dist: 14, distRange: [8, 17],
+      target: new THREE.Vector3(mainB.x * 0.4, tgtY, mainB.z * 0.4), dist: 14, distRange: [8, 17],
       yaw: rng.range(0, TAU), yawRange: null,
       pitch: 0.16, pitchRange: [-0.1, 0.55],
       drift: 0.035, idlePitch: 0.15, fov: 45, minY: -1,
@@ -213,6 +216,7 @@ export default {
         view.minY = hm.at(camera.position.x, camera.position.z) + 1.1;
         life.update(dt, time);
         manta.update(dt, time);
+        eagle.update(dt, time, floorAt);
         jellies.update(dt, time, tod.night, (x, z) => hm.at(x, z));
         post.bloom.strength = lerp(0.3, 0.8, tod.night);
         post.bloom.threshold = lerp(0.8, 0.38, tod.night);
@@ -248,6 +252,11 @@ export default {
         { const c = tag(i++); c.member = null; c.label = '银汉鱼群'; c.pos = life.silCenter; c.radius = 2.0; }
         for (const b of life.barra) { const c = tag(i++); c.member = null; c.label = '尖吻鲈'; c.pos = b.pos; c.radius = 0.6; }
         if (manta.mesh.visible) { const c = tag(i++); c.member = null; c.label = '蝠鲼'; c.pos = manta.pos; c.radius = 2.2; }
+        { const c = tag(i++); c.member = null; c.label = '鹰鳐'; c.pos = eagle.pos; c.radius = 1.0; }
+        for (const g of life.hoverGroups) { if (g.kind !== 'anthias') continue; const c = tag(i++); c.member = null; c.label = '金拟花鮨'; c.pos = g.c; c.radius = 1.3; }
+        if (life.butter[0]) { const c = tag(i++); c.member = null; c.label = '蝴蝶鱼'; c.pos = life.butter[0].pos; c.radius = 0.5; }
+        { const c = tag(i++); c.member = null; c.label = '清洁站 · 裂唇鱼'; c.pos = life.station.wall; c.radius = 0.6; }
+        { const c = tag(i++); c.member = null; c.label = '鲹鱼群'; c.pos = life.jackC; c.radius = 4.0; }
         return tagCache.slice(0, i);
       },
       dispose() {

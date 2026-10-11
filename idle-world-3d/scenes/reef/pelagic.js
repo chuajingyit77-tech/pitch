@@ -1,15 +1,17 @@
 // 深蓝 · 珊瑚礁 — open-water visitors: a manta ray gliding overhead and glowing moon jellies at night.
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU, quatFromForward, patchMaterial } from '../../lib/util.js';
-import { waterize, UW_VERT, UW_FRAG, NOISE_GLSL } from './uw.js';
+import { waterize, addDetail, UW_VERT, UW_FRAG, NOISE_GLSL } from './uw.js';
 
 /* ------------------------------------------------------------------ */
 /* Manta                                                               */
 /* ------------------------------------------------------------------ */
-function mantaGeometry() {
+function mantaGeometry(eagle = false) {
   const NS = 48, NU = 18;
   const pos = [], col = [], idx = [];
-  const xF = s => { const a = Math.abs(s); return 0.42 - 0.48 * Math.pow(a, 1.25) + 0.07 * Math.exp(-(((a - 0.13) / 0.045) ** 2)) - 0.035 * Math.exp(-((s / 0.06) ** 2)); };
+  const xF = eagle
+    ? s => { const a = Math.abs(s); return 0.34 - 0.5 * Math.pow(a, 1.05) + 0.16 * Math.exp(-((s / 0.085) ** 2)); }
+    : s => { const a = Math.abs(s); return 0.42 - 0.48 * Math.pow(a, 1.25) + 0.07 * Math.exp(-(((a - 0.13) / 0.045) ** 2)) - 0.035 * Math.exp(-((s / 0.06) ** 2)); };
   const xB = s => { const a = Math.abs(s); return -0.42 + 0.36 * Math.pow(a, 0.75); };
   const black = new THREE.Color('#15171c'), grey = new THREE.Color('#3a3f47'), white = new THREE.Color('#e9edf0'), belly = new THREE.Color('#f2f2ee'), edge = new THREE.Color('#4a4e56');
   const c = new THREE.Color();
@@ -27,7 +29,8 @@ function mantaGeometry() {
           c.copy(black).lerp(grey, 0.25 * Math.sin(u * 3 + s * 5) ** 2);
           // chevron shoulder patches
           const pu = (a - 0.14) / 0.42, pv = u / 0.55;
-          if (pu > 0 && pu < 1 && pv < 1 && pv < pu * 1.3 + 0.15 && pv > pu * 0.5 - 0.2) c.lerp(white, 0.85 * smoothstep(0, 0.15, Math.min(pu, 1 - pu)) * smoothstep(0, 0.15, 1 - pv));
+          if (eagle) c.copy(black).lerp(grey, 0.3);
+          else if (pu > 0 && pu < 1 && pv < 1 && pv < pu * 1.3 + 0.15 && pv > pu * 0.5 - 0.2) c.lerp(white, 0.85 * smoothstep(0, 0.15, Math.min(pu, 1 - pu)) * smoothstep(0, 0.15, 1 - pv));
         } else {
           c.copy(belly).lerp(edge, smoothstep(0.75, 1, u) * 0.8 + smoothstep(0.7, 0.98, a) * 0.6);
           if (Math.sin(s * 37) * Math.sin(u * 23) > 0.93) c.lerp(black, 0.7);
@@ -46,13 +49,14 @@ function mantaGeometry() {
   g.setIndex(idx);
   g.computeVertexNormals();
   // tail
-  const tail = new THREE.CylinderGeometry(0.004, 0.014, 0.6, 5, 4, true).rotateZ(Math.PI / 2).translate(-0.7, 0.02, 0);
+  const tL = eagle ? 1.7 : 0.6;
+  const tail = new THREE.CylinderGeometry(0.004, 0.014, tL, 5, 6, true).rotateZ(Math.PI / 2).translate(-0.4 - tL / 2, 0.02, 0);
   tail.deleteAttribute('uv');
   const tc = new Float32Array(tail.getAttribute('position').count * 3).fill(0.1);
   tail.setAttribute('color', new THREE.BufferAttribute(tc, 3));
   const parts = [g, tail];
   // cephalic fins: small curled flaps beside the mouth
-  for (const s of [1, -1]) {
+  for (const s of eagle ? [] : [1, -1]) {
     const f = new THREE.PlaneGeometry(0.12, 0.05, 4, 1);
     const p = f.getAttribute('position');
     for (let i = 0; i < p.count; i++) { const x = p.getX(i) + 0.06, y = p.getY(i); p.setXYZ(i, 0.43 + x, 0.03 - x * x * 3 + y * 0.2, s * (0.12 + y * 0.3)); }
@@ -86,9 +90,21 @@ function mergeAll(geos) {
   return g;
 }
 
+const EAGLE_GLSL = /* glsl */`
+float detailH(vec3 p){ return 0.0; }
+vec3 detailCol(vec3 p, float h, vec3 c){
+  float lum = dot(c, vec3(0.333));
+  vec2 cc = cell2(p.xz * 12.0);
+  float spot = smoothstep(0.24, 0.15, cc.x) * (1.0 - step(0.3, lum));
+  return mix(c, vec3(0.9, 0.92, 0.95), spot);
+}
+`;
+
+const _tmpV = new THREE.Vector3();
 export class Manta {
-  constructor(W, rng, center) {
+  constructor(W, rng, center, { eagle = false } = {}) {
     this.rng = rng;
+    this.eagle = eagle;
     this.center = center.clone();
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0, envMapIntensity: 0.7, side: THREE.DoubleSide });
     this.u = { uFlap: { value: 0 }, uAmp: { value: 0.22 } };
@@ -108,10 +124,12 @@ export class Manta {
       },
     });
     waterize(mat, W, { key: 'manta' });
-    this.mesh = new THREE.Mesh(mantaGeometry(), mat);
+    if (eagle) addDetail(mat, W, { space: 'object', bump: 0, key: 'eaglespots', glsl: EAGLE_GLSL });
+    this.mesh = new THREE.Mesh(mantaGeometry(eagle), mat);
     this.mesh.castShadow = true;
     this.mesh.frustumCulled = false;
-    this.scale = rng.range(2.1, 2.5);
+    this.scale = eagle ? rng.range(0.95, 1.15) : rng.range(2.1, 2.5);
+    this.theta = rng.range(0, TAU);
     this.mesh.scale.setScalar(this.scale);
     this.mesh.visible = false;
     this.pos = new THREE.Vector3();
@@ -135,7 +153,8 @@ export class Manta {
     this.t = 0; this.active = true;
     this.mesh.visible = true;
   }
-  update(dt, time) {
+  update(dt, time, floorAt) {
+    if (this.eagle) return this.updateEagle(dt, time, floorAt);
     if (!this.active) {
       this.wait -= dt;
       if (this.wait <= 0) this.begin();
@@ -165,6 +184,34 @@ export class Manta {
     this.flap += dt * TAU / 5.2 * (0.6 + 0.4 * beat);
     this.u.uFlap.value = this.flap;
     this.u.uAmp.value = lerp(0.07, 0.24, smoothstep(0.2, 0.8, beat));
+  }
+  /** Spotted eagle ray: endless slow loops over the sand apron around the reef. */
+  updateEagle(dt, time, floorAt) {
+    this.mesh.visible = true;
+    const R0 = 15.5 + 2.2 * Math.sin(this.theta * 2 + 1.3);
+    this.theta += dt * 1.05 / R0;
+    const th = this.theta;
+    const R = 15.5 + 2.2 * Math.sin(th * 2 + 1.3);
+    const x = this.center.x + Math.cos(th) * R, z = this.center.z + Math.sin(th) * R;
+    const y = Math.max(floorAt(x, z) + 0.75, this.center.y - 30) + 0.25 * Math.sin(time * 0.3);
+    _tmpV.set(x, y, z);
+    this.fwd.subVectors(_tmpV, this.pos);
+    const sp = this.fwd.length();
+    if (sp > 1e-4) {
+      this.fwd.divideScalar(sp);
+      const prev = Math.atan2(this.dir.z, this.dir.x);
+      this.dir.lerp(this.fwd, 1 - Math.exp(-2 * dt)).normalize();
+      const yawRate = (Math.atan2(this.dir.z, this.dir.x) - prev) / Math.max(dt, 1e-3);
+      this.roll = lerp(this.roll, clamp(-yawRate * 1.2, -0.4, 0.4), 1 - Math.exp(-dt));
+    }
+    this.pos.copy(_tmpV);
+    quatFromForward(this.quat, this.dir, this.roll);
+    this.mesh.position.copy(this.pos);
+    this.mesh.quaternion.copy(this.quat);
+    const beat = 0.5 + 0.5 * Math.sin(time * 0.17 + 1.0);
+    this.flap += dt * TAU / 3.4 * (0.7 + 0.3 * beat);
+    this.u.uFlap.value = this.flap;
+    this.u.uAmp.value = lerp(0.05, 0.17, smoothstep(0.3, 0.8, beat));
   }
 }
 

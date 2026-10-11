@@ -71,6 +71,92 @@ if (!PAINTERS.reefPaletteTang) {
   };
 }
 
+if (!PAINTERS.reefAnthias) {
+  // Sea goldie / lyretail anthias: orange-pink with a lavender cheek stripe, lyre tail.
+  PAINTERS.reefAnthias = {
+    setup: () => ({}),
+    body(s, v, C) {
+      const q = C.q;
+      let col = mix3(hex('#ff5f24'), hex('#ff8a3c'), smoothstep(0.2, 0.8, q) * 0.6);
+      col = mix3(col, hex('#ffb070'), (1 - smoothstep(0, 0.35, q)) * 0.45);
+      const st = smoothstep(0.035, 0.0, Math.abs(s - 0.17 - (0.62 - q) * 0.3)) * smoothstep(0.2, 0.35, q) * (1 - smoothstep(0.62, 0.7, q)) * (s < 0.32 ? 1 : 0);
+      return mix3(col, hex('#c88cff'), st);
+    },
+    fin(region, a, b) {
+      if (region === REGION.caudal) { const e = Math.min(b, 1 - b); return [...mix3(hex('#ff6a2a'), hex('#ff2a7a'), smoothstep(0.25, 0.02, e)), 0.92]; }
+      if (region === REGION.dorsal) return [...mix3(hex('#ff7a3a'), hex('#ff2a4a'), smoothstep(0.4, 0.9, a)), 0.9];
+      return [...hex('#ffa060'), lerp(0.85, 0.5, a)];
+    },
+    eye: { iris: '#ff7040', pupil: '#050505' },
+    material: () => ({ roughness: 0.34, clearcoat: 0.5, iridescence: 0.35, normalScale: 0.25 }),
+    scaleDark: () => 0.04,
+  };
+  PAINTERS.reefAnthiasPurple = {
+    setup: () => ({}),
+    body(s, v, C) {
+      const q = C.q;
+      let col = mix3(hex('#7a3ae0'), hex('#a46aff'), smoothstep(0.2, 0.8, q) * 0.6);
+      col = mix3(col, hex('#d0a8ff'), (1 - smoothstep(0, 0.35, q)) * 0.4);
+      return mix3(col, hex('#ffd23a'), smoothstep(0.9, 0.97, q) * smoothstep(0.3, 0.4, s) * 0.8);
+    },
+    fin(region, a, b) {
+      if (region === REGION.caudal) { const e = Math.min(b, 1 - b); return [...mix3(hex('#8a4aff'), hex('#3a1a8a'), smoothstep(0.25, 0.02, e)), 0.92]; }
+      if (region === REGION.dorsal) return [...mix3(hex('#ffd23a'), hex('#ff9a2a'), a), 0.9];
+      return [...hex('#b088ff'), lerp(0.8, 0.45, a)];
+    },
+    eye: { iris: '#c0a0ff', pupil: '#050505' },
+    material: () => ({ roughness: 0.34, clearcoat: 0.5, iridescence: 0.45, normalScale: 0.25 }),
+    scaleDark: () => 0.04,
+  };
+  // Threadfin butterflyfish: white with chevrons, yellow rear, black eye band and dorsal spot.
+  PAINTERS.reefButterfly = {
+    setup: () => ({}),
+    body(s, v, C) {
+      const q = C.q;
+      let col = hex('#f7f5ee');
+      col = mix3(col, hex('#ffd018'), smoothstep(0.48, 0.66, s + (q - 0.5) * 0.3));
+      const ln = Math.sin(s * 34 + q * 20);
+      if (s > 0.22 && s < 0.6 && ln > 0.82) col = mix3(col, hex('#4a4a4a'), 0.55);
+      if (Math.abs(s - 0.17) < 0.04 && q > 0.2) col = hex('#121212');
+      if (Math.hypot((s - 0.8) / 0.07, (q - 0.82) / 0.09) < 1) col = hex('#121212');
+      return countershadeL(col, q, 0.06);
+    },
+    fin(region, a) {
+      if (region === REGION.dorsal || region === REGION.anal) return [...mix3(hex('#ffd018'), hex('#121212'), smoothstep(0.84, 0.9, a)), 0.95];
+      if (region === REGION.caudal) return [...mix3(hex('#ffd018'), hex('#f0f0e8'), smoothstep(0.7, 0.9, a)), 0.9];
+      return [...hex('#f0eee0'), lerp(0.75, 0.4, a)];
+    },
+    eye: { iris: '#202020', pupil: '#050505' },
+    material: () => ({ roughness: 0.36, clearcoat: 0.5, iridescence: 0.15, normalScale: 0.2 }),
+    scaleDark: () => 0.03,
+  };
+  // Bluestreak cleaner wrasse: pale front, electric blue rear, black stripe widening to the tail.
+  PAINTERS.reefCleaner = {
+    setup: () => ({}),
+    body(s, v, C) {
+      const q = C.q;
+      let col = mix3(hex('#eaf2ff'), hex('#1f7aff'), smoothstep(0.25, 0.9, s));
+      const w = 0.035 + s * 0.09;
+      col = mix3(col, hex('#0c0c16'), smoothstep(w + 0.01, w - 0.01, Math.abs(q - 0.56)) * smoothstep(0.02, 0.08, s));
+      return col;
+    },
+    fin(region, a, b) {
+      if (region === REGION.caudal) return [...(Math.abs(b - 0.5) < 0.16 ? hex('#0c0c16') : hex('#3a8aff')), 0.92];
+      return [...hex('#4a9aff'), lerp(0.8, 0.4, a)];
+    },
+    eye: { iris: '#202030', pupil: '#050505' },
+    material: () => ({ roughness: 0.3, clearcoat: 0.6, iridescence: 0.5, normalScale: 0.2 }),
+    scaleDark: () => 0.02,
+  };
+  SHAPES.reefAnthias = { ...SHAPES.chromis, height: 0.32, tailLen: 0.22, caudal: { type: 'fork', L: 0.36, S: 0.24, notch: 0.28 }, dorsal: { d0: 0.26, d1: 0.78, h: 0.11, profile: [0, 1.3, 0.7, 0.65, 0.7, 0.2], sweep: 0.3 } };
+  SHAPES.reefButterfly = { ...SHAPES.emperorAngel, height: 0.62, noseQ: 1.05, mouthY: 0.08, tailLen: 0.15,
+    dorsal: { d0: 0.26, d1: 0.9, h: 0.13, profile: [0, 0.8, 1, 1, 0.9, 0.6, 0.35], sweep: 0.55 }, anal: { d0: 0.52, d1: 0.9, h: 0.11, profile: [0, 0.8, 1, 0.9, 0.5], sweep: 0.5 },
+    caudal: { type: 'truncate', L: 0.15, S: 0.16 } };
+  SHAPES.reefCleaner = { ...SHAPES.chromis, height: 0.2, width: 0.12, hPos: 0.4, tailLen: 0.18, noseQ: 0.7,
+    caudal: { type: 'truncate', L: 0.14, S: 0.1 }, dorsal: { d0: 0.3, d1: 0.86, h: 0.045, profile: [0, 1, 1, 1, 0.6], sweep: 0.2 }, anal: { d0: 0.55, d1: 0.86, h: 0.04, profile: [0, 1, 1, 0.5], sweep: 0.2 } };
+}
+const countershadeL = (c, q, amt) => mix3(c, [1, 1, 1], (1 - smoothstep(0.0, 0.45, q)) * amt);
+
 const SPEC = {
   clownfish: { shape: 'clownfish', painter: 'clownfish', size: 0.38, cruise: 0.45, sprint: 1.35, agility: 3.4, notice: 4 },
   blueTang: { shape: 'blueTang', painter: 'reefPaletteTang', size: 0.6, cruise: 0.66, sprint: 1.8, agility: 2.8, notice: 11 },
@@ -192,7 +278,7 @@ class Food {
 /* Life                                                                */
 /* ------------------------------------------------------------------ */
 export async function createLife(ctx) {
-  const { W, env, hm, scene, anemones, bommies, surfY, camera, center } = ctx;
+  const { W, env, hm, scene, anemones, bommies, surfY, camera, center, thickets = [], tod = { night: 0 } } = ctx;
   const rng = env.rng.fork('life');
   const q = Math.max(0.45, env.q);
   const group = new THREE.Group();
@@ -246,12 +332,13 @@ export async function createLife(ctx) {
   for (const m of env.members) addResident(m);
 
   /* ---- chromis school ---- */
-  const nSchool = Math.round(clamp(130 * q, 60, 150));
+  const nSchool = Math.round(clamp(85 * q, 40, 100));
+  const nChromHover = Math.round(3 * q) * 18;
   const chromGeo = buildFishGeometry('chromis', { detail: 0.5 });
   const chromPaint = paintFish('chromis', { seed: 3, size: [512, 256] });
   const chromMat = createFishMaterial(chromPaint, { envMapIntensity: 1.2 });
   waterize(chromMat, W, { key: 'fish' });
-  const chromInst = new FishInstances(chromGeo, chromMat, nSchool, { castShadow: false });
+  const chromInst = new FishInstances(chromGeo, chromMat, nSchool + nChromHover, { castShadow: false });
   group.add(chromInst.mesh);
   disposables.push(chromGeo, chromPaint.map);
   const school = [];
@@ -283,6 +370,96 @@ export async function createLife(ctx) {
     const a = silRng.range(0, TAU), r = silRng.range(0.8, 2.4);
     const p = silCenter.clone().add(new THREE.Vector3(Math.cos(a) * r, silRng.range(-1, 1), Math.sin(a) * r));
     silver.push(new Swimmer({ pos: p, size: silRng.range(0.14, 0.19), speed: 1.1, rng: silRng, agility: 4, maxPitch: 0.35 }));
+  }
+
+
+  /* ---- hovering groups: anthias clouds over the coral heads, chromis over staghorn ---- */
+  const mkSpecies = (painter, shape, n, detail, seed) => {
+    const g = buildFishGeometry(shape, { detail });
+    const pt = paintFish(painter, { seed, shape, size: [512, 256] });
+    const m = createFishMaterial(pt, { envMapIntensity: 1.2 });
+    waterize(m, W, { key: 'fish' });
+    const inst = new FishInstances(g, m, n, { castShadow: false });
+    group.add(inst.mesh);
+    disposables.push(g, pt.map);
+    return inst;
+  };
+  const hoverGroups = [];
+  const hRng = rng.fork('hover');
+  const mkGroup = (centerPos, n, sizeLo, sizeHi, spread, kind) => {
+    const fish = [];
+    for (let i = 0; i < n; i++) {
+      const off = new THREE.Vector3(hRng.range(-1, 1) * spread, hRng.range(0.15, 1) * spread * 0.55, hRng.range(-1, 1) * spread);
+      const p = centerPos.clone().add(off);
+      const sw = new Swimmer({ pos: p, size: hRng.range(sizeLo, sizeHi), speed: 0.1, rng: hRng, agility: 3.5, maxPitch: 0.4 });
+      sw.off = off; sw.jit = hRng.range(0, 100); sw.food = null; sw.dart = 0;
+      fish.push(sw);
+    }
+    hoverGroups.push({ c: centerPos.clone(), fish, kind, spread });
+    return fish;
+  };
+  const coralHeads = bommies.map(b => new THREE.Vector3(b.x, b.top + 0.5, b.z));
+  const anthO = [], anthP = [];
+  const nAnth = Math.round(30 * q);
+  const heads = [...coralHeads, ...thickets.slice(0, 3)];
+  heads.forEach((c, i) => {
+    if (i >= Math.round(6 * q) + 1) return;
+    const list = i % 3 === 2 ? anthP : anthO;
+    list.push(...mkGroup(c.clone().add(new THREE.Vector3(0, 0.3, 0)), nAnth, 0.17, 0.23, 1.3, 'anthias'));
+  });
+  const anthOInst = anthO.length ? mkSpecies('reefAnthias', 'reefAnthias', anthO.length, 0.5, 11) : null;
+  const anthPInst = anthP.length ? mkSpecies('reefAnthiasPurple', 'reefAnthias', anthP.length, 0.5, 12) : null;
+  const chromHover = [];
+  thickets.slice(3, 3 + Math.round(3 * q)).forEach(c => chromHover.push(...mkGroup(c.clone(), 18, 0.18, 0.24, 0.8, 'chromis')));
+  if (thickets.length < 4) coralHeads.slice(1, 3).forEach(c => chromHover.push(...mkGroup(c.clone().add(new THREE.Vector3(1.5, -0.6, 0)), 18, 0.18, 0.24, 0.8, 'chromis')));
+
+  /* ---- butterflyfish pairs grazing the reef ---- */
+  const butter = [];
+  const bfInst = mkSpecies('reefButterfly', 'reefButterfly', 6, 0.8, 13);
+  const bfRng = rng.fork('butterfly');
+  for (let pI = 0; pI < (q > 0.6 ? 3 : 2); pI++) {
+    const b = bommies[(pI + 1) % bommies.length];
+    const p0 = new THREE.Vector3(b.x + 1.5, b.top - 0.6, b.z + 1.2);
+    for (let k = 0; k < 2; k++) {
+      const sw = new Swimmer({ pos: p0.clone().add(new THREE.Vector3(k * 0.4, 0, k * 0.3)), size: bfRng.range(0.36, 0.44), speed: 0.4, rng: bfRng, agility: 2.6, maxPitch: 0.6 });
+      sw.lead = k === 0 ? null : butter[butter.length - 1];
+      sw.target = p0.clone(); sw.spot = new THREE.Vector3(); sw.timer = 0; sw.state = 'roam'; sw.food = null; sw.r = bfRng;
+      butter.push(sw);
+    }
+  }
+
+  /* ---- cleaner station on the flank of a coral head ---- */
+  const station = (() => {
+    const b = bommies[bommies.length > 2 ? 2 : 0];
+    const a = rng.range(0, TAU);
+    const y = (b.top + hm.at(b.x + Math.cos(a) * (b.r + 2), b.z + Math.sin(a) * (b.r + 2))) * 0.5;
+    let rr = 0.3;
+    while (rr < b.r * 1.8 && hm.at(b.x + Math.cos(a) * rr, b.z + Math.sin(a) * rr) > y) rr += 0.1;
+    const wall = new THREE.Vector3(b.x + Math.cos(a) * rr, y, b.z + Math.sin(a) * rr);
+    const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    return { wall, out, hover: wall.clone().addScaledVector(out, 0.9), client: null, t: 0 };
+  })();
+  const cleanerInst = mkSpecies('reefCleaner', 'reefCleaner', 5, 0.6, 14);
+  const cleaners = [];
+  const clRng = rng.fork('cleaner');
+  for (let i = 0; i < (q > 0.6 ? 5 : 3); i++) {
+    const sw = new Swimmer({ pos: station.wall.clone().addScaledVector(station.out, 0.25).add(new THREE.Vector3(clRng.range(-0.3, 0.3), clRng.range(-0.2, 0.2), clRng.range(-0.3, 0.3))), size: clRng.range(0.13, 0.17), speed: 0.2, rng: clRng, agility: 5, maxPitch: 0.7 });
+    sw.ph = clRng.range(0, TAU); sw.k = clRng.range(-0.4, 0.4);
+    cleaners.push(sw);
+  }
+
+  /* ---- distant school of jacks: silhouettes in the blue ---- */
+  const nJack = Math.round(clamp(150 * q, 60, 160));
+  const jackInst = new FishInstances(silGeo, silMat, nJack, { castShadow: false });
+  group.add(jackInst.mesh);
+  const jRng = rng.fork('jacks');
+  const jA = -Math.PI / 2 + jRng.range(-0.6, 0.6);
+  const jackC = new THREE.Vector3(Math.cos(jA) * 31, 0, Math.sin(jA) * 31);
+  jackC.y = Math.max(hm.at(jackC.x, jackC.z) + 6, center.y + 4.5);
+  const jacks = [];
+  for (let i = 0; i < nJack; i++) {
+    const a = jRng.range(0, TAU), r = jRng.range(2.5, 5.5);
+    jacks.push(new Swimmer({ pos: jackC.clone().add(new THREE.Vector3(Math.cos(a) * r, jRng.range(-1.5, 1.5), Math.sin(a) * r)), size: jRng.range(0.55, 0.8), speed: 1.0, rng: jRng, agility: 2.4, maxPitch: 0.3 }));
   }
 
   /* ---- barramundi ---- */
@@ -605,6 +782,7 @@ export async function createLife(ctx) {
     }
     chromInst.begin();
     for (const s of school) chromInst.push(s);
+    for (const s of chromHover) chromInst.push(s);
     chromInst.end(t);
   }
 
@@ -634,12 +812,144 @@ export async function createLife(ctx) {
     silInst.end(t);
   }
 
+
+  function updateHover(dt, t) {
+    const cur = W.uCurDir.value;
+    const night = tod.night;
+    for (const g of hoverGroups) {
+      for (const s of g.fish) {
+        // stations above the coral head; at night they sink into the reef
+        _v1.copy(g.c).add(s.off);
+        _v1.x += Math.sin(t * 0.21 + s.jit) * 0.35; _v1.z += Math.cos(t * 0.17 + s.jit) * 0.35; _v1.y += Math.sin(t * 0.3 + s.jit) * 0.12;
+        _v1.y = lerp(_v1.y, hm.at(_v1.x, _v1.z) + 0.25, night * 0.8);
+        _d.subVectors(_v1, s.pos).multiplyScalar(0.9);
+        // hold station facing into the current
+        _d.x -= cur.x * 0.16; _d.z -= cur.y * 0.16;
+        s.dart -= dt;
+        if (s.dart < 0) { s.dart = 1.5 + Math.random() * 5; s.vel.addScaledVector(_v2.set(Math.random() - 0.5, (Math.random() - 0.5) * 0.4, Math.random() - 0.5), 0.6); }
+        if (food.active && !s.food) s.food = food.nearest(s.pos, 3.0, foodAvail);
+        if (s.food) {
+          if (!s.food.alive) s.food = null;
+          else {
+            _v2.copy(s.fwd).multiplyScalar(s.size * 0.45).add(s.pos);
+            _d.addScaledVector(_v3.subVectors(s.food.pos, _v2), 2.4);
+            if (_v2.distanceTo(s.food.pos) < 0.11) { food.eat(s.food); env.onEat(null, s.food.pos.clone()); s.food = null; }
+          }
+        }
+        const sp = _d.length(), maxS = s.food ? 1.6 : 0.6;
+        if (sp > maxS) _d.multiplyScalar(maxS / sp);
+        s.steer(_d, dt).integrate(dt);
+        s.pos.x += cur.x * 0.16 * dt; s.pos.z += cur.y * 0.16 * dt;
+        clampAbove(s, 0.25);
+      }
+    }
+    if (anthOInst) { anthOInst.begin(); for (const s of anthO) anthOInst.push(s); anthOInst.end(t); }
+    if (anthPInst) { anthPInst.begin(); for (const s of anthP) anthPInst.push(s); anthPInst.end(t); }
+  }
+
+  function updateButterfly(dt, t) {
+    for (const s of butter) {
+      const r = s.r;
+      s.timer -= dt;
+      _d.set(0, 0, 0);
+      if (s.lead) {
+        // the partner follows close behind and slightly to the side
+        _v1.copy(s.lead.pos).addScaledVector(s.lead.fwd, -0.45).add(_v2.set(-s.lead.fwd.z, 0.08, s.lead.fwd.x).multiplyScalar(0.3));
+        s.seek(_v1, 0.9, 0.6, _d);
+      } else {
+        const it = food.active ? food.nearest(s.pos, 6, foodAvail) : null;
+        if (it) {
+          s.seek(it.pos, 1.3, 0.3, _d);
+          _v1.copy(s.fwd).multiplyScalar(s.size * 0.45).add(s.pos);
+          if (_v1.distanceTo(it.pos) < 0.14) { food.eat(it); env.onEat(null, it.pos.clone()); }
+        } else {
+          if (s.timer <= 0) {
+            if (s.state === 'roam' && r.chance(0.5)) {
+              s.state = 'graze'; s.timer = r.range(3, 6);
+              const b = bommies[Math.floor(r.next() * bommies.length)];
+              const a = r.range(0, TAU), rr = r.range(0.3, b.r * 1.3);
+              const x = b.x + Math.cos(a) * rr, z = b.z + Math.sin(a) * rr;
+              s.spot.set(x, hm.at(x, z), z);
+              s.target.copy(s.spot).addScaledVector(hm.normal(x, z, _v3), 0.35);
+            } else { s.state = 'roam'; s.timer = r.range(5, 10); randomReefPoint(r, s.target, 0.6, 2.2); }
+          }
+          if (s.state === 'graze' && s.pos.distanceTo(s.target) < 0.4) {
+            _d.subVectors(s.spot, s.pos).normalize().multiplyScalar(0.06 + 0.05 * Math.max(0, Math.sin(t * 5 + s.phase)));
+          } else s.seek(s.target, 0.45, 1.0, _d);
+        }
+      }
+      avoid(s, _d, 0.3, dt);
+      s.steer(_d, dt).integrate(dt);
+      clampAbove(s, 0.3);
+    }
+    bfInst.begin(); for (const s of butter) bfInst.push(s); bfInst.end(t);
+  }
+
+  function updateCleaners(dt, t) {
+    const cl = station.client;
+    for (let i = 0; i < cleaners.length; i++) {
+      const s = cleaners[i];
+      if (cl && cl.state === 'cleaning') {
+        // pick along the client's flanks, gills and fins
+        const along = Math.sin(t * 0.7 + s.ph) * 0.42 * cl.size;
+        const ang = t * (0.9 + i * 0.13) + s.ph;
+        _v1.copy(cl.pos).addScaledVector(cl.fwd, along);
+        _v2.set(-cl.fwd.z, 0, cl.fwd.x).normalize();
+        _v1.addScaledVector(_v2, Math.cos(ang) * cl.size * 0.2).add(_v3.set(0, Math.sin(ang) * cl.size * 0.15, 0));
+        s.seek(_v1, 0.9, 0.25, _d);
+      } else {
+        // dance at the station to advertise
+        _v1.copy(station.wall).addScaledVector(station.out, 0.25 + 0.12 * Math.sin(t * 1.7 + s.ph));
+        _v1.y += Math.sin(t * 2.1 + s.ph * 2) * 0.18 + s.k * 0.3;
+        _v1.x += Math.cos(t * 1.3 + s.ph) * 0.2; _v1.z += Math.sin(t * 1.5 + s.ph) * 0.2;
+        s.seek(_v1, 0.5, 0.3, _d);
+      }
+      s.steer(_d, dt).integrate(dt);
+    }
+    cleanerInst.begin(); for (const s of cleaners) cleanerInst.push(s); cleanerInst.end(t);
+  }
+
+  function updateJacks(dt, t) {
+    const c = jackC, n = jacks.length;
+    for (let i = 0; i < n; i++) {
+      const s = jacks[i];
+      const rx = s.pos.x - c.x, ry = s.pos.y - c.y, rz = s.pos.z - c.z;
+      const rr = Math.hypot(rx, rz) + 1e-3;
+      const R = 4.2 + Math.sin(t * 0.15 + i * 0.3) * 1.0;
+      _d.set(-rz / rr * 1.1, 0, rx / rr * 1.1);
+      _d.x += -rx / rr * (rr - R) * 0.5; _d.z += -rz / rr * (rr - R) * 0.5;
+      _d.y = -ry * 0.35 + Math.sin(t * 0.4 + i) * 0.2;
+      s.steer(_d, dt).integrate(dt);
+    }
+    c.x += Math.sin(t * 0.02) * dt * 0.2;
+    jackInst.begin(); for (const s of jacks) jackInst.push(s); jackInst.end(t);
+  }
+
   function updateBarra(dt, t) {
     if (!barraInst) return;
     for (const b of barra) {
       b.timer -= dt;
       const it = food.active ? food.nearest(b.pos, 6, foodAvail) : null;
       let speed = 0.5;
+      b.cleanT = (b.cleanT ?? (20 + barra.indexOf(b) * 35)) - dt;
+      if (!it && b.cleanT < 0 && !station.client) { station.client = b; b.state = 'toStation'; }
+      if (station.client === b && !it) {
+        if (b.state === 'toStation') {
+          b.seek(station.hover, 0.5, 2.0, _d);
+          if (b.pos.distanceTo(station.hover) < 0.5) { b.state = 'cleaning'; b.cleanDur = 14 + Math.random() * 6; }
+        } else {
+          // hover still, nose slightly up, while the wrasse work
+          _d.subVectors(station.hover, b.pos).multiplyScalar(0.6);
+          _d.addScaledVector(_v2.set(-station.out.x, 0.25, -station.out.z), 0.02);
+          b.cleanDur -= dt;
+          if (b.cleanDur < 0) { station.client = null; b.state = 'cruise'; b.cleanT = 60 + Math.random() * 60; b.timer = 0; }
+        }
+        avoid(b, _d, 0.7, dt);
+        b.steer(_d, dt).integrate(dt);
+        b.amp *= b.state === 'cleaning' ? 0.4 : 1;
+        continue;
+      }
+      if (station.client === b) { station.client = null; b.state = 'cruise'; }
       if (it) {
         b.target.copy(it.pos); speed = 1.2;
         _v1.copy(b.fwd).multiplyScalar(b.size * 0.48).add(b.pos);
@@ -661,7 +971,7 @@ export async function createLife(ctx) {
   }
 
   return {
-    group, food, residents, turtles, school, schoolC, barra, silver, silCenter,
+    group, food, residents, turtles, school, schoolC, barra, silver, silCenter, hoverGroups, butter, station, jackC,
     addMember(m) { addResident(m); },
     update(dt, t) {
       time = t;
@@ -671,6 +981,10 @@ export async function createLife(ctx) {
       updateSchool(dt, t);
       updateSilver(dt, t);
       updateBarra(dt, t);
+      updateHover(dt, t);
+      updateButterfly(dt, t);
+      updateCleaners(dt, t);
+      updateJacks(dt, t);
     },
     spawnFood(center, n) { return food.spawnCloud(center, n, rng, floorAt, surfY); },
     dispose() {
