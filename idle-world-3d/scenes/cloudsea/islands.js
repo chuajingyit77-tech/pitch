@@ -7,43 +7,41 @@ import { patchStd, SHARED_GLSL, CLOUD_TOP } from './common.js';
 /* ------------------------------------------------------------------ */
 /* Materials                                                           */
 /* ------------------------------------------------------------------ */
-const BUMP_HEADER = /* glsl */`
-uniform sampler2D tNoise;
-uniform float uBump, uBumpScale, uMossAmt;
-float rockH(vec3 p, vec3 n){
+const ROCK_HEADER = /* glsl */`
+uniform sampler2D tRock;
+uniform float uBump, uBumpScale, uMossAmt, uStrata;
+// Triplanar normal mapping (whiteout blend). Returns the blended height; writes the world normal.
+float triRock(vec3 p, vec3 n, out vec3 wn){
   vec3 w = pow(abs(n), vec3(4.0)); w /= (w.x + w.y + w.z);
   vec3 q = p * uBumpScale;
-  float a = texture2D(tNoise, q.zy).g * w.x + texture2D(tNoise, q.xz).g * w.y + texture2D(tNoise, q.xy).g * w.z;
-  float b = texture2D(tNoise, q.zy * 3.1).b * w.x + texture2D(tNoise, q.xz * 3.1).b * w.y + texture2D(tNoise, q.xy * 3.1).b * w.z;
-  float strata = sin(p.y * 3.1 + a * 6.0) * 0.5 + 0.5;
-  return a * 0.55 + b * 0.25 + strata * 0.35 * (1.0 - w.y);
+  vec4 tx = texture2D(tRock, q.zy), ty = texture2D(tRock, q.xz), tz = texture2D(tRock, q.xy);
+  vec3 nx = vec3((tx.xy * 2.0 - 1.0) * uBump, 1.0), ny = vec3((ty.xy * 2.0 - 1.0) * uBump, 1.0), nz = vec3((tz.xy * 2.0 - 1.0) * uBump, 1.0);
+  nx = vec3(nx.xy + n.zy, abs(nx.z) * n.x);
+  ny = vec3(ny.xy + n.xz, abs(ny.z) * n.y);
+  nz = vec3(nz.xy + n.xy, abs(nz.z) * n.z);
+  wn = normalize(nx.zyx * w.x + ny.xzy * w.y + nz.xyz * w.z);
+  return tx.a * w.x + ty.a * w.y + tz.a * w.z;
 }
 `;
-/** Rock/stone: vertex colours + triplanar procedural bump, moss on top faces, sky fog. */
-export function stoneMaterial(shared, tex, { bump = 0.6, scale = 0.18, moss = 0.6, roughness = 0.9, color = 0xffffff, key = 'stone' } = {}) {
+/** Rock/stone: vertex colours + triplanar normal map, strata, moss on top faces, sky fog. */
+export function stoneMaterial(shared, tex, { bump = 0.6, scale = 0.18, moss = 0.6, strata = 1, roughness = 0.9, color = 0xffffff, key = 'stone' } = {}) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness: 0, color });
   return patchStd(m, shared, {
     key,
-    uniforms: { tNoise: { value: tex.noise }, uBump: { value: bump }, uBumpScale: { value: scale }, uMossAmt: { value: moss } },
-    fragmentHeader: BUMP_HEADER,
+    uniforms: { tRock: { value: tex.rock }, uBump: { value: bump }, uBumpScale: { value: scale }, uMossAmt: { value: moss }, uStrata: { value: strata } },
+    fragmentHeader: ROCK_HEADER,
     fragment: {
       '#include <color_fragment>': /* glsl */`$&
         vec3 wN0 = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
-        float rh = rockH(vWPos, wN0);
-        diffuseColor.rgb *= 0.78 + 0.42 * rh;
-        float mossy = smoothstep(0.55, 0.9, wN0.y + (rh - 0.5) * 0.6) * uMossAmt;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.42, 0.2) * (0.8 + 0.4 * rh), mossy * 0.75);
+        vec3 rockN;
+        float rh = triRock(vWPos, wN0, rockN);
+        float band = sin(vWPos.y * 2.2 + rh * 2.5) * 0.5 + 0.5;
+        diffuseColor.rgb *= mix(1.0, 0.82 + 0.3 * band, uStrata * (1.0 - abs(wN0.y))) * (0.8 + 0.4 * rh);
+        float mossy = smoothstep(0.5, 0.85, rockN.y + (rh - 0.5) * 0.5) * uMossAmt;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.30, 0.40, 0.19) * (0.75 + 0.5 * rh), mossy * 0.7);
       `,
       '#include <normal_fragment_maps>': /* glsl */`$&
-        {
-          vec3 vp = -vViewPosition;
-          vec3 dpx = dFdx(vp), dpy = dFdy(vp);
-          float dhx = dFdx(rh), dhy = dFdy(rh);
-          vec3 r1 = cross(dpy, normal), r2 = cross(normal, dpx);
-          float det = dot(dpx, r1);
-          vec3 sg = sign(det) * (dhx * r1 + dhy * r2);
-          normal = normalize(abs(det) * normal - sg * uBump);
-        }
+        normal = normalize((viewMatrix * vec4(rockN, 0.0)).xyz);
       `,
     },
   });
@@ -463,10 +461,10 @@ export function createIslands(env, shared, tex, wind) {
   const bobbers = [];     // { obj, base, amp, speed, phase }
   const updaters = [];
 
-  const rockMat = stoneMaterial(shared, tex, { key: 'rock', bump: 0.9, scale: 0.12, moss: 0.55 });
-  const ruinMat = stoneMaterial(shared, tex, { key: 'ruin', bump: 0.35, scale: 0.35, moss: 0.35, roughness: 0.82 });
+  const rockMat = stoneMaterial(shared, tex, { key: 'rock', bump: 0.85, scale: 0.09, moss: 0.5 });
+  const ruinMat = stoneMaterial(shared, tex, { key: 'ruin', bump: 0.28, scale: 0.22, moss: 0.3, strata: 0, roughness: 0.8 });
   const goldMat = patchStd(new THREE.MeshStandardMaterial({ color: '#d8a64a', metalness: 1, roughness: 0.32, envMapIntensity: 1.3 }), shared, { key: 'gold' });
-  const barkMat = stoneMaterial(shared, tex, { key: 'bark', bump: 0.5, scale: 0.9, moss: 0.2, roughness: 0.95 });
+  const barkMat = stoneMaterial(shared, tex, { key: 'bark', bump: 0.6, scale: 0.7, moss: 0.15, strata: 0, roughness: 0.95 });
   const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
   addWind(leafMat, wind, { height: 6, amount: 0.12, stiffness: 1.2, flutter: 0.02, key: 'leafwind' });
   patchStd(leafMat, shared, {
@@ -698,7 +696,7 @@ export function createIslands(env, shared, tex, wind) {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     return mesh;
   }
-  group.add(grassOn(main, 0, 0, 0, Math.round(9000 * q), reserved));
+  group.add(grassOn(main, 0, 0, 0, Math.round(6500 * q), reserved));
 
   // glowing flowers sprinkled in the grass (positions for the fx module)
   const flowerSpots = [];
@@ -776,7 +774,7 @@ export function createIslands(env, shared, tex, wind) {
   group.add(debris);
 
   /* ---- giant silhouettes far away in the haze ---- */
-  const farMat = stoneMaterial(shared, tex, { key: 'far', bump: 0.1, scale: 0.01, moss: 0.0, roughness: 1 });
+  const farMat = stoneMaterial(shared, tex, { key: 'far', bump: 0.4, scale: 0.012, moss: 0.0, strata: 0.5, roughness: 1 });
   const farGeos = [];
   const farRng = rng.fork('far');
   const fa = farRng.range(0, TAU);

@@ -17,11 +17,11 @@ const DUSK = [
   { e: -15, zen: '#040924', mid: '#0b1546', hzA: '#1d2a62', hzB: '#222e68', glow: '#06070e', light: '#a4b8ff', li: 0.34, amb: '#1d2654', ai: 0.22, bounce: '#232c5c', bi: 0.2, sky: 1.0, fog: 0.0011 },
   { e: -7, zen: '#0d1850', mid: '#28337c', hzA: '#55529a', hzB: '#a8629a', glow: '#5a2a40', light: '#9888d0', li: 0.06, amb: '#3a3a80', ai: 0.30, bounce: '#4a3f86', bi: 0.25, sky: 1.0, fog: 0.0012 },
   { e: -2, zen: '#1c2a6c', mid: '#5c4f9c', hzA: '#b07cae', hzB: '#f88e6c', glow: '#b84e34', light: '#ff8462', li: 0.45, amb: '#6a5aa6', ai: 0.40, bounce: '#9a6a9a', bi: 0.35, sky: 1.0, fog: 0.0012 },
-  { e: 1.5, zen: '#2d3d88', mid: '#8a6cae', hzA: '#e8a2b2', hzB: '#ffb070', glow: '#ff9a52', light: '#ff9f72', li: 1.15, amb: '#8a76bc', ai: 0.48, bounce: '#e0a0a8', bi: 0.55, sky: 1.0, fog: 0.0012 },
-  { e: 6, zen: '#38589f', mid: '#9c90c8', hzA: '#f1bcc0', hzB: '#ffcf92', glow: '#ffbc70', light: '#ffc28c', li: 1.55, amb: '#9a94cc', ai: 0.55, bounce: '#f0c0b8', bi: 0.65, sky: 1.0, fog: 0.0011 },
-  { e: 14, zen: '#3c6fc4', mid: '#86acdf', hzA: '#d9dcec', hzB: '#fde4c6', glow: '#ffe0b0', light: '#ffe6c8', li: 1.85, amb: '#a3b4dc', ai: 0.6, bounce: '#e8e4ea', bi: 0.7, sky: 1.0, fog: 0.0010 },
-  { e: 30, zen: '#2f71d6', mid: '#70a6e8', hzA: '#c4dcf4', hzB: '#e2ecf8', glow: '#fff0d8', light: '#fff4e6', li: 2.0, amb: '#a4bae0', ai: 0.62, bounce: '#e4ecf6', bi: 0.75, sky: 1.0, fog: 0.0009 },
-  { e: 90, zen: '#2864cc', mid: '#679ee6', hzA: '#c0dbf6', hzB: '#dbe9f8', glow: '#fff6ea', light: '#ffffff', li: 2.1, amb: '#a6bde4', ai: 0.64, bounce: '#e6eef8', bi: 0.78, sky: 1.0, fog: 0.0009 },
+  { e: 1.5, zen: '#2a3a86', mid: '#8468b0', hzA: '#e49ab0', hzB: '#ffac68', glow: '#ff9a52', light: '#ff9a68', li: 1.55, amb: '#8270c0', ai: 0.42, bounce: '#e0a0a8', bi: 0.55, sky: 1.0, fog: 0.0012 },
+  { e: 6, zen: '#33529c', mid: '#9488c8', hzA: '#efb4bc', hzB: '#ffc888', glow: '#ffb468', light: '#ffbc84', li: 1.9, amb: '#9290cc', ai: 0.46, bounce: '#f0c0b8', bi: 0.65, sky: 1.0, fog: 0.0011 },
+  { e: 14, zen: '#3a6cc4', mid: '#82a9de', hzA: '#d6dcee', hzB: '#fbe2c6', glow: '#ffe0b0', light: '#ffe6c8', li: 1.9, amb: '#9fb2de', ai: 0.5, bounce: '#e8e4ea', bi: 0.7, sky: 1.0, fog: 0.0010 },
+  { e: 30, zen: '#2c6cd4', mid: '#6aa2e6', hzA: '#c0daf4', hzB: '#deeaf8', glow: '#fff0d8', light: '#fff4e6', li: 1.8, amb: '#98b2e2', ai: 0.48, bounce: '#e4ecf6', bi: 0.75, sky: 1.0, fog: 0.0009 },
+  { e: 90, zen: '#2660ca', mid: '#629ae4', hzA: '#bcd8f6', hzB: '#d8e8f8', glow: '#fff6ea', light: '#ffffff', li: 1.85, amb: '#9ab4e4', ai: 0.5, bounce: '#e6eef8', bi: 0.78, sky: 1.0, fog: 0.0009 },
 ];
 // Sunrise: softer, paler pastels (mint-lilac-apricot) instead of the saturated golden-pink dusk.
 const DAWN = [

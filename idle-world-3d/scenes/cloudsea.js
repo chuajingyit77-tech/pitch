@@ -2,7 +2,7 @@
 // and Journey). Floating ruins, manta rays of light, sky jellyfish and flocks of light birds.
 import * as THREE from 'three';
 import { createWind, clamp, lerp, damp, smoothstep, TAU } from '../lib/util.js';
-import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, CLOUD_TOP } from './cloudsea/common.js';
+import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, makeRockTexture, CLOUD_TOP } from './cloudsea/common.js';
 import { createSky, createAurora, createEnvironment } from './cloudsea/sky.js';
 import { createCloudSea, createPuffs, towerPuffs, bankPuffs } from './cloudsea/clouds.js';
 import { createIslands } from './cloudsea/islands.js';
@@ -29,6 +29,7 @@ export default {
       detail: makeDetailTexture(env.seed ^ 0xde7a11, 256),
       cirrus: makeCirrusTexture(env.seed ^ 0xc1c1, q >= 0.7 ? 512 : 256),
       noise: makeNoiseTexture(env.seed ^ 0x9015e, 256),
+      rock: makeRockTexture(env.seed ^ 0x70c4, 256),
     };
 
     /* ---- shared time-of-day state ---- */
@@ -68,14 +69,14 @@ export default {
       const a = crng.range(0, TAU), d = crng.range(190, 760);
       bankPuffs(crng, new THREE.Vector3(Math.cos(a) * d, CLOUD_TOP - 2, Math.sin(a) * d), crng.range(110, 280), crng.range(40, 80), crng.range(14, 30), Math.round(lerp(9, 15, q)), crng.range(0, TAU), farItems);
     }
-    const farPuffs = createPuffs(shared, tex, farItems, { glow: glowU, fogMul: 0.85 });
+    const farPuffs = createPuffs(shared, tex, farItems, { glow: glowU, fogMul: 0.6 });
     farPuffs.mesh.renderOrder = 1;
     scene.add(farPuffs.mesh);
 
     const nearItems = [];
     const cloudlets = [];
     for (let i = 0; i < (q >= 0.7 ? 7 : 4); i++) {
-      const a = crng.range(0, TAU), d = crng.range(38, 120), y = CLOUD_TOP + crng.range(8, 34);
+      const a = crng.range(0, TAU), d = crng.range(80, 150), y = CLOUD_TOP + crng.range(6, 30);
       const cl = { a, d, y, speed: crng.range(0.0025, 0.006) * crng.sign(), items: [] };
       const n = crng.int(5, 9), size = crng.range(3, 6.5);
       for (let k = 0; k < n; k++) {
@@ -170,7 +171,7 @@ export default {
       const n = tod.night, g = tod.golden, d = tod.day;
       post.bloom.threshold = lerp(lerp(2.6, 1.5, g), 0.9, n);
       post.bloom.strength = lerp(lerp(0.55, 0.8, g), 0.95, n);
-      post.exposure = lerp(lerp(0.95, 1.02, g), 1.35, n);
+      post.exposure = lerp(lerp(0.86, 1.0, g), 1.35, n);
       post.saturation = lerp(1.05, 1.1, g);
       post.lift[0] = lerp(0.02, 0.03, n); post.lift[1] = lerp(0.012, 0.02, n); post.lift[2] = lerp(0.045, 0.07, n);
     }
@@ -184,7 +185,7 @@ export default {
       dispose() {
         envMap.dispose();
         for (const k of ['billow', 'detail']) tex[k].tex.dispose();
-        tex.cirrus.dispose(); tex.noise.dispose();
+        tex.cirrus.dispose(); tex.noise.dispose(); tex.rock.dispose();
       },
     };
   },

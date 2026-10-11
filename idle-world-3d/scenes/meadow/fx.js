@@ -154,10 +154,11 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   trails.renderOrder = 6;
   scene.add(trails);
   const srng = rng.fork('stream');
+  const sFwd = new THREE.Vector3(), sRight = new THREE.Vector3();
   /** Stream of fluff + leaves from around the camera to `to`. */
   fx.stream = (camera, to) => {
-    const fwd = tmp.set(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
-    const right = tmp2.set(-fwd.z, 0, fwd.x);
+    const fwd = sFwd.set(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
+    const right = sRight.set(-fwd.z, 0, fwd.x);
     let leafSlots = leaves.filter(l => l.stream && !l.active);
     for (let i = 0; i < 46; i++) {
       const s = {
@@ -178,8 +179,6 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   };
 
   /* ---------------- crumbs / sparkles ---------------- */
-  const PP = cpuPoints(160);
-  scene.add(PP.pts);
   const puffs = [];
   const crumbA = new THREE.Color('#e0a050'), crumbB = new THREE.Color('#ffe7b0');
   fx.puff = (p, n = 14, sparkle = false) => {
@@ -307,8 +306,10 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       const hl = s.hist.length / 3;
       for (let k = 0; k < hl - 1 && nt < 60 * TRAIL; k++) {
         const f = (1 - k / TRAIL) * a * 0.55;
-        trailPos.set([s.hist[k * 3], s.hist[k * 3 + 1], s.hist[k * 3 + 2], s.hist[k * 3 + 3], s.hist[k * 3 + 4], s.hist[k * 3 + 5]], nt * 6);
-        trailCol.set([light.r * f, light.g * f, light.b * f * 0.9, light.r * f * 0.6, light.g * f * 0.6, light.b * f * 0.55], nt * 6);
+        const o6 = nt * 6;
+        for (let c = 0; c < 6; c++) trailPos[o6 + c] = s.hist[k * 3 + c];
+        trailCol[o6] = light.r * f; trailCol[o6 + 1] = light.g * f; trailCol[o6 + 2] = light.b * f * 0.9;
+        trailCol[o6 + 3] = light.r * f * 0.5; trailCol[o6 + 4] = light.g * f * 0.5; trailCol[o6 + 5] = light.b * f * 0.45;
         nt++;
       }
     }
@@ -332,7 +333,6 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     SP.uniforms.uPR.value = pr;
     trailGeo.setDrawRange(0, nt * 2);
     trailGeo.attributes.position.needsUpdate = trailGeo.attributes.color.needsUpdate = true;
-    PP.pts.visible = false;
 
     // dragonflies: hover, dart, hover; daytime only
     const dfVis = day * (1 - night);

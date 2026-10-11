@@ -36,21 +36,20 @@ vec3 glowLights(vec3 p, vec3 N){
   }
   return acc;
 }
-// Soft multiple-scattering cloud shading. hn: 0 deep/valley .. 1 exposed top. sh: sun visibility.
-vec3 cloudShade(vec3 N, vec3 V, vec3 L, float hn, float sh, float exposure){
+// Soft multiple-scattering cloud shading. hn: 0 deep/valley .. 1 exposed top. sh: light visibility.
+// thin: 0 thick core .. 1 optically thin edge (silver lining when back-lit).
+vec3 cloudShade(vec3 N, vec3 V, vec3 L, float hn, float sh, float exposure, float thin){
   float ndl = dot(N, L);
-  float wrap = clamp((ndl + 0.42) / 1.42, 0.0, 1.0);
-  wrap = wrap * wrap * (3.0 - 2.0 * wrap);
-  float ao = mix(0.42, 1.0, smoothstep(0.0, 1.0, hn));
-  vec3 amb = uAmbient * ao * (0.8 + 0.3 * N.y) + uBounce * 0.12 * (1.0 - N.y);
-  vec3 direct = uLightCol * wrap * sh * mix(0.35, 1.0, exposure);
+  float wrap = clamp((ndl + 0.3) / 1.3, 0.0, 1.0);
+  float diffuse = mix(max(ndl, 0.0), wrap * wrap, 0.55);
+  float depth = smoothstep(0.0, 1.0, hn);
+  vec3 amb = uAmbient * mix(0.32, 1.08, depth) * (0.78 + 0.3 * N.y) + uBounce * 0.1 * (1.0 - N.y);
+  vec3 direct = uLightCol * diffuse * sh * mix(0.3, 1.0, depth) * exposure;
   float VL = dot(-V, L);
-  float fwd = pow(max(VL, 0.0), 6.0);
-  float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
-  vec3 silver = uLightCol * rim * (0.18 + 2.4 * fwd) * sh * (0.4 + 0.6 * hn);
-  // light leaking through thin billow tops when the sun is behind them
-  vec3 trans = uLightCol * pow(max(VL, 0.0), 3.0) * (1.0 - wrap) * hn * 0.35 * mix(0.4, 1.0, sh);
-  return vec3(0.97, 0.965, 0.96) * (amb + direct) + silver + trans;
+  float fwd = pow(max(VL, 0.0), 5.0);
+  vec3 silver = uLightCol * thin * (0.1 + 2.2 * fwd) * sh * (0.35 + 0.65 * depth);
+  vec3 sheen = uLightCol * pow(max(VL, 0.0), 12.0) * 0.3 * sh * depth;
+  return vec3(0.97, 0.965, 0.96) * (amb + direct) + silver + sheen;
 }
 `;
 
@@ -98,11 +97,10 @@ varying vec3 vW;
 varying vec2 vUv1, vUv2;
 varying float vHn;
 
-float heightAt(vec2 xz){
+float heightAt(vec2 xz, float sw){
   vec2 xr = vec2(xz.x * uRot2.x - xz.y * uRot2.y, xz.x * uRot2.y + xz.y * uRot2.x);
-  float h1 = texture2D(tBillow, xz * uL1.x + uL1.yz, 1.0).r;
-  float h2 = texture2D(tBillow, xr * uL2.x + uL2.yz, 1.0).r;
-  float sw = textureLod(tBillow, xz * uL0.x + uL0.yz, 5.0).a;
+  float h1 = texture2D(tBillow, xz * uL1.x + uL1.yz, 1.5).r;
+  float h2 = texture2D(tBillow, xr * uL2.x + uL2.yz, 1.5).r;
   return uCloudTop + (h1 - 0.45) * uL1.w * (0.55 + 0.9 * sw) + (h2 - 0.5) * uL2.w + (sw - 0.5) * uL0.w - dot(xz, xz) * uCurve;
 }
 
@@ -117,31 +115,37 @@ void main(){
   vec2 g2r = (b2.gb - 0.5) * 2.0 * uG1 * uL2.x * uL2.w;
   vec2 g2 = vec2(uRot2.x * g2r.x + uRot2.y * g2r.y, -uRot2.y * g2r.x + uRot2.x * g2r.y);
   vec2 gw = g1 + g2;
-  float detailW = 1.0 - smoothstep(50.0, 420.0, dist);
+  float detailW = 1.0 - smoothstep(60.0, 500.0, dist);
   vec4 dd = texture2D(tDetail, vW.xz * uLD.x + uLD.yz);
   gw += (dd.gb - 0.5) * 2.0 * uGD * uLD.x * uLD.w * detailW;
-  vec4 dd2 = texture2D(tDetail, vW.zx * uLD.x * 3.1 - uLD.yz * 1.7);
-  gw += (dd2.gb - 0.5) * 2.0 * uGD * uLD.x * 3.1 * uLD.w * 0.3 * detailW;
   vec3 N = normalize(vec3(-gw.x, 1.0, -gw.y));
   vec3 L = uLightDir;
 
   // self shadowing: march the height field toward the light
   float sh = 1.0;
   vec2 Lh = L.xz; float lh = length(Lh); Lh = lh > 1e-3 ? Lh / lh : vec2(1.0, 0.0);
-  float tanE = L.y / max(lh, 1e-3);
-  float stepLen = 3.0;
+  // never march flatter than ~6 degrees: at sunset the tops must still catch the light
+  float tanE = max(L.y, 0.105) / max(lh, 1e-3);
+  float stepLen = 4.0;
   float t = 0.0;
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 5; i++) {
     if (i >= uShadowSteps) break;
-    t += stepLen; stepLen *= 1.75;
+    t += stepLen; stepLen *= 1.9;
     vec2 q = vW.xz + Lh * t;
-    float ry = vW.y + tanE * t + 0.4;
-    float hq = heightAt(q);
-    sh = min(sh, smoothstep(-0.6 - t * 0.06, 1.2 + t * 0.12, ry - hq));
+    float ry = vW.y + tanE * t + 0.6;
+    float hq = heightAt(q, sw);
+    sh = min(sh, smoothstep(-1.0 - t * 0.08, 1.5 + t * 0.15, ry - hq));
   }
+  sh = mix(sh, 1.0, 0.18);
   sh *= casterShadow(vW, L);
-  float hn = clamp(vHn * 0.8 + dd.r * 0.2 * detailW + (sw - 0.5) * 0.3, 0.0, 1.0);
-  vec3 col = cloudShade(N, V, L, hn, sh, 1.0);
+  float hn = clamp(vHn * 0.85 + dd.r * 0.15 * detailW + (sw - 0.5) * 0.3, 0.0, 1.0);
+  float rimT = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
+  vec3 col = cloudShade(N, V, L, hn, sh, 1.0, rimT);
+  // soften silhouettes: grazing edges are optically thin, fade them toward the mean cloud tone
+  float edge = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5);
+  float fwdE = pow(max(dot(-V, L), 0.0), 4.0);
+  vec3 meanC = uAmbient * 0.85 + uLightCol * 0.42;
+  col = mix(col, meanC, edge * 0.35 * (1.0 - fwdE));
   col += glowLights(vW, N) * (0.6 + 0.4 * hn);
   // haze: the sea dissolves into the horizon
   col = mix(col, hazeColor(-V), fogAmountAt(vW));
@@ -205,16 +209,16 @@ export function createCloudSea(env, shared, tex) {
   const uniforms = Object.assign({}, shared, {
     tBillow: { value: tex.billow.tex },
     tDetail: { value: tex.detail.tex },
-    uL1: { value: new THREE.Vector4(1 / 300, env.rng.next(), env.rng.next(), 17) },
-    uL2: { value: new THREE.Vector4(1 / 104, env.rng.next(), env.rng.next(), 6.5) },
-    uL0: { value: new THREE.Vector4(1 / 1700, env.rng.next(), env.rng.next(), 12) },
-    uLD: { value: new THREE.Vector4(1 / 21, env.rng.next(), env.rng.next(), 1.1) },
+    uL1: { value: new THREE.Vector4(1 / 340, env.rng.next(), env.rng.next(), 22) },
+    uL2: { value: new THREE.Vector4(1 / 118, env.rng.next(), env.rng.next(), 5) },
+    uL0: { value: new THREE.Vector4(1 / 1900, env.rng.next(), env.rng.next(), 14) },
+    uLD: { value: new THREE.Vector4(1 / 46, env.rng.next(), env.rng.next(), 0.55) },
     uRot2: { value: new THREE.Vector2(Math.cos(rot), Math.sin(rot)) },
     uTexSize: { value: tex.billow.size },
     uG1: { value: tex.billow.G },
     uGD: { value: tex.detail.G },
     uCurve: { value: 1 / (2 * 70000) },
-    uShadowSteps: { value: q >= 0.9 ? 5 : q >= 0.6 ? 4 : 3 },
+    uShadowSteps: { value: q >= 0.9 ? 4 : q >= 0.6 ? 3 : 2 },
     uCasters: { value: casters },
     uGlowPos: { value: glowPos },
     uGlowCol: { value: glowCol },
@@ -290,25 +294,26 @@ void main(){
   vec2 ruv = vec2(cs * vUv.x - sn * vUv.y, sn * vUv.x + cs * vUv.y);
   float n1 = texture2D(tDetail, ruv * 0.28 + vec2(sd * 3.7, sd * 1.3)).r;
   float n2 = texture2D(tNoise, ruv * 0.45 + vec2(sd * 1.9, sd * 4.1) + uTime * 0.002).g;
-  float edge = (1.0 - r2) + (n1 - 0.55) * 0.55 + (n2 - 0.5) * 0.35;
-  float a = smoothstep(0.0, 0.42, edge) * vP2.z;
+  float edge = (1.0 - r2) + (n1 - 0.55) * 0.6 + (n2 - 0.5) * 0.35;
+  float a = smoothstep(0.0, 0.55, edge) * vP2.z;
   if (a < 0.004) discard;
   vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
   vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
   vec3 toCam = normalize(cameraPosition - vC);
-  vec3 nv = vec3(vUv + (vec2(n1, n2) - 0.5) * 0.35, sqrt(max(1.0 - r2, 0.0)));
+  vec3 nv = normalize(vec3((vUv + (vec2(n1, n2) - 0.5) * 0.4) * 0.8, sqrt(max(1.0 - r2, 0.0)) + 0.45));
   vec3 N = normalize(right * nv.x + up * nv.y + toCam * nv.z);
   vec3 V = normalize(cameraPosition - vW);
   vec3 L = uLightDir;
   vec3 rel = vC - vCl.xyz;
   float exposure = smoothstep(-0.75, 0.55, dot(rel / max(length(rel), 1e-3), L)) * 0.8 + 0.2 * vP2.y;
   float sh = casterShadow(vW, L);
-  vec3 col = cloudShade(N, V, L, vP2.y * 0.75 + nv.z * 0.25, sh, exposure);
+  vec3 col = cloudShade(N, V, L, clamp(vP2.y * 0.7 + vUv.y * 0.2 + 0.1, 0.0, 1.0), sh, exposure, r2 * r2);
   col += glowLights(vW, N);
-  float fog = fogAmountAt(vW) * uFogMul;
+  float fog = fogAmountAt(vC) * uFogMul;
   col = mix(col, hazeColor(-V), fog);
-  // dissolve where the puff dips into the cloud sea
+  // dissolve where the puff dips into the cloud sea, and when the camera gets close
   a *= smoothstep(uCloudTop - 14.0, uCloudTop + 2.0, vW.y) * 0.6 + 0.4;
+  a *= smoothstep(vR * 1.2, vR * 3.5, distance(cameraPosition, vC));
   gl_FragColor = vec4(col * a, a);
 }`;
 

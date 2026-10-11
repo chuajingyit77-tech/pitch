@@ -35,8 +35,8 @@ void main(){
   vec3 base = hazeBase(d);
 
   // vertical gradient: haze band -> lavender mid sky -> zenith
-  vec3 col = mix(base, uMidSky, smoothstep(0.0, 0.42, pow(h, 0.75)));
-  col = mix(col, uZenith, smoothstep(0.22, 1.0, h));
+  vec3 col = mix(base, uMidSky, smoothstep(0.0, 0.34, pow(h, 0.72)));
+  col = mix(col, uZenith, smoothstep(0.16, 0.8, h));
 
   // Belt of Venus (pink band) above the earth shadow on the anti-solar side at twilight
   vec2 a = normalize(d.xz + 1e-5), s = normalize(uSunDir.xz + 1e-5);
@@ -53,17 +53,17 @@ void main(){
   vec3 sB = cross(sT, uSunDir);
   vec3 rel = d - uSunDir * mu;
   float ang = atan(dot(rel, sB), dot(rel, sT));
-  float r1 = texture2D(tNoise, vec2(ang / 6.2831853 * 3.0, uTime * 0.0021)).g;
-  float r2 = texture2D(tNoise, vec2(ang / 6.2831853 * 7.0, 0.37 - uTime * 0.0013)).b;
-  float rays = smoothstep(0.42, 0.72, r1 * 0.65 + r2 * 0.45);
-  float rayMask = pow(mup, 3.0) * (1.0 - pow(mup, 90.0)) * smoothstep(-0.02, 0.08, y);
-  glow *= 0.8 + 0.45 * rays * rayMask * 2.0;
-  col += glow + uGlow * rays * rayMask * (0.12 + 0.35 * uGolden);
+  float r1 = texture2D(tNoise, vec2(ang / 6.2831853 * 2.0, uTime * 0.0021)).r;
+  float r2 = texture2D(tNoise, vec2(ang / 6.2831853 * 4.0, 0.37 - uTime * 0.0013)).g;
+  float rays = smoothstep(0.4, 0.75, r1 * 0.7 + r2 * 0.4);
+  float rayMask = pow(mup, 5.0) * (1.0 - pow(mup, 60.0)) * smoothstep(-0.02, 0.1, y);
+  glow *= 0.92 + 0.2 * rays * rayMask;
+  col += glow + uGlow * rays * rayMask * (0.04 + 0.12 * uGolden);
 
   // sun disc (stylised, larger than life) with a soft limb
   float cosR = 0.99955;
   float disc = smoothstep(cosR - 0.00018, cosR + 0.00006, mu);
-  vec3 discCol = mix(vec3(1.0, 0.62, 0.32), vec3(1.0, 0.95, 0.86), smoothstep(0.0, 0.25, uSunDir.y)) * 40.0;
+  vec3 discCol = mix(vec3(1.0, 0.6, 0.3), vec3(1.0, 0.95, 0.86), smoothstep(0.0, 0.25, uSunDir.y)) * 22.0;
   col += discCol * disc * uSunUp * (1.0 - 0.96 * uEnvPass) * smoothstep(-0.012, 0.004, y);
   col += uGlow * pow(mup, 1800.0) * 6.0 * (1.0 - 0.9 * uEnvPass);
 
