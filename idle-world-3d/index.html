@@ -1,0 +1,218 @@
+<title>栖境</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;500;700&family=Noto+Sans+SC:wght@400;500&family=Cormorant+Garamond:ital,wght@1,400;1,500&display=swap">
+<style>
+/* Layout: one full-bleed WebGL world. Glass HUD floats on top (brand top-left, tools top-right,
+   residents + scene dock bottom-left, clock bottom-right) and fades out after a few idle seconds,
+   leaving the world and the clock as a screensaver. Deliberately single dark theme: it sits on a 3D scene. */
+:root{
+  --ink:#f5f2ea; --ink-2:rgba(245,242,234,.72); --ink-3:rgba(245,242,234,.48);
+  --glass:rgba(12,14,18,.38); --glass-2:rgba(12,14,18,.62); --line:rgba(255,255,255,.14);
+  --gold:#e6c17a; --gold-ink:#22190a; --bg:#05070a;
+  --serif:"Noto Serif SC","Songti SC","STSong",serif;
+  --sans:"Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --latin:"Cormorant Garamond","Times New Roman",serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#gl.dragging{cursor:grabbing}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);border:1px solid var(--line)}
+.hud{transition:opacity 1.2s ease,transform 1.2s ease}
+body.idle .hud{opacity:0;pointer-events:none}
+body.idle #gl{cursor:none}
+body.noui .hud,body.noui .clock{display:none}
+
+/* top bar */
+.top{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top,0px) + 16px);display:flex;justify-content:space-between;align-items:center;gap:12px;pointer-events:none}
+.top>*{pointer-events:auto}
+.brand{display:flex;align-items:center;gap:14px;padding:8px 16px 8px 18px;border-radius:999px;min-width:0}
+.logo{font-family:var(--serif);font-weight:700;font-size:18px;letter-spacing:.32em;margin-right:-.32em;white-space:nowrap}
+.brand .bar{width:1px;height:16px;background:var(--line)}
+#pcName{font:inherit;font-size:14px;color:var(--ink-2);background:transparent;border:0;border-bottom:1px solid transparent;width:9em;max-width:38vw;padding:2px 0}
+#pcName:hover{border-bottom-color:var(--line)}
+#pcName:focus{outline:none;border-bottom-color:var(--gold);color:var(--ink)}
+.tools{display:flex;gap:8px}
+.icon-btn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);transition:background .2s,color .2s}
+.icon-btn:hover{background:rgba(255,255,255,.14);color:var(--ink)}
+.icon-btn[aria-pressed="true"]{color:var(--gold)}
+.icon-btn svg{width:18px;height:18px}
+
+/* bottom left: residents + dock */
+.bottom{position:fixed;left:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);display:flex;flex-direction:column;gap:10px;align-items:flex-start;max-width:calc(100% - 32px)}
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.status-line{padding:9px 14px;border-radius:12px;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.status-line b{color:var(--ink);font-weight:500}
+.pill{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:999px;font-size:14px;transition:transform .15s,background .2s}
+.pill svg{width:16px;height:16px}
+.pill.primary{background:var(--gold);color:var(--gold-ink);font-weight:500;border:0}
+.pill.primary:hover{transform:translateY(-1px);background:#f0cf8e}
+.pill.ghost:hover{background:rgba(255,255,255,.14)}
+.dock{display:flex;gap:8px;padding:6px;border-radius:18px;overflow-x:auto;max-width:100%;scrollbar-width:none}
+.dock::-webkit-scrollbar{display:none}
+.card{position:relative;flex:0 0 auto;width:124px;height:76px;border-radius:12px;overflow:hidden;text-align:left;padding:10px 12px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;border:1px solid transparent;transition:transform .2s,border-color .2s}
+.card::before{content:"";position:absolute;inset:0;background:var(--g);z-index:0;transition:filter .2s}
+.card::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.55));z-index:0}
+.card>*{position:relative;z-index:1}
+.card:hover{transform:translateY(-2px)}
+.card:hover::before{filter:brightness(1.15)}
+.card[aria-current="true"]{border-color:var(--gold)}
+.card .nm{font-family:var(--serif);font-weight:500;font-size:16px;letter-spacing:.08em;line-height:1.2}
+.card .sb{font-size:11px;color:var(--ink-2);white-space:nowrap}
+.card .key{position:absolute;top:7px;right:9px;font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+/* clock */
+.clock{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);text-align:right;pointer-events:none;text-shadow:0 2px 30px rgba(0,0,0,.45);transition:transform 4s ease}
+.clock .time{font-family:var(--serif);font-weight:300;font-size:clamp(56px,8.5vw,128px);line-height:.9;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.clock .date{margin-top:10px;font-size:14px;letter-spacing:.24em;color:var(--ink-2)}
+.clock .where{margin-top:6px;font-size:12px;letter-spacing:.18em;color:var(--ink-3)}
+body.hide-clock .clock{display:none}
+
+/* scene title card */
+.title-card{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;opacity:0;transition:opacity 1.6s ease, letter-spacing 2.4s ease;text-shadow:0 2px 40px rgba(0,0,0,.5);width:min(90vw,720px)}
+.title-card.show{opacity:1}
+.title-card .eyebrow{font-size:12px;letter-spacing:.5em;color:var(--ink-2);margin-right:-.5em}
+.title-card h1{font-family:var(--serif);font-weight:300;font-size:clamp(44px,7vw,92px);letter-spacing:.3em;margin:14px -.3em 6px 0;line-height:1.1}
+.title-card .sub{font-size:15px;letter-spacing:.3em;color:var(--ink-2);margin-right:-.3em}
+.title-card .ref{margin-top:18px;font-family:var(--latin);font-style:italic;font-size:17px;color:var(--ink-3);letter-spacing:.04em}
+
+/* veil for transitions */
+#veil{position:fixed;inset:0;background:#000;opacity:1;pointer-events:none;transition:opacity .9s ease;display:grid;place-items:center}
+#veil.clear{opacity:0}
+#veil .spin{width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.15);border-top-color:var(--gold);animation:spin 1s linear infinite;opacity:.8}
+#veil .msg{position:absolute;top:calc(50% + 34px);left:0;right:0;text-align:center;font-size:13px;color:var(--ink-3);letter-spacing:.2em}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* labels, toasts, hearts */
+#tag{position:fixed;left:0;top:0;transform:translate(-50%,-100%);padding:8px 12px;border-radius:10px;pointer-events:none;white-space:nowrap;font-size:12px;transition:opacity .2s}
+#tag .nm{font-size:14px;font-weight:500;color:var(--ink)}
+#tag .kd{color:var(--ink-3);margin-left:6px}
+#tag .meter{margin-top:6px;height:3px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden;width:120px}
+#tag .meter i{display:block;height:100%;background:var(--gold)}
+#tag .ln{margin-top:4px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+#toasts{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 76px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;width:max-content;max-width:calc(100% - 32px)}
+.toast{padding:9px 16px;border-radius:999px;font-size:13px;color:var(--ink);animation:toast 3.2s ease forwards;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes toast{0%{opacity:0;transform:translateY(-6px)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+.heart{position:fixed;pointer-events:none;color:#ff8fa3;font-size:18px;text-shadow:0 0 12px rgba(255,120,150,.8);animation:heart 1.6s ease-out forwards;transform:translate(-50%,-50%)}
+@keyframes heart{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1;transform:translate(-50%,-60%) scale(1.1)}100%{opacity:0;transform:translate(-50%,-260%) scale(.9)}}
+
+/* settings drawer */
+#settings{position:fixed;top:0;right:0;bottom:0;width:min(380px,100%);padding:calc(env(safe-area-inset-top,0px) + 22px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);background:var(--glass-2);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);border-left:1px solid var(--line);transform:translateX(102%);transition:transform .45s cubic-bezier(.2,.8,.2,1);overflow-y:auto;display:flex;flex-direction:column;gap:22px}
+#settings.open{transform:none}
+#settings h2{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:.2em;margin:0}
+#settings .row{display:flex;flex-direction:column;gap:8px}
+#settings label.h{font-size:12px;letter-spacing:.16em;color:var(--ink-3)}
+#settings .hint{font-size:12px;color:var(--ink-3);line-height:1.6}
+.seg{display:flex;padding:3px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid var(--line);flex-wrap:wrap}
+.seg button{flex:1;padding:7px 8px;border-radius:8px;font-size:13px;color:var(--ink-2);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#111;font-weight:500}
+.field{font:inherit;font-size:14px;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+input[type=range]{width:100%;accent-color:var(--gold)}
+.mono{font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.seed{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:15px}
+.link{font-size:13px;color:var(--gold);text-decoration:underline;text-underline-offset:3px}
+.confirm{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(230,193,122,.4);background:rgba(230,193,122,.08);font-size:13px;line-height:1.6}
+.confirm .acts{display:flex;gap:8px}
+.check{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--ink-2)}
+.credits{font-size:11.5px;color:var(--ink-3);line-height:1.7}
+.credits b{color:var(--ink-2);font-weight:500}
+.close{align-self:flex-end;margin-top:-8px}
+
+@media (max-width:720px){
+  .clock{top:calc(env(safe-area-inset-top,0px) + 72px);bottom:auto;right:16px}
+  .clock .time{font-size:52px}
+  .clock .date{font-size:12px}
+  .card{width:108px;height:68px}
+  .logo{font-size:16px}
+  #toasts{top:calc(env(safe-area-inset-top,0px) + 150px)}
+}
+@media (prefers-reduced-motion:reduce){.hud,.title-card,#veil{transition:none}.heart,.toast{animation-duration:.01s}}
+</style>
+
+<canvas id="gl" aria-label="可投喂的 3D 待机世界。拖动旋转视角，滚轮缩放，点击水面或地面投喂。"></canvas>
+
+<header class="top hud">
+  <div class="brand glass"><span class="logo">栖境</span><span class="bar"></span><input id="pcName" maxlength="20" aria-label="这台电脑的名字" spellcheck="false"></div>
+  <div class="tools glass" style="border-radius:999px;padding:3px">
+    <button class="icon-btn" id="btnSound" aria-pressed="false" title="声音 (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+    <button class="icon-btn" id="btnFull" title="全屏待机 (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button class="icon-btn" id="btnSettings" title="设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+  </div>
+</header>
+
+<div class="bottom hud">
+  <div class="status">
+    <div class="status-line glass" id="statusLine">正在唤醒世界…</div>
+    <button class="pill primary" id="btnFeed"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="7" cy="14" r="2.2"/><circle cx="13" cy="10" r="2.2"/><circle cx="17" cy="16" r="2.2"/><circle cx="11" cy="17.5" r="1.6"/><circle cx="16" cy="6" r="1.4"/></svg><span id="feedLabel">撒一把</span></button>
+    <button class="pill ghost glass" id="btnAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新居民</button>
+  </div>
+  <nav class="dock glass" id="dock" aria-label="切换世界"></nav>
+</div>
+
+<div class="clock" id="clock"><div class="time" id="clockTime">--:--</div><div class="date" id="clockDate"></div><div class="where" id="clockWhere"></div></div>
+
+<div class="title-card" id="titleCard"><div class="eyebrow" id="tcEyebrow"></div><h1 id="tcName"></h1><div class="sub" id="tcSub"></div><div class="ref" id="tcRef"></div></div>
+
+<div id="tag" class="glass" hidden></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="fx"></div>
+
+<aside id="settings" aria-label="设置" aria-hidden="true">
+  <button class="icon-btn close" id="btnClose" title="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h2>这台电脑的世界</h2>
+  <div class="row">
+    <label class="h" for="pcName2">电脑名字</label>
+    <input class="field" id="pcName2" maxlength="20" spellcheck="false">
+  </div>
+  <div class="row">
+    <label class="h">世界编号</label>
+    <div class="seed"><span class="mono" id="seedText">—</span><button class="link" id="btnReseed">重新生成</button></div>
+    <div class="hint">每台电脑第一次打开时都会生成独一无二的地形、珊瑚、锦鲤花纹和居民名字，保存在这台电脑的浏览器里。</div>
+    <div class="confirm" id="reseedConfirm" hidden>重新生成后，这台电脑的所有世界和居民都会换成新的，喂养记录也会清空。
+      <div class="acts"><button class="pill primary" id="reseedYes">确定重新生成</button><button class="pill ghost" id="reseedNo">取消</button></div>
+    </div>
+  </div>
+  <div class="row">
+    <label class="h">时间</label>
+    <div class="seg" id="segTime"><button data-v="real">跟随现实</button><button data-v="manual">手动</button></div>
+    <div id="manualTime" hidden><input type="range" id="hourRange" min="0" max="24" step="0.25" aria-label="手动时间"><div class="hint mono" id="hourText"></div></div>
+  </div>
+  <div class="row">
+    <label class="h">画质</label>
+    <div class="seg" id="segQuality"><button data-v="auto">自动</button><button data-v="high">高</button><button data-v="medium">中</button><button data-v="low">低</button></div>
+    <div class="hint" id="qualityHint"></div>
+  </div>
+  <div class="row">
+    <label class="h">待机轮播</label>
+    <div class="seg" id="segRotate"><button data-v="0">不轮播</button><button data-v="10">10 分钟</button><button data-v="30">30 分钟</button><button data-v="60">1 小时</button></div>
+  </div>
+  <div class="row">
+    <div class="check"><span>待机省电（30 帧）</span><div class="seg" id="segPower" style="width:120px"><button data-v="1">开</button><button data-v="0">关</button></div></div>
+    <div class="check"><span>显示时钟</span><div class="seg" id="segClock" style="width:120px"><button data-v="1">开</button><button data-v="0">关</button></div></div>
+  </div>
+  <div class="row">
+    <label class="h">操作</label>
+    <div class="hint">拖动旋转视角 · 滚轮或双指缩放 · 点击水面或地面投喂 · 空格撒一把 · 数字键 1–6 切换世界 · F 全屏 · M 声音 · H 隐藏界面</div>
+  </div>
+  <div class="row credits">
+    <label class="h">致谢</label>
+    <div><b>Fox</b> 模型 PixelMannen（CC0），绑骨与动画 tomkranis（CC BY 4.0），glTF 转换 AsoboStudio 与 scurest（CC BY 4.0）。</div>
+    <div><b>Parrot · Flamingo · Stork</b> 模型 mirada / ro.me，来自 three.js 示例。</div>
+    <div><b>Barramundi Fish</b> 模型 Microsoft（CC0）。</div>
+    <div><b>three.js</b>（MIT）。其余鱼类、植物、地形、天空与声音均为程序生成。</div>
+  </div>
+</aside>
+
+<div id="veil"><div class="spin"></div><div class="msg" id="veilMsg">正在唤醒世界</div></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="./app.js"></script>
