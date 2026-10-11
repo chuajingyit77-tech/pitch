@@ -1,0 +1,656 @@
+<title>待机小世界</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Baloo+2:wght@500;700&family=Noto+Sans+SC:wght@400;600&display=swap">
+<style>
+/* Layout: the living scene fills the screen; controls float as glass chips and fade away when the mouse rests, leaving scene + clock as a screensaver. */
+:root{
+  --ink:#f4f8f3; --muted:rgba(244,248,243,.7); --panel:rgba(8,22,28,.5); --line:rgba(255,255,255,.18);
+  --accent:#ffd36b; --accent-ink:#2a1d00; --bg:#06202b;
+  --display:"ZCOOL KuaiLe","Baloo 2",system-ui,sans-serif;
+  --body:"Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --num:"Baloo 2",ui-rounded,system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;-webkit-user-select:none;user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:manipulation}
+.ui{transition:opacity .7s ease}
+body.idle .ui{opacity:0;pointer-events:none}
+body.idle canvas{cursor:none}
+.glass{background:var(--panel);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:14px}
+.top{position:fixed;top:calc(env(safe-area-inset-top,0px) + 16px);left:16px;right:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;pointer-events:none}
+.top>*{pointer-events:auto}
+.brand{display:flex;align-items:baseline;gap:6px;padding:6px 14px;min-width:0}
+#pcname{font-family:var(--display);font-size:22px;background:transparent;border:0;border-bottom:1px dashed var(--line);color:var(--ink);width:7.5em;max-width:46vw;padding:2px 0}
+#pcname:focus{outline:none;border-bottom-color:var(--accent)}
+.brand small{color:var(--muted);font-size:13px;white-space:nowrap}
+.tabs{display:flex;padding:4px;gap:4px}
+button{font:inherit;color:var(--ink);background:transparent;border:0;border-radius:10px;padding:7px 14px;cursor:pointer;font-size:14px}
+button:hover{background:rgba(255,255,255,.12)}
+button:focus-visible,#pcname:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.bottom{position:fixed;left:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:calc(100% - 32px)}
+.stat{padding:8px 14px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink);font-weight:600}
+.btns{display:flex;flex-wrap:wrap;gap:4px;padding:4px}
+.btns .primary{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.clock{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);text-align:right;pointer-events:none;text-shadow:0 2px 24px rgba(0,0,0,.35)}
+.clock .time{font-family:var(--num);font-weight:700;font-size:clamp(52px,9vw,120px);line-height:.85;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.clock .date{font-size:15px;color:var(--muted);letter-spacing:.08em;margin-top:6px}
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 82px);transform:translateX(-50%);padding:8px 16px;font-size:14px;opacity:0;transition:opacity .4s;pointer-events:none;white-space:nowrap;max-width:calc(100% - 32px);overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1}
+.hint{color:var(--muted);font-size:12px;padding:0 4px}
+@media (max-width:640px){
+  .clock{right:16px;bottom:auto;top:calc(env(safe-area-inset-top,0px) + 120px)}
+  .clock .time{font-size:56px}
+  #toast{top:calc(env(safe-area-inset-top,0px) + 112px)}
+}
+</style>
+
+<canvas id="c" aria-label="可投喂的待机小世界，点击画面投喂"></canvas>
+
+<header class="top ui">
+  <label class="brand glass"><input id="pcname" maxlength="16" aria-label="电脑名称"><small>的专属小世界</small></label>
+  <nav class="tabs glass" role="tablist" aria-label="切换场景">
+    <button role="tab" data-scene="reef">鱼缸</button>
+    <button role="tab" data-scene="island">海岛</button>
+    <button role="tab" data-scene="forest">雨林</button>
+  </nav>
+</header>
+
+<div class="bottom ui">
+  <div class="stat glass" id="stat"></div>
+  <div class="btns glass">
+    <button class="primary" id="feedBtn">撒一把</button>
+    <button id="addBtn">+ 新成员</button>
+    <button id="rainBtn" hidden>下雨</button>
+    <button id="fullBtn">全屏待机</button>
+  </div>
+  <div class="hint" id="hint">点画面任意位置投喂 · 鼠标停 6 秒自动进入待机 · 数字键 1/2/3 切场景</div>
+</div>
+
+<div class="clock"><div class="time" id="time">00:00</div><div class="date" id="date"></div></div>
+<div id="toast" class="glass"></div>
+
+<script>
+(() => {
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const TAU = Math.PI * 2;
+const R = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.random() * a.length | 0];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 存档：每台电脑的浏览器各自一份 ---------- */
+const KEY = 'idle-world-v2';
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || null } catch (e) { return null } };
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)) } catch (e) {} };
+const today = () => new Date().toDateString();
+
+const NAMES = ['阿橙','豆豆','泡泡','年糕','芝麻','团子','可乐','布丁','奶盖','小蓝','汤圆','麻薯','花卷','椰椰','柚子','米粒','小满','栗子','跳跳','闪闪','毛豆','大福','QQ','咕噜'];
+const KIND = {
+  clown:   { zh:'小丑鱼',   base:22, speed:42, agi:2.2, colors:['#ff7a1a'] },
+  tang:    { zh:'蓝吊',     base:27, speed:46, agi:2,   colors:['#2f6fe0'] },
+  neon:    { zh:'霓虹灯鱼', base:12,  speed:58, agi:3,   colors:['#3cc8ff'] },
+  gold:    { zh:'金鱼',     base:24, speed:30, agi:1.6, colors:['#ffa53a','#ff6a3d','#f3ece0'] },
+  crab:    { zh:'小螃蟹',   base:18, speed:36, agi:4,   colors:['#e8553b','#f08a3a'] },
+  gull:    { zh:'海鸥',     base:22, speed:85, agi:1.4, colors:['#ffffff'] },
+  turtle:  { zh:'海龟',     base:33, speed:22, agi:0.8, colors:['#4f8a3c','#6b7f3a'] },
+  frog:    { zh:'箭毒蛙',   base:18, speed:0,  agi:0,   colors:['#3fbf5a','#2e7bff','#ff6b2c','#ffd23a'] },
+  butterfly:{ zh:'蝴蝶',    base:18, speed:48, agi:2.4, colors:['#3d7bff','#ffb52e','#ff5fa2'] },
+};
+const SCENES = {
+  reef:   { label:'鱼缸', food:'鱼食', kinds:['clown','tang','neon','gold'], start:['clown','clown','tang','neon','neon','neon','gold'] },
+  island: { label:'海岛', food:'小虾', kinds:['crab','gull','turtle'],       start:['crab','crab','crab','gull','gull','turtle'] },
+  forest: { label:'雨林', food:'浆果', kinds:['frog','butterfly'],           start:['frog','frog','frog','butterfly','butterfly','butterfly'] },
+};
+const MAX_MEMBERS = 16;
+
+function makeMember(kind, usedNames) {
+  const free = NAMES.filter(n => !usedNames.includes(n));
+  const K = KIND[kind];
+  return { id: Math.random().toString(36).slice(2, 8), kind, name: pick(free.length ? free : NAMES),
+    size: K.base * R(.9, 1.1), color: pick(K.colors), eaten: 0, lastAte: Date.now() - R(0, 3) * 3600e3 };
+}
+let save = load() || { name: '我的电脑', scene: 'reef', worlds: {} };
+for (const k in SCENES) {
+  if (!save.worlds[k]) {
+    const ms = [];
+    SCENES[k].start.forEach(kind => ms.push(makeMember(kind, ms.map(m => m.name))));
+    save.worlds[k] = { members: ms, fedDay: today(), fed: 0 };
+  }
+}
+if (!SCENES[save.scene]) save.scene = 'reef';
+
+/* ---------- 画布 ---------- */
+let W, H, DPR, G = {};
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  layout();
+}
+function layout() {
+  // 鱼缸
+  G.sandY = H * .86;
+  G.plants = Array.from({ length: Math.max(6, W / 70 | 0) }, (_, i) => ({ x: R(0, W), h: R(H * .12, H * .38), w: R(5, 10), c: pick(['#2f9e5b','#3fb36a','#1f7d4a','#6cc06a']), p: R(0, TAU) }));
+  G.rocks = Array.from({ length: 5 }, () => ({ x: R(0, W), rx: R(30, 90), ry: R(18, 40), c: pick(['#5b6273','#6d5f75','#4f5a63']) }));
+  G.corals = Array.from({ length: 4 }, () => ({ x: R(W * .05, W * .95), s: R(18, 34), c: pick(['#ff7aa8','#ff9b6a','#c58cff']) }));
+  // 海岛
+  G.hor = H * .48; G.cx = W * .5; G.rx = Math.min(W * .4, 500); G.cy = H * 1.0; G.ry = H * .31;
+  G.stars = Array.from({ length: 90 }, () => ({ x: R(0, W), y: R(0, G.hor), r: R(.5, 1.6), p: R(0, TAU) }));
+  G.clouds = Array.from({ length: 5 }, () => ({ x: R(0, W), y: R(H * .06, G.hor * .6), s: R(30, 70), v: R(4, 12) }));
+  // 雨林
+  G.ground = H * .8;
+  G.trunks = Array.from({ length: Math.max(5, W / 160 | 0) }, () => ({ x: R(0, W), w: R(18, 60), a: R(.25, .6) }));
+  G.vines = Array.from({ length: Math.max(6, W / 120 | 0) }, () => ({ x: R(0, W), l: R(H * .15, H * .5), p: R(0, TAU) }));
+  G.leaves = [
+    { x: -20, y: H * .2, s: Math.min(W, H) * .32, r: .5, f: 1 }, { x: W + 20, y: H * .35, s: Math.min(W, H) * .28, r: 2.6, f: -1 },
+    { x: W * .1, y: H + 10, s: Math.min(W, H) * .26, r: -1.2, f: 1 }, { x: W * .92, y: H + 20, s: Math.min(W, H) * .3, r: -1.9, f: -1 },
+  ];
+  if (ents) ents.forEach(e => constrain(e));
+}
+
+/* ---------- 区域规则 ---------- */
+const inIsland = (x, y, k = 1) => ((x - G.cx) / (G.rx * k)) ** 2 + ((y - G.cy) / (G.ry * k)) ** 2 < 1;
+function randomPoint(kind) {
+  switch (kind) {
+    case 'crab': for (let i = 0; i < 40; i++) { const x = R(G.cx - G.rx * .8, G.cx + G.rx * .8), y = R(G.cy - G.ry, H - 14); if (inIsland(x, y, .88)) return [x, y]; } return [G.cx, H - 40];
+    case 'gull': return [R(30, W - 30), R(H * .07, G.hor - 30)];
+    case 'turtle': for (let i = 0; i < 40; i++) { const x = R(20, W - 20), y = R(G.hor + 30, H - 20); if (!inIsland(x, y, 1.18)) return [x, y]; } return [30, G.hor + 50];
+    case 'frog': return [R(30, W - 30), R(G.ground + 14, H - 18)];
+    case 'butterfly': return [R(40, W - 40), R(H * .15, G.ground + 20)];
+    default: return [R(40, W - 40), R(H * .12, G.sandY - 30)];
+  }
+}
+function constrain(e) {
+  const k = e.m.kind;
+  if (k === 'crab') {
+    if (!inIsland(e.x, e.y, .92)) { e.x += (G.cx - e.x) * .06; e.y += (G.cy - G.ry * .5 - e.y) * .06; }
+    e.y = Math.min(e.y, H - 12);
+  } else if (k === 'turtle') {
+    e.x = clamp(e.x, 15, W - 15); e.y = clamp(e.y, G.hor + 22, H - 14);
+    if (inIsland(e.x, e.y, 1.14)) { const a = Math.atan2(e.y - G.cy, e.x - G.cx); e.x += Math.cos(a) * 2; e.y += Math.sin(a) * 2; }
+  } else if (k === 'gull') { e.x = clamp(e.x, 10, W - 10); e.y = clamp(e.y, 16, H - 10); }
+  else if (k === 'frog') { e.x = clamp(e.x, 16, W - 16); e.y = clamp(e.y, G.ground + 8, H - 12); }
+  else if (k === 'butterfly') { e.x = clamp(e.x, 16, W - 16); e.y = clamp(e.y, 30, H - 24); }
+  else { e.x = clamp(e.x, 24, W - 24); e.y = clamp(e.y, H * .07, G.sandY - 10); }
+}
+function canEat(kind, f) {
+  if (!f.landed && kind !== 'clown' && kind !== 'tang' && kind !== 'neon' && kind !== 'gold') return false;
+  if (kind === 'crab') return f.zone === 'sand';
+  if (kind === 'turtle') return f.zone === 'sea';
+  return true;
+}
+
+/* ---------- 世界状态 ---------- */
+let ents = null, foods = [], parts = [], bubbles = [], drops = [], flies = [], rain = !reduced;
+function world() { return save.worlds[save.scene]; }
+function spawnEnt(m) {
+  const [x, y] = randomPoint(m.kind);
+  const e = { m, x, y, vx: 0, vy: 0, face: 1, ang: R(0, TAU), phase: R(0, TAU), tx: x, ty: y, wait: R(0, 2), hop: null, cool: R(0, 2), hopH: 0, tongue: null };
+  [e.tx, e.ty] = randomPoint(m.kind);
+  return e;
+}
+function setScene(k) {
+  save.scene = k; persist();
+  ents = world().members.map(spawnEnt);
+  foods = []; parts = []; bubbles = [];
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.scene === k));
+  document.getElementById('rainBtn').hidden = k !== 'forest';
+  document.getElementById('feedBtn').textContent = '撒一把' + SCENES[k].food;
+  drops = Array.from({ length: 160 }, () => ({ x: R(0, W), y: R(-H, H), l: R(10, 22), v: R(500, 800) }));
+  flies = Array.from({ length: 16 }, () => ({ x: R(0, W), y: R(H * .2, H * .9), p: R(0, TAU), vx: R(-8, 8), vy: R(-6, 6) }));
+  updateStat();
+}
+
+/* ---------- 投喂 ---------- */
+function feed(x, y) {
+  if (foods.length > 40) foods.shift();
+  const s = save.scene, f = { x, y, vy: 0, landed: false, age: 0, zone: 'water', ty: y, hue: R(0, 1), p: R(0, TAU) };
+  if (s === 'reef') { f.y = Math.min(y, G.sandY - 6); f.ty = G.sandY - R(2, 10); }
+  else if (s === 'island') {
+    if (y < G.hor) { f.ty = G.hor + R(20, 60); f.zone = 'sea'; }
+    else { f.ty = y; f.y = y - 70; f.zone = inIsland(x, y) ? 'sand' : 'sea'; }
+  } else { f.ty = y < G.ground ? G.ground + R(10, (H - G.ground) * .6) : y; if (y >= G.ground) f.y = y - 70; }
+  foods.push(f);
+  const w = world();
+  if (w.fedDay !== today()) { w.fedDay = today(); w.fed = 0; }
+  w.fed++; updateStat();
+}
+function feedHandful() { for (let i = 0; i < 6; i++) { const [x, y] = save.scene === 'reef' ? [R(W * .15, W * .85), R(H * .1, H * .2)] : save.scene === 'island' ? (Math.random() < .5 ? randomPoint('crab') : randomPoint('turtle')) : [R(W * .1, W * .9), R(H * .2, H * .5)]; feed(x, y); } }
+
+function eat(e, f) {
+  foods.splice(foods.indexOf(f), 1);
+  const m = e.m, K = KIND[m.kind];
+  m.eaten++; m.lastAte = Date.now(); m.size = Math.min(K.base * 1.6, m.size + K.base * .03);
+  parts.push({ x: e.x, y: e.y - m.size, vy: -28, life: 1.3, t: '♥' });
+  if (Math.random() < .5) toast(`${m.name} 吃到了${SCENES[save.scene].food}${m.eaten % 10 === 0 ? ` · 第 ${m.eaten} 顿！` : ''}`);
+  dirty = true;
+}
+
+/* ---------- 更新 ---------- */
+let dirty = false;
+const fullness = m => clamp(1 - (Date.now() - m.lastAte) / (4 * 3600e3), 0, 1);
+
+function update(dt, t) {
+  const s = save.scene;
+  for (const f of foods) {
+    f.age += dt;
+    if (!f.landed) {
+      if (s === 'reef') { f.y += 26 * dt; f.x += Math.sin(t * 2 + f.p) * 8 * dt; if (f.y >= f.ty) { f.y = f.ty; f.landed = true; } }
+      else { f.vy += 900 * dt; f.y += f.vy * dt; if (f.y >= f.ty) { f.y = f.ty; f.landed = true; if (s === 'forest') parts.push({ x: f.x, y: f.y, vy: -10, life: .4, t: '·' }); } }
+    }
+  }
+  foods = foods.filter(f => f.age < 60);
+
+  for (const e of ents) {
+    const m = e.m, K = KIND[m.kind], hungry = fullness(m) < .35;
+    let target = null, best = Infinity;
+    for (const f of foods) if (canEat(m.kind, f)) { const d = (f.x - e.x) ** 2 + (f.y - e.y) ** 2; if (d < best) { best = d; target = f; } }
+    e.chasing = !!target;
+    if (target) { e.tx = target.x; e.ty = target.y; }
+
+    if (m.kind === 'frog') { updateFrog(e, target, dt); continue; }
+
+    let dx = e.tx - e.x, dy = e.ty - e.y, d = Math.hypot(dx, dy) || 1;
+    if (!target && d < 12) {
+      e.wait -= dt; e.vx *= .9; e.vy *= .9;
+      if (e.wait <= 0) { [e.tx, e.ty] = randomPoint(m.kind); e.wait = R(.5, m.kind === 'crab' ? 4 : 2.5); }
+    } else {
+      let sp = K.speed * (target ? 2 : 1) * (hungry && !target ? .7 : 1) * (.45 + .55 * clamp(d / 70, 0, 1));
+      let dvx = dx / d * sp, dvy = dy / d * sp;
+      if (m.kind === 'crab') dvy *= .6;
+      const k = 1 - Math.exp(-dt * K.agi);
+      e.vx += (dvx - e.vx) * k; e.vy += (dvy - e.vy) * k;
+    }
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    if (m.kind === 'butterfly') { e.y += Math.sin(t * 7 + e.phase) * 26 * dt; e.x += Math.cos(t * 3 + e.phase) * 12 * dt; }
+    if (Math.abs(e.vx) > 3) e.face += (Math.sign(e.vx) - e.face) * Math.min(1, dt * 6);
+    if (m.kind === 'turtle' && Math.hypot(e.vx, e.vy) > 2) { const a = Math.atan2(e.vy, e.vx); const df = ((a - e.ang + Math.PI * 3) % TAU) - Math.PI; e.ang += df * Math.min(1, dt * 2); }
+    constrain(e);
+    if (target && Math.hypot(target.x - e.x, target.y - e.y) < m.size * .9 + 6) eat(e, target);
+    if (s === 'reef' && Math.random() < dt * .15) bubbles.push({ x: e.x + e.face * m.size, y: e.y, r: R(1.5, 3), v: R(25, 45), p: R(0, TAU) });
+  }
+
+  if (s === 'reef') {
+    if (Math.random() < dt * 9) bubbles.push({ x: W * .82 + R(-6, 6), y: G.sandY - 8, r: R(2, 5), v: R(40, 80), p: R(0, TAU) });
+    for (const b of bubbles) { b.y -= b.v * dt; b.x += Math.sin(b.y * .05 + b.p) * .4; }
+    bubbles = bubbles.filter(b => b.y > -10);
+  }
+  if (s === 'island') for (const c of G.clouds) { c.x += c.v * dt; if (c.x - c.s * 3 > W) c.x = -c.s * 3; }
+  if (s === 'forest') {
+    if (rain) for (const d of drops) { d.y += d.v * dt; d.x -= d.v * .12 * dt; if (d.y > H) { d.y = R(-60, 0); d.x = R(0, W + 100); } }
+    for (const f of flies) { f.x += (f.vx + Math.sin(t * .7 + f.p) * 10) * dt; f.y += (f.vy + Math.cos(t * .9 + f.p) * 8) * dt; if (f.x < 0 || f.x > W) f.vx *= -1; if (f.y < H * .15 || f.y > H) f.vy *= -1; }
+  }
+  for (const p of parts) { p.y += p.vy * dt; p.life -= dt; }
+  parts = parts.filter(p => p.life > 0);
+}
+
+function updateFrog(e, target, dt) {
+  const m = e.m;
+  if (e.tongue) { e.tongue.t += dt; if (e.tongue.t > .28) { if (foods.includes(e.tongue.f)) eat(e, e.tongue.f); e.tongue = null; e.cool = R(.3, .8); } return; }
+  if (e.hop) {
+    const h = e.hop; h.t += dt; const p = Math.min(1, h.t / h.dur);
+    e.x = lerp(h.x0, h.x1, p); e.y = lerp(h.y0, h.y1, p); e.hopH = Math.sin(p * Math.PI) * h.hgt;
+    if (p >= 1) { e.hop = null; e.hopH = 0; e.cool = target ? R(.15, .5) : R(1.5, 6); }
+    return;
+  }
+  e.cool -= dt;
+  const dx = e.tx - e.x, dy = e.ty - e.y, d = Math.hypot(dx, dy);
+  if (target && d < m.size * 4.5 + 20) { e.face = Math.sign(dx) || e.face; e.tongue = { f: target, t: 0 }; return; }
+  if (e.cool > 0) return;
+  if (!target && d < 10) { [e.tx, e.ty] = randomPoint('frog'); return; }
+  const len = Math.min(d, R(40, 90)), x1 = e.x + dx / d * len, y1 = e.y + dy / d * len;
+  e.face = Math.sign(dx) || e.face;
+  e.hop = { t: 0, dur: .42, x0: e.x, y0: e.y, x1: clamp(x1, 16, W - 16), y1: clamp(y1, G.ground + 8, H - 12), hgt: Math.min(46, len * .55) };
+}
+
+/* ---------- 天色（海岛按真实时间） ---------- */
+const SKY = [[0,'#0a1433','#23355f',1],[5,'#0a1433','#23355f',1],[6.5,'#6d6fb0','#ffb38a',.3],[8.5,'#3ea6f0','#c4e8ff',0],[16.5,'#3ea6f0','#c4e8ff',0],[18.3,'#5a5ea8','#ff9a6b',.3],[19.8,'#0a1433','#23355f',1],[24,'#0a1433','#23355f',1]];
+const hx = h => { const n = parseInt(h.slice(1), 16); return [n >> 16, n >> 8 & 255, n & 255]; };
+const mix = (a, b, t) => { a = hx(a); b = hx(b); return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`; };
+function sky() {
+  const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
+  for (let i = 0; i < SKY.length - 1; i++) if (h >= SKY[i][0] && h < SKY[i + 1][0]) {
+    const a = SKY[i], b = SKY[i + 1], t = (h - a[0]) / (b[0] - a[0]);
+    return { top: mix(a[1], b[1], t), bot: mix(a[2], b[2], t), night: lerp(a[3], b[3], t), h };
+  }
+  return { top: SKY[0][1], bot: SKY[0][2], night: 1, h };
+}
+
+/* ---------- 绘制：场景 ---------- */
+function drawReef(t) {
+  let g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#1fa6bd'); g.addColorStop(.55, '#0a5a78'); g.addColorStop(1, '#05314a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,.05)';
+  for (let i = 0; i < 6; i++) {
+    const x = W * (i + .5) / 6 + Math.sin(t * .15 + i * 1.7) * 50;
+    ctx.beginPath(); ctx.moveTo(x - 25, 0); ctx.lineTo(x + 25, 0); ctx.lineTo(x + 140, G.sandY); ctx.lineTo(x - 40, G.sandY); ctx.fill();
+  }
+  for (const r of G.rocks) { ctx.fillStyle = r.c; ctx.beginPath(); ctx.ellipse(r.x, G.sandY + 4, r.rx, r.ry, 0, Math.PI, TAU); ctx.fill(); }
+  for (const p of G.plants) {
+    ctx.strokeStyle = p.c; ctx.lineWidth = p.w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(p.x, G.sandY + 6);
+    const seg = 5; for (let i = 1; i <= seg; i++) { const y = G.sandY - p.h * i / seg, sw = Math.sin(t * 1.2 + p.p + i * .6) * i * 4; ctx.lineTo(p.x + sw, y); }
+    ctx.stroke();
+  }
+  for (const c of G.corals) {
+    ctx.fillStyle = c.c;
+    for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.ellipse(c.x + i * c.s * .35, G.sandY - c.s * (1 - Math.abs(i) * .25), c.s * .16, c.s * (1 - Math.abs(i) * .25), i * .25, 0, TAU); ctx.fill(); }
+  }
+  g = ctx.createLinearGradient(0, G.sandY - 10, 0, H); g.addColorStop(0, '#dcc89b'); g.addColorStop(1, '#a48d5c');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 20) ctx.lineTo(x, G.sandY + Math.sin(x * .013) * 6 + Math.sin(x * .041) * 3);
+  ctx.lineTo(W, H); ctx.fill();
+  // 气泡石
+  ctx.fillStyle = '#3d4a52'; ctx.beginPath(); ctx.ellipse(W * .82, G.sandY - 2, 14, 7, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
+  for (const b of bubbles) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.stroke(); }
+}
+function drawReefGlass() {
+  const g = ctx.createLinearGradient(0, 0, W * .18, 0); g.addColorStop(0, 'rgba(255,255,255,.08)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W * .18, H);
+}
+function drawIsland(t) {
+  const S = sky();
+  let g = ctx.createLinearGradient(0, 0, 0, G.hor); g.addColorStop(0, S.top); g.addColorStop(1, S.bot);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, G.hor + 1);
+  if (S.night > .05) for (const s of G.stars) { ctx.globalAlpha = S.night * (.5 + .5 * Math.sin(t * 2 + s.p)); ctx.fillStyle = '#fff'; ctx.fillRect(s.x, s.y, s.r, s.r); }
+  ctx.globalAlpha = 1;
+  const day = S.h >= 6 && S.h <= 18.6, p = day ? (S.h - 6) / 12.6 : ((S.h + 24 - 18.6) % 24) / 11.4;
+  const bx = W * (.08 + .84 * p), by = G.hor - Math.sin(p * Math.PI) * G.hor * .78;
+  if (day) { const sg = ctx.createRadialGradient(bx, by, 4, bx, by, 70); sg.addColorStop(0, 'rgba(255,240,180,1)'); sg.addColorStop(.3, 'rgba(255,220,130,.6)'); sg.addColorStop(1, 'rgba(255,220,130,0)'); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(bx, by, 70, 0, TAU); ctx.fill(); }
+  else { ctx.fillStyle = '#f4f1e1'; ctx.beginPath(); ctx.arc(bx, by, 18, 0, TAU); ctx.fill(); ctx.fillStyle = S.top; ctx.beginPath(); ctx.arc(bx + 7, by - 4, 15, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = `rgba(255,255,255,${.85 - S.night * .6})`;
+  for (const c of G.clouds) for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.ellipse(c.x + i * c.s * .7 - c.s, c.y + (i % 2) * -c.s * .25, c.s * .6, c.s * .38, 0, 0, TAU); ctx.fill(); }
+  g = ctx.createLinearGradient(0, G.hor, 0, H); g.addColorStop(0, mix('#3bb4d4', '#18305a', S.night)); g.addColorStop(1, mix('#0b6a8a', '#0a1a38', S.night));
+  ctx.fillStyle = g; ctx.fillRect(0, G.hor, W, H - G.hor);
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.2;
+  for (let r = 0; r < 9; r++) {
+    const y0 = G.hor + 10 + r * r * (H - G.hor) / 70, amp = 1 + r * .6;
+    ctx.beginPath(); for (let x = 0; x <= W; x += 14) { const y = y0 + Math.sin(x * .02 + t * (1 + r * .1) + r) * amp; x ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+  }
+  // 浪花 + 沙岛
+  ctx.strokeStyle = `rgba(255,255,255,${.35 + Math.sin(t * 1.5) * .15})`; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.ellipse(G.cx, G.cy, G.rx * 1.05 + Math.sin(t * 1.5) * 3, G.ry * 1.06, 0, Math.PI, TAU); ctx.stroke();
+  g = ctx.createRadialGradient(G.cx, G.cy - G.ry * .4, 10, G.cx, G.cy, G.rx); g.addColorStop(0, '#f6e2ac'); g.addColorStop(1, '#ddbf7f');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(G.cx, G.cy, G.rx, G.ry, 0, 0, TAU); ctx.fill();
+  drawPalm(G.cx - G.rx * .32, G.cy - G.ry * .78, t);
+  if (S.night > .5) { ctx.fillStyle = `rgba(4,8,30,${(S.night - .5) * .5})`; ctx.fillRect(0, 0, W, H); }
+}
+function drawPalm(x, y, t) {
+  const hgt = Math.min(H * .34, 260), sway = Math.sin(t * .8) * 8, tx = x + 40 + sway, ty = y - hgt;
+  ctx.strokeStyle = '#8a6136'; ctx.lineWidth = 14; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 50, y - hgt * .5, tx, ty); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.lineWidth = 2;
+  for (let i = 1; i < 10; i++) { const p = i / 10, px = lerp(lerp(x, x + 50, p), lerp(x + 50, tx, p), p), py = lerp(lerp(y, y - hgt * .5, p), lerp(y - hgt * .5, ty, p), p); ctx.beginPath(); ctx.moveTo(px - 7, py); ctx.lineTo(px + 7, py - 2); ctx.stroke(); }
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI * .95 + i * Math.PI * .32 + Math.sin(t * 1.1 + i) * .06, L = hgt * .55;
+    const ex = tx + Math.cos(a) * L, ey = ty + Math.sin(a) * L * .55 + L * .35;
+    ctx.fillStyle = i % 2 ? '#2f8f46' : '#3fa652';
+    ctx.beginPath(); ctx.moveTo(tx, ty);
+    ctx.quadraticCurveTo(tx + Math.cos(a) * L * .5, ty + Math.sin(a) * L * .5 - 30, ex, ey);
+    ctx.quadraticCurveTo(tx + Math.cos(a) * L * .5, ty + Math.sin(a) * L * .5 - 8, tx, ty); ctx.fill();
+  }
+  ctx.fillStyle = '#5a3d1e'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(tx - 6 + i * 7, ty + 8 + (i % 2) * 4, 6, 0, TAU); ctx.fill(); }
+}
+function drawForest(t) {
+  const S = sky();
+  let g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, mix('#0f3d2a', '#06140f', S.night)); g.addColorStop(.75, mix('#226a42', '#0c2a1c', S.night)); g.addColorStop(1, '#1a2a14');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const tr of G.trunks) { ctx.fillStyle = `rgba(10,30,20,${tr.a})`; ctx.fillRect(tr.x, 0, tr.w, G.ground + 10); }
+  // 薄雾
+  g = ctx.createLinearGradient(0, G.ground - H * .25, 0, G.ground); g.addColorStop(0, 'rgba(200,240,220,0)'); g.addColorStop(1, 'rgba(200,240,220,.14)');
+  ctx.fillStyle = g; ctx.fillRect(0, G.ground - H * .25, W, H * .25);
+  ctx.strokeStyle = '#2d6b3a'; ctx.lineWidth = 3;
+  for (const v of G.vines) {
+    ctx.beginPath(); ctx.moveTo(v.x, 0); const sw = Math.sin(t * .7 + v.p) * 12;
+    ctx.quadraticCurveTo(v.x + sw, v.l * .5, v.x + sw * 1.5, v.l); ctx.stroke();
+    ctx.fillStyle = '#3f8a46'; for (let i = 1; i < 5; i++) { const p = i / 5; ctx.beginPath(); ctx.ellipse(v.x + sw * p * 1.4 + 5, v.l * p, 6, 3, .6, 0, TAU); ctx.fill(); }
+  }
+  ctx.fillStyle = '#2a3d1d'; ctx.beginPath(); ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 24) ctx.lineTo(x, G.ground + Math.sin(x * .01) * 8 + Math.sin(x * .037) * 4);
+  ctx.lineTo(W, H); ctx.fill();
+  ctx.fillStyle = '#3d5a26'; for (let x = 8; x < W; x += 26) { ctx.beginPath(); ctx.ellipse(x, G.ground + 6 + Math.sin(x) * 3, 10, 4, 0, 0, TAU); ctx.fill(); }
+  // 萤火虫：夜里更亮
+  for (const f of flies) {
+    const a = (.15 + .55 * S.night) * (.5 + .5 * Math.sin(t * 2.4 + f.p));
+    const fg = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, 10); fg.addColorStop(0, `rgba(220,255,140,${a})`); fg.addColorStop(1, 'rgba(220,255,140,0)');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(f.x, f.y, 10, 0, TAU); ctx.fill();
+  }
+}
+function drawForestFront(t) {
+  for (const l of G.leaves) drawLeaf(l, t);
+  if (rain) {
+    ctx.strokeStyle = 'rgba(200,230,255,.32)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const d of drops) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.l * .12, d.y + d.l); } ctx.stroke();
+  }
+}
+function drawLeaf(l, t) {
+  ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(l.r + Math.sin(t * .6 + l.x) * .04); ctx.scale(1, l.f);
+  const s = l.s; ctx.fillStyle = '#1d5e33';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(s * .3, -s * .45, s * .85, -s * .35, s, 0); ctx.bezierCurveTo(s * .85, s * .35, s * .3, s * .45, 0, 0); ctx.fill();
+  ctx.strokeStyle = 'rgba(10,40,20,.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(s, 0);
+  for (let i = 1; i < 6; i++) { const x = s * i / 6.5; ctx.moveTo(x, 0); ctx.lineTo(x + s * .12, -s * .2); ctx.moveTo(x, 0); ctx.lineTo(x + s * .12, s * .2); }
+  ctx.stroke(); ctx.restore();
+}
+
+/* ---------- 绘制：食物 ---------- */
+function drawFood(f, t) {
+  const fade = clamp((60 - f.age) / 5, 0, 1); ctx.globalAlpha = fade;
+  const s = save.scene;
+  if (s === 'reef') { ctx.fillStyle = f.hue > .5 ? '#a8662e' : '#c2843f'; ctx.beginPath(); ctx.arc(f.x, f.y, 3, 0, TAU); ctx.fill(); }
+  else if (s === 'island') {
+    const bob = f.zone === 'sea' && f.landed ? Math.sin(t * 2 + f.p) * 2 : 0;
+    if (f.landed) { ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(f.x, f.y + 4, 7, 2.5, 0, 0, TAU); ctx.fill(); }
+    ctx.strokeStyle = '#ff8a7a'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(f.x, f.y + bob, 5, Math.PI * .2, Math.PI * 1.4); ctx.stroke();
+  } else {
+    if (f.landed) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(f.x, f.y + 5, 6, 2, 0, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = f.hue > .5 ? '#c2185b' : '#6a1b9a'; ctx.beginPath(); ctx.arc(f.x, f.y, 5, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.beginPath(); ctx.arc(f.x - 1.6, f.y - 1.8, 1.4, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#4caf50'; ctx.beginPath(); ctx.ellipse(f.x + 3, f.y - 5, 3, 1.5, -.6, 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- 绘制：动物 ---------- */
+function shade(hex, k) { const c = hx(hex); return `rgb(${c.map(v => Math.round(clamp(v * k, 0, 255))).join(',')})`; }
+function drawFish(e, t) {
+  const m = e.m, s = m.size, k = m.kind;
+  ctx.save(); ctx.translate(e.x, e.y); ctx.scale(e.face, 1); ctx.rotate(clamp(e.vy * .006, -.45, .45));
+  const w = Math.sin(t * (e.chasing ? 16 : 8) + e.phase) * s * .25;
+  const body = m.color, tail = k === 'tang' ? '#ffd23f' : k === 'neon' ? '#9fe8ff' : shade(body, .85);
+  ctx.fillStyle = tail; ctx.globalAlpha = k === 'gold' ? .85 : 1;
+  const tl = k === 'gold' ? 1.9 : 1.45;
+  ctx.beginPath(); ctx.moveTo(-s * .7, 0); ctx.lineTo(-s * tl, -s * .6 + w); ctx.quadraticCurveTo(-s * (tl - .3), w * .4, -s * tl, s * .6 + w); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = shade(body, .9);
+  ctx.beginPath(); ctx.moveTo(-s * .35, -s * .45); ctx.quadraticCurveTo(-s * .05, -s * 1, s * .35, -s * .42); ctx.fill();
+  ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, s, s * .58, 0, 0, TAU); ctx.fill();
+  ctx.save(); ctx.clip();
+  if (k === 'clown') { ctx.fillStyle = '#fff'; ctx.fillRect(s * .22, -s, s * .22, s * 2); ctx.fillRect(-s * .42, -s, s * .2, s * 2); ctx.fillStyle = '#1a1a1a'; ctx.fillRect(s * .44, -s, s * .04, s * 2); ctx.fillRect(s * .18, -s, s * .04, s * 2); }
+  if (k === 'tang') { ctx.fillStyle = '#10204a'; ctx.beginPath(); ctx.ellipse(-s * .15, -s * .05, s * .65, s * .22, -.15, 0, TAU); ctx.fill(); }
+  if (k === 'neon') { ctx.fillStyle = '#ff3b4e'; ctx.fillRect(-s, s * .05, s * 1.1, s); }
+  ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.ellipse(s * .1, s * .3, s * .7, s * .22, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s * .55, -s * .1, s * .15, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(s * .59, -s * .1, s * .08, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+function drawCrab(e, t) {
+  const m = e.m, s = m.size, c = m.color, moving = Math.hypot(e.vx, e.vy) > 4, wk = moving ? Math.sin(t * 20 + e.phase) : 0;
+  ctx.save(); ctx.translate(e.x, e.y);
+  ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.beginPath(); ctx.ellipse(0, s * .6, s * 1.3, s * .3, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = shade(c, .75); ctx.lineWidth = s * .14; ctx.lineCap = 'round';
+  for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) {
+    const j = (i % 2 ? wk : -wk) * s * .15;
+    ctx.beginPath(); ctx.moveTo(sd * s * .7, -s * .05 + i * s * .2); ctx.lineTo(sd * s * 1.25, s * .05 + i * s * .2 + j); ctx.lineTo(sd * s * 1.45, s * .5 + i * s * .12); ctx.stroke();
+  }
+  for (const sd of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(sd * s * .6, -s * .3); ctx.lineTo(sd * s * .95, -s * .75); ctx.stroke();
+    const snap = e.chasing ? Math.abs(Math.sin(t * 10)) * .5 : .2;
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sd * s * 1.02, -s * .92, s * .34, -Math.PI / 2 + snap, Math.PI * 1.5 - snap); ctx.lineTo(sd * s * 1.02, -s * .92); ctx.fill();
+  }
+  ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, s, s * .65, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.ellipse(-s * .2, -s * .25, s * .5, s * .2, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = shade(c, .75); ctx.lineWidth = s * .1;
+  for (const sd of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(sd * s * .28, -s * .5); ctx.lineTo(sd * s * .34, -s * .95); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sd * s * .34, -s * 1, s * .17, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sd * s * .34 + (e.vx > 0 ? 1 : -1) * s * .05, -s * 1, s * .09, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawGull(e, t) {
+  const s = e.m.size, f = Math.sin(t * (e.chasing ? 12 : 7) + e.phase);
+  ctx.save(); ctx.translate(e.x, e.y); ctx.scale(e.face, 1);
+  ctx.strokeStyle = '#cfd8de'; ctx.lineWidth = s * .32; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-s * .35, -s * .9 * f, -s * 1.1, -s * .5 * f - s * .25); ctx.stroke();
+  ctx.fillStyle = '#e9eef1'; ctx.beginPath(); ctx.moveTo(-s * .7, 0); ctx.lineTo(-s * 1.15, -s * .15); ctx.lineTo(-s * 1.15, s * .15); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 0, s * .85, s * .3, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(s * .72, -s * .16, s * .28, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#ffc93a'; ctx.beginPath(); ctx.moveTo(s * .95, -s * .2); ctx.lineTo(s * 1.35, -s * .1); ctx.lineTo(s * .95, -s * .04); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(s * .8, -s * .22, s * .06, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = s * .32;
+  ctx.beginPath(); ctx.moveTo(-s * .05, -s * .05); ctx.quadraticCurveTo(-s * .2, -s * 1.1 * f, -s * .9, -s * .75 * f - s * .3); ctx.stroke();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = s * .2; ctx.beginPath(); ctx.moveTo(-s * .8, -s * .7 * f - s * .28); ctx.lineTo(-s * .95, -s * .77 * f - s * .31); ctx.stroke();
+  ctx.restore();
+}
+function drawTurtle(e, t) {
+  const m = e.m, s = m.size, pd = Math.sin(t * 3 + e.phase) * .5;
+  ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang);
+  ctx.fillStyle = 'rgba(0,30,50,.25)'; ctx.beginPath(); ctx.ellipse(4, 6, s * 1.1, s * .85, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#93bb62';
+  for (const [x, y, a] of [[s * .45, -s * .7, -.6 + pd], [s * .45, s * .7, .6 - pd], [-s * .6, -s * .55, -2.4 - pd * .5], [-s * .6, s * .55, 2.4 + pd * .5]]) { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(s * .3, 0, s * .42, s * .16, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+  ctx.beginPath(); ctx.ellipse(s * 1.05, 0, s * .34, s * .27, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(s * 1.15, -s * .14, s * .05, 0, TAU); ctx.arc(s * 1.15, s * .14, s * .05, 0, TAU); ctx.fill();
+  ctx.fillStyle = m.color; ctx.beginPath(); ctx.ellipse(0, 0, s, s * .8, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = shade(m.color, .7); ctx.lineWidth = 1.5; ctx.fillStyle = shade(m.color, 1.18);
+  for (const [x, y, r] of [[0, 0, .32], [s * .5, 0, .2], [-s * .5, 0, .2], [s * .22, -s * .45, .2], [-s * .22, -s * .45, .2], [s * .22, s * .45, .2], [-s * .22, s * .45, .2]]) { ctx.beginPath(); ctx.ellipse(x, y, s * r, s * r * .85, 0, 0, TAU); ctx.fill(); ctx.stroke(); }
+  ctx.restore();
+}
+function drawFrog(e, t) {
+  const m = e.m, s = m.size, c = m.color;
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + s * .6, s * (1 - e.hopH / 120), s * .25, 0, 0, TAU); ctx.fill();
+  ctx.save(); ctx.translate(e.x, e.y - e.hopH); ctx.scale(e.face, 1);
+  if (e.hop) ctx.scale(.9, 1.15);
+  if (e.tongue) {
+    const f = e.tongue.f, p = Math.sin(Math.min(1, e.tongue.t / .28) * Math.PI);
+    const tx = (f.x - e.x) * e.face, ty = f.y - e.y;
+    ctx.strokeStyle = '#ff6f91'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(s * .8, -s * .05); ctx.lineTo(s * .8 + (tx - s * .8) * p, -s * .05 + (ty + s * .05) * p); ctx.stroke();
+  }
+  ctx.fillStyle = shade(c, .78); ctx.beginPath(); ctx.ellipse(-s * .55, s * .3, s * .55, s * .3, -.2, 0, TAU); ctx.fill();
+  ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, s, s * .68, -.12, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.ellipse(s * .2, s * .32, s * .6, s * .24, 0, 0, TAU); ctx.fill();
+  if (c !== '#3fbf5a') { ctx.fillStyle = '#141414'; const seed = m.id.charCodeAt(0); for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(-s * .6 + ((seed * (i + 3)) % 10) / 10 * s * 1.1, -s * .35 + ((seed * (i + 7)) % 10) / 10 * s * .5, s * .1, 0, TAU); ctx.fill(); } }
+  ctx.strokeStyle = shade(c, .78); ctx.lineWidth = s * .16; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(s * .45, s * .3); ctx.lineTo(s * .6, s * .62); ctx.stroke();
+  ctx.fillStyle = c; ctx.beginPath(); ctx.arc(s * .5, -s * .55, s * .3, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#e8b530'; ctx.beginPath(); ctx.arc(s * .55, -s * .58, s * .2, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(s * .58, -s * .58, s * .14, s * .1, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+function drawButterfly(e, t) {
+  const m = e.m, s = m.size, c = m.color, flap = .2 + .8 * Math.abs(Math.sin(t * (e.chasing ? 16 : 11) + e.phase));
+  ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(clamp(e.vx * .004, -.3, .3));
+  ctx.save(); ctx.scale(flap, 1);
+  for (const sd of [-1, 1]) {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(sd * s * .55, -s * .3, s * .6, s * .45, sd * -.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = shade(c, .7); ctx.beginPath(); ctx.ellipse(sd * s * .42, s * .35, s * .38, s * .3, sd * .5, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(sd * s * .85, -s * .45, s * .08, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = '#1b1b1b'; ctx.beginPath(); ctx.ellipse(0, 0, s * .1, s * .5, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -s * .45); ctx.lineTo(-s * .25, -s * .9); ctx.moveTo(0, -s * .45); ctx.lineTo(s * .25, -s * .9); ctx.stroke();
+  ctx.restore();
+}
+const DRAW = { clown: drawFish, tang: drawFish, neon: drawFish, gold: drawFish, crab: drawCrab, gull: drawGull, turtle: drawTurtle, frog: drawFrog, butterfly: drawButterfly };
+
+/* ---------- 悬停名牌 ---------- */
+let mouse = { x: -999, y: -999 };
+function drawTag() {
+  let hit = null, best = 45 * 45;
+  for (const e of ents) { const d = (e.x - mouse.x) ** 2 + (e.y - mouse.y) ** 2; if (d < best) { best = d; hit = e; } }
+  if (!hit || document.body.classList.contains('idle')) return;
+  const m = hit.m, full = Math.round(fullness(m) * 100);
+  const l1 = `${m.name} · ${KIND[m.kind].zh}`, l2 = `吃过 ${m.eaten} 次 · 饱腹 ${full}%`;
+  ctx.font = '600 14px ' + getComputedStyle(document.body).fontFamily; const w1 = ctx.measureText(l1).width;
+  ctx.font = '12px ' + getComputedStyle(document.body).fontFamily; const w2 = ctx.measureText(l2).width;
+  const w = Math.max(w1, w2) + 20, x = clamp(hit.x - w / 2, 8, W - w - 8), y = Math.max(8, hit.y - hit.m.size * 2 - 52 - hit.hopH);
+  ctx.fillStyle = 'rgba(8,22,28,.78)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, 44, 10) : ctx.rect(x, y, w, 44); ctx.fill();
+  ctx.fillStyle = '#f4f8f3'; ctx.font = '600 14px ' + getComputedStyle(document.body).fontFamily; ctx.fillText(l1, x + 10, y + 19);
+  ctx.fillStyle = full < 35 ? '#ffb27a' : 'rgba(244,248,243,.72)'; ctx.font = '12px ' + getComputedStyle(document.body).fontFamily; ctx.fillText(l2, x + 10, y + 36);
+}
+
+/* ---------- 主循环 ---------- */
+let last = performance.now(), saveTimer = 0;
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now; const t = now / 1000;
+  update(dt, t);
+  const s = save.scene;
+  if (s === 'reef') drawReef(t); else if (s === 'island') drawIsland(t); else drawForest(t);
+  for (const f of foods) drawFood(f, t);
+  const order = ents.slice().sort((a, b) => (a.m.kind === 'gull' || a.m.kind === 'butterfly') - (b.m.kind === 'gull' || b.m.kind === 'butterfly') || a.y - b.y);
+  for (const e of order) {
+    DRAW[e.m.kind](e, t);
+    if (fullness(e.m) < .35 && !e.chasing) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '600 13px system-ui'; ctx.fillText('饿…', e.x - 10, e.y - e.m.size * 1.6 - e.hopH); }
+  }
+  if (s === 'reef') drawReefGlass(); if (s === 'forest') drawForestFront(t);
+  ctx.textAlign = 'center';
+  for (const p of parts) { ctx.globalAlpha = clamp(p.life, 0, 1); ctx.fillStyle = '#ff6f91'; ctx.font = '700 16px system-ui'; ctx.fillText(p.t, p.x, p.y); }
+  ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  drawTag();
+  saveTimer += dt; if (dirty && saveTimer > 3) { persist(); dirty = false; saveTimer = 0; updateStat(); }
+  idleCheck();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+function updateStat() {
+  const w = world(), ms = w.members, fed = w.fedDay === today() ? w.fed : 0, hungry = ms.filter(m => fullness(m) < .35).length;
+  $('stat').innerHTML = `${SCENES[save.scene].label}里有 <b>${ms.length}</b> 位成员 · 今天投喂 <b>${fed}</b> 次` + (hungry ? ` · <b>${hungry}</b> 位饿了` : ' · 大家都饱饱的');
+}
+let toastT;
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2200); }
+function tick() {
+  const d = new Date(), wk = '日一二三四五六'[d.getDay()];
+  $('time').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  $('date').textContent = `${d.getMonth() + 1}月${d.getDate()}日 · 周${wk}`;
+}
+let lastAct = Date.now();
+const wake = () => { lastAct = Date.now(); };
+function idleCheck() { document.body.classList.toggle('idle', Date.now() - lastAct > 6000 && document.activeElement !== $('pcname')); }
+
+cv.addEventListener('pointerdown', ev => { wake(); feed(ev.clientX, ev.clientY); });
+addEventListener('pointermove', ev => { wake(); mouse.x = ev.clientX; mouse.y = ev.clientY; });
+addEventListener('keydown', ev => {
+  wake(); if (ev.target === $('pcname')) return;
+  const k = { '1': 'reef', '2': 'island', '3': 'forest' }[ev.key];
+  if (k) setScene(k); else if (ev.key === ' ') { ev.preventDefault(); feedHandful(); }
+});
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setScene(b.dataset.scene)));
+$('feedBtn').onclick = feedHandful;
+$('addBtn').onclick = () => {
+  const w = world(); if (w.members.length >= MAX_MEMBERS) { toast(`${SCENES[save.scene].label}已经住满 ${MAX_MEMBERS} 位了`); return; }
+  const m = makeMember(pick(SCENES[save.scene].kinds), w.members.map(x => x.name));
+  w.members.push(m); ents.push(spawnEnt(m)); persist(); updateStat(); toast(`欢迎新成员 ${m.name}（${KIND[m.kind].zh}）`);
+};
+$('rainBtn').onclick = () => { rain = !rain; $('rainBtn').textContent = rain ? '停雨' : '下雨'; };
+$('rainBtn').textContent = rain ? '停雨' : '下雨';
+$('fullBtn').onclick = async () => {
+  try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); else await document.exitFullscreen(); } catch (e) {}
+  try { await navigator.wakeLock?.request('screen'); } catch (e) {}
+  lastAct = 0;
+};
+const nameEl = $('pcname'); nameEl.value = save.name;
+nameEl.addEventListener('input', () => { save.name = nameEl.value.trim() || '我的电脑'; persist(); });
+nameEl.addEventListener('keydown', ev => { if (ev.key === 'Enter') nameEl.blur(); });
+
+addEventListener('resize', resize);
+resize(); setScene(save.scene); tick(); setInterval(tick, 1000); setInterval(updateStat, 60000);
+requestAnimationFrame(frame);
+})();
+</script>
