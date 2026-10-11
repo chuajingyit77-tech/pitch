@@ -105,7 +105,7 @@ export function buildGodRays(shared, anchors, rng) {
         float streak = 0.55 + 0.45 * vnoise(vec2(x * 3.0 + vSeed * 50.0, vAlong * 2.0 - uTime * 0.05));
         streak *= 0.7 + 0.3 * vnoise(vec2(x * 9.0 + uTime * 0.07, vSeed * 11.0));
         vec3 V = normalize(vWorldP - cameraPosition);
-        float fwd = mix(0.3, 1.0, pow(max(dot(V, -uLightDirW), 0.0), 2.0));
+        float fwd = mix(0.45, 1.0, pow(max(dot(V, -uLightDirW), 0.0), 2.0));
         float camFade = smoothstep(2.0, 7.0, length(vWorldP - cameraPosition));
         float a = across * ends * streak * fwd * camFade * vK * uRayAmt;
         gl_FragColor = vec4(uRayCol * a, 1.0);
@@ -286,8 +286,8 @@ export function buildMistSheets(shared, rng, sheets) {
       void main(){
         vec2 e = min(vUv, 1.0 - vUv);
         float edge = smoothstep(0.0, 0.3, e.x) * smoothstep(0.0, 0.3, e.y);
-        vec2 p = vWorldP.xz * 0.12 + vec2(uTime * 0.012, uTime * 0.004);
-        float n = fbm3(vec3(p, uTime * 0.02 + vSeed * 5.0)) * 0.5 + 0.5;
+        vec2 p = vWorldP.xz * 0.035 + vec2(uTime * 0.0035, uTime * 0.0012) + vSeed;
+        float n = texture2D(uCookieTex, p).b * 0.65 + texture2D(uCookieTex, p * 2.7 - vec2(uTime * 0.004, 0.0)).r * 0.35;
         float a = smoothstep(0.35, 0.85, n) * edge * uAmt;
         vec3 V = normalize(vWorldP - cameraPosition);
         float soft = smoothstep(1.0, 6.0, length(vWorldP - cameraPosition));

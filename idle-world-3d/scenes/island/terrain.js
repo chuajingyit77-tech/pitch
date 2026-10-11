@@ -31,7 +31,7 @@ export function createTerrain(env, rng, noise) {
   const hillAng = rng.range(0, TAU);
   const hillDist = rng.range(2.6, 4.2);
   const hx = Math.cos(hillAng) * hillDist, hz = Math.sin(hillAng) * hillDist;
-  const hillH = rng.range(4.4, 5.8), hillR = rng.range(3.8, 4.6);
+  const hillH = rng.range(5.4, 6.8), hillR = rng.range(3.8, 4.8);
   const dockAng = hillAng + Math.PI + rng.range(-0.45, 0.45);
   const o1 = rng.range(0, 50), o2 = rng.range(0, 50), o3 = rng.range(0, 50), o4 = rng.range(0, 50);
 
@@ -45,7 +45,7 @@ export function createTerrain(env, rng, noise) {
   };
   const lagoonW = a => {
     const c = Math.cos(a), s = Math.sin(a);
-    return 9.0 + 3.6 * noise.noise2(c * 1.3 + o4, s * 1.3 - o3) + 1.2 * noise.noise2(c * 3.1 - o1, s * 3.1 + o2);
+    return 6.6 + 2.6 * noise.noise2(c * 1.3 + o4, s * 1.3 - o3) + 1.0 * noise.noise2(c * 3.1 - o1, s * 3.1 + o2);
   };
   /** Signed distance (m) from the coastline along the radius: + inland, - offshore. */
   const coastE = (x, z) => coast(Math.atan2(z, x)) - Math.hypot(x, z);
@@ -61,15 +61,16 @@ export function createTerrain(env, rng, noise) {
       h += noise.fbm2(x * 0.11 + 3.1, z * 0.11 - 1.7, 3) * 0.45 * smoothstep(3.5, 8.5, e);
     } else {
       const u = -e, lw = lagoonW(a);
-      h = -0.09 * Math.min(u, 2.5) - 0.105 * clamp(u - 2.5, 0, lw - 2.5);
-      h += noise.fbm2(x * 0.085 - 5.0, z * 0.085 + 2.0, 3) * 0.32 * smoothstep(2.5, 6, u) * (1 - smoothstep(lw - 1, lw + 2, u));
-      // reef crest then the drop-off to the open ocean
-      h += 0.28 * Math.exp(-Math.pow((u - lw - 0.4) / 1.3, 2));
-      h -= 9.2 * smoothstep(lw + 0.8, lw + 10.5, u);
-      h -= 2.6 * smoothstep(lw + 9, lw + 26, u);
+      h = -0.09 * Math.min(u, 2.5) - 0.17 * clamp(u - 2.5, 0, lw - 2.5);
+      h += noise.fbm2(x * 0.085 - 5.0, z * 0.085 + 2.0, 3) * 0.38 * smoothstep(2.5, 6, u) * (1 - smoothstep(lw - 1, lw + 2, u));
+      // reef crest then a long drop-off to the open ocean (turquoise → teal → blue)
+      h += 0.16 * Math.exp(-Math.pow((u - lw - 0.4) / 1.2, 2));
+      h -= 3.2 * smoothstep(lw + 0.3, lw + 5.5, u);
+      h -= 6.5 * smoothstep(lw + 3, lw + 16, u);
+      h -= 2.6 * smoothstep(lw + 12, lw + 30, u);
     }
     const dh = Math.hypot(x - hx, z - hz) / hillR;
-    if (dh < 3) h += hillH * Math.exp(-dh * dh * 1.5) * (0.78 + 0.4 * noise.ridged2(x * 0.24 + o1, z * 0.24, 3)) * smoothstep(3, 7.5, e);
+    if (dh < 3) h += hillH * Math.exp(-dh * dh * 1.35) * (0.72 + 0.5 * noise.ridged2(x * 0.24 + o1, z * 0.24, 3)) * smoothstep(3, 7.5, e);
     return h;
   }
 
@@ -105,7 +106,7 @@ export function createTerrain(env, rng, noise) {
   const colors = new Float32Array(pos.count * 3);
   const mats = new Float32Array(pos.count * 3);
   const C = {
-    sandDry: new THREE.Color('#f3e0b6'), sandWarm: new THREE.Color('#ead09c'), sandPale: new THREE.Color('#f7ead0'),
+    sandDry: new THREE.Color('#f2d8a6'), sandWarm: new THREE.Color('#e6c48a'), sandPale: new THREE.Color('#f8e8c8'),
     sandSea: new THREE.Color('#ece6d4'), seagrass: new THREE.Color('#5d6e3a'), coral: new THREE.Color('#c99d8c'), deepSand: new THREE.Color('#b9c4b8'),
     grass1: new THREE.Color('#5fae3c'), grass2: new THREE.Color('#79c04a'), grass3: new THREE.Color('#4e9433'), jungle: new THREE.Color('#3f7d2c'),
     rock1: new THREE.Color('#8d877c'), rock2: new THREE.Color('#6f6860'), moss: new THREE.Color('#62783f'),
@@ -235,7 +236,7 @@ export function createTerrain(env, rng, noise) {
       const e = coastE(x, z);
       fE[k] = e;
       const u = -e, lw = lagoonW(Math.atan2(z, x));
-      fA[k] = u > 0 ? Math.exp(-Math.pow((u - lw - 0.6) / 1.5, 2)) : 0;
+      fA[k] = u > 0 ? Math.exp(-Math.pow((u - lw - 0.5) / 0.9, 2)) : 0;
     }
   }
   const obstacles = [];

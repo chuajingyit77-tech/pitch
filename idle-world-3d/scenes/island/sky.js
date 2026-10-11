@@ -21,17 +21,33 @@ export function createSky(env, rng) {
     uMoonCol: { value: new THREE.Color(1.0, 0.96, 0.88) },
     uSunGlow: { value: new THREE.Color(0, 0, 0) },
     uLowTint: { value: new THREE.Color(1, 1, 1) },
+    uArtZen: { value: new THREE.Color(0.05, 0.2, 0.6) },
+    uArtHor: { value: new THREE.Color(0.5, 0.7, 0.85) },
+    uArtSun: { value: new THREE.Color(1, 0.6, 0.3) },
+    uArtMix: { value: 0.5 },
+    uArtGain: { value: 1 },
+    uSkySat: { value: 1.2 },
   });
   sky.material.fragmentShader = sky.material.fragmentShader
     .replace('uniform vec3 up;', /* glsl */`uniform vec3 up;
       uniform float uNight, uSkyGain, uTime;
-      uniform vec3 uMoonDir, uNightZen, uNightHor, uMoonCol, uSunGlow, uLowTint;
+      uniform vec3 uMoonDir, uNightZen, uNightHor, uMoonCol, uSunGlow, uLowTint, uArtZen, uArtHor, uArtSun;
+      uniform float uArtMix, uArtGain, uSkySat;
       float sHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
     `)
     .replace('gl_FragColor = vec4( retColor, 1.0 );', /* glsl */`
       vec3 col = retColor * uSkyGain;
       float upv = direction.y;
+      float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = max(mix(vec3(lum), col, uSkySat), 0.0);
       col *= mix(uLowTint, vec3(1.0), smoothstep(0.0, 0.35, upv));
+      // art-directed gradient (tropical blue by day, warm twilight band toward the sun)
+      vec2 dxz = normalize(direction.xz + 1e-5);
+      vec2 sxz = normalize(vSunDirection.xz + 1e-5);
+      float toward = pow(max(dot(dxz, sxz), 0.0), 3.0);
+      vec3 hor = mix(uArtHor, uArtSun, toward * 0.85);
+      vec3 art = mix(hor, uArtZen, pow(clamp(upv, 0.0, 1.0), 0.55)) * uArtGain;
+      col = mix(col, art, uArtMix);
       float cs = max(dot(direction, vSunDirection), 0.0);
       col += uSunGlow * (pow(cs, 700.0) * 3.0 + pow(cs, 60.0) * 0.35 + pow(cs, 8.0) * 0.12);
       // ---- night ----
@@ -95,27 +111,28 @@ export function createSky(env, rng) {
 function createClouds(env, rng) {
   const q = env.q;
   const tex = puffTexture(rng.int(1, 1e6));
-  const nClouds = Math.round(lerp(13, 22, q));
+  const nClouds = Math.round(lerp(20, 30, q));
   const P = [];
   for (let c = 0; c < nClouds; c++) {
     const a = rng.range(0, TAU);
-    const dist = rng.range(170, 760);
+    const far = c < nClouds * 0.7;                       // most clouds sit low over the horizon
+    const dist = far ? rng.range(420, 1500) : rng.range(160, 420);
     const cx = Math.cos(a) * dist, cz = Math.sin(a) * dist;
     const big = rng.range(0, 1);
-    const size = (26 + big * 50) * (0.75 + dist / 760 * 0.6);
-    const cy = rng.range(60, 120) + dist * 0.06 + size * 0.2;
-    const n = Math.round((9 + big * 8) * lerp(0.75, 1, q));
+    const size = (far ? 55 + big * 95 : 30 + big * 45);
+    const cy = far ? rng.range(28, 70) + dist * 0.035 + size * 0.15 : rng.range(70, 120);
+    const n = Math.round((11 + big * 10) * lerp(0.75, 1, q));
     const rot = rng.range(0, TAU), cr = Math.cos(rot), sr = Math.sin(rot);
-    const stretch = rng.range(1.0, 1.8);
+    const stretch = rng.range(1.1, 2.0);
     for (let i = 0; i < n; i++) {
       const ua = rng.range(-1, 1), wa = rng.range(-1, 1);
       const edge = 1 - Math.min(1, Math.hypot(ua * 0.9, wa));
-      const lx = ua * size * 0.6 * stretch, lz = wa * size * 0.32;
-      const r = size * rng.range(0.24, 0.4) * (0.55 + edge * 0.65);
-      const ly = Math.pow(rng.next(), 0.8) * size * 0.32 * (0.25 + edge * 1.1) + r * 0.32;
+      const lx = ua * size * 0.62 * stretch, lz = wa * size * 0.34;
+      const r = size * rng.range(0.24, 0.4) * (0.55 + edge * 0.7);
+      const ly = Math.pow(rng.next(), 0.75) * size * 0.4 * (0.2 + edge * 1.2) + r * 0.3;
       P.push({
         x: cx + lx * cr - lz * sr, y: cy + ly, z: cz + lx * sr + lz * cr, r,
-        cx, cy: cy - size * 0.05, cz, rel: Math.min(1, ly / (size * 0.42 + 1e-3)),
+        cx, cy: cy - size * 0.05, cz, rel: Math.min(1, ly / (size * 0.5 + 1e-3)),
       });
     }
   }
@@ -186,7 +203,7 @@ function createClouds(env, rng) {
         float fs = pow(max(dot(-fwd, uSunDir), 0.0), 7.0);
         col += uRim * fs * (1.0 - tx.r) * 1.8;
         float d = length(vPos - cameraPosition);
-        col = mix(col, uHaze, smoothstep(220.0, 1200.0, d) * 0.6);
+        col = mix(col, uHaze, smoothstep(300.0, 1900.0, d) * 0.5);
         gl_FragColor = vec4(col * a, a);
       }`,
     transparent: true,

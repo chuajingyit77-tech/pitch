@@ -22,7 +22,7 @@ export function createShared() {
     uCookieDrift: { value: new THREE.Vector2() },
     uCanopyY: { value: 17 },
     uCookieMin: { value: 0.16 },
-    uClearing: { value: new THREE.Vector4(0, -5, 5, 9) },
+    uClearing: { value: new THREE.Vector4(0.5, -4.5, 6.5, 11.5) },
     uFogColor: { value: new THREE.Color('#7da08a') },
     uFogSunColor: { value: new THREE.Color('#f0e6c0') },
     uFogDensity: { value: 0.02 },

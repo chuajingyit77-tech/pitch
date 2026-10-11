@@ -114,24 +114,52 @@ export function buildTerrain(ground, W, env, { rings = 130, segs = 180, rMax = 1
 /* Rocks                                                               */
 /* ------------------------------------------------------------------ */
 const ROCK_GLSL = /* glsl */`
+// Living crust: the reef substrate is covered edge to edge by encrusting colonies of different
+// colours and polyp textures, separated by dark crevices; undersides stay bare stone.
+float gN1, gN2, gCrev;
+vec3 reefPal(float i){
+  i = mod(i, 10.0);
+  vec3 c = vec3(0.42, 0.24, 0.56);
+  c = i >= 1.0 ? vec3(0.62, 0.22, 0.3) : c;
+  c = i >= 2.0 ? vec3(0.27, 0.4, 0.14) : c;
+  c = i >= 3.0 ? vec3(0.6, 0.4, 0.1) : c;
+  c = i >= 4.0 ? vec3(0.12, 0.4, 0.4) : c;
+  c = i >= 5.0 ? vec3(0.72, 0.3, 0.09) : c;
+  c = i >= 6.0 ? vec3(0.34, 0.25, 0.17) : c;
+  c = i >= 7.0 ? vec3(0.52, 0.52, 0.3) : c;
+  c = i >= 8.0 ? vec3(0.46, 0.17, 0.5) : c;
+  c = i >= 9.0 ? vec3(0.55, 0.36, 0.42) : c;
+  return c;
+}
 float detailH(vec3 p){
   float d = length(p - cameraPosition);
   float fade = 1.0 - smoothstep(14.0, 34.0, d);
-  float h = snoise(p * 2.7) * 0.03 + snoise(p * 8.3) * 0.012;
+  gN1 = snoise(p * 0.9 + 3.1) * 0.5 + 0.5;
+  gN2 = snoise(p * 1.7 - 7.3) * 0.5 + 0.5;
+  float e1 = abs(fract(gN1 * 4.0) - 0.5), e2 = abs(fract(gN2 * 3.0) - 0.5);
+  gCrev = smoothstep(0.43, 0.5, max(e1, e2));
+  float h = snoise(p * 2.6) * 0.022 - gCrev * 0.035;
   vec2 c = cell2(p.xz * 5.0 + vec2(p.y * 3.3, -p.y * 2.1));
-  h -= smoothstep(0.32, 0.0, c.x) * 0.014;
-  h += (vnoise3(p * 31.0) - 0.5) * 0.005;
+  h -= smoothstep(0.3, 0.0, c.x) * 0.01;
+  h += (vnoise3(p * 30.0) - 0.5) * 0.007;
   return h * fade;
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
-  float m = snoise(p * 1.6) * 0.5 + 0.5;
-  c *= 0.72 + 0.5 * m;
-  c *= 0.86 + h * 7.0;
-  float sp = vnoise3(p * 9.0);
-  c = mix(c, vec3(0.66, 0.34, 0.46), smoothstep(0.76, 0.92, sp) * 0.55);
-  c = mix(c, vec3(0.78, 0.56, 0.22), smoothstep(0.8, 0.95, vnoise3(p * 6.0 + 3.0)) * 0.45);
-  c = mix(c, vec3(0.2, 0.42, 0.5), smoothstep(0.84, 0.97, vnoise3(p * 4.0 + 11.0)) * 0.35);
-  return c;
+  float lum = dot(c, vec3(0.3, 0.5, 0.2));
+  float expo = smoothstep(0.05, 0.2, lum);
+  float id = floor(gN1 * 4.0) * 3.0 + floor(gN2 * 3.0);
+  float hsh = hash12(vec2(id, 7.0));
+  vec3 pc = reefPal(floor(hsh * 10.0));
+  float kind = floor(fract(hsh * 7.31) * 3.0);
+  float tex;
+  if (kind < 1.0) { vec2 cc = cell2(p.xz * 22.0 + p.y * 17.0); tex = 0.7 + 0.5 * smoothstep(0.32, 0.05, cc.x); }
+  else if (kind < 2.0) { tex = 0.78 + 0.3 * sin(dot(p, vec3(31.0, 23.0, 27.0)) + snoise(p * 4.0) * 3.0); }
+  else { tex = 0.8 + 0.35 * vnoise3(p * 18.0); }
+  float cover = smoothstep(0.18, 0.5, snoise(p * 0.45 + 9.0) * 0.5 + 0.62) * expo;
+  vec3 col = mix(c, pc * tex, cover);
+  col = mix(col, vec3(0.55, 0.3, 0.42), smoothstep(0.82, 0.95, vnoise3(p * 3.0)) * 0.4 * expo);
+  col *= (1.0 - gCrev * 0.65) * (0.85 + h * 6.0);
+  return col;
 }
 `;
 
@@ -252,51 +280,73 @@ export class HeightMap {
 }
 
 /**
- * Rock layout: a few coral heads (bommies) built from stacked rocks near the centre, loose rocks
- * across the slope and big silhouettes in the haze.
+ * Reef knoll: a continuous reef (dense substrate rocks) rising toward the centre, cut by
+ * spur-and-groove sand channels on the outer slope, with tall coral heads (bommies) on top and big
+ * pinnacles in the haze. Sand only shows in the channels and on the apron around the reef.
  */
 export function buildRocks(ground, hm, W, env, rng) {
-  const detail = env.q >= 0.9 ? 5 : 4;
-  const T = [0, 1, 2, 3, 4].map(i => rockTemplate((env.seed ^ (0x9e37 * (i + 1))) >>> 0, detail));
+  const q = Math.max(0.6, env.q);
+  const T = [0, 1, 2, 3].map(i => rockTemplate((env.seed ^ (0x9e37 * (i + 1))) >>> 0, env.q >= 0.9 ? 4 : 3));
+  const Ts = [0, 1, 2, 3].map(i => rockTemplate((env.seed ^ (0x51ed * (i + 3))) >>> 0, 3));
   const farT = rockTemplate((env.seed ^ 0x1234) >>> 0, 3);
+  const all = [...T, ...Ts];
+  const n = createNoise((env.seed ^ 0x77ab) >>> 0);
+  const field = (x, z) => {
+    const r = Math.hypot(x, z), a = Math.atan2(z, x);
+    let m = 1 - smoothstep(6.0, 14.0, r + n.fbm2(x * 0.07, z * 0.07, 3) * 4.0);
+    const g = Math.abs(Math.sin(a * 4.5 + n.noise2(x * 0.05 + 3, z * 0.05) * 2.2 + r * 0.09));
+    m -= smoothstep(0.82, 0.975, g) * smoothstep(4.5, 8.5, r) * 1.4;
+    m += n.fbm2(x * 0.2 + 3, z * 0.2 - 1, 3) * 0.3;
+    return clamp(m, 0, 1);
+  };
+  const topH = (x, z, m) => Math.pow(m, 0.6) * (0.4 + 1.9 * (1 - smoothstep(0, 11, Math.hypot(x, z))));
   const items = []; // { t, pos, scale, rotY }
+  // substrate
+  const sp = 1.3 / Math.sqrt(q);
+  for (let gz = -16.5; gz <= 16.5; gz += sp) for (let gx = -16.5; gx <= 16.5; gx += sp) {
+    const x = gx + rng.range(-0.45, 0.45) * sp, z = gz + rng.range(-0.45, 0.45) * sp;
+    const m = field(x, z);
+    if (m < 0.16 || rng.next() > 0.35 + m) continue;
+    const g = ground.height(x, z), top = g + topH(x, z, m) + rng.range(-0.15, 0.2);
+    const s = rng.range(0.75, 1.15) * (0.75 + 0.45 * m) * Math.sqrt(1 / q) * 0.9;
+    const sy = clamp((top - g) * 0.62, 0.32, 2.0);
+    items.push({ t: 4 + rng.int(0, 3), pos: new THREE.Vector3(x, top - sy * 1.0, z), scale: new THREE.Vector3(s * rng.range(0.9, 1.35), sy, s * rng.range(0.9, 1.35)), rotY: rng.range(0, TAU) });
+  }
+  // coral heads rising from the reef
   const bommies = [];
-  const nB = rng.int(3, 4);
+  const nB = Math.round(rng.int(4, 5) * Math.min(1, q + 0.2));
   const angle0 = rng.range(0, TAU);
   for (let b = 0; b < nB; b++) {
     let cx, cz;
-    if (b === 0) { cx = rng.range(-1, 1); cz = rng.range(-1, 1); }
-    else { const a = angle0 + (b / (nB - 1)) * TAU * 0.92 + rng.range(-0.3, 0.3); const r = rng.range(5.2, 7.2); cx = Math.cos(a) * r; cz = Math.sin(a) * r; }
-    const big = b === 0 ? 1.2 : rng.range(0.82, 1.05);
-    const sx = rng.range(1.9, 2.5) * big, sy = rng.range(1.8, 2.3) * big, sz = rng.range(1.7, 2.3) * big;
+    if (b === 0) { cx = rng.range(-1.2, 1.2); cz = rng.range(-1.2, 1.2); }
+    else { const a = angle0 + (b / (nB - 1)) * TAU * 0.9 + rng.range(-0.25, 0.25); const r = rng.range(4.2, 8.0); cx = Math.cos(a) * r; cz = Math.sin(a) * r; }
     const gy = ground.height(cx, cz);
-    items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(cx, gy - sy * 0.3, cz), scale: new THREE.Vector3(sx, sy, sz), rotY: rng.range(0, TAU) });
-    const kids = rng.int(3, 5);
+    const H = b === 0 ? rng.range(3.6, 4.2) : rng.range(2.5, 3.6) * (1 - Math.hypot(cx, cz) / 22);
+    const big = b === 0 ? 1.15 : rng.range(0.8, 1.0);
+    const sx = rng.range(1.5, 1.9) * big, sz = rng.range(1.4, 1.8) * big, sy = H * 0.5;
+    items.push({ t: rng.int(0, 3), pos: new THREE.Vector3(cx, gy + H * 0.45 - sy, cz), scale: new THREE.Vector3(sx, sy, sz), rotY: rng.range(0, TAU) });
+    const kids = rng.int(2, 4);
     for (let k = 0; k < kids; k++) {
-      const a = rng.range(0, TAU), r = rng.range(0.4, 1.3) * big;
-      const kx = cx + Math.cos(a) * r, kz = cz + Math.sin(a) * r;
-      const ks = rng.range(0.6, 1.1) * big;
-      items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(kx, gy + sy * rng.range(0.45, 0.95), kz), scale: new THREE.Vector3(ks * rng.range(0.9, 1.3), ks * rng.range(0.7, 1.0), ks * rng.range(0.9, 1.3)), rotY: rng.range(0, TAU) });
+      const a = rng.range(0, TAU), r = rng.range(0.2, 0.9) * big;
+      const ks = rng.range(0.7, 1.05) * big;
+      const ky = gy + H * rng.range(0.62, 0.8);
+      items.push({ t: rng.int(0, 3), pos: new THREE.Vector3(cx + Math.cos(a) * r, ky - ks * 0.55, cz + Math.sin(a) * r), scale: new THREE.Vector3(ks * rng.range(0.9, 1.3), ks * rng.range(0.7, 0.95), ks * rng.range(0.9, 1.3)), rotY: rng.range(0, TAU) });
     }
-    bommies.push({ x: cx, z: cz, r: Math.max(sx, sz) * 1.25, main: b === 0 });
+    bommies.push({ x: cx, z: cz, r: Math.max(sx, sz) * 1.2, main: b === 0, top: gy + H });
   }
-  // loose rocks on the slope
-  const nLoose = Math.round(16 * Math.max(0.6, env.q));
+  // a few boulders on the sand apron
+  const nLoose = Math.round(10 * q);
   for (let i = 0; i < nLoose; i++) {
-    let x, z, ok = false;
-    for (let tries = 0; tries < 20 && !ok; tries++) {
-      const a = rng.range(0, TAU), r = rng.range(3.5, 22);
-      x = Math.cos(a) * r; z = Math.sin(a) * r;
-      ok = bommies.every(b => Math.hypot(b.x - x, b.z - z) > b.r + 0.8);
-    }
-    const s = rng.range(0.35, 1.25) * (Math.hypot(x, z) > 12 ? 1.4 : 1);
-    items.push({ t: rng.int(0, 4), pos: new THREE.Vector3(x, ground.height(x, z) - s * 0.25, z), scale: new THREE.Vector3(s * rng.range(1, 1.6), s * rng.range(0.6, 1), s * rng.range(1, 1.5)), rotY: rng.range(0, TAU) });
+    const a = rng.range(0, TAU), r = rng.range(13, 22);
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const s = rng.range(0.4, 1.1);
+    items.push({ t: 4 + rng.int(0, 3), pos: new THREE.Vector3(x, ground.height(x, z) - s * 0.3, z), scale: new THREE.Vector3(s * rng.range(1, 1.6), s * rng.range(0.6, 1), s * rng.range(1, 1.5)), rotY: rng.range(0, TAU) });
   }
   // big pinnacles in the haze
   const far = [];
-  const nFar = Math.round(12 * Math.max(0.6, env.q));
+  const nFar = Math.round(12 * q);
   for (let i = 0; i < nFar; i++) {
-    const a = (i / nFar) * TAU + rng.range(-0.2, 0.2), r = rng.range(26, 52);
+    const a = (i / nFar) * TAU + rng.range(-0.2, 0.2), r = rng.range(26, 50);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const s = rng.range(2.5, 5.5);
     far.push({ pos: new THREE.Vector3(x, ground.height(x, z) - s * 0.3, z), scale: new THREE.Vector3(s * rng.range(0.9, 1.5), s * rng.range(1.0, 2.2), s * rng.range(0.9, 1.5)), rotY: rng.range(0, TAU) });
@@ -309,7 +359,7 @@ export function buildRocks(ground, hm, W, env, rng) {
     const lx = (dx * c - dz * s) / it.scale.x, lz = (dx * s + dz * c) / it.scale.z, ly = dy / it.scale.y;
     const L = Math.hypot(lx, ly, lz);
     if (L < 1e-5) return true;
-    return L < T[it.t].sample(lx / L, ly / L, lz / L);
+    return L < all[it.t].sample(lx / L, ly / L, lz / L);
   };
   for (const it of items) {
     const R = Math.max(it.scale.x, it.scale.z) * 1.65;
@@ -324,10 +374,10 @@ export function buildRocks(ground, hm, W, env, rng) {
   const group = new THREE.Group();
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
   const meshes = [];
-  for (let t = 0; t < T.length; t++) {
+  for (let t = 0; t < all.length; t++) {
     const list = items.filter(it => it.t === t);
     if (!list.length) continue;
-    const im = new THREE.InstancedMesh(T[t].geometry, mat, list.length);
+    const im = new THREE.InstancedMesh(all[t].geometry, mat, list.length);
     list.forEach((it, i) => { q.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, q, it.scale); im.setMatrixAt(i, m4); });
     im.castShadow = true; im.receiveShadow = true;
     im.computeBoundingSphere();
@@ -339,5 +389,5 @@ export function buildRocks(ground, hm, W, env, rng) {
   far.forEach((it, i) => { q.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, q, it.scale); fim.setMatrixAt(i, m4); });
   fim.computeBoundingSphere();
   group.add(fim);
-  return { group, meshes, items, bommies, far };
+  return { group, meshes, items, bommies, far, field };
 }

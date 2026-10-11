@@ -8,6 +8,8 @@ import { barkTexture, frondTexture, leafClusterTexture, grassTexture, flowerText
 const V3 = THREE.Vector3;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new V3(), _p = new V3(), _e = new THREE.Euler();
 const UP = new V3(0, 1, 0);
+const WHITE = new THREE.Color(1, 1, 1);
+const CORAL = ['#b0587e', '#7e5aa8', '#c47f45', '#5f9a8e', '#c9a14a'].map(c => new THREE.Color(c).multiplyScalar(1.6));
 
 /** Foliage seen from behind keeps its (outward/up) normal instead of flipping dark. */
 function noFlip(material) {
@@ -344,6 +346,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
     const pt = terrain.pointAt(a, e);
     const z = terrain.zone(pt.x, pt.z);
     if (z.sand > 0.35 && brng.chance(0.85)) continue;
+    if (z.rock > 0.35 && brng.chance(0.8)) continue;
     const big = smoothstep(6, 11, e);
     const s = brng.range(0.75, 1.25) * (1 + big * 0.8);
     if (!free(pt.x, pt.z, 0.55 * s)) continue;
@@ -476,7 +479,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
   for (let i = 0; i < Math.round(lerp(6, 10, q)); i++) {
     const a = rrng.range(0, TAU), d = rrng.range(0.3, hill.r * 1.1);
     const x = hill.x + Math.cos(a) * d, z = hill.z + Math.sin(a) * d;
-    const s = rrng.range(0.9, 2.2) * (1 - d / (hill.r * 1.6));
+    const s = rrng.range(1.2, 2.8) * (1 - d / (hill.r * 1.7));
     rockSites[rrng.int(0, 2)].push({ x, y: H(x, z) - 0.25 * s, z, s, ys: rrng.range(0.8, 1.3) });
     occupied.push({ x, z, r: s * 0.8 });
   }
@@ -506,7 +509,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
     const a = rrng.range(0, TAU), u = rrng.range(4, 9);
     const pt = terrain.pointAt(a, -u);
     const s = rrng.range(0.5, 1.1);
-    rockSites[2].push({ x: pt.x, y: pt.y - 0.2, z: pt.z, s, ys: 0.8 });
+    rockSites[2].push({ x: pt.x, y: pt.y - 0.3 * s, z: pt.z, s, ys: 0.55, coral: true });
   }
   const rockMeshes = rockGeos.map((g, i) => {
     const sites = rockSites[i];
@@ -516,6 +519,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
       _q.setFromEuler(_e);
       _m.compose(_p.set(r.x, r.y, r.z), _q, _s.set(r.s, r.s * r.ys, r.s * rrng.range(0.8, 1.2)));
       mesh.setMatrixAt(k, _m);
+      mesh.setColorAt(k, r.coral ? rrng.pick(CORAL) : WHITE);
     });
     mesh.count = sites.length;
     mesh.castShadow = true; mesh.receiveShadow = true;

@@ -143,7 +143,7 @@ export function makeRock(seed, W = 512, H = 512) {
       let h = clamp(0.5 + a * 0.6 + b * 0.25 + strata * 0.12, 0, 1);
       const crack = sm(0.06, 0.0, Math.abs(a * 1.2 + b * 0.3)) * 0.5;
       h = clamp(h - crack, 0, 1);
-      const v = 0.26 + h * 0.2 + b * 0.05;
+      const v = 0.3 + h * 0.3 + b * 0.06;
       const warm = clamp(0.5 + a, 0, 1);
       const r = v * lerp(0.92, 1.05, warm), gch = v * lerp(0.96, 0.98, warm), bb = v * lerp(1.02, 0.85, warm);
       cimg.data[i] = clamp(r, 0, 1) * 255; cimg.data[i + 1] = clamp(gch, 0, 1) * 255; cimg.data[i + 2] = clamp(bb, 0, 1) * 255; cimg.data[i + 3] = 255;

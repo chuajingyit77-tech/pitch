@@ -124,7 +124,7 @@ function createCrabs(env, ctx, max) {
   const list = [];
   const { terrain, fx, props } = ctx;
   const H = terrain.height;
-  const CRAB_SCALE = 1.55;
+  const CRAB_SCALE = 1.95;
   const PALETTE = [new THREE.Color('#e5482c'), new THREE.Color('#f06a2a'), new THREE.Color('#d8342f'), new THREE.Color('#e88a3a'), new THREE.Color('#b8452f')];
   const HERMIT_SHELLS = [new THREE.Color('#ffffff'), new THREE.Color('#ffd7c8'), new THREE.Color('#e9d3ff'), new THREE.Color('#d8f0ff')];
 

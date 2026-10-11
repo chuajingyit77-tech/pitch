@@ -13,7 +13,7 @@ export const LAYER_NO_REFLECT = 1;
  */
 export const waterUniforms = {
   uWTime: { value: 0 },
-  uAbsorb: { value: new THREE.Vector3(1.0, 0.16, 0.11) },  // per metre of light path
+  uAbsorb: { value: new THREE.Vector3(0.9, 0.2, 0.13) },  // per metre of light path
   uDeep: { value: new THREE.Color(0.008, 0.07, 0.17) },     // asymptotic in-scatter radiance (lit)
   uCaustic: { value: new THREE.Color(1, 1, 1) },            // sun colour * intensity, 0 at night
   uGlowUW: { value: new THREE.Color(0, 0, 0) },             // night plankton glow tint

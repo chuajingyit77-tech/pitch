@@ -61,6 +61,7 @@ export default {
 
   async create(env) {
     const { renderer, q } = env;
+    const T0 = performance.now(); const mark = l => console.warn('[jungle]', l, Math.round(performance.now() - T0));
     const seed = env.seed >>> 0;
     RAIN_SALT = seed % 9973;
     const rng = env.rng;
@@ -88,6 +89,7 @@ export default {
     const wN2 = env.loadTexture('textures/Water_2_M_Normal.jpg', { srgb: false, repeat: true });
 
     const camPos0 = new THREE.Vector3(VIEW_TARGET.x, VIEW_TARGET.y + 14 * Math.sin(VIEW_PITCH), VIEW_TARGET.z + 14 * Math.cos(VIEW_PITCH));
+    mark('textures');
     /* ---------------- layout + ground ---------------- */
     const L = createLayout((seed % 100000) + 17);
     const groundMat = new THREE.MeshStandardMaterial({ map: ground.map, normalMap: ground.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), vertexColors: true, roughness: 0.93, envMapIntensity: 0.45 });
@@ -154,6 +156,7 @@ export default {
       return m;
     });
 
+    mark('terrain');
     /* ---------------- trees ---------------- */
     const barkMat = new THREE.MeshStandardMaterial({ map: bark.map, normalMap: bark.normalMap, normalScale: new THREE.Vector2(1.3, 1.3), vertexColors: true, roughness: 0.9, envMapIntensity: 0.5 });
     jungleMaterial(barkMat, shared, { moss: 0.75, specks: true });
@@ -222,7 +225,7 @@ export default {
       return g;
     };
     const allHangs = trees.slice(0, 2).flatMap(t => t.hangs);
-    const innerHangs = trees.slice(0, 4).flatMap(t => t.limbs.map(lb => lb.curve.getPointAt(0.25 + Math.random() * 0.3)));
+    const innerHangs = trees.slice(0, 4).flatMap(t => t.limbs.map(lb => lb.curve.getPointAt(0.25 + rl.next() * 0.3)));
     const lianaTint = (t, n) => { const m = clamp(n.y, 0, 1) * 0.6; return [lerp(0.55, 0.4, m), lerp(0.48, 0.6, m), lerp(0.36, 0.25, m)]; };
     for (let i = 0; i < Math.min(9, allHangs.length); i++) {
       const a = allHangs[rl.int(0, allHangs.length - 1)];
@@ -285,6 +288,7 @@ export default {
       }
     }
 
+    mark('trees');
     /* ---------------- plants ---------------- */
     const WIND_LOW = { height: 1.0, amount: 0.07, stiffness: 1.5, flutter: 0.012 };
     const WIND_MID = { height: 2.2, amount: 0.13, stiffness: 1.7, flutter: 0.02 };
@@ -351,11 +355,11 @@ export default {
     // ferns on cliff ledges
     const cliffPts = sampleCliff(cliffGeo, R('cliffp'), Math.round(60 * q), { minY: 0.8, maxNy: 0.75, minNy: 0.1 });
     for (const c of cliffPts) fernList.push({ x: c.p.x, y: c.p.y - 0.05, z: c.p.z, s: rp.range(0.6, 1.2), rot: rp.next() * TAU, normal: c.n.clone().lerp(UP, 0.5).normalize() });
-    instance(fernGeo, foliageMat(WIND_LOW), fernList, { shadow: q > 0.6 });
+    instance(fernGeo, foliageMat(WIND_LOW), fernList, { shadow: false, mainOnly: true });
     // glowing ferns near the water and the log (bioluminescent veins at night)
     const glowFernGeo = P.fern(atlas, R('fernGlow'), { fronds: 8, rect: 'glowfern' });
     const glowFernList = scatter(Math.round(16 * Math.max(q, 0.6)), { region: [-9, 9, -8, 6], s: [0.5, 0.9], test: nearShore });
-    instance(glowFernGeo, foliageMat(WIND_LOW, { glowLeaf: true }), glowFernList, { shadow: false });
+    instance(glowFernGeo, foliageMat(WIND_LOW, { glowLeaf: true }), glowFernList, { shadow: false, mainOnly: true });
     // monstera
     const monGeo = P.monstera(atlas, R('mon'), { leaves: 9 });
     const monList = [
@@ -420,8 +424,8 @@ export default {
       (i % 3 === 0 ? bromRedList : bromList).push(item);
     });
     for (const c of sampleCliff(cliffGeo, R('cliffb'), Math.round(14 * q), { minY: 2, maxNy: 0.9, minNy: 0.2 })) bromList.push({ x: c.p.x, y: c.p.y, z: c.p.z, s: re.range(0.8, 1.3), rot: re.next() * TAU, normal: c.n.clone().lerp(UP, 0.6).normalize() });
-    instance(bromGeo, foliageMat(WIND_LOW), bromList, { shadow: false });
-    instance(bromRedGeo, foliageMat(WIND_LOW), bromRedList, { shadow: false });
+    instance(bromGeo, foliageMat(WIND_LOW), bromList, { shadow: false, mainOnly: true });
+    instance(bromRedGeo, foliageMat(WIND_LOW), bromRedList, { shadow: false, mainOnly: true });
     const orchGeos = ['orchid', 'orchid2', 'orchid3'].map((rect, i) => P.orchidSpray(atlas, R('orch' + i), { rect, flowers: 6 }));
     const orchLists = [[], [], []];
     for (let i = 0; i < Math.round(18 * Math.max(q, 0.6)); i++) {
@@ -429,7 +433,7 @@ export default {
       const spot = sp ? { x: sp.x, y: sp.y + 0.1, z: sp.z } : (() => { const b = boulderSpots[re.int(0, boulderSpots.length - 1)]; return { x: b.pos.x, y: b.pos.y - 0.05, z: b.pos.z }; })();
       orchLists[i % 3].push({ ...spot, s: re.range(1.0, 1.6), rot: re.next() * TAU });
     }
-    orchGeos.forEach((g, i) => instance(g, foliageMat(WIND_LOW), orchLists[i], { shadow: false }));
+    orchGeos.forEach((g, i) => instance(g, foliageMat(WIND_LOW), orchLists[i], { shadow: false, mainOnly: true }));
 
     // hanging vine curtains: from limbs and the cliff rim
     const curtainGeo = P.vineCurtain(atlas, R('curt'), { strands: 6, len: 4.5 });
@@ -452,7 +456,7 @@ export default {
       vertex: { '#include <begin_vertex>': '$&\n { float hd = clamp(-position.y / 4.5, 0.0, 1.2); vec3 io = vec3(0.0); \n #ifdef USE_INSTANCING\n io = instanceMatrix[3].xyz;\n #endif\n transformed.x += sin(uWT * 0.9 + io.x * 0.7 + position.y * 0.6) * hd * hd * 0.18; transformed.z += cos(uWT * 0.7 + io.z * 0.5) * hd * hd * 0.12; }' },
     });
     jungleMaterial(curtMat, shared, { translucent: 0.8 });
-    instance(curtainGeo, curtMat, curtList, { shadow: q > 0.6 });
+    instance(curtainGeo, curtMat, curtList, { shadow: false });
 
     // mushrooms (bioluminescent at night)
     const mushGeo = P.mushroomCluster(R('mush'), { count: 6 });
@@ -477,7 +481,7 @@ export default {
       if (L.inPond(x, z, -0.05)) continue;
       mushList.push({ x, y: L.groundH(x, z), z, s: rmu.range(1.2, 2), rot: rmu.next() * TAU });
     }
-    instance(mushGeo, mushMat, mushList, { shadow: false });
+    instance(mushGeo, mushMat, mushList, { shadow: false, mainOnly: true });
     // glow light sources for night (strongest clusters)
     const glowSources = mushList.map(m => new THREE.Vector4(m.x, m.y + 0.25, m.z, 0.35 * m.s));
     glowFernList.forEach(f => glowSources.push(new THREE.Vector4(f.x, f.y + 0.4, f.z, 0.3 * f.s)));
@@ -557,9 +561,10 @@ export default {
       const back = rc.range(0.8, 6);
       clumpsB.push({ x, y: L.cliffH(x) + rc.range(0.2, 1.5), z: L.cliffZ(x) - back, s: rc.range(1.6, 3), rot: rc.next() * TAU });
     }
-    const canopyA = instance(clumpGeoA, clumpMat, clumpsA, { shadow: false });
+    const canopyA = instance(clumpGeoA, clumpMat, clumpsA, { shadow: false, mainOnly: true });
     const canopyB = instance(clumpGeoB, clumpMat, clumpsB, { shadow: false });
 
+    mark('plants');
     /* ---------------- water ---------------- */
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const pond = buildPond(env, shared, L, { normal1: wN1, normal2: wN2, rtScale: q >= 0.9 ? 0.5 : q >= 0.6 ? 0.4 : 0.32 });
@@ -567,7 +572,7 @@ export default {
     const waterfall = buildWaterfall(shared, q);
     scene.add(waterfall);
     const plunge = new THREE.Vector3(FALL.x, WATER_Y, FALL.lipZ + 0.1 + 1.55 * fallT());
-    const mist = buildMist(shared, puff, q, R('mist'), { count: 70, origin: plunge.clone().add(new THREE.Vector3(0, 0.2, 0.3)), spread: 2.2 });
+    const mist = buildMist(shared, puff, q, R('mist'), { count: 34, origin: plunge.clone().add(new THREE.Vector3(0, 0.1, 0.2)), spread: 1.8 });
     scene.add(mist);
     const splash = buildSplash(shared, sprite, q, R('splash'), { count: 280, origin: plunge.clone().add(new THREE.Vector3(0, 0, 0.1)) });
     scene.add(splash);
@@ -575,6 +580,7 @@ export default {
 
     /* ---------------- sky, lights, environment ---------------- */
     const sky = buildSky(shared);
+    sky.renderOrder = 900; // after the opaque world so hidden sky pixels are never shaded
     scene.add(sky);
     const sun = new THREE.DirectionalLight(0xffffff, 3);
     sun.castShadow = env.shadows;
@@ -685,6 +691,7 @@ export default {
     });
     fishGeo.dispose();
 
+    mark('fx+fish');
     /* ---------------- residents ---------------- */
     const members = env.members;
     const fruits = new FruitSystem(shared, 8, env.shadows);
@@ -1043,7 +1050,7 @@ export default {
       shared.uLightDirW.value.copy(L0);
       let lc, li;
       if (useMoon) { lc = _c.copy(pal.moon); li = 0.55 * smoothstep(-3, -10, e); }
-      else { lc = _c.copy(s.sunColor); li = s.sunIntensity * 1.55; }
+      else { lc = _c.copy(s.sunColor); li = s.sunIntensity * 1.9; }
       li *= 1 - rainA * 0.82;
       sun.color.copy(lc);
       sun.intensity = li;
@@ -1059,7 +1066,7 @@ export default {
       fog.copy(pal.fogDay).lerp(pal.fogGold, golden * (morning ? 0.4 : 0.85)).lerp(pal.fogDawn, dawnMist * 0.8).lerp(pal.fogDusk, dusk).lerp(pal.fogNight, night).lerp(pal.fogRain, rainA * (1 - night * 0.7));
       fog.multiplyScalar(lerp(1, 0.75, rainA * (1 - night)));
       shared.uFogSunColor.value.copy(lc).multiplyScalar(Math.min(li, 3) * 0.32).add(_c.copy(fog).multiplyScalar(0.8));
-      shared.uFogDensity.value = 0.016 + dawnMist * 0.05 + rainA * 0.028 + night * 0.012 + dusk * 0.008;
+      shared.uFogDensity.value = 0.012 + dawnMist * 0.05 + rainA * 0.028 + night * 0.01 + dusk * 0.008;
       shared.uFogFalloff.value = lerp(0.09, 0.16, dawnMist);
       shared.uCookieMin.value = lerp(lerp(0.13, 0.3, night), 0.75, rainA);
       shared.uNight.value = smoothstep(-2, -10, e);
@@ -1084,13 +1091,18 @@ export default {
       splash.material.uniforms.uAmb.value.copy(amb);
       // fx
       const ru = godRays.material.uniforms;
-      ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.09 : (0.07 + golden * 0.08) * Math.min(li, 4));
+      ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.22 : (0.16 + golden * 0.16) * Math.min(li, 4));
       ru.uRayAmt.value = (1 - rainA * 0.85) * (useMoon ? smoothstep(-4, -12, e) : smoothstep(0, 8, e));
+      godRays.visible = ru.uRayAmt.value > 0.01;
       motes.material.uniforms.uAmt.value = (0.35 + day * 0.65) * (1 - rainA) * (1 - night * 0.7);
       motes.material.uniforms.uAmb.value.copy(amb);
       fireflies.material.uniforms.uAmt.value = smoothstep(2, -5, e) * (1 - rainA * 0.85);
       spores.material.uniforms.uAmt.value = shared.uNight.value * (1 - rainA * 0.5);
       rain.material.uniforms.uRain.value = rainA;
+      rain.visible = rainA > 0.002;
+      fireflies.visible = fireflies.material.uniforms.uAmt.value > 0.01;
+      spores.visible = spores.material.uniforms.uAmt.value > 0.01;
+      motes.visible = motes.material.uniforms.uAmt.value > 0.01;
       rain.material.uniforms.uAmb.value.copy(amb);
       mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.85 + rainA * 0.5 + night * 0.3 + dusk * 0.25 + 0.08, 0, 0.95);
       mistSheets.material.uniforms.uAmb.value.copy(amb);
@@ -1180,6 +1192,7 @@ export default {
 
     // initial pose
     update(1 / 60, 0);
+    mark('done');
 
     /* ---------------- instance API ---------------- */
     const pickPool = [];

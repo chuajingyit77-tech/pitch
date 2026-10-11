@@ -265,18 +265,18 @@ export function buildWaterfall(shared, q) {
         float lipFoam = smoothstep(0.25, 0.0, abs(tau - 0.02)) * 0.6;
         float bottom = smoothstep(uFallT - 0.35, uFallT, tau);
         float dens = lay > 1.5 ? 0.55 : (lay > 0.5 ? 0.42 : 1.0);
-        float alpha = smoothstep(0.32, 0.75, streak + 0.1 * (1.0 - lay) + bottom * 0.3) * edge * top * dens;
+        float alpha = smoothstep(0.36, 0.78, streak + 0.06 * (1.0 - lay) + bottom * 0.25) * edge * top * dens;
         alpha = max(alpha, rim * edge * smoothstep(0.45, 0.8, a2) * 0.6 * top);
-        alpha = clamp(alpha + lipFoam * edge * 0.5 + bottom * 0.35 * edge, 0.0, 0.97);
+        alpha = clamp(alpha + lipFoam * edge * 0.5 + bottom * 0.25 * edge, 0.0, 0.94);
         if (tau < 0.0) alpha *= 0.75 + 0.25 * smoothstep(0.4, 0.7, a1);
-        float white = clamp(streak * 1.25 + rim * 0.4 + bottom * 0.5 + lipFoam, 0.0, 1.0);
-        vec3 base = mix(vec3(0.42, 0.6, 0.58), vec3(1.0, 1.0, 0.98), white);
+        float white = clamp((streak - 0.25) * 1.6 + rim * 0.35 + bottom * 0.4 + lipFoam, 0.0, 1.0);
+        vec3 base = mix(vec3(0.3, 0.46, 0.45), vec3(0.95, 0.97, 0.95), white);
         vec3 N = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
         vec3 V = normalize(cameraPosition - vWorldP);
         float cookie = jgCookie(vWorldP);
         float wrap = max(dot(N, uLightDirW) * 0.5 + 0.5, 0.0);
         float back = pow(max(dot(-V, uLightDirW), 0.0), 4.0) * 1.2;
-        vec3 lit = uAmb * 1.15 + uLightCol * cookie * (wrap * 0.75 + back) * smoothstep(-0.1, 0.1, uLightDirW.y + 0.15);
+        vec3 lit = uAmb * 1.0 + uLightCol * cookie * (wrap * 0.55 + back * 0.8) * smoothstep(-0.1, 0.1, uLightDirW.y + 0.15);
         vec3 col = base * lit;
         // moonlight sheen on the streaks at night
         col += vec3(0.55, 0.72, 0.95) * uMoon * pow(white, 3.0) * (0.6 + 0.4 * sin(tau * 9.0 - t * 6.0 + s * 20.0));
@@ -307,13 +307,13 @@ export function buildMist(shared, puffTex, q, rng, { count = 70, origin, spread 
   for (let i = 0; i < n; i++) {
     const a = rng.next() * TAU, r = Math.sqrt(rng.next()) * spread;
     off[i * 3] = Math.cos(a) * r * 1.3; off[i * 3 + 1] = rng.range(-0.2, 0.4); off[i * 3 + 2] = Math.sin(a) * r * 0.8;
-    prm[i * 4] = rng.next(); prm[i * 4 + 1] = rng.range(0.07, 0.16); prm[i * 4 + 2] = rng.range(1.2, 3.2); prm[i * 4 + 3] = rng.next() * TAU;
+    prm[i * 4] = rng.next(); prm[i * 4 + 1] = rng.range(0.07, 0.16); prm[i * 4 + 2] = rng.range(1.0, 2.4); prm[i * 4 + 3] = rng.next() * TAU;
   }
   geo.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 3));
   geo.setAttribute('aPrm', new THREE.InstancedBufferAttribute(prm, 4));
   geo.instanceCount = n;
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...shared, tPuff: { value: puffTex }, uOrigin: { value: origin.clone() }, uAmb: { value: new THREE.Color(0.3, 0.35, 0.33) }, uDensity: { value: 1 }, uRise: { value: 3.5 } },
+    uniforms: { ...shared, tPuff: { value: puffTex }, uOrigin: { value: origin.clone() }, uAmb: { value: new THREE.Color(0.3, 0.35, 0.33) }, uDensity: { value: 1 }, uRise: { value: 2.6 } },
     vertexShader: /* glsl */`
       uniform vec3 uOrigin; uniform float uTime, uRise;
       attribute vec3 aOff; attribute vec4 aPrm;
@@ -327,7 +327,7 @@ export function buildMist(shared, puffTex, q, rng, { count = 70, origin, spread 
         p.z += age * 1.4;
         vWorldP = p;
         vec4 mv = viewMatrix * vec4(p, 1.0);
-        float size = aPrm.z * (0.6 + age * 1.6);
+        float size = aPrm.z * (0.5 + age * 1.1);
         float rot = aPrm.w + uTime * 0.05;
         vec2 c = position.xy;
         c = vec2(c.x * cos(rot) - c.y * sin(rot), c.x * sin(rot) + c.y * cos(rot));
@@ -342,7 +342,7 @@ export function buildMist(shared, puffTex, q, rng, { count = 70, origin, spread 
       void main(){
         float a = texture2D(tPuff, vUv).a;
         float life = smoothstep(0.0, 0.15, vAge) * (1.0 - smoothstep(0.55, 1.0, vAge));
-        a *= life * 0.32 * uDensity;
+        a *= life * 0.2 * uDensity;
         if (a < 0.003) discard;
         vec3 V = normalize(cameraPosition - vWorldP);
         float cookie = jgCookie(vWorldP);

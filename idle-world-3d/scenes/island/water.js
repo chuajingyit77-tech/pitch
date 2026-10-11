@@ -181,13 +181,14 @@ void main() {
   float lace = smoothstep(0.58, 0.8, vnoise(p * 2.4 + vec2(t * 0.07, -t * 0.05))) * (1.0 - smoothstep(0.0, 3.2, u)) * 0.45 * smoothstep(0.3, 0.6, fn);
   float ob = fld.b * smoothstep(0.3, 0.7, fn * 0.8 + 0.3 * sin(t * 1.6 + p.x * 1.7 + p.y * 1.3));
   float reefPulse = 0.5 + 0.5 * sin(t * 0.75 + p.x * 0.13 - p.y * 0.09);
-  float reef = fld.a * smoothstep(0.42, 0.75, fn * 0.65 + reefPulse * 0.55) * 0.85;
+  float reefBreak = smoothstep(0.45, 0.7, vnoise(p * 0.35 + vec2(t * 0.05, 0.0)));
+  float reef = fld.a * smoothstep(0.5, 0.85, fn * 0.7 + reefPulse * 0.45) * reefBreak * 0.6;
   float caps = smoothstep(0.62, 1.0, vCrest + (fn - 0.5) * 0.7) * smoothstep(5.0, 9.0, depth) * 0.55;
   float foam = clamp(foamEdge + lines + lace + ob * 0.85 + reef + caps, 0.0, 1.0) * 0.92;
 
   // bioluminescent plankton: the shore foam and the shallows glow blue at night
-  float bio = (foamEdge * 1.2 + lines * 1.4 + lace * 0.8 + ob * 0.8 + reef * 0.35) * (0.75 + 0.25 * sin(t * 2.3 + p.x * 3.1 + p.y * 2.3));
-  bio += sparkle(p * 2.7 + 3.0, t * 0.7, 0.16) * (1.0 - smoothstep(0.0, 5.0, u)) * 1.6;
+  float bio = (foamEdge * 1.0 + lines * 1.1 + lace * 0.3 + ob * 0.5 + reef * 0.06) * (0.7 + 0.3 * sin(t * 2.3 + p.x * 3.1 + p.y * 2.3));
+  bio += sparkle(p * 2.7 + 3.0, t * 0.7, 0.12) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4;
   vec3 glow = uGlow * bio;
 
   vec3 surf = refl * F + spec + sss * (1.0 - F);
