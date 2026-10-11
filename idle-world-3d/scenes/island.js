@@ -132,7 +132,7 @@ export default {
       // key light: the sun by day, the moon by night
       const sunVis = smoothstep(-3.5, 2.5, s.elevationDeg);
       const sunI = s.sunIntensity * 1.15 * sunVis;
-      const moonI = 0.42 * night;
+      const moonI = 0.36 * night;
       if (sunVis > 0.02) { sun.position.copy(sunDir).multiplyScalar(80); sun.color.copy(C.sunCol); sun.intensity = sunI + moonI * 0.2; }
       else { sun.position.copy(moonDir).multiplyScalar(80); sun.color.copy(C.moon); sun.intensity = moonI; }
       hemi.color.copy(s.skyAmbient);
@@ -174,7 +174,7 @@ export default {
       tod.lantern = smoothstep(3, -3, s.elevationDeg);
 
       // post
-      post.exposure = lerp(1.0, 1.45, night) * lerp(1, 0.94, golden);
+      post.exposure = lerp(1.0, 1.32, night) * lerp(1, 0.94, golden);
       post.bloom.strength = lerp(0.3, 0.8, night) + golden * 0.12;
       post.bloom.threshold = lerp(1.2, 0.5, night) + golden * 0.4;
       post.saturation = lerp(1.13, 1.04, night) + golden * 0.05;

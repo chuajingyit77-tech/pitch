@@ -216,12 +216,15 @@ export function createProps(env, rng, terrain, plan) {
   const winMat = new THREE.MeshStandardMaterial({ color: 0x2b2e33, emissive: 0xffb060, emissiveIntensity: 0, roughness: 0.3 });
   disposables.push(wallTex, wallMat, thatchTex, thatchMat, trimMat, winMat);
   const W = 2.7, D = 2.3, Hh = 1.95, plat = 0.32;
-  const add = (geo, mat, x, y, z, ry = 0, cast = true) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z); m.rotation.y = ry;
-    m.castShadow = cast; m.receiveShadow = true;
-    hut.add(m); disposables.push(geo);
-    return m;
+  // collect hut parts per material and merge them into a handful of meshes (few draw calls)
+  const parts = new Map();
+  const add = (geo, mat, x, y, z, ry = 0) => {
+    if (geo.index === null) geo = geo; // all primitives here are indexed
+    geo.rotateY(ry);
+    geo.translate(x, y, z);
+    if (!parts.has(mat)) parts.set(mat, []);
+    parts.get(mat).push(geo);
+    return geo;
   };
   add(new THREE.BoxGeometry(W + 1.0, 0.14, D + 1.5), wallMat, 0, plat, 0.45);          // platform + porch
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(new THREE.CylinderGeometry(0.08, 0.09, plat + 0.6, 7), trimMat, x * (W + 0.9) / 2, plat / 2 - 0.3, z * (D + 1.4) / 2 + 0.45);
@@ -240,12 +243,19 @@ export function createProps(env, rng, terrain, plan) {
   const roofGeo = new THREE.ConeGeometry(2.75, 1.6, 4, 3, true);
   roofGeo.rotateY(Math.PI / 4);
   roofGeo.scale(1.06, 1, 1.2);
-  const roof = add(roofGeo, thatchMat, 0, plat + Hh + 0.85, 0.25);
-  roof.castShadow = true;
+  add(roofGeo, thatchMat, 0, plat + Hh + 0.85, 0.25);
   const roofTop = new V3(0, plat + Hh + 1.68, 0.25);
   add(new THREE.SphereGeometry(0.16, 8, 6), trimMat, roofTop.x, roofTop.y - 0.05, roofTop.z);
   // little bench + surfboard-ish plank leaning on the wall
   add(new THREE.BoxGeometry(1.1, 0.08, 0.36), trimMat, 0.75, plat + 0.45, -0.2 + D / 2 + 0.5);
+  for (const [mat, list] of parts) {
+    const g = mergeGeometries(list);
+    list.forEach(x => x.dispose());
+    const m = new THREE.Mesh(g, mat);
+    m.castShadow = mat !== winMat; m.receiveShadow = true;
+    hut.add(m);
+    disposables.push(g);
+  }
   hut.updateMatrixWorld(true);
   perches.push(hut.localToWorld(roofTop.clone().add(new V3(0, 0.12, 0))));
   group.add(hut);
