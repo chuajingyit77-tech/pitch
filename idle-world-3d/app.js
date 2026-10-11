@@ -712,7 +712,7 @@ function frame(now) {
   const rawDt = Math.min(0.1, (now - last) / 1000);
   last = now;
   // idle state
-  const idleNow = performance.now() - lastInput > 8000 && !$('settings').classList.contains('open') && document.activeElement?.tagName !== 'INPUT';
+  const idleNow = !(TEST && TEST.noIdle) && performance.now() - lastInput > 8000 && !$('settings').classList.contains('open') && document.activeElement?.tagName !== 'INPUT';
   if (idleNow !== idle) { idle = idleNow; document.body.classList.toggle('idle', idle); }
   // power save: 30 fps in screensaver mode
   if (idle && save.powerSave && !TEST) { acc += rawDt; if (acc < 1 / 31) return; }
