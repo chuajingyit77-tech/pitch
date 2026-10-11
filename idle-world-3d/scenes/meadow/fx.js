@@ -368,7 +368,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
         if (d.vel.lengthSq() > 0.04) d.heading = Math.atan2(d.vel.x, d.vel.z);
         e.set(0, d.heading, 0);
         tmpQ.setFromEuler(e);
-        sc.setScalar(1.0);
+        sc.setScalar(1.5);
         mtx.compose(d.pos, tmpQ, sc);
         dfBody.setMatrixAt(i, mtx); dfWing.setMatrixAt(i, mtx);
       }

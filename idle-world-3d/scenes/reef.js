@@ -108,9 +108,9 @@ export default {
       return out.set((d.x / h) * hw, yw, (d.z / h) * hw);
     };
     const pal = {
-      day: { L0: lin(0.022, 0.21, 0.4), glow: lin(0.9, 1.0, 0.95), light: 5.2, lightCol: C('#f4fbff'), hemi: 0.9, sky: C('#b8dcdc'), gnd: C('#5c6658'), shaft: lin(0.55, 0.85, 0.95), caus: 1.0 },
-      gold: { L0: lin(0.05, 0.16, 0.22), glow: lin(1.7, 0.85, 0.42), light: 2.2, lightCol: C('#ffd2a0'), hemi: 0.95, sky: C('#a6c4c4'), gnd: C('#45504c'), shaft: lin(1.0, 0.7, 0.4), caus: 0.75 },
-      night: { L0: lin(0.002, 0.012, 0.04), glow: lin(0.25, 0.4, 0.8), light: 0.5, lightCol: C('#9db8ff'), hemi: 0.32, sky: C('#3a5c9a'), gnd: C('#0c1a2a'), shaft: lin(0.18, 0.3, 0.55), caus: 0.3 },
+      day: { L0: lin(0.022, 0.21, 0.4), glow: lin(0.9, 1.0, 0.95), light: 5.6, lightCol: C('#f4fbff'), hemi: 0.78, sky: C('#b8dcdc'), gnd: C('#5c6658'), shaft: lin(0.55, 0.85, 0.95), caus: 1.0 },
+      gold: { L0: lin(0.06, 0.14, 0.2), glow: lin(2.4, 1.0, 0.42), light: 3.0, lightCol: C('#ffc890'), hemi: 0.75, sky: C('#b0b8b0'), gnd: C('#4a4840'), shaft: lin(1.25, 0.72, 0.36), caus: 0.8 },
+      night: { L0: lin(0.004, 0.02, 0.065), glow: lin(0.3, 0.45, 0.9), light: 0.75, lightCol: C('#9db8ff'), hemi: 0.45, sky: C('#4a6aa8'), gnd: C('#10203a'), shaft: lin(0.22, 0.36, 0.65), caus: 0.35 },
     };
     const mkP = () => ({ L0: lin(0, 0, 0), glow: lin(0, 0, 0), light: 0, lightCol: C('#fff'), hemi: 0, sky: C('#fff'), gnd: C('#fff'), shaft: lin(0, 0, 0), caus: 0 });
     const mixP = (a, b, t, out) => {
@@ -129,7 +129,7 @@ export default {
       const s = env.sun();
       tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       mixP(pal.night, pal.day, s.day, tmpP);
-      mixP(tmpP, pal.gold, s.golden * 0.85, cur);
+      mixP(tmpP, pal.gold, Math.min(1, s.golden * 1.1), cur);
       const useSun = s.elevationDeg > -3;
       refract(useSun ? s.dir : s.moonDir, tod.sunW);
       tod.axis.copy(tod.sunW).negate();
@@ -137,7 +137,7 @@ export default {
       W.uL0.value.copy(cur.L0);
       W.uGlow.value.copy(cur.glow).multiplyScalar(useSun ? 1 : 0.5);
       W.uCaustic.value = cur.caus;
-      W.uFluor.value = smoothstep(0.2, 0.9, s.night);
+      W.uFluor.value = smoothstep(0.2, 0.9, s.night) * 0.5;
       sunL.color.copy(cur.lightCol);
       sunL.intensity = cur.light;
       sunL.position.copy(center).addScaledVector(tod.sunW, 45);
@@ -204,6 +204,7 @@ export default {
     let time = 0;
     return {
       scene, camera, view, post,
+      debug: { anemones: reef.anemones, bommies: rocks.bommies, life, manta, eagle, hm },
       update(dt, t) {
         time += dt;
         W.uTime.value = time;
@@ -220,7 +221,7 @@ export default {
         jellies.update(dt, time, tod.night, (x, z) => hm.at(x, z));
         post.bloom.strength = lerp(0.3, 0.8, tod.night);
         post.bloom.threshold = lerp(0.8, 0.38, tod.night);
-        post.exposure = lerp(1.0, 1.25, tod.night);
+        post.exposure = lerp(1.0, 1.3, tod.night);
       },
       feed(raycaster) {
         const hit = rayHit(raycaster.ray, _hit);

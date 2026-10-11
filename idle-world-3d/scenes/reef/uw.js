@@ -447,7 +447,7 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
         p = c + mod(p - c, uBox);
         vec4 mv = viewMatrix * vec4(p, 1.0);
         float dist = -mv.z;
-        float size = 0.018 + s * s * 0.05;
+        float size = 0.022 + s * s * 0.06;
         gl_PointSize = clamp(size * uScale / max(dist, 0.1), 1.0, 28.0);
         float edge = 1.0 - smoothstep(uBox * 0.32, uBox * 0.5, length(p - cameraPosition));
         vA = edge * smoothstep(0.4, 1.6, dist) * step(p.y, uSurfY - 0.1);
@@ -466,7 +466,7 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
         float r = dot(c, c);
         if (r > 1.0) discard;
         float a = exp(-r * 3.5) * vA;
-        vec3 lit = uwLc(vWp.y) * 2.4 * uSnowI + vec3(0.55, 0.65, 0.6) * uSnowI * 0.06;
+        vec3 lit = uwLc(vWp.y) * 3.2 * uSnowI + vec3(0.55, 0.65, 0.6) * uSnowI * 0.08;
         vec3 glow = vec3(0.25, 0.95, 1.3) * vTw * uBio * 6.0 + vec3(0.1, 0.5, 0.8) * vBio * uBio * 0.08;
         vec3 col = (lit + glow) * a;
         gl_FragColor = vec4(uwAtten(col, vWp), 1.0);

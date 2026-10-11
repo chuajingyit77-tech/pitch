@@ -79,7 +79,7 @@ export default {
     LANTERNS.forEach(l => { l.y = heightAt(l.x, l.z); });
     // maples: hero tree beside the torii, others layered behind
     const treeSpots = [
-      { x: lay.range(-5.6, -4.4), z: lay.range(-3.6, -1.6), s: lay.range(1.05, 1.2) },
+      { x: lay.range(-6.4, -5.4), z: lay.range(-3.6, -1.6), s: lay.range(1.05, 1.2) },
       { x: lay.range(5.5, 8.0), z: lay.range(-9.5, -6.0), s: lay.range(0.9, 1.05) },
       { x: lay.range(-17, -12), z: lay.range(-20, -12), s: lay.range(1.0, 1.25) },
       { x: lay.range(13, 19), z: lay.range(-30, -20), s: lay.range(1.1, 1.3) },
@@ -179,10 +179,10 @@ export default {
       const tmat = new THREE.MeshLambertMaterial({ color: '#ffffff' });
       patchMaterial(tmat, {
         key: 'meadowTerrain',
-        uniforms: { ...windU, uPath: { value: pathU }, uPathW: { value: 0.58 }, uNearCol: { value: new THREE.Color('#3a3420') }, uFarCol: { value: new THREE.Color('#a8884c') }, uDirtCol: { value: new THREE.Color('#7c6548') } },
+        uniforms: { ...windU, uPath: { value: pathU }, uPathW: { value: 0.58 }, uNearCol: { value: new THREE.Color('#3e3622') }, uFarCol: { value: new THREE.Color('#8c7442') }, uFarCol2: { value: new THREE.Color('#4e4a2a') }, uDirtCol: { value: new THREE.Color('#7c6548') } },
         vertexHeader: '',
         fragmentHeader: WIND_GLSL.replace(/uniform vec4 uPress\[4\];/, 'uniform vec4 uPress[4];') + `
-          uniform vec2 uPath[24]; uniform float uPathW; uniform vec3 uNearCol, uFarCol, uDirtCol;
+          uniform vec2 uPath[24]; uniform float uPathW; uniform vec3 uNearCol, uFarCol, uFarCol2, uDirtCol;
           float pathDistF(vec2 p){ float d = 1e9; for (int i = 0; i < 23; i++){ vec2 a = uPath[i], b = uPath[i + 1]; vec2 pa = p - a, ba = b - a;
             float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); d = min(d, length(pa - ba * h)); } return d; }`,
         fragment: {
@@ -193,7 +193,9 @@ export default {
               float pat = mNoise(wp.xz * 0.13) * 0.6 + mNoise(wp.xz * 0.55 + 3.0) * 0.4;
               vec3 nearC = uNearCol * (0.7 + 0.6 * pat);
               float g = gustAt(wp.xz);
-              vec3 farC = uFarCol * (0.78 + 0.34 * pat + 0.3 * g);
+              float big = mNoise(wp.xz * 0.012 + 7.0) * 0.6 + mNoise(wp.xz * 0.035) * 0.4;
+              float streak = mNoise(vec2(wp.x * 0.02, wp.z * 0.2));
+              vec3 farC = mix(uFarCol, uFarCol2, smoothstep(0.45, 0.8, big)) * (0.72 + 0.3 * pat + 0.18 * streak + 0.32 * g);
               vec3 c = mix(nearC, farC, smoothstep(12.0, 55.0, dc));
               if (dot(wp.xz, wp.xz) < 3600.0) {
                 float pd = pathDistF(wp.xz);
@@ -263,7 +265,7 @@ export default {
             const nP = grng.chance(0.35) ? 2 : 1;
             for (let k = 0; k < nP; k++) {
               const ph = H * grng.range(1.15, 1.45);
-              plumes.push({ x: x + grng.range(-0.15, 0.15) * rec.sx, y, z: z + grng.range(-0.15, 0.15) * rec.sx, rot: grng.range(0, TAU), sx: ph * grng.range(0.85, 1.1) * (R.xz > 1.5 ? 1.25 : 1), sy: ph, inst: [grng.range(-0.3, 0.3), grng.next(), grng.next(), grng.next()], d: rec.d });
+              plumes.push({ x: x + grng.range(-0.15, 0.15) * rec.sx, y, z: z + grng.range(-0.15, 0.15) * rec.sx, rot: Math.atan2(-baseWind.y, baseWind.x) + grng.range(-0.7, 0.7), sx: ph * grng.range(0.85, 1.1) * (R.xz > 1.5 ? 1.25 : 1), sy: ph, inst: [grng.range(-0.3, 0.3), grng.next(), grng.next(), grng.next()], d: rec.d });
             }
           }
         }
@@ -391,7 +393,7 @@ export default {
       fragment: {
         '#include <map_fragment>': `$&
           float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-          diffuseColor.rgb = vec3(1.0, 0.965, 0.91) * (0.42 + 0.95 * smoothstep(0.02, 0.55, lum));`,
+          diffuseColor.rgb = vec3(0.97, 0.94, 0.88) * (0.26 + 0.78 * smoothstep(0.02, 0.6, lum));`,
         '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance += vec3(0.62, 0.78, 1.0) * uGlow * (0.35 + 0.65 * diffuseColor.r);',
       },
     });
@@ -625,7 +627,7 @@ export default {
         if (this.white) {
           const vis = world.night > 0.35 || world.dusk > 0.5;
           const a = smoothstep(0.35, 0.9, Math.max(world.night, world.dusk * 0.6));
-          whiteU.uGlow.value = 0.12 + 0.55 * a;
+          whiteU.uGlow.value = 0.5 * a;
           this.wisps.forEach((s, i) => {
             s.visible = vis;
             const ang = t * 0.7 + i * TAU / 3;
@@ -821,7 +823,7 @@ export default {
       sunDirV.copy(s.dir);
       // artistic moon: rises on the left in the evening, crosses in front, sets on the right before dawn
       const np = (((hours - 18) % 24) + 24) % 24 / 12;
-      moonDir.set(-0.85 + 1.7 * clamp(np, 0, 1), 0.3 + 0.32 * Math.sin(Math.PI * clamp(np, 0, 1)), -1).normalize();
+      moonDir.set(-0.95 + 1.7 * clamp(np, 0, 1), 0.1 + 0.2 * Math.sin(Math.PI * clamp(np, 0, 1)), -1).normalize();
       const night = s.night, day = s.day;
       world.night = night; world.day = day; world.golden = s.golden;
       world.dusk = smoothstep(-9, -1, el) * (1 - smoothstep(0, 4, el));
@@ -874,7 +876,8 @@ export default {
       shrineGlow.material.opacity = lampOn * 0.6; shrineGlow.visible = lampOn > 0.01;
       hokora.userData.doorMat.emissiveIntensity = lampOn * 0.6;
       // grass tuning per time of day
-      colors.uGustBright.value = lerp(0.18, 0.42, day);
+      colors.uGustBright.value = lerp(0.2, 0.55, day);
+      plumeMat.userData.U.uTransl.value = lerp(0.5, 0.2, night);
       // post
       post.exposure = pal.exp;
       post.bloom.strength = 0.32 + 0.3 * s.golden + 0.25 * night;

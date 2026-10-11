@@ -113,6 +113,7 @@ export function buildGodRays(shared, anchors, rng) {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
@@ -142,8 +143,9 @@ function pointsMaterial(shared, sprite, kind) {
           p.y += sin(t * 0.21 + ph) * 0.25;
           vWorldP = p;
           float lit = jgCookie(p);
-          lit = smoothstep(0.35, 1.0, lit);
-          vCol = uLightCol * lit * 1.4 + uAmb * 0.25;
+          lit = smoothstep(0.45, 1.0, lit);
+          lit *= lit;
+          vCol = uLightCol * lit * 1.1 + uAmb * 0.05;
           bright = 0.5 + 0.5 * sin(t * 1.7 + ph * 3.0);
           vA = (0.35 + 0.65 * bright) * uAmt;
         #elif ${kind === 'fireflies' ? 1 : 0}
@@ -243,6 +245,7 @@ export function buildRain(shared, q, rng, center) {
       }`,
     transparent: true,
     depthWrite: false,
+    side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;

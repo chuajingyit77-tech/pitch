@@ -232,18 +232,21 @@ function anemoneTentacleGeo(len = 0.3) {
 }
 
 function softCoralGeo(rng, stem, blossom) {
+  // Carnation tree coral: a translucent trunk, a few branches, each ending in a lumpy
+  // cauliflower crown of polyp clusters.
   const parts = [];
-  const trunkH = rng.range(0.32, 0.5);
-  const tr = strip(new THREE.CylinderGeometry(0.045, 0.085, trunkH, 8, 3, false));
+  const nn = createNoise(Math.floor(rng.next() * 1e6));
+  const trunkH = rng.range(0.3, 0.46);
+  const tr = strip(new THREE.CylinderGeometry(0.04, 0.08, trunkH, 8, 3, false));
   tr.translate(0, trunkH / 2, 0);
   paint(tr, () => [stem, 0.1]);
   parts.push(tr);
   const nb = rng.int(5, 8);
   for (let b = 0; b < nb; b++) {
     const a = (b / nb) * TAU + rng.range(-0.3, 0.3);
-    const h0 = trunkH * rng.range(0.5, 0.95);
-    const dir = new THREE.Vector3(Math.cos(a) * rng.range(0.6, 1.1), rng.range(0.7, 1.2), Math.sin(a) * rng.range(0.6, 1.1)).normalize();
-    const L = rng.range(0.16, 0.3);
+    const h0 = trunkH * rng.range(0.45, 0.95);
+    const dir = new THREE.Vector3(Math.cos(a) * rng.range(0.6, 1.1), rng.range(0.7, 1.25), Math.sin(a) * rng.range(0.6, 1.1)).normalize();
+    const L = rng.range(0.14, 0.28);
     const br = strip(new THREE.CylinderGeometry(0.014, 0.026, L, 6, 1, true));
     br.translate(0, L / 2, 0);
     br.applyQuaternion(_q.setFromUnitVectors(_up, dir));
@@ -251,21 +254,22 @@ function softCoralGeo(rng, stem, blossom) {
     paint(br, () => [stem, 0.1]);
     parts.push(br);
     const end = new THREE.Vector3(0, h0, 0).addScaledVector(dir, L);
-    const nc = rng.int(11, 17);
-    for (let k = 0; k < nc; k++) {
-      const r = rng.range(0.035, 0.062);
-      const sp = strip(new THREE.SphereGeometry(r, 6, 4));
-      const o = rng.onSphere(new THREE.Vector3()).multiplyScalar(rng.range(0.02, 0.1));
-      o.y = Math.abs(o.y) * 0.8;
-      sp.translate(end.x + o.x, end.y + o.y, end.z + o.z);
-      const cc = blossom.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.08, 0.06));
-      paint(sp, () => [cc, 0.8]);
-      parts.push(sp);
+    const R = rng.range(0.07, 0.12);
+    const crown = strip(new THREE.SphereGeometry(1, 12, 9));
+    const p = crown.getAttribute('position'), v = new THREE.Vector3();
+    const off = rng.range(0, 100);
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const k = 1 + nn.noise3(v.x * 2.6 + off, v.y * 2.6, v.z * 2.6) * 0.32 + nn.noise3(v.x * 6 + off, v.y * 6, v.z * 6) * 0.12;
+      p.setXYZ(i, end.x + v.x * R * k, end.y + (v.y * 0.8 + 0.25) * R * k, end.z + v.z * R * k);
     }
+    crown.computeVertexNormals();
+    const cc = blossom.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.06, 0.05));
+    paint(crown, (x, y) => [_c.copy(cc).multiplyScalar(lerp(0.75, 1.1, clamp((y - end.y) / R * 0.5 + 0.5, 0, 1))).clone(), 0.8]);
+    parts.push(crown);
   }
   const g = mergeGeometries(parts);
   parts.forEach(p => p.dispose());
-  g.computeVertexNormals();
   g.computeBoundingSphere();
   return g;
 }
@@ -678,18 +682,19 @@ export function buildReef(ctx) {
 
   /* ---- staghorn thickets ---- */
   const stagPal = [
-    [C('#9a6c3c'), C('#f6e2b0')], [C('#6a4a8e'), C('#dcb0ff')], [C('#3f6f98'), C('#86d8ff')], [C('#a85a72'), C('#ffb4cc')], [C('#77803a'), C('#dcf27e')],
+    [C('#9a6c3c'), C('#f6e2b0')], [C('#6a4a8e'), C('#dcb0ff')], [C('#3f6f98'), C('#86d8ff')], [C('#a85a72'), C('#ffb4cc')], [C('#77803a'), C('#dcf27e')], [C('#8a5a2a'), C('#ffcf7a')],
   ];
+  const stagWeights = [0, 0, 5, 5, 1, 2, 3, 4, 4];
   const stagGeos = stagPal.map(([b, t], i) => staghornGeo(rng.fork('stag' + i), b, t));
   const stagMat = stdMat(W, { vertexColors: true, roughness: 0.72 }, { key: 'stag' });
   addDetail(stagMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'polyp' });
-  addFluor(stagMat, W, '#47ffb0', 0.9, 'stag');
+  addFluor(stagMat, W, '#47ffb0', 0.7, 'stag');
   const stagLists = stagGeos.map(() => []);
   const thickets = [];
   for (let c = N(13); c > 0; c--) {
     const s0 = take(reefSpots, s2 => nrm(s2).y > 0.55, 0.55);
     if (!s0) break;
-    const t = rng.int(0, stagGeos.length - 1);
+    const t = rng.pick(stagWeights);
     const n = rng.int(2, 5);
     const colonies = [s0];
     for (let k = 0; k < n * 3 && colonies.length < n; k++) {
@@ -730,18 +735,19 @@ export function buildReef(ctx) {
   const fanG = new THREE.PlaneGeometry(1.5, 1.4, 6, 6);
   fanG.translate(0, 0.68, 0);
   const fans = [];
-  const fanCols = [C('#b03cc8'), C('#d84aa8'), C('#9a3fe0'), C('#ff5a3a'), C('#ffb02a'), C('#e8303a')];
+  const fanCols = [C('#b03cc8'), C('#d84aa8'), C('#9a3fe0'), C('#ff5a3a'), C('#ffb02a'), C('#e8303a'), C('#ff7a2a')];
   for (let i = N(26); i > 0; i--) {
     const s = rng.chance(0.8) ? take(reefSpots, s2 => nrm(s2).y > 0.4, 0.35) : take(sandSpots, () => true, 0.35);
     if (!s) continue;
     const sc = rng.range(0.8, 1.5);
     const yaw = Math.atan2(curDir.x, curDir.y) + rng.range(-0.35, 0.35);
-    fans.push({ pos: new THREE.Vector3(s.x, s.y - 0.05, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.12, 0.12), yaw, rng.range(-0.1, 0.1))).clone(), scale: new THREE.Vector3(sc, sc * rng.range(0.85, 1.15), sc), color: rng.chance(0.6) ? rng.pick(fanCols.slice(0, 3)) : rng.pick(fanCols.slice(3)) });
+    fans.push({ pos: new THREE.Vector3(s.x, s.y - 0.05, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.12, 0.12), yaw, rng.range(-0.1, 0.1))).clone(), scale: new THREE.Vector3(sc, sc * rng.range(0.85, 1.15), sc), color: rng.chance(0.4) ? rng.pick(fanCols.slice(0, 3)) : rng.pick(fanCols.slice(3)) });
   }
   group.add(instanced(fanG, fanMat, fans));
 
   /* ---- soft tree corals ---- */
   const softMat = stdMat(W, { vertexColors: true, roughness: 0.6 }, { key: 'soft' });
+  addDetail(softMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1.4, key: 'softpolyp' });
   addSway(softMat, W, { height: 0.6, amount: 0.06, stiff: 1.3, flutter: 0.01, key: 'soft' });
   addFluor(softMat, W, '#ff5aa0', 0.8, 'soft');
   const softDefs = [[C('#f1d6dc'), C('#ff3f7f')], [C('#f3e3d0'), C('#ff7a2a')], [C('#e8d8f0'), C('#b44ae8')], [C('#f6e8d8'), C('#ffcf3a')], [C('#f6dce0'), C('#e8203a')]];
@@ -770,11 +776,11 @@ export function buildReef(ctx) {
   })();
   const moundMat = stdMat(W, { vertexColors: true, roughness: 0.7 }, { key: 'mound' });
   addDetail(moundMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'mound' });
-  addFluor(moundMat, W, '#36ffd0', 0.7, 'mound');
-  const moundCols = [C('#b58cd8'), C('#d9b04a'), C('#8ccf9a'), C('#e8909c'), C('#7fb6e8'), C('#c9d46a'), C('#e09a5a'), C('#ff8a6a')];
+  addFluor(moundMat, W, '#36ffd0', 0.35, 'mound');
+  const moundCols = [C('#b58cd8'), C('#d9b04a'), C('#8ccf9a'), C('#e8909c'), C('#c9d46a'), C('#e09a5a'), C('#ff8a6a'), C('#c8a060'), C('#a0b850')];
   const mounds = [];
-  for (let i = N(150); i > 0; i--) {
-    const s = rng.chance(0.85) ? take(reefSpots, () => true, 0.2) : take(sandSpots, () => true, 0.25);
+  for (let i = N(190); i > 0; i--) {
+    const s = rng.chance(0.88) ? take(reefSpots, () => true, 0.2) : take(sandSpots, () => true, 0.25);
     if (!s) continue;
     const r = rng.range(0.13, 0.36);
     mounds.push({ pos: new THREE.Vector3(s.x, s.y - r * 0.15, s.z), quat: standOn(nrm(s), rng.range(0, TAU), 0.25), scale: new THREE.Vector3(r * rng.range(0.9, 1.4), r, r * rng.range(0.9, 1.4)), color: rng.pick(moundCols).clone().offsetHSL(0, 0, rng.range(-0.06, 0.04)) });

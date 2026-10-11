@@ -157,15 +157,15 @@ void main() {
   // rougher, blurrier reflections over the open swell; crisp over the calm lagoon
   float rough = smoothstep(1.0, 6.0, depth);
   vec2 ruv = vMirror.xy / vMirror.w + N.xz * mix(0.03, 0.075, rough) / (1.0 + dist * 0.006);
-  vec3 refl = mix(uSkyFallback, texture2D(tMirror, ruv, mix(0.5, 3.2, rough)).rgb, uMirrorOn);
+  vec3 refl = mix(uSkyFallback, texture2D(tMirror, ruv, mix(0.5, 4.0, rough)).rgb, uMirrorOn);
 
   // sun + moon speculars and a glittering path made of discrete sparkles
   vec3 R = reflect(-V, N);
   float sd = max(dot(R, uSunDir), 0.0);
   float spk = sparkle(p * 3.1, t, 0.085) + sparkle(p * 5.7 + 17.0, t * 1.3, 0.07) * 0.8;
-  vec3 spec = uSunCol * (pow(sd, 1200.0) * 9.0 + pow(sd, 160.0) * 0.45 + pow(sd, 14.0) * spk * 7.0 * farK);
+  vec3 spec = uSunCol * (pow(sd, 1200.0) * 9.0 + pow(sd, 160.0) * 0.45 + pow(sd, 48.0) * spk * 14.0 * farK);
   float md = max(dot(R, uMoonDir), 0.0);
-  spec += uMoonCol * (pow(md, 700.0) * 7.0 + pow(md, 10.0) * spk * 5.0 * farK);
+  spec += uMoonCol * (pow(md, 700.0) * 7.0 + pow(md, 30.0) * spk * 9.0 * farK);
 
   // subsurface glow through the swell crests (Sea of Thieves turquoise)
   float crest = clamp(vCrest * 1.15, 0.0, 1.0);

@@ -574,7 +574,7 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
   const flamMat = fMesh.material.clone();
   flamMat.vertexColors = true; flamMat.roughness = 0.7;
   disposables.push(flamMat);
-  const flock = { active: false, t: 0, cooldown: 3, birds: [], origin: new V3(), dir: new V3(), y: 22 };
+  const flock = { active: false, t: 0, cooldown: 0, birds: [], origin: new V3(), dir: new V3(), y: 22 };
   const NF = 7;
   for (let i = 0; i < NF; i++) {
     const root = new THREE.Group();
@@ -605,7 +605,7 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
         const a = frng.range(0, TAU);
         const off = frng.range(-14, 14);
         flock.dir.set(Math.cos(a), 0, Math.sin(a));
-        flock.origin.set(-Math.cos(a) * 62 - Math.sin(a) * off, frng.range(16, 26), -Math.sin(a) * 62 + Math.cos(a) * off);
+        flock.origin.set(-Math.cos(a) * 42 - Math.sin(a) * off, frng.range(14, 22), -Math.sin(a) * 42 + Math.cos(a) * off);
         for (const b of flock.birds) b.root.visible = true;
       }
       return;
@@ -622,7 +622,7 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
       b.root.position.y += Math.sin(t * 0.9 + i) * 0.25;
       b.root.rotation.set(0, yaw, Math.sin(t * 0.7 + i) * 0.06);
     }
-    if (dist > 135) {
+    if (dist > 100) {
       flock.active = false; flock.cooldown = frng.range(25, 55);
       for (const b of flock.birds) b.root.visible = false;
     }
@@ -704,18 +704,18 @@ function createTurtles(env, ctx, max) {
       out.copy(props.dockEnd).addScaledVector(props.dockPerp, tr.r.range(-3.5, 3.5)).addScaledVector(props.dockDir, tr.r.range(-1, 3));
       return out;
     }
-    for (let k = 0; k < 12; k++) {
+    for (let k = 0; k < 16; k++) {
       const a = Math.atan2(tr.pos.z, tr.pos.x) + tr.r.range(-0.7, 0.7);
       const lw = terrain.lagoonW(a);
-      terrain.pointAt(a, -tr.r.range(3.5, lw + 1.5), out);
-      if (out.y < -0.65 && !props.onDock(out.x, out.z)) return out;
+      terrain.pointAt(a, -tr.r.range(2.5, Math.max(3, lw - 0.8)), out);
+      if (out.y < -0.42 && out.y > -1.8 && !props.onDock(out.x, out.z)) return out;
     }
     return out;
   }
   function add(member) {
     const r = makeRng(member.seed || 7);
     const a = r.range(0, TAU);
-    const p = terrain.pointAt(a, -r.range(5, 8));
+    const p = terrain.pointAt(a, -r.range(3, Math.max(3.2, terrain.lagoonW(a) - 1)));
     const tr = {
       member, r, pos: new V3(p.x, -0.45, p.z), vel: new V3(), yaw: r.range(0, TAU), pitch: 0, roll: 0,
       phase: r.range(0, TAU), target: new V3(), state: 'swim', timer: r.range(20, 45), food: null, biteT: 0, surface: 0, radius: 0.7,
@@ -744,7 +744,7 @@ function createTurtles(env, ctx, max) {
       if (tr.food && !fx.foods.includes(tr.food)) { tr.food = null; tr.state = 'swim'; lagoonTarget(tr, tr.target, hungry); }
       let tgt = tr.target, speed = 0.75, wantY;
       const seabed = H(tr.pos.x, tr.pos.z);
-      const cruiseY = clamp(seabed + 0.35, -0.75, -0.32);
+      const cruiseY = clamp(seabed + 0.3, -0.55, -0.22);
       wantY = cruiseY;
       switch (tr.state) {
         case 'swim': {
@@ -847,7 +847,7 @@ function buildDolphinGeometry() {
     return lerp(r0, r1, k);
   };
   const pos = [], col = [], idx = [];
-  const dark = new THREE.Color('#40505f'), mid = new THREE.Color('#7f8e9b'), belly = new THREE.Color('#eef0f2');
+  const dark = new THREE.Color('#2f3c48'), mid = new THREE.Color('#5f6f7c'), belly = new THREE.Color('#d6d8dc');
   const c = new THREE.Color();
   for (let i = 0; i <= NS; i++) {
     const s = i / NS;
@@ -907,7 +907,7 @@ function createDolphins(env, ctx, max) {
   const aDol = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4);
   aDol.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('aDol', aDol);
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.0, envMapIntensity: 1.1 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.0, envMapIntensity: 0.55 });
   const bend = {
     key: 'dolphinBend',
     vertexHeader: 'attribute vec4 aDol;',
@@ -955,7 +955,7 @@ function createDolphins(env, ctx, max) {
     for (const d of list) {
       const m = d.member;
       const hungry = m ? env.fullness(m) < 0.3 : false;
-      const scale = m ? 0.92 + (m.size - 1) * 0.5 : 0.9;
+      const scale = (m ? 0.92 + (m.size - 1) * 0.5 : 0.9) * 1.2;
       d.radius = 1.1 * scale;
       // food
       if (!d.food && d.state === 'pod') {

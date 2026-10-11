@@ -275,6 +275,7 @@ export default {
       addMember: m => fauna.addMember(m),
       creatures: () => fauna.creatures(),
       resize() { water.resize(); },
+      _debug: { terrain, props, fx, fauna, water, sky },
       dispose() {
         water.dispose(); sky.dispose(); terrain.dispose(); flora.dispose(); props.dispose(); fx.dispose(); fauna.dispose();
         normalTex.dispose();

@@ -96,6 +96,7 @@ function orientUp(geo) {
  * Returns { roof: geometry (top tiles + underside + fascia, attrs position/normal/color/aTile/aTileUv), ridges: [curves], top: ring }.
  */
 export function roofGeometry(poly, { height = 2, vMax = 1, K = 12, p = 1.75, lift = 0.5, flare = 0.3, seg = 8, thick = 0.14, tile = COL.tileGreen, under = COL.rafter, fascia = COL.redDark } = {}) {
+  poly = ensureCCW(poly);
   const n = poly.length, M = maxInset(poly);
   const [cx, cz] = polyCentroid(poly);
   const sideLen = poly.map((a, i) => { const b = poly[(i + 1) % n]; return Math.hypot(b[0] - a[0], b[1] - a[1]); });

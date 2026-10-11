@@ -300,7 +300,7 @@ export function puffTexture(seed) {
 export function driedFishTexture() {
   return canvasTexture(128, 64, (g, w, h) => {
     const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, '#6d4420'); gr.addColorStop(0.45, '#b97a37'); gr.addColorStop(0.7, '#dcae6a'); gr.addColorStop(1, '#efd29b');
+    gr.addColorStop(0, '#7a3f12'); gr.addColorStop(0.4, '#d0791f'); gr.addColorStop(0.7, '#f0b04a'); gr.addColorStop(1, '#ffe2a0');
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
     g.strokeStyle = 'rgba(80,45,15,0.35)'; g.lineWidth = 1;
     for (let x = 8; x < w; x += 7) { g.beginPath(); g.moveTo(x, 4); g.quadraticCurveTo(x + 4, h * 0.5, x, h - 4); g.stroke(); }

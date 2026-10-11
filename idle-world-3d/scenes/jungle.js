@@ -183,7 +183,7 @@ export default {
       const back = rb.range(3, 26);
       const z = L.cliffZ(x) - back;
       const y = L.cliffH(x) + back * 0.05 - 0.6;
-      const h = rb.range(12, 24), r0 = rb.range(0.35, 0.75);
+      const h = rb.range(6, 13) + back * 0.25, r0 = rb.range(0.3, 0.6);
       const lean = new THREE.Vector3(rb.range(-1.2, 1.2), 0, rb.range(-1.2, 1.2));
       const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(x, y - 1, z), new THREE.Vector3(x + lean.x * 0.3, y + h * 0.5, z + lean.z * 0.3), new THREE.Vector3(x + lean.x, y + h, z + lean.z)]);
       const g = taperTube(curve, t => lerp(r0 * 1.4, r0 * 0.5, Math.pow(t, 0.7)), { tubular: 8, radial: 7, tint: [0.85, 0.9, 0.8], uvScale: [2, 0.4] });
@@ -244,12 +244,12 @@ export default {
     }
     // aerial roots: thin straight strands hanging from limbs
     const rootTops = [];
-    for (let i = 0; i < Math.round(12 * Math.max(q, 0.5)); i++) {
+    for (let i = 0; i < Math.round(5 * Math.max(q, 0.5)); i++) {
       const a = innerHangs[rl.int(0, innerHangs.length - 1)];
       const end = Math.max(L.groundH(a.x, a.z) + rl.range(0.3, 3.5), WATER_Y + 0.4);
       if (a.y - end < 2) continue;
       const pts = [a.clone(), new THREE.Vector3(a.x + rl.range(-0.2, 0.2), (a.y + end) / 2, a.z + rl.range(-0.2, 0.2)), new THREE.Vector3(a.x + rl.range(-0.3, 0.3), end, a.z + rl.range(-0.3, 0.3))];
-      const g = taperTube(new THREE.CatmullRomCurve3(pts), () => rl.range(0.012, 0.02), { tubular: 6, radial: 3, tint: [0.62, 0.55, 0.42] });
+      const g = taperTube(new THREE.CatmullRomCurve3(pts), () => 0.022, { tubular: 6, radial: 4, tint: [0.5, 0.45, 0.35] });
       const len = a.y - end;
       vineParts.push(withHang(g, (k, p) => clamp((a.y - p.getY(k)) / len, 0, 1)));
       rootTops.push(a);
@@ -300,6 +300,8 @@ export default {
       const m = new THREE.MeshStandardMaterial({ map: atlas.texture, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.58, envMapIntensity: 0.7 });
       if (preset) addWind(m, wind, preset);
       jungleMaterial(m, shared, { translucent: 0.85, ...extra });
+      // wind presets only differ in uniform values: let them share one compiled program
+      m.customProgramCacheKey = () => 'jgfoliage' + (preset ? 'w' : '') + JSON.stringify(extra);
       foliageMats.set(key, m);
       return m;
     };
@@ -352,6 +354,12 @@ export default {
     const fernGeo = P.fern(atlas, R('fernG'), { fronds: 9 });
     const fernList = scatter(Math.round(150 * q), { region: [-24, 24, -9, 18], minR: 0.3, s: [0.7, 1.6], test: (x, z) => rp.chance(0.35 + Math.min(1, Math.abs(x) / 14) * 0.6) && (L.pondD(x, z) > 1.15) });
     for (const f of fernList) { if (Math.abs(camAng(f.x, f.z)) < 0.45 && f.z > POND.cz + 2) f.s *= 0.65; }
+    // low ground cover in front of the pond (keeps the view open but hides bare soil)
+    for (let i = 0; i < Math.round(70 * Math.max(q, 0.5)); i++) {
+      const x = camPos0.x + rp.range(-7, 7), z = rp.range(POND.cz + POND.rzFront * 0.95, camPos0.z - 1);
+      if (blocked(x, z, 0.2) || L.pondD(x, z) < 1.12) continue;
+      fernList.push({ x, y: L.groundH(x, z), z, s: rp.range(0.3, 0.55), rot: rp.next() * TAU, tiltX: rp.range(-0.1, 0.1) });
+    }
     // ferns on cliff ledges
     const cliffPts = sampleCliff(cliffGeo, R('cliffp'), Math.round(60 * q), { minY: 0.8, maxNy: 0.75, minNy: 0.1 });
     for (const c of cliffPts) fernList.push({ x: c.p.x, y: c.p.y - 0.05, z: c.p.z, s: rp.range(0.6, 1.2), rot: rp.next() * TAU, normal: c.n.clone().lerp(UP, 0.5).normalize() });
@@ -553,7 +561,13 @@ export default {
     // over the camera: overhanging fronds at the top of the frame
     for (let i = 0; i < 10; i++) clumpsB.push({ x: rc.range(-12, 12), y: rc.range(13.5, 17), z: rc.range(6, 14), s: rc.range(2.5, 4), rot: rc.next() * TAU });
     // background crowns
-    for (const p of bgTops) for (let k = 0; k < 3; k++) clumpsA.push({ x: p.x + rc.range(-2.5, 2.5), y: p.y + rc.range(-2, 1), z: p.z + rc.range(-2.5, 2.5), s: rc.range(3, 5), rot: rc.next() * TAU });
+    for (const p of bgTops) for (let k = 0; k < 4; k++) clumpsA.push({ x: p.x + rc.range(-2.8, 2.8), y: p.y + rc.range(-3, 0.5), z: p.z + rc.range(-2.8, 2.8), s: rc.range(2.6, 4.6), rot: rc.next() * TAU });
+    // layered forest wall on the plateau, receding into the haze
+    for (let i = 0; i < Math.round(40 * Math.max(q, 0.6)); i++) {
+      const x = rc.range(-34, 34);
+      const back = rc.range(4, 30);
+      clumpsA.push({ x, y: L.cliffH(x) + rc.range(2, 7) + back * 0.18, z: L.cliffZ(x) - back, s: rc.range(3, 5.5), rot: rc.next() * TAU });
+    }
     // plateau undergrowth (lower crowns along the rim)
     for (let i = 0; i < 26; i++) {
       const x = rc.range(-26, 26);
@@ -631,16 +645,16 @@ export default {
       for (const c of cands) {
         if (rayAnchors.length >= Math.round(16 * Math.max(q, 0.6))) break;
         if (rayAnchors.some(r => Math.hypot(r.x - c.x, r.z - c.z) < 3.2)) continue;
-        rayAnchors.push(Object.assign(new THREE.Vector4(c.x, Y, c.z, rng.range(0.35, 0.9)), { len: rng.range(18, 26), k: rng.range(0.5, 1) }));
+        rayAnchors.push(Object.assign(new THREE.Vector4(c.x, Y, c.z, rng.range(0.9, 2.2)), { len: rng.range(18, 26), k: rng.range(0.5, 1) }));
       }
       // broad shafts through the clearing gap
-      for (let i = 0; i < 4; i++) rayAnchors.push(Object.assign(new THREE.Vector4(POND.cx + rng.range(-4, 4), Y + 1, POND.cz - 3 + rng.range(-3, 3), rng.range(1.2, 2.2)), { len: rng.range(20, 26), k: rng.range(0.35, 0.6) }));
+      for (let i = 0; i < 5; i++) rayAnchors.push(Object.assign(new THREE.Vector4(POND.cx + rng.range(-5, 5), Y + 1, POND.cz - 2 + rng.range(-4, 3), rng.range(2.5, 4.5)), { len: rng.range(20, 26), k: rng.range(0.3, 0.55) }));
     }
     const godRays = ONLY_MAIN(buildGodRays(shared, rayAnchors, R('rays')));
     scene.add(godRays);
     const rm = R('motes');
     const motePos = [];
-    for (let i = 0; i < Math.round(500 * q); i++) motePos.push(new THREE.Vector3(rm.range(-14, 14), rm.range(0.3, 10), rm.range(-10, 9)));
+    for (let i = 0; i < Math.round(320 * q); i++) motePos.push(new THREE.Vector3(rm.range(-14, 14), rm.range(0.3, 10), rm.range(-10, 9)));
     const motes = ONLY_MAIN(buildPoints(shared, sprite, 'motes', motePos, rm, [0.03, 0.07]));
     scene.add(motes);
     const ffPos = [];
@@ -1026,9 +1040,10 @@ export default {
 
     /* ---------------- time of day ---------------- */
     let night = 0;
+    const lightCol = new THREE.Color();
     const state = { lastH: -1, wet: 0 };
     const pal = {
-      fogDay: new THREE.Color('#86ad97'), fogDawn: new THREE.Color('#c4c6bb'), fogGold: new THREE.Color('#d6b386'), fogDusk: new THREE.Color('#4f5a82'), fogNight: new THREE.Color('#0b1d29'), fogRain: new THREE.Color('#6d8077'),
+      fogDay: new THREE.Color('#86ad97'), fogDawn: new THREE.Color('#a9b9b3'), fogGold: new THREE.Color('#7f8c78'), fogDusk: new THREE.Color('#4f5a82'), fogNight: new THREE.Color('#0b1d29'), fogRain: new THREE.Color('#6d8077'),
       hemiSkyDay: new THREE.Color('#bcd6c4'), hemiGround: new THREE.Color('#2b3a1c'), hemiSkyNight: new THREE.Color('#1d4258'), hemiGroundNight: new THREE.Color('#0a1712'),
       moon: new THREE.Color('#9fbcff'), murkDay: new THREE.Color('#2c6a52'), murkNight: new THREE.Color('#06222b'),
     };
@@ -1048,9 +1063,10 @@ export default {
       const useMoon = e < -3;
       const L0 = useMoon ? s.moonDir : s.dir;
       shared.uLightDirW.value.copy(L0);
-      let lc, li;
-      if (useMoon) { lc = _c.copy(pal.moon); li = 0.55 * smoothstep(-3, -10, e); }
-      else { lc = _c.copy(s.sunColor); li = s.sunIntensity * 1.9; }
+      let li;
+      const lc = lightCol;
+      if (useMoon) { lc.copy(pal.moon); li = 0.55 * smoothstep(-3, -10, e); }
+      else { lc.copy(s.sunColor); li = s.sunIntensity * 1.9; }
       li *= 1 - rainA * 0.82;
       sun.color.copy(lc);
       sun.intensity = li;
@@ -1059,16 +1075,17 @@ export default {
       // ambient
       hemi.color.copy(pal.hemiSkyDay).lerp(s.skyAmbient, 0.35).lerp(pal.hemiSkyNight, night).lerp(_c2.set('#9aa8a2'), rainA * 0.5);
       hemi.groundColor.copy(pal.hemiGround).lerp(pal.hemiGroundNight, night);
-      hemi.intensity = lerp(s.ambientIntensity * 0.9, 0.5, night) + rainA * 0.25 + dawnMist * 0.1;
+      hemi.intensity = lerp(s.ambientIntensity * 1.05, 0.5, night) + rainA * 0.25 + dawnMist * 0.1;
       const amb = _c2.copy(hemi.color).multiplyScalar(hemi.intensity * 0.8);
       // fog
       const fog = shared.uFogColor.value;
       fog.copy(pal.fogDay).lerp(pal.fogGold, golden * (morning ? 0.4 : 0.85)).lerp(pal.fogDawn, dawnMist * 0.8).lerp(pal.fogDusk, dusk).lerp(pal.fogNight, night).lerp(pal.fogRain, rainA * (1 - night * 0.7));
       fog.multiplyScalar(lerp(1, 0.75, rainA * (1 - night)));
-      shared.uFogSunColor.value.copy(lc).multiplyScalar(Math.min(li, 3) * 0.32).add(_c.copy(fog).multiplyScalar(0.8));
+      shared.uFogSunColor.value.copy(lc).multiplyScalar(Math.min(li, 3) * (0.3 + golden * 0.25)).add(_c.copy(fog).multiplyScalar(0.8));
       shared.uFogDensity.value = 0.012 + dawnMist * 0.05 + rainA * 0.028 + night * 0.01 + dusk * 0.008;
       shared.uFogFalloff.value = lerp(0.09, 0.16, dawnMist);
-      shared.uCookieMin.value = lerp(lerp(0.13, 0.3, night), 0.75, rainA);
+      shared.uCookieMin.value = lerp(lerp(0.17, 0.3, night), 0.75, rainA);
+      shared.uWaterScatter.value.set('#1b5a49').multiplyScalar(lerp(0.5 + day * 0.7, 0.12, night)).lerp(_c.set('#3a5a50'), rainA * 0.3);
       shared.uNight.value = smoothstep(-2, -10, e);
       shared.uWet.value = state.wet;
       shared.uCaustic.value = (1 - rainA * 0.8) * lerp(1, 0.35, night);
@@ -1125,7 +1142,7 @@ export default {
       b.strength = lerp(0.32 + golden * 0.12, 0.95, night) * (1 - rainA * 0.25);
       b.radius = lerp(0.65, 0.85, night);
       b.threshold = lerp(0.85, 0.42, night);
-      post.exposure = lerp(1.0, 1.18, night) * lerp(1, 1.06, rainA) * lerp(1, 1.05, dawnMist);
+      post.exposure = lerp(1.06, 1.18, night) * lerp(1, 1.06, rainA) * lerp(1, 1.05, dawnMist);
       post.saturation = lerp(lerp(1.1, 1.15, night), 0.88, rainA);
       post.contrast = lerp(1.06, 1.1, night) - rainA * 0.04;
       post.lift = [lerp(0.0, 0.0, night), lerp(0.008, 0.02, night), lerp(0.012, 0.045, night)];
@@ -1138,6 +1155,11 @@ export default {
     let fishNibble = 0;
     const fishGoal = new THREE.Vector3();
     function update(dt, t) {
+      if (compileRTLive && simT > 0) {
+        compileRTLive = false;
+        if (renderer.getRenderTarget() === compileRT) renderer.setRenderTarget(null);
+        compileRT.dispose();
+      }
       simT += dt;
       shared.uTime.value = t;
       shared.uCookieDrift.value.set(Math.sin(t * 0.05) * 0.004, Math.cos(t * 0.043) * 0.004);
@@ -1190,6 +1212,12 @@ export default {
       }
     }
 
+    // The shell pre-compiles with whatever render target is bound; frames render into a linear
+    // render target, so bind a tiny linear target now to avoid compiling every program twice.
+    const compileRT = new THREE.WebGLRenderTarget(1, 1);
+    renderer.setRenderTarget(compileRT);
+    let compileRTLive = true;
+    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, post, view, L };
     // initial pose
     update(1 / 60, 0);
     mark('done');

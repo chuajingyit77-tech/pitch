@@ -11,7 +11,7 @@ export function createLayout(seed) {
   const n2 = createNoise(seed + 77);
   const cliffZ = x => -9.0 + 0.032 * x * x + 0.45 * n.noise2(x * 0.14, 3.3);
   const cliffH = x => {
-    let h = 10.6 - 0.011 * x * x + 1.1 * n.fbm2(x * 0.09, 8.1, 3);
+    let h = 9.0 - 0.009 * x * x + 1.0 * n.fbm2(x * 0.09, 8.1, 3);
     h -= 1.25 * Math.exp(-Math.pow((x - FALL.x) / 1.9, 2)); // waterfall notch
     return Math.max(h, 3.5);
   };
@@ -109,23 +109,30 @@ export function buildCliff(L, q, seed) {
     const dzdx = (L.cliffZ(x0 + 0.1) - L.cliffZ(x0 - 0.1)) / 0.2;
     const nxo = -dzdx, nzo = 1; const nl = Math.hypot(nxo, nzo);
     const ox = nxo / nl, oz = nzo / nl;
-    const nearFall = Math.exp(-Math.pow((x0 - FALL.x) / 2.2, 2));
-    let arc = 0;
+    const nearFall = Math.exp(-Math.pow((x0 - FALL.x) / 3.0, 2));
+    let arc = 0, crev = 0;
     for (let j = 0; j < rows; j++) {
+      crev = 0;
       const k = (j * cols + i);
       let x, y, z, vv;
       if (j <= NF) {
         const t = j / NF;
         y = base + t * (H - base);
-        // face displacement: big bulges, ledges (strata), fine ridges; overhang near the top
-        const big = n.fbm2(x0 * 0.12, y * 0.12, 3) * 1.4;
-        const strata = (y * 0.55 + n.noise2(x0 * 0.2, y * 0.2) * 0.8);
-        const ledge = Math.pow(strata - Math.floor(strata), 3.0) * 0.55;
-        const ridge = (1 - Math.abs(n.noise2(x0 * 0.6, y * 0.18))) * 0.35;
-        const top = smoothstep(H - 2.5, H, y);
-        let d = big + ledge + ridge + top * 0.6 - 0.4;
-        d -= nearFall * 1.1 * smoothstep(-1, 2, y); // recess behind the falling water
-        d -= t * 0.7; // slight backward lean
+        // face displacement: big bulges, fracture columns, strata ledges, blocky chunks, overhang at the top
+        const big = n.fbm2(x0 * 0.1, y * 0.1, 3) * 1.25;
+        const fxc = x0 * 0.62 + n.noise2(x0 * 0.21, y * 0.07) * 0.9;
+        const colv = Math.abs(Math.sin(fxc * Math.PI));
+        const columns = Math.pow(colv, 0.3) * 0.5;
+        const strata = y * 0.42 + n.noise2(x0 * 0.13, y * 0.2) * 0.7;
+        const fr = strata - Math.floor(strata);
+        const ledge = smoothstep(0.72, 0.97, fr) * 0.55;
+        const blocks = Math.floor((n.noise2(x0 * 0.28, y * 0.22) * 0.5 + 0.5) * 4) / 4 * 0.45;
+        const ridge = (1 - Math.abs(n.noise2(x0 * 0.7, y * 0.16))) * 0.18;
+        const top = smoothstep(H - 2.2, H, y);
+        let d = big + columns + ledge + blocks + ridge + top * 0.55 - 0.75;
+        d -= nearFall * 1.2 * smoothstep(-1, 2, y); // recess behind the falling water
+        d -= t * 0.6; // slight backward lean
+        crev = (1 - Math.pow(colv, 0.5)) * 0.8 + (1 - smoothstep(0.0, 0.25, fr)) * 0.35;
         x = x0 + ox * d; z = cz + oz * d; vv = y;
         if (j === NF) arc = 0;
       } else {
@@ -141,10 +148,12 @@ export function buildCliff(L, q, seed) {
       }
       pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
       uv[k * 2] = x0 / 3.5; uv[k * 2 + 1] = vv / 3.5;
-      // vertex color: wet dark near waterfall and base, warmer rock elsewhere
-      const wet = Math.max(nearFall * smoothstep(H + 1, 0, y) * 1.0, smoothstep(1.5, -0.5, y) * 0.6);
-      const v = 0.9 + n.noise2(x0 * 0.3, y * 0.4) * 0.15;
-      colr[k * 3] = v * lerp(1.0, 0.45, wet); colr[k * 3 + 1] = v * lerp(0.98, 0.5, wet); colr[k * 3 + 2] = v * lerp(0.92, 0.5, wet);
+      // vertex color: wet dark near the waterfall and base, water stains, darker crevices, warm/cool rock
+      const wet = Math.max(nearFall * smoothstep(H + 1, 0, y) * 0.9, smoothstep(1.2, -0.5, y) * 0.55);
+      const stain = smoothstep(0.55, 0.9, n.noise2(x0 * 1.3, y * 0.05 + 40) * 0.5 + 0.5) * smoothstep(H, H - 4, y) * 0.5;
+      const warm = n.noise2(x0 * 0.08 + 9, y * 0.1) * 0.5 + 0.5;
+      const v = (0.95 + n.noise2(x0 * 0.3, y * 0.4) * 0.15) * (1 - clamp(crev, 0, 1) * 0.55) * (1 - stain * 0.5);
+      colr[k * 3] = v * lerp(0.95, 1.08, warm) * lerp(1.0, 0.42, wet); colr[k * 3 + 1] = v * lerp(0.98, 0.98, warm) * lerp(1.0, 0.47, wet); colr[k * 3 + 2] = v * lerp(1.02, 0.86, warm) * lerp(1.0, 0.5, wet);
     }
   }
   const idx = [];

@@ -115,7 +115,7 @@ function createClouds(env, rng) {
   const P = [];
   for (let c = 0; c < nClouds; c++) {
     const a = rng.range(0, TAU);
-    const far = c < nClouds * 0.7;                       // most clouds sit low over the horizon
+    const far = c < nClouds * 0.85;                       // most clouds sit low over the horizon
     const dist = far ? rng.range(420, 1500) : rng.range(160, 420);
     const cx = Math.cos(a) * dist, cz = Math.sin(a) * dist;
     const big = rng.range(0, 1);

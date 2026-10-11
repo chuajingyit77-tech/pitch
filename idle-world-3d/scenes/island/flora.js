@@ -431,14 +431,14 @@ export function createFlora(env, rng, terrain, wind, reserved) {
     const a = grng.range(0, TAU), e = grng.range(4.0, terrain.R0 + 2);
     const pt = terrain.pointAt(a, e);
     const z = terrain.zone(pt.x, pt.z);
-    const w = z.grass + z.sand * smoothstep(3.6, 5.4, e) * 0.35;
+    const w = z.grass + z.sand * smoothstep(4.2, 5.6, e) * 0.18;
     if (grng.next() > w) continue;
     _q.setFromAxisAngle(UP, grng.range(0, TAU));
     const s = grng.range(0.7, 1.35) * (z.grass > 0.5 ? 1 : 0.8);
     _m.compose(_p.set(pt.x, pt.y - 0.03, pt.z), _q, _s.set(s, s * grng.range(0.8, 1.3), s));
     grass.setMatrixAt(gi, _m);
     if (z.grass > 0.5) tint.setRGB(grng.range(0.85, 1.05), grng.range(0.95, 1.1), grng.range(0.75, 0.95));
-    else tint.setRGB(1.25, 1.15, 0.7); // dry beach grass
+    else tint.setRGB(0.92, 0.9, 0.55); // dry beach grass
     grass.setColorAt(gi, tint);
     gi++;
   }
@@ -503,13 +503,6 @@ export function createFlora(env, rng, terrain, wind, reserved) {
       if (y < 0.2 && y + sk * 0.55 > -0.2) terrain.addObstacle(x, z, sk * 0.9, 1);
     }
     i++;
-  }
-  // coral heads / boulders in the lagoon
-  for (let i = 0; i < Math.round(lerp(5, 9, q)); i++) {
-    const a = rrng.range(0, TAU), u = rrng.range(4, 9);
-    const pt = terrain.pointAt(a, -u);
-    const s = rrng.range(0.5, 1.1);
-    rockSites[2].push({ x: pt.x, y: pt.y - 0.3 * s, z: pt.z, s, ys: 0.55, coral: true });
   }
   const rockMeshes = rockGeos.map((g, i) => {
     const sites = rockSites[i];

@@ -170,50 +170,47 @@ export function buildPond(env, shared, L, { normal1, normal2, rtScale = 0.5 }) {
 /* Waterfall                                                            */
 /* ------------------------------------------------------------------ */
 const G = 9.8;
-export function fallPoint(tau, s, layer = 0) {
-  // s in [-0.5, 0.5] across; returns world position on the main sheet
-  const u0 = 1.55 + layer * 0.25;
-  const y = FALL.lipY - 0.5 * G * tau * tau;
-  const z = FALL.lipZ + 0.1 + u0 * tau + 0.15 * Math.cos(s * Math.PI) ;
-  const widen = 1 + tau * 0.22;
-  const x = FALL.x + s * FALL.width * widen;
+/** Streams pouring over the lip: x offset, lip drop, width at the lip, outward speed, layer id. */
+export const STREAMS = [
+  { dx: 0.0, drop: 0.0, w: 1.75, u0: 1.55, spread: 0.42, id: 0, nu: 16 },
+  { dx: 0.05, drop: 0.0, w: 2.0, u0: 1.75, spread: 0.5, id: 1, nu: 12, dz: 0.1 },
+  { dx: 1.55, drop: 0.35, w: 0.5, u0: 1.25, spread: 0.6, id: 2, nu: 5 },
+  { dx: -1.45, drop: 0.55, w: 0.32, u0: 1.15, spread: 0.7, id: 2, nu: 4 },
+];
+export function fallPoint(tau, s, st = STREAMS[0]) {
+  // s in [-0.5, 0.5] across; returns world position on a stream sheet
+  const y = FALL.lipY - st.drop - 0.5 * G * tau * tau;
+  const z = FALL.lipZ + 0.12 + st.u0 * tau + 0.12 * Math.cos(s * Math.PI) + (st.dz || 0);
+  const widen = 1 + tau * st.spread;
+  const x = FALL.x + st.dx + s * st.w * widen + Math.sin(tau * 2.3 + st.dx) * 0.06 * tau;
   return [x, y, z];
 }
-export const fallT = () => Math.sqrt(2 * (FALL.lipY - WATER_Y) / G);
+export const fallT = (st = STREAMS[0]) => Math.sqrt(2 * (FALL.lipY - st.drop - WATER_Y) / G);
 
 export function buildWaterfall(shared, q) {
-  const layers = [
-    // [width scale, z offset, opacity, layer id, NU, s offset]
-    { w: 1.0, dz: 0.0, id: 0, nu: 18 },
-    { w: 1.12, dz: 0.12, id: 1, nu: 14 },
-    { w: 0.22, dz: 0.05, id: 2, nu: 4, sx: -0.62 },
-    { w: 0.18, dz: 0.03, id: 2, nu: 4, sx: 0.64 },
-  ];
   const NV = Math.round(40 * Math.max(0.6, q));
   const pos = [], uv = [], lay = [], idx = [];
   let base = 0;
-  const T = fallT();
-  // the lip: a short flat run of water over the rim before the drop
-  for (const L of layers) {
-    const nu = L.nu;
+  for (const st of STREAMS) {
+    const nu = st.nu;
+    const T = fallT(st);
     for (let j = 0; j <= NV; j++) {
       const v = j / NV;
       const tau = -0.25 + v * (T + 0.25);
       for (let i = 0; i <= nu; i++) {
-        const s = (i / nu - 0.5) * L.w + (L.sx || 0);
+        const s = i / nu - 0.5;
         let x, y, z;
         if (tau < 0) {
           // flowing over the lip, from back on the plateau
           const k = -tau / 0.25;
-          [x, y, z] = fallPoint(0, s, L.id === 1 ? 1 : 0);
-          z -= k * 1.2; y += k * 0.08 - 0.02;
+          [x, y, z] = fallPoint(0, s, st);
+          z -= k * 1.2; y += k * 0.06 - 0.02;
         } else {
-          [x, y, z] = fallPoint(tau, s, L.id === 1 ? 1 : 0);
+          [x, y, z] = fallPoint(tau, s, st);
         }
-        z += L.dz;
         pos.push(x, y, z);
         uv.push(i / nu, tau);
-        lay.push(L.id);
+        lay.push(st.id + (st.dx !== 0 ? 0.25 : 0));
       }
     }
     for (let j = 0; j < NV; j++) for (let i = 0; i < nu; i++) {
@@ -222,6 +219,7 @@ export function buildWaterfall(shared, q) {
     }
     base += (NV + 1) * (nu + 1);
   }
+  const T = fallT();
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -248,13 +246,17 @@ export function buildWaterfall(shared, q) {
       void main(){
         float s = vUv.x, tau = vUv.y;
         float t = uTime * uFlow;
-        float lay = vLayer;
+        float lay = floor(vLayer + 0.01); float side = fract(vLayer + 0.01) > 0.1 ? 1.0 : 0.0;
         float sp = lay > 1.5 ? 1.4 : (lay > 0.5 ? 1.25 : 1.0);
         // streaks advected with the water: features are fixed in (s, tau - t)
         float a1 = fbm2(vec2(s * 14.0 + lay * 7.0, (tau - t * 1.0 * sp) * 2.6));
         float a2 = fbm2(vec2(s * 33.0 + 5.0 + lay * 3.0, (tau - t * 1.35 * sp) * 5.5));
         float a3 = vnoise(vec2(s * 80.0 + 11.0, (tau - t * 1.7 * sp) * 12.0));
         float streak = a1 * 0.55 + a2 * 0.33 + a3 * 0.2;
+        // packets: rounder clumps of aerated water tumbling down
+        float pk = vnoise(vec2(s * 7.0 + lay * 3.0, (tau - t * 1.1 * sp) * 6.5));
+        float pk2 = vnoise(vec2(s * 13.0 + 4.0, (tau - t * 1.25 * sp) * 11.0));
+        streak = streak * 0.7 + smoothstep(0.45, 0.9, pk * 0.65 + pk2 * 0.35) * 0.45;
         float speed = max(tau, 0.0) * 9.8 + 1.5;
         // edges break up into spray
         float e = min(s, 1.0 - s);
@@ -263,7 +265,7 @@ export function buildWaterfall(shared, q) {
         float rim = 1.0 - smoothstep(0.0, 0.22, e);
         float top = smoothstep(-0.25, -0.05, tau);
         float lipFoam = smoothstep(0.25, 0.0, abs(tau - 0.02)) * 0.6;
-        float bottom = smoothstep(uFallT - 0.35, uFallT, tau);
+        float bottom = smoothstep(uFallT - 0.35 - side * 0.1, uFallT - side * 0.1, tau);
         float dens = lay > 1.5 ? 0.55 : (lay > 0.5 ? 0.42 : 1.0);
         float alpha = smoothstep(0.36, 0.78, streak + 0.06 * (1.0 - lay) + bottom * 0.25) * edge * top * dens;
         alpha = max(alpha, rim * edge * smoothstep(0.45, 0.8, a2) * 0.6 * top);

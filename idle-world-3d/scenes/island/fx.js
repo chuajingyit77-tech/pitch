@@ -167,7 +167,7 @@ export function createFx(env, terrain, props) {
   const MAXF = 32;
   const fishGeo = buildDriedFish();
   const fishTex = driedFishTexture();
-  const fishMat = new THREE.MeshStandardMaterial({ map: fishTex, roughness: 0.45, metalness: 0.1, emissive: 0x2a1404 });
+  const fishMat = new THREE.MeshStandardMaterial({ map: fishTex, roughness: 0.38, metalness: 0.15, emissive: 0x6a3008, emissiveIntensity: 0.6, color: 0xffd9a0 });
   const foodMesh = new THREE.InstancedMesh(fishGeo, fishMat, MAXF);
   foodMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   foodMesh.count = 0;
@@ -176,7 +176,7 @@ export function createFx(env, terrain, props) {
   foodMesh.layers.set(LAYER_NO_REFLECT);
   group.add(foodMesh);
   const foods = [];
-  const FOOD_SCALE = 1.5;
+  const FOOD_SCALE = 2.3;
   function spawnFood(point, { sound = true } = {}) {
     if (foods.length >= MAXF) foods.shift();
     const onDock = props.onDock(point.x, point.z);

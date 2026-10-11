@@ -214,14 +214,14 @@ export function createSkyMaterial(fogU) {
 export function buildMountains({ noise, rng, fogU, sunsetAz }) {
   const group = new THREE.Group();
   const layers = [
-    { R: 330, hmin: 3, hmax: 30, base: '#28332b', alt: '#5a3420', a0: -1.95, a1: 1.95, seg: 260 },
-    { R: 520, hmin: 10, hmax: 68, base: '#2f3d3c', alt: '#4a3a30', a0: -2.0, a1: 2.0, seg: 220 },
-    { R: 800, hmin: 26, hmax: 135, base: '#394a54', alt: '#394a54', a0: -2.05, a1: 2.05, seg: 200 },
-    { R: 1250, hmin: 60, hmax: 250, base: '#45566a', alt: '#45566a', a0: -2.1, a1: 2.1, seg: 160 },
+    { R: 330, hmin: 3, hmax: 30, base: '#28332b', alt: '#5a3420', a0: -1.95, a1: 1.95, seg: 900 },
+    { R: 520, hmin: 10, hmax: 68, base: '#2f3d3c', alt: '#4a3a30', a0: -2.0, a1: 2.0, seg: 700 },
+    { R: 800, hmin: 26, hmax: 135, base: '#394a54', alt: '#394a54', a0: -2.05, a1: 2.05, seg: 480 },
+    { R: 1250, hmin: 60, hmax: 250, base: '#45566a', alt: '#45566a', a0: -2.1, a1: 2.1, seg: 320 },
   ];
   const ridgeAt = [];
   layers.forEach((L, li) => {
-    const rows = 9;
+    const rows = 6;
     const pos = [], col = [], idx = [];
     const cA = new THREE.Color(L.base), cB = new THREE.Color(L.alt), c = new THREE.Color();
     const ph = rng.range(0, 100);
@@ -231,6 +231,8 @@ export function buildMountains({ noise, rng, fogU, sunsetAz }) {
       let n = noise.fbm2(a * (1.5 + li * 0.45) + ph, li * 7.3, 5) * 0.5 + 0.5;
       n = n * 0.78 + noise.ridged2(a * (4.0 + li) + ph * 0.7, li * 3.1, 4) * 0.22;
       let h = lerp(L.hmin, L.hmax, smoothstep(0.18, 0.92, n));
+      // forested ridge: fine fuzzy bumps along the silhouette
+      h += (noise.noise2(a * 140 + li * 13, 0.5) * 0.65 + noise.noise2(a * 330 + li * 7, 2.5) * 0.35) * L.R * 0.004 * [1, 0.65, 0.35, 0.18][li];
       // low saddle where the sun sets, taller shoulders around it
       const dA = a - sunsetAz;
       h *= 1 - 0.75 * Math.exp(-(dA * dA) / (2 * 0.17 * 0.17));

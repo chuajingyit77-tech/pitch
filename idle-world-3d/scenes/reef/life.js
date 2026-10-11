@@ -398,14 +398,14 @@ export async function createLife(ctx) {
     hoverGroups.push({ c: centerPos.clone(), fish, kind, spread });
     return fish;
   };
-  const coralHeads = bommies.map(b => new THREE.Vector3(b.x, b.top + 0.5, b.z));
+  const coralHeads = bommies.map(b => new THREE.Vector3(b.x, b.top + 0.15, b.z));
   const anthO = [], anthP = [];
   const nAnth = Math.round(30 * q);
   const heads = [...coralHeads, ...thickets.slice(0, 3)];
   heads.forEach((c, i) => {
-    if (i >= Math.round(6 * q) + 1) return;
+    if (i >= Math.round(7 * q) + 1) return;
     const list = i % 3 === 2 ? anthP : anthO;
-    list.push(...mkGroup(c.clone().add(new THREE.Vector3(0, 0.3, 0)), nAnth, 0.17, 0.23, 1.3, 'anthias'));
+    list.push(...mkGroup(c.clone().add(new THREE.Vector3(0, 0.1, 0)), nAnth, 0.17, 0.23, 1.25, 'anthias'));
   });
   const anthOInst = anthO.length ? mkSpecies('reefAnthias', 'reefAnthias', anthO.length, 0.5, 11) : null;
   const anthPInst = anthP.length ? mkSpecies('reefAnthiasPurple', 'reefAnthias', anthP.length, 0.5, 12) : null;

@@ -414,3 +414,65 @@ export function bankPuffs(rng, center, length, depth, height, count, yaw, out) {
     });
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Mist-falls spilling off islet edges                                 */
+/* ------------------------------------------------------------------ */
+const MIST_VERT = /* glsl */`
+varying vec2 vUv; varying vec3 vW;
+void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const MIST_FRAG = /* glsl */`
+${SHARED_GLSL}
+uniform sampler2D tNoise;
+uniform float uSpeed, uOpacity;
+varying vec2 vUv; varying vec3 vW;
+void main(){
+  float u = vUv.x, v = vUv.y;   // u across, v along the fall (0 lip .. 1 bottom)
+  float s1 = texture2D(tNoise, vec2(u * 1.3, v * 2.2 - uTime * uSpeed)).r;
+  float s2 = texture2D(tNoise, vec2(u * 3.1 + 0.3, v * 5.0 - uTime * uSpeed * 1.6)).g;
+  float s3 = texture2D(tNoise, vec2(u * 7.0, v * 9.0 - uTime * uSpeed * 2.3)).b;
+  float streak = clamp(s1 * 0.55 + s2 * 0.45 + s3 * 0.3 - 0.35, 0.0, 1.0);
+  float across = smoothstep(0.0, 0.3, u) * smoothstep(1.0, 0.7, u);
+  float along = smoothstep(0.0, 0.05, v) * (1.0 - smoothstep(0.55, 1.0, v));
+  float a = streak * across * along * uOpacity * (1.25 - v * 0.6);
+  vec3 V = normalize(cameraPosition - vW);
+  float fwd = pow(max(dot(-V, uLightDir), 0.0), 5.0);
+  vec3 col = vec3(0.95) * (uAmbient * 1.2 + uLightCol * (0.55 + 1.6 * fwd)) + uBounce * 0.2;
+  col = mix(col, hazeColor(-V), fogAmountAt(vW));
+  gl_FragColor = vec4(col * a, a);
+}`;
+
+export function mistFall(shared, tex, start, outward, height, width0, width1) {
+  const segs = 40, across = 8, pos = [], uv = [], idx = [];
+  const side = new THREE.Vector3(-outward.z, 0, outward.x);
+  for (let i = 0; i <= segs; i++) {
+    const v = i / segs;
+    const out = (1 - Math.exp(-v * 5)) * 2.2 + v * 1.5;
+    const y = -Math.pow(v, 1.6) * height;
+    const w = lerp(width0, width1, Math.pow(v, 0.8));
+    for (let j = 0; j <= across; j++) {
+      const u = j / across;
+      const curl = Math.sin(u * Math.PI) * w * 0.35; // curved sheet
+      const c = start.clone().addScaledVector(outward, out + curl).addScaledVector(side, (u - 0.5) * w);
+      c.y += y;
+      pos.push(c.x, c.y, c.z); uv.push(u, v);
+    }
+  }
+  for (let i = 0; i < segs; i++) for (let j = 0; j < across; j++) {
+    const a = i * (across + 1) + j, b = a + 1, c = a + across + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: Object.assign({}, shared, { tNoise: { value: tex.noise }, uSpeed: { value: 0.32 }, uOpacity: { value: 0.75 } }),
+    vertexShader: MIST_VERT, fragmentShader: MIST_FRAG,
+    transparent: true, depthWrite: false, premultipliedAlpha: true, side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.renderOrder = 2;
+  return mesh;
+}
+

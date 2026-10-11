@@ -54,6 +54,12 @@ vec3 bendPlant(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, out
 `;
 
 const NFB_NOFLIP = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
+const A2C_SOFT = /* glsl */`
+#ifdef USE_ALPHATEST
+  diffuseColor.a = clamp((diffuseColor.a - alphaTest * 0.5) / (1.0 - alphaTest * 0.5), 0.0, 1.0);
+  if (diffuseColor.a < 0.06) discard;
+#endif
+`;
 const A2C_ALPHATEST = /* glsl */`
 #ifdef USE_ALPHATEST
   diffuseColor.a = clamp((diffuseColor.a - alphaTest) / max(fwidth(diffuseColor.a), 1e-4) + 0.5, 0.0, 1.0);
@@ -82,7 +88,7 @@ export function makeGrassColorUniforms() {
     uRootCol: { value: new THREE.Color('#4a4220') },
     uMidCol: { value: new THREE.Color('#b08a40') },
     uTipCol: { value: new THREE.Color('#ecd79c') },
-    uPlumeCol: { value: new THREE.Color('#f2e4c8') },
+    uPlumeCol: { value: new THREE.Color('#ddd0b6') },
     uGustBright: { value: 0.4 },
   };
 }
@@ -91,6 +97,7 @@ export function makeGrassColorUniforms() {
 export function grassMaterial({ wind, colors, fogU, plume = false, map = null, transl = 0.35, wrap = 0.35 }) {
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, map, alphaTest: plume ? 0.3 : 0, alphaToCoverage: plume });
   const U = { ...wind, ...colors, uTransl: { value: transl }, uWrap: { value: wrap } };
+  mat.userData.U = U;
   patchMaterial(mat, {
     key: plume ? 'mgPlume2' : 'mgGrass2',
     uniforms: U,
@@ -130,7 +137,7 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
           pc *= 1.0 + vGust * uGustBright * 0.7;
           diffuseColor.rgb = mix(c * 1.15, pc * diffuseColor.rgb, vPart);` : 'diffuseColor.rgb = c;'}
         }`,
-      '#include <alphatest_fragment>': A2C_ALPHATEST,
+      '#include <alphatest_fragment>': plume ? A2C_SOFT : A2C_ALPHATEST,
       '#include <normal_fragment_begin>': NFB_NOFLIP,
       '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * vH * vH'),
       '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',

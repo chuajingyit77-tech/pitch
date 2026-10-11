@@ -114,55 +114,51 @@ export function buildTerrain(ground, W, env, { rings = 130, segs = 180, rMax = 1
 /* Rocks                                                               */
 /* ------------------------------------------------------------------ */
 const ROCK_GLSL = /* glsl */`
-// Living crust: the reef substrate is covered by encrusting colonies (warped Voronoi cells picked on
-// the dominant world plane), each with its own colour and polyp texture, separated by soft dark
-// crevices. Overhangs stay bare stone.
-float gCrev, gCid, gEdge;
+// Living crust: turf-covered reef rock with pink coralline crusts, encrusting colonies and sponge
+// patches as soft irregular blobs; relief shading and dark crevices keep it muted so the 3D corals pop.
+float gA, gB, gR;
 vec3 reefPal(float i){
-  i = mod(i, 12.0);
-  vec3 c = vec3(0.4, 0.24, 0.52);
-  c = i >= 1.0 ? vec3(0.58, 0.22, 0.3) : c;
-  c = i >= 2.0 ? vec3(0.3, 0.4, 0.16) : c;
-  c = i >= 3.0 ? vec3(0.58, 0.4, 0.12) : c;
-  c = i >= 4.0 ? vec3(0.14, 0.38, 0.38) : c;
-  c = i >= 5.0 ? vec3(0.7, 0.3, 0.1) : c;
-  c = i >= 6.0 ? vec3(0.36, 0.27, 0.18) : c;
-  c = i >= 7.0 ? vec3(0.5, 0.48, 0.28) : c;
-  c = i >= 8.0 ? vec3(0.44, 0.18, 0.46) : c;
-  c = i >= 9.0 ? vec3(0.52, 0.34, 0.38) : c;
-  c = i >= 10.0 ? vec3(0.24, 0.3, 0.44) : c;
-  c = i >= 11.0 ? vec3(0.62, 0.52, 0.36) : c;
+  i = mod(i, 10.0);
+  vec3 c = vec3(0.36, 0.22, 0.42);
+  c = i >= 1.0 ? vec3(0.5, 0.2, 0.26) : c;
+  c = i >= 2.0 ? vec3(0.26, 0.34, 0.14) : c;
+  c = i >= 3.0 ? vec3(0.5, 0.36, 0.12) : c;
+  c = i >= 4.0 ? vec3(0.14, 0.32, 0.32) : c;
+  c = i >= 5.0 ? vec3(0.56, 0.26, 0.1) : c;
+  c = i >= 6.0 ? vec3(0.3, 0.24, 0.16) : c;
+  c = i >= 7.0 ? vec3(0.42, 0.4, 0.24) : c;
+  c = i >= 8.0 ? vec3(0.4, 0.16, 0.4) : c;
+  c = i >= 9.0 ? vec3(0.22, 0.26, 0.38) : c;
   return c;
 }
 float detailH(vec3 p){
   float d = length(p - cameraPosition);
   float fade = 1.0 - smoothstep(16.0, 36.0, d);
-  vec3 an = abs(gWN);
-  vec2 uv = an.y > max(an.x, an.z) ? p.xz : (an.x > an.z ? p.zy : p.xy);
-  vec2 w = vec2(snoise(p * 0.7), snoise(p * 0.7 + 5.3)) * 0.45;
-  vec3 c = cellid(uv * 2.0 + w);
-  gCid = c.z;
-  gEdge = c.y - c.x;
-  gCrev = 1.0 - smoothstep(0.015, 0.11, gEdge);
-  float dome = smoothstep(0.0, 0.45, gEdge);
-  float h = dome * 0.028 - gCrev * 0.02 + snoise(p * 3.1) * 0.01;
-  float kind = fract(gCid * 7.31);
-  float f = 26.0;
-  float aa = 1.0 - smoothstep(0.25, 0.6, length(fwidth(uv * f)));
-  if (kind < 0.4) { vec2 cc = cell2(uv * f); h += smoothstep(0.35, 0.05, cc.x) * 0.004 * aa; }
-  else if (kind < 0.7) { h += sin(dot(uv, vec2(37.0, 23.0)) + snoise(p * 3.0) * 4.0) * 0.003 * aa; }
+  gA = snoise(p * 1.05);
+  gB = snoise(p * 2.2 + 7.0);
+  gR = snoise(p * 3.6) * 0.6 + snoise(p * 8.5 + 2.0) * 0.4;
+  vec3 q = p * 26.0;
+  float aa = 1.0 - smoothstep(0.3, 0.7, length(fwidth(q)));
+  float h = gR * 0.022 + (vnoise3(q) - 0.5) * 0.008 * aa;
+  vec2 c = cell2(p.xz * 6.0 + vec2(p.y * 3.3, -p.y * 2.1));
+  h -= smoothstep(0.3, 0.0, c.x) * 0.012;
   return h * fade;
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
-  float lum = dot(c, vec3(0.3, 0.5, 0.2));
-  float expo = smoothstep(0.04, 0.16, lum) * smoothstep(-0.4, 0.2, gWN.y);
-  vec3 pc = reefPal(floor(gCid * 12.0));
-  pc *= 0.8 + 0.4 * fract(gCid * 13.7);
-  float cover = smoothstep(0.08, 0.3, gCid * 0.8 + snoise(p * 0.35 + 9.0) * 0.25 + 0.2) * expo;
-  vec3 col = mix(c, pc, cover);
-  col *= 0.8 + 0.5 * clamp(h * 18.0 + 0.4, 0.0, 1.0);
-  col *= 1.0 - gCrev * 0.6;
-  return col;
+  float expo = smoothstep(-0.45, 0.25, gWN.y);
+  vec3 base = c * 0.82;
+  float coral = smoothstep(0.1, 0.4, gA) * expo;
+  base = mix(base, vec3(0.46, 0.24, 0.34), coral * 0.7);
+  float idn = snoise(p * 0.38 + 3.0) * 0.5 + 0.5;
+  vec3 enc = reefPal(floor(idn * 10.0)) * (0.85 + 0.3 * (gB * 0.5 + 0.5));
+  float encM = smoothstep(0.18, 0.45, gB) * (1.0 - coral * 0.6) * expo;
+  base = mix(base, enc, encM * 0.8);
+  float sp = smoothstep(0.62, 0.72, snoise(p * 1.6 + 11.0)) * expo;
+  base = mix(base, vec3(0.66, 0.16, 0.06), sp * 0.75);
+  float sp2 = smoothstep(0.66, 0.76, snoise(p * 1.9 - 4.0)) * expo;
+  base = mix(base, vec3(0.6, 0.48, 0.08), sp2 * 0.7);
+  base *= 0.5 + 0.65 * clamp(gR * 0.7 + 0.55 + h * 10.0, 0.0, 1.0);
+  return base;
 }
 `;
 

@@ -10,11 +10,11 @@ export function plumeTexture(seed = 7) {
     g.clearRect(0, 0, w, h);
     g.fillStyle = '#ffffff';
     g.fillRect(0, 0, 4, h);
-    const bx = 62, by = h - 3;
+    const bx = 52, by = h - 3;
     // faint core so the plume survives mip-mapping at a distance
     for (let i = 0; i < 18; i++) {
       const s = i / 17;
-      const x = bx + s * s * 18, y = by - s * (h - 30);
+      const x = bx + s * s * 14, y = by - s * (h - 30);
       const r = 5 + Math.sin(Math.PI * Math.min(1, s * 1.1)) * 13;
       const grd = g.createRadialGradient(x, y, 0, x, y, r);
       grd.addColorStop(0, 'rgba(255,248,236,0.42)');
@@ -26,9 +26,9 @@ export function plumeTexture(seed = 7) {
     const nR = 22;
     for (let k = 0; k < nR; k++) {
       const spread = k / (nR - 1) - 0.5;
-      const len = (h - 26) * rng.range(0.62, 1.0) * (1 - Math.abs(spread) * 0.55);
-      let a = -Math.PI / 2 + spread * 0.55 + rng.range(-0.08, 0.08);
-      const curl = rng.range(0.5, 1.3);
+      const len = (h - 30) * rng.range(0.6, 0.95) * (1 - Math.abs(spread) * 0.55);
+      let a = -Math.PI / 2 + spread * 0.5 + rng.range(-0.08, 0.08);
+      const curl = rng.range(0.35, 0.9);
       let x = bx + rng.range(-2, 2), y = by - rng.range(0, 40);
       const steps = 26, pts = [];
       for (let i = 0; i <= steps; i++) {
@@ -66,12 +66,13 @@ export function drawMapleLeaf(g, size, fill, vein, lobes = 7) {
     const a = -Math.PI / 2 - span / 2 + step * k;
     const len = size * (lens[k] ?? 0.45);
     const aN = a + step / 2;
-    const sinus = size * 0.12;
+    const sinus = size * 0.16;
     if (k === 0) g.moveTo(Math.cos(a - step / 2) * sinus * 0.6, Math.sin(a - step / 2) * sinus * 0.6);
     // left edge with a small serration, tip, right edge
-    g.quadraticCurveTo(Math.cos(a - 0.22) * len * 0.62, Math.sin(a - 0.22) * len * 0.62, Math.cos(a - 0.05) * len * 0.92, Math.sin(a - 0.05) * len * 0.92);
+    g.quadraticCurveTo(Math.cos(a - 0.36) * len * 0.6, Math.sin(a - 0.36) * len * 0.6, Math.cos(a - 0.07) * len * 0.9, Math.sin(a - 0.07) * len * 0.9);
     g.lineTo(Math.cos(a) * len, Math.sin(a) * len);
-    g.quadraticCurveTo(Math.cos(a + 0.22) * len * 0.62, Math.sin(a + 0.22) * len * 0.62, Math.cos(aN) * sinus, Math.sin(aN) * sinus);
+    g.lineTo(Math.cos(a + 0.07) * len * 0.9, Math.sin(a + 0.07) * len * 0.9);
+    g.quadraticCurveTo(Math.cos(a + 0.36) * len * 0.6, Math.sin(a + 0.36) * len * 0.6, Math.cos(aN) * sinus, Math.sin(aN) * sinus);
   }
   g.closePath();
   g.fillStyle = fill;
@@ -108,12 +109,12 @@ export function mapleAtlasTexture(seed = 11) {
         g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
       }
       // leaves: back layer darker, front layer brighter
-      const n = 22 + cell * 2;
+      const n = 34 + cell * 3;
       for (let i = 0; i < n; i++) {
         const tw = rng.pick(twigs);
         const p = tw[1 + Math.floor(rng.next() * (tw.length - 1))];
-        const x = p[0] + rng.range(-34, 34), y = p[1] + rng.range(-30, 26);
-        const size = rng.range(40, 68);
+        const x = clamp(p[0] + rng.range(-40, 40), 42, 214), y = clamp(p[1] + rng.range(-34, 30), 42, 214);
+        const size = rng.range(44, 72);
         const back = i < n * 0.4;
         let col = new THREE.Color(rng.pick(MAPLE_COLS));
         if (back) col.multiplyScalar(0.62);

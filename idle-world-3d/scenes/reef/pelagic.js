@@ -265,8 +265,8 @@ export class Jellies {
           // four horseshoe gonads
           float gon = smoothstep(0.05, 0.0, abs(r - 0.12 - 0.02 * cos(ang * 4.0))) * smoothstep(0.2, 0.6, abs(sin(ang * 2.0)));
           float rim = smoothstep(0.3, 0.36, r);
-          vec3 col = base * (fr * 1.6 + 0.08) + vec3(1.0, 0.55, 0.85) * gon * 1.2 + base * rim * (1.4 + vPulse * 2.0);
-          col *= uNight * (0.7 + 0.5 * vPulse);
+          vec3 col = base * (fr * 0.9 + 0.035) + vec3(1.0, 0.55, 0.85) * gon * 0.55 + base * rim * (0.6 + vPulse * 0.9);
+          col *= uNight * (0.6 + 0.4 * vPulse);
           gl_FragColor = vec4(uwAtten(col, vWp), 1.0);
         }`,
     });
@@ -297,7 +297,7 @@ export class Jellies {
     const vis = night > 0.02;
     this.group.visible = vis;
     this.u.uNight.value = night;
-    this.lmat.opacity = 0.55 * night;
+    this.lmat.opacity = 0.4 * night;
     if (!vis) return;
     const lp = this.linePos;
     let o = 0;

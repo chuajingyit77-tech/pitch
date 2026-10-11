@@ -1,18 +1,19 @@
-// 云海 · 光之鳐 — a dreamlike realm above a sea of clouds (inspired by Sky: Children of the Light
-// and Journey). Floating ruins, manta rays of light, sky jellyfish and flocks of light birds.
+// 云海 · 蟠桃仙境 — the Queen Mother's heavenly peach garden floating above a sea of clouds.
+// Chinese pavilions with flying eaves, an immortal peach tree, an old tortoise practising tai chi,
+// red-crowned cranes and flocks of little blue spirit birds. Feed them glowing peaches (蟠桃).
 import * as THREE from 'three';
 import { createWind, clamp, lerp, damp, smoothstep, TAU } from '../lib/util.js';
 import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, makeRockTexture, CLOUD_TOP } from './cloudsea/common.js';
-import { createSky, createAurora, createEnvironment } from './cloudsea/sky.js';
-import { createCloudSea, createPuffs, towerPuffs, bankPuffs } from './cloudsea/clouds.js';
-import { createIslands } from './cloudsea/islands.js';
+import { createSky, createEnvironment } from './cloudsea/sky.js';
+import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './cloudsea/clouds.js';
+import { createGarden } from './cloudsea/garden.js';
 
 export default {
   id: 'cloudsea',
-  food: '星光',
-  kinds: { manta: { zh: '光之鳐' }, jelly: { zh: '天水母' }, spirit: { zh: '光灵' } },
-  starter: ['manta', 'jelly', 'spirit', 'manta', 'jelly'],
-  addable: ['manta', 'jelly', 'spirit'],
+  food: '蟠桃',
+  kinds: { tortoise: { zh: '神龟' }, crane: { zh: '仙鹤' }, bird: { zh: '青鸟' } },
+  starter: ['tortoise', 'crane', 'crane', 'bird', 'bird'],
+  addable: ['crane', 'bird', 'crane', 'bird', 'tortoise'],
   maxMembers: 12,
   ambience: ['pad', 'wind'],
   eatSound: 'chime',
@@ -37,24 +38,23 @@ export default {
     const tod = createTimeOfDay(env, shared);
     tod.update(true);
 
-    /* ---- sky, aurora, image based lighting ---- */
+    /* ---- sky + image based lighting ---- */
     const sky = createSky(shared, tex);
     scene.add(sky.mesh);
-    const aurora = createAurora(shared, tex, rng.fork('aurora'));
-    scene.add(aurora.mesh);
     const envMap = createEnvironment(env, shared, sky.material);
 
     /* ---- cloud sea ---- */
     const sea = createCloudSea(env, shared, tex);
     scene.add(sea.mesh);
 
-    /* ---- islands ---- */
+    /* ---- the garden ---- */
     const wind = createWind({ direction: new THREE.Vector2(0.8, 0.4), strength: 0.8 });
-    const isl = createIslands(env, shared, tex, wind);
-    scene.add(isl.group);
-    isl.casters.slice(0, 4).forEach((c, i) => sea.casters[i].copy(c));
+    const garden = createGarden(env, shared, tex, wind);
+    scene.add(garden.group);
+    garden.casters.slice(0, 4).forEach((c, i) => sea.casters[i].copy(c));
+    for (const f of garden.mistFalls) scene.add(mistFall(shared, tex, f.lip, f.dir, f.height, f.w0, f.w1));
 
-    /* ---- cloud puffs: far towers & banks (static), near cloudlets (dynamic) ---- */
+    /* ---- clouds: far towers & banks (static), auspicious swirls + collars (dynamic) ---- */
     const glowU = { casters: sea.uniforms.uCasters, glowPos: sea.uniforms.uGlowPos, glowCol: sea.uniforms.uGlowCol };
     const crng = rng.fork('puffs');
     const farItems = [];
@@ -63,7 +63,7 @@ export default {
     for (let i = 0; i < nTowers; i++) {
       const a = a0 + (i / nTowers) * TAU + crng.range(-0.25, 0.25);
       const d = crng.range(950, 2300);
-      towerPuffs(crng, new THREE.Vector3(Math.cos(a) * d, CLOUD_TOP - 25, Math.sin(a) * d), crng.range(170, 460), crng.range(80, 170), Math.round(lerp(22, 40, q)), farItems);
+      towerPuffs(crng, new THREE.Vector3(Math.cos(a) * d, CLOUD_TOP - 25, Math.sin(a) * d), crng.range(170, 420), crng.range(80, 170), Math.round(lerp(22, 40, q)), farItems);
     }
     for (let i = 0; i < 11; i++) {
       const a = crng.range(0, TAU), d = crng.range(190, 760);
@@ -74,29 +74,41 @@ export default {
     scene.add(farPuffs.mesh);
 
     const nearItems = [];
-    const cloudlets = [];
-    for (let i = 0; i < (q >= 0.7 ? 7 : 4); i++) {
-      const a = crng.range(0, TAU), d = crng.range(80, 150), y = CLOUD_TOP + crng.range(6, 30);
-      const cl = { a, d, y, speed: crng.range(0.0025, 0.006) * crng.sign(), items: [] };
-      const n = crng.int(5, 9), size = crng.range(3, 6.5);
-      for (let k = 0; k < n; k++) {
-        const it = { ox: crng.range(-1.6, 1.6) * size, oy: crng.range(-0.3, 0.6) * size, oz: crng.range(-0.8, 0.8) * size, r: size * crng.range(0.55, 1.0), seed: crng.next(), shade: 0.5, alpha: crng.range(0.75, 0.95), x: 0, y: 0, z: 0, cx: 0, cy: 0, cz: 0, cr: size * 2 };
-        it.shade = clamp(0.45 + it.oy / size * 0.5, 0, 1);
-        cl.items.push(it); nearItems.push(it);
-      }
-      cloudlets.push(cl);
+    // 祥云: puffs strung along ruyi-style double spirals; each swirl turns to face the camera
+    const swirls = [];
+    const nSwirls = q >= 0.7 ? 7 : 4;
+    for (let i = 0; i < nSwirls; i++) {
+      const a = crng.range(0, TAU), d = i < 3 ? crng.range(34, 55) : crng.range(70, 140);
+      const sw = { a, d, y: crng.range(-6, 18) + (i < 3 ? 0 : 6), speed: crng.range(0.006, 0.012) * crng.sign(), size: i < 3 ? crng.range(1.6, 2.4) : crng.range(3, 5.5), pts: [], dir: crng.sign() };
+      const S = sw.size;
+      const curl = (cx, cy, R0, turns, sign, k0) => {
+        const n = Math.round(26 * turns);
+        for (let k = 0; k < n; k++) {
+          const t = k / n, th = t * turns * TAU;
+          const r = R0 * Math.exp(-0.32 * th);
+          sw.pts.push({ u: cx + sign * Math.cos(th + k0) * r, v: cy + Math.sin(th + k0) * r, w: crng.range(-0.15, 0.15) * S, r: Math.max(0.3, 0.5 * r + 0.18) * S * 0.7 });
+        }
+      };
+      curl(0, 0, 1.6, 1.25, sw.dir, Math.PI);
+      curl(sw.dir * 2.3, -0.35, 1.05, 1.1, -sw.dir, 0);
+      // trailing tail
+      for (let k = 0; k < 16; k++) { const t = k / 15; sw.pts.push({ u: -sw.dir * (1.2 + t * 4.4), v: -1.25 + Math.sin(t * 3.2) * 0.35, w: 0, r: (0.85 - t * 0.55) * S * 0.7 }); }
+      for (const p of sw.pts) { p.it = { x: 0, y: 0, z: 0, r: p.r, seed: crng.next(), shade: clamp(0.6 + p.v * 0.12, 0.25, 1), alpha: 0.8, cx: 0, cy: 0, cz: 0, cr: 4 * S }; nearItems.push(p.it); }
+      swirls.push(sw);
     }
-    // collars where the islets dip toward the sea, and mist where the fall meets the clouds
+    // collars where the islets dip toward the sea, and mist where the falls meet the clouds
     const addStatic = (x, y, z, r, alpha, shade = 0.6) => nearItems.push({ x, y, z, r, seed: crng.next(), shade, alpha, cx: x, cy: y - r, cz: z, cr: r * 2 });
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * TAU + crng.range(-0.2, 0.2), rr = crng.range(3, 8);
-      addStatic(Math.cos(a) * rr, crng.range(-27, -19), Math.sin(a) * rr, crng.range(4, 7), 0.75, 0.5);
+      addStatic(Math.cos(a) * rr, crng.range(-28, -20), Math.sin(a) * rr, crng.range(4, 7), 0.75, 0.5);
     }
-    for (let i = 0; i < 5; i++) {
-      const v = i / 4;
-      const p = isl.lip.clone().addScaledVector(isl.fallDir, 2 + v * 2.5);
-      p.y -= Math.pow(v, 1.5) * 32 + 1;
-      addStatic(p.x, p.y, p.z, lerp(1.4, 8, v), lerp(0.35, 0.8, v), 0.7);
+    for (const f of garden.mistFalls) {
+      for (let i = 0; i < 5; i++) {
+        const v = i / 4;
+        const p = f.lip.clone().addScaledVector(f.dir, 2 + v * 2.5);
+        p.y -= Math.pow(v, 1.5) * f.height * 0.92 + 1;
+        addStatic(p.x, p.y, p.z, lerp(1.2, f.w1 * 0.9, v), lerp(0.3, 0.75, v), 0.7);
+      }
     }
     const nearPuffs = createPuffs(shared, tex, nearItems, { dynamic: true, glow: glowU });
     nearPuffs.mesh.renderOrder = 3;
@@ -109,13 +121,19 @@ export default {
       const s = q >= 0.9 ? 2048 : 1024;
       keyLight.shadow.mapSize.set(s, s);
       const c = keyLight.shadow.camera;
-      c.left = -19; c.right = 19; c.top = 19; c.bottom = -19; c.near = 1; c.far = 140;
+      c.left = -20; c.right = 20; c.top = 20; c.bottom = -20; c.near = 1; c.far = 160;
       keyLight.shadow.bias = -0.0004;
       keyLight.shadow.normalBias = 0.04;
     }
     scene.add(keyLight, keyLight.target);
     const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.5);
     scene.add(hemi);
+    const warmLight = new THREE.PointLight(new THREE.Color('#ff9a52'), 0, 18, 1.6);
+    warmLight.position.copy(garden.pavPos).add(new THREE.Vector3(0, 3.0, 0));
+    scene.add(warmLight);
+    const terraceLight = new THREE.PointLight(new THREE.Color('#ffb070'), 0, 14, 1.6);
+    terraceLight.position.copy(garden.taiji).add(new THREE.Vector3(1.4, 1.6, 0));
+    scene.add(terraceLight);
 
     /* ---- post ---- */
     const post = {
@@ -125,50 +143,59 @@ export default {
       lift: [0.02, 0.01, 0.045], gain: [1.02, 1.0, 0.98], ca: 0.0015,
     };
 
+    // frame the moon at night, the sunset in the evening
+    let yaw0 = 1.2;
+    if (tod.night > 0.5) {
+      const md = tod.moonDir;
+      yaw0 = Math.atan2(-md.x, -md.z) - 0.35;
+    }
+    const target = new THREE.Vector3(0.6, 2.4, 0.3);
     const view = {
-      target: new THREE.Vector3(0, 2.0, 0), dist: 30, distRange: [18, 60],
-      yaw: 1.22, yawRange: null, pitch: 0.12, pitchRange: [0.05, 0.45],
+      target, dist: 28, distRange: [16, 60],
+      yaw: yaw0, yawRange: null, pitch: 0.13, pitchRange: [0.04, 0.45],
       drift: 0.025, fov: 42,
     };
 
     envMap.update(env.hours(), 0, true);
     scene.environment = envMap.texture;
 
-    let elapsed = 0;
-    const tmpV = new THREE.Vector3();
     function update(dt, t) {
-      elapsed = t;
       shared.uTime.value = t;
       tod.update();
       wind.update(dt);
       if (envMap.update(tod.hours, t, false)) scene.environment = envMap.texture;
       sky.mesh.position.copy(camera.position);
-      aurora.mesh.position.copy(camera.position);
-      aurora.uniforms.uAurora.value = smoothstep(0.35, 0.95, tod.night);
       sea.update(dt);
-      // drifting cloudlets
-      for (const cl of cloudlets) {
-        cl.a += cl.speed * dt;
-        const cx = Math.cos(cl.a) * cl.d, cz = Math.sin(cl.a) * cl.d, cy = cl.y + Math.sin(t * 0.1 + cl.d) * 1.5;
-        for (const it of cl.items) {
-          it.x = cx + it.ox; it.y = cy + it.oy; it.z = cz + it.oz;
-          it.cx = cx; it.cy = cy - 2; it.cz = cz;
+      // swirls drift around the garden and turn to face the viewer
+      for (const sw of swirls) {
+        sw.a += sw.speed * dt;
+        const cx = Math.cos(sw.a) * sw.d, cz = Math.sin(sw.a) * sw.d, cy = sw.y + Math.sin(t * 0.12 + sw.d) * 1.2;
+        let rx = camera.position.z - cz, rz = -(camera.position.x - cx);
+        const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
+        const fx = -rz, fz = rx;
+        for (const p of sw.pts) {
+          const it = p.it;
+          it.x = cx + rx * p.u * sw.size + fx * p.w; it.y = cy + p.v * sw.size; it.z = cz + rz * p.u * sw.size + fz * p.w;
+          it.cx = cx; it.cy = cy - sw.size; it.cz = cz;
         }
       }
       nearPuffs.update(camera);
-      isl.update(dt, t, tod);
+      garden.update(dt, t, tod);
 
       // key light follows the sun / moon
-      keyLight.position.copy(tod.lightDir).multiplyScalar(70);
+      keyLight.position.copy(tod.lightDir).multiplyScalar(80);
       keyLight.target.position.set(0, 0, 0);
       keyLight.color.copy(tod.pal.light);
       keyLight.intensity = tod.lightI * Math.PI;
       hemi.color.copy(shared.uAmbient.value).multiplyScalar(1.2);
       hemi.groundColor.copy(shared.uBounce.value).multiplyScalar(1.2);
       hemi.intensity = Math.PI * 0.35;
+      const fl = 0.9 + 0.1 * Math.sin(t * 7.7) * Math.sin(t * 3.1);
+      warmLight.intensity = lerp(0.6, 16, tod.night) * fl;
+      terraceLight.intensity = lerp(0.3, 9, tod.night) * fl;
 
       // grade with the time of day
-      const n = tod.night, g = tod.golden, d = tod.day;
+      const n = tod.night, g = tod.golden;
       post.bloom.threshold = lerp(lerp(2.6, 1.5, g), 0.9, n);
       post.bloom.strength = lerp(lerp(0.55, 0.8, g), 0.95, n);
       post.exposure = lerp(lerp(0.86, 1.0, g), 1.35, n);

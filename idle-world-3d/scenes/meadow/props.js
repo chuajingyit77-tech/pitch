@@ -31,7 +31,7 @@ export function makeStoneMaterial(maps, fogU, tint = '#a39d90') {
     vertexHeader: 'varying vec3 vWN;',
     fragmentHeader: 'varying vec3 vWN;',
     vertex: { '#include <beginnormal_vertex>': '$&\n vWN = normalize(mat3(modelMatrix) * objectNormal);' },
-    fragment: { '#include <map_fragment>': '$&\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.24, 0.08), smoothstep(0.55, 0.95, vWN.y) * 0.55);' },
+    fragment: { '#include <map_fragment>': '$&\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.24, 0.26, 0.1), smoothstep(0.75, 0.98, vWN.y) * 0.4);' },
   });
   return addFog(m, fogU, 'mfogStone');
 }
@@ -175,7 +175,7 @@ export function buildRocks({ rng, noise, list, heightAt, stoneMat }) {
       p.setXYZ(i, x * d, Math.max(y * d, -0.6), z * d);
     }
     geo.computeVertexNormals();
-    geo.scale(r.s * rng.range(0.9, 1.3), r.s * rng.range(0.45, 0.75), r.s * rng.range(0.8, 1.1));
+    geo.scale(r.s * rng.range(0.9, 1.25), r.s * rng.range(0.6, 0.95), r.s * rng.range(0.8, 1.1));
     geo.rotateY(rng.range(0, TAU));
     geo.translate(r.x, heightAt(r.x, r.z) - r.s * 0.12, r.z);
     // planar-ish uv for the tiling stone texture
