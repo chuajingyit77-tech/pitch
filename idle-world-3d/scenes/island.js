@@ -2,7 +2,7 @@
 // Art direction: Sea of Thieves water (rich reflective deep ocean, sun glitter, turquoise swell glow)
 // + Animal Crossing coziness (soft sand, palms, a little dock, hut and lantern, friendly residents).
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, createNoise, createWind } from '../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, createNoise, createWind, sunState } from '../lib/util.js';
 import { waterUniforms, LAYER_NO_REFLECT } from './island/shared.js';
 import { createTerrain } from './island/terrain.js';
 import { createWater, waveHeight } from './island/water.js';
@@ -66,13 +66,29 @@ export default {
     const hemi = new THREE.HemisphereLight(0xbcd8ff, 0xd8c9a0, 0.4);
     scene.add(hemi);
 
+    /* ---------------- camera ---------------- */
+    const dockA = terrain.dockAng + 0.55;
+    const viewYaw = Math.atan2(Math.cos(dockA), Math.sin(dockA));
+    const view = {
+      target: new THREE.Vector3(0, 1.4, 0),
+      dist: 45, distRange: [25, 80],
+      yaw: viewYaw, yawRange: null,
+      pitch: 0.35, pitchRange: [0.12, 0.9],
+      drift: 0.03, fov: 50, minY: 2.5,
+    };
+    // The sun sets roughly behind the island as seen from the opening view (sun path on the water),
+    // and the solar clock is nudged ~20 min later so 18:00–18:20 is a real golden sunset.
+    const SUN_SHIFT = 0.32;
+    const sunYaw = viewYaw + 0.38;
+    const SUN_AZ = Math.atan2(Math.cos(sunYaw), Math.sin(sunYaw));
+
     /* ---------------- time of day ---------------- */
     const post = {
       bloom: { strength: 0.35, radius: 0.55, threshold: 1.0 },
       exposure: 1.0, toneMapping: 'aces',
       vignette: 0.35, grain: 0.02, saturation: 1.12, contrast: 1.05,
       lift: [0, 0.004, 0.012], gain: [1, 1, 1], ca: 0.0012,
-      tilt: { amount: 0.25, center: 0.52, width: 0.2 },
+      tilt: { amount: 0.22, center: 0.52, width: 0.24 },
     };
     const tod = { hours: -1, elev: 0, day: 1, night: 0, golden: 0, lantern: 0, dusk: 0, envElev: -999, envNight: -1, timer: 0 };
     const C = {
@@ -86,7 +102,7 @@ export default {
       const h = env.hours();
       if (!force && Math.abs(h - tod.hours) < 0.0015) return;
       tod.hours = h;
-      const s = env.sun();
+      const s = sunState(h - SUN_SHIFT, { azimuthOffset: SUN_AZ });
       sunDir.copy(s.dir); moonDir.copy(s.moonDir);
       tod.elev = s.elevationDeg; tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       const day = s.day, night = s.night, golden = s.golden;
@@ -103,8 +119,15 @@ export default {
       su.uNight.value = smoothstep(0.0, 1.0, night * 1.1);
       su.uMoonDir.value.copy(moonDir);
       su.uSunGlow.value.copy(C.sunCol).multiplyScalar(golden * 0.9);
-      su.uSkyGain.value = lerp(0.48, 0.62, golden);
+      su.uSkyGain.value = lerp(0.46, 0.6, golden);
       su.uLowTint.value.setRGB(1, 1, 1).lerp(C.tmp.setRGB(1.25, 0.95, 1.05), golden * 0.6);
+      su.uArtZen.value.copy(s.zenith);
+      su.uArtHor.value.copy(s.horizon);
+      su.uArtSun.value.copy(C.sunCol).multiplyScalar(1.1);
+      const twi = smoothstep(2, -4, s.elevationDeg);
+      su.uArtMix.value = lerp(lerp(0.55, 0.32, golden), 0.88, twi);
+      su.uArtGain.value = lerp(1.18, 1.35, Math.max(golden, twi)) * (1 - night * 0.5);
+      su.uSkySat.value = 1.25;
 
       // key light: the sun by day, the moon by night
       const sunVis = smoothstep(-3.5, 2.5, s.elevationDeg);
@@ -129,10 +152,9 @@ export default {
       wu.uMoonCol.value.copy(C.moon).multiplyScalar(night * 0.7);
       wu.uSSS.value.setRGB(0.0, 0.55, 0.42).multiplyScalar(sunI * 0.11 + 0.02 * day).lerp(C.tmp.setRGB(0.25, 0.32, 0.15).multiplyScalar(sunI * 0.12), golden * 0.5);
       wu.uFoamCol.value.copy(C.sunCol).multiplyScalar(sunI * 0.26).add(C.tmp.copy(s.skyAmbient).multiplyScalar(s.ambientIntensity * 0.5));
-      wu.uGlow.value.setRGB(0.12, 0.8, 1.7).multiplyScalar(2.6 * smoothstep(0.35, 0.95, night));
+      wu.uGlow.value.setRGB(0.04, 0.5, 1.6).multiplyScalar(1.6 * smoothstep(0.35, 0.95, night));
       wu.uNight.value = night;
-      C.horizon.copy(s.horizon).lerp(C.tmp.copy(s.zenith), 0.25).multiplyScalar(lerp(0.85, 0.55, golden) * (1 - night * 0.6));
-      if (golden > 0) C.horizon.lerp(C.tmp.copy(C.sunCol).multiplyScalar(0.6), golden * 0.25);
+      C.horizon.copy(s.horizon).lerp(C.tmp.copy(s.zenith), 0.18).multiplyScalar(lerp(1.05, 0.8, golden) * (1 - night * 0.7));
       wu.uHorizon.value.copy(C.horizon);
       wu.uSkyFallback.value.copy(C.horizon);
 
@@ -168,16 +190,6 @@ export default {
       }
     }
     applyTime(true);
-
-    /* ---------------- camera ---------------- */
-    const dockA = terrain.dockAng + 0.55;
-    const view = {
-      target: new THREE.Vector3(0, 1.4, 0),
-      dist: 45, distRange: [25, 80],
-      yaw: Math.atan2(Math.cos(dockA), Math.sin(dockA)), yawRange: null,
-      pitch: 0.35, pitchRange: [0.12, 0.9],
-      drift: 0.03, fov: 50, minY: 2.5,
-    };
 
     /* ---------------- feeding ---------------- */
     const H = terrain.height;
