@@ -20,7 +20,7 @@ export const COL = {
 /* ------------------------------------------------------------------ */
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 export function xf(geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) {
-  _e.set(rx, ry, rz); _q.setFromEuler(_e); _s.set(sx, sy, sz); _p.set(x, y, z);
+  _e.set(rx, ry, rz, 'YXZ'); _q.setFromEuler(_e); _s.set(sx, sy, sz); _p.set(x, y, z);
   return geo.applyMatrix4(_m.compose(_p, _q, _s));
 }
 /** Normalise a built-in geometry for merging: indexed, no uv, constant (or gradient-darkened) colour. */
@@ -44,7 +44,7 @@ const cyl = (r0, r1, h, seg, color, o) => paint(new THREE.CylinderGeometry(r0, r
 
 /** Collects geometry per material bucket; local placement via a parent matrix. */
 export class Builder {
-  constructor() { this.b = { paint: [], jade: [], roof: [], gold: [] }; this.lanterns = []; this.lights = []; this.mat = new THREE.Matrix4(); this.stack = []; }
+  constructor() { this.b = { paint: [], jade: [], roof: [], gold: [] }; this.lanterns = []; this.lights = []; this.extras = []; this.mat = new THREE.Matrix4(); this.stack = []; }
   push(x, y, z, ry = 0, s = 1) { this.stack.push(this.mat.clone()); const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(s, s, s)); this.mat.multiply(m); return this; }
   pop() { this.mat.copy(this.stack.pop()); return this; }
   add(bucket, geo) { geo.applyMatrix4(this.mat); this.b[bucket].push(geo); return geo; }
@@ -224,14 +224,13 @@ export function archMaterials(shared, tex) {
       `,
       '#include <normal_fragment_maps>': /* glsl */`$&
         if (vTile > 0.5) {
+          // surface-gradient bump across the round tile rolls (analytic, so no blockiness)
           vec3 dpx = dFdx(-vViewPosition), dpy = dFdy(-vViewPosition);
-          float h = cos(fract(tph) * 3.14159) * 0.35 * aa;
-          float dhx = dFdx(tph), dhy = dFdy(tph);
-          // tilt the normal across the tile rolls
+          float dH = 0.13 * cos(fract(tph) * 3.14159) * aa;
+          float Hx = dH * dFdx(tph), Hy = dH * dFdy(tph);
           vec3 r1 = cross(dpy, normal), r2 = cross(normal, dpx);
           float det = dot(dpx, r1);
-          vec3 sg = sign(det) * (dhx * r1 + dhy * r2) * h;
-          normal = normalize(normal + sg * 0.6 / max(abs(det), 1e-6) * abs(det));
+          normal = normalize(abs(det) * normal - sign(det) * (Hx * r1 + Hy * r2));
         }
       `,
     },
@@ -285,8 +284,8 @@ function rectPoly(hx, hz) { return ensureCCW([[-hx, -hz], [hx, -hz], [hx, hz], [
 function ensureCCW(poly) {
   let a = 0;
   for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; a += p[0] * q[1] - q[0] * p[1]; }
-  // with x right and z "down" when seen from +y, inward-left requires negative signed area here
-  return a > 0 ? poly.slice().reverse() : poly;
+  // insetPoly treats the left normal (-ez, ex) as inward, which holds for positive signed area
+  return a < 0 ? poly.slice().reverse() : poly;
 }
 
 /** White-jade balustrade along a polyline of Vector3 points (local to the builder). */
@@ -319,9 +318,9 @@ export function balustrade(B, pts, { h = 0.85, every = 1.05, closed = false, pos
 
 /** Hexagonal double-eaved pavilion (重檐六角亭). Local origin at ground centre. */
 export function pavilion(B, { R = 2.0, colH = 2.75, plat = 3.1, platH = 0.62, openAngle = 0 } = {}) {
-  // platform
-  B.add('jade', xf(cyl(plat, plat + 0.12, platH, 6, COL.jade, { ao: 0.35 }), 0, platH / 2, 0, 0, openAngle));
-  B.add('jade', xf(cyl(plat + 0.05, plat + 0.05, 0.08, 6, COL.jadeShade), 0, platH + 0.02, 0, 0, openAngle));
+  // platform (hexagon corners aligned with the columns)
+  B.add('jade', xf(cyl(plat, plat + 0.12, platH, 6, COL.jade, { ao: 0.35 }), 0, platH / 2, 0, 0, openAngle + Math.PI / 6));
+  B.add('jade', xf(cyl(plat + 0.05, plat + 0.05, 0.08, 6, COL.jadeShade), 0, platH + 0.02, 0, 0, openAngle + Math.PI / 6));
   // steps toward +z (rotated by openAngle)
   for (let i = 0; i < 3; i++) {
     const g = box(1.6, platH * (3 - i) / 3, 0.42, COL.jade, { ao: 0.2 });
@@ -445,8 +444,8 @@ export function gate(B, plaqueGeo, { openAngle = 0 } = {}) {
     B.add('paint', xf(box(2.15, 0.28, 0.24, COL.teal), s * 2.28, 3.55, 0));
     B.add('gold', xf(box(2.17, 0.05, 0.26, COL.gold), s * 2.28, 3.4, 0));
   }
-  // plaque between lintels
-  if (plaqueGeo) B.add('paint', xf(plaqueGeo, 0, 3.78, 0.14));
+  // plaque between lintels (textured, built by the caller)
+  if (plaqueGeo) B.extras.push({ geo: plaqueGeo, matrix: B.mat.clone().multiply(new THREE.Matrix4().makeTranslation(0, 3.78, 0.14)) });
   B.add('gold', xf(box(1.5, 0.62, 0.06, COL.gold), 0, 3.78, 0.1));
   // roofs
   addRoof(B, rectPoly(1.75, 0.62), 4.4, { height: 0.75, vMax: 1, K: 8, lift: 0.32, flare: 0.22, seg: 6, thick: 0.1 }, { ridgeR: 0.045, mainRidge: true });
@@ -515,13 +514,14 @@ export function createLanterns(shared, list) {
   const caps = mergeGeometries([
     paint(new THREE.CylinderGeometry(0.1, 0.11, 0.05, 12), COL.gold).translate(0, 0.2, 0),
     paint(new THREE.CylinderGeometry(0.11, 0.1, 0.05, 12), COL.gold).translate(0, -0.2, 0),
-    paint(new THREE.CylinderGeometry(0.008, 0.008, 1, 4), '#2a1a12').translate(0, 0.7, 0),
+    paint(new THREE.CylinderGeometry(0.008, 0.008, 0.32, 4), '#2a1a12').translate(0, 0.36, 0),
     paint(new THREE.ConeGeometry(0.045, 0.22, 8), '#b8261c').rotateX(Math.PI).translate(0, -0.33, 0),
   ]);
   const n = list.length;
+  const glowU = { value: 1 };
   const bodyMat = patchStd(new THREE.MeshStandardMaterial({ color: '#c42a1c', roughness: 0.7, emissive: new THREE.Color('#ff5a1e'), emissiveIntensity: 1 }), shared, {
     key: 'lantern',
-    uniforms: { uLanternGlow: { value: 1 } },
+    uniforms: { uLanternGlow: glowU },
     fragmentHeader: 'uniform float uLanternGlow;',
     fragment: {
       '#include <emissivemap_fragment>': /* glsl */`$&
@@ -542,7 +542,7 @@ export function createLanterns(shared, list) {
       const L = state[i];
       const sw = Math.sin(t * 0.9 + L.ph) * 0.06;
       _q.setFromEuler(_e.set(sw, 0, Math.cos(t * 0.7 + L.ph) * 0.05));
-      m.compose(_p.set(L.pos.x, L.pos.y - L.hang * L.s - 0.2 * L.s, L.pos.z), _q, _s.set(L.s, L.s, L.s));
+      m.compose(_p.set(L.pos.x, L.pos.y - 0.5 * L.s, L.pos.z), _q, _s.set(L.s, L.s, L.s));
       bodies.setMatrixAt(i, m); capsM.setMatrixAt(i, m);
     }
     bodies.instanceMatrix.needsUpdate = true; capsM.instanceMatrix.needsUpdate = true;
@@ -552,7 +552,7 @@ export function createLanterns(shared, list) {
     meshes: [bodies, capsM], state,
     update(t, night) {
       write(t);
-      bodyMat.userData.shader && (bodyMat.userData.shader.uniforms.uLanternGlow.value = lerp(0.12, 2.6, night) * (0.92 + 0.08 * Math.sin(t * 7.3)));
+      glowU.value = lerp(0.12, 2.6, night) * (0.92 + 0.08 * Math.sin(t * 7.3));
     },
   };
 }
