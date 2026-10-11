@@ -392,6 +392,7 @@ class KoiPond {
     this.buildBamboo();
     this.buildShrubs();
     this.buildLilies();
+    this.buildFloatLanterns();
     this.buildSpout();
     this.buildParticles();
     this.buildKoi();
@@ -516,7 +517,7 @@ class KoiPond {
     const mat = new THREE.MeshPhysicalMaterial({
       color: '#ffffff', roughness: 0.035, metalness: 0, ior: 1.333,
       transmission: useTransmission ? 1 : 0, thickness: 0.8,
-      attenuationColor: new THREE.Color('#4f8a6c'), attenuationDistance: 2.4,
+      attenuationColor: new THREE.Color('#3f8a6a'), attenuationDistance: 2.2,
       transparent: !useTransmission, opacity: 0.42,
       specularIntensity: 1, envMapIntensity: 1.5,
     });
@@ -720,7 +721,7 @@ class KoiPond {
     this.bridge = group;
   }
 
-  /* ---------- snow-viewing lantern (yukimi-dōrō) ---------- */
+  /* ---------- stone lantern (kasuga-dōrō) ---------- */
   buildLantern() {
     const r = this.rng.fork('lantern');
     // pick a shoreline spot on the big lobe, facing the camera side
@@ -739,43 +740,116 @@ class KoiPond {
     spot = spot || new THREE.Vector3(this.lobes[0].x, 0.1, this.lobes[0].z + this.lobes[0].r);
     const stone = new THREE.MeshStandardMaterial({ map: this.rockMat.map, normalMap: this.rockMat.normalMap, normalScale: new THREE.Vector2(1, 1), color: '#b9b4a6', roughness: 0.9 });
     addUnderwater(stone, this.U, { caustic: 0.6, tint: 1, moss: 0.9, key: 'lantern' });
+    // Kasuga-style lantern: base, pole with ring, platform, light box, hexagonal roof with curled corners, jewel
     const g = new THREE.Group();
-    const S = 1.15;
-    // three curved legs
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * TAU + 0.3;
-      const pts = [new THREE.Vector3(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55), new THREE.Vector3(Math.cos(a) * 0.42, 0.32, Math.sin(a) * 0.42), new THREE.Vector3(Math.cos(a) * 0.22, 0.55, Math.sin(a) * 0.22)];
-      const leg = new THREE.Mesh(taperedTube(pts, 0.07, 0.05, 6), stone);
-      leg.castShadow = true;
-      g.add(leg);
-    }
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.08, 6), stone); ring.position.y = 0.58; g.add(ring);
-    const box = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.3, 6), stone); box.position.y = 0.77; g.add(box);
-    // paper windows
+    const add = (geo, y) => { const m = new THREE.Mesh(geo, stone); m.position.y = y; g.add(m); return m; };
+    add(new THREE.CylinderGeometry(0.36, 0.4, 0.14, 6), 0.07);
+    add(new THREE.CylinderGeometry(0.2, 0.33, 0.12, 6), 0.2);
+    add(new THREE.CylinderGeometry(0.092, 0.112, 0.92, 14), 0.72);
+    add(new THREE.TorusGeometry(0.108, 0.022, 6, 18), 0.72).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.31, 0.15, 0.15, 6), 1.255);
+    add(new THREE.CylinderGeometry(0.2, 0.2, 0.34, 6), 1.5);
     this.lanternGlow = new THREE.MeshStandardMaterial({ color: '#f2e2c0', emissive: '#ffb25a', emissiveIntensity: 0, roughness: 0.9 });
+    const ap = 0.2 * Math.cos(Math.PI / 6) + 0.003;
     for (let i = 0; i < 6; i += 2) {
-      const a = (i / 6) * TAU + Math.PI / 6;
-      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.18), this.lanternGlow);
-      win.position.set(Math.cos(a) * 0.226, 0.77, Math.sin(a) * 0.226);
-      win.lookAt(win.position.clone().multiplyScalar(2).setY(0.77));
+      const phi = (i / 6) * TAU + Math.PI / 6;
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.2), this.lanternGlow);
+      win.position.set(Math.sin(phi) * ap, 1.5, Math.cos(phi) * ap);
+      win.lookAt(new THREE.Vector3(Math.sin(phi) * 2, 1.5, Math.cos(phi) * 2));
       g.add(win);
     }
-    // wide hexagonal roof with upturned rim
-    const roofProfile = [new THREE.Vector2(0.0, 0.36), new THREE.Vector2(0.1, 0.34), new THREE.Vector2(0.38, 0.17), new THREE.Vector2(0.62, 0.05), new THREE.Vector2(0.69, 0.09), new THREE.Vector2(0.67, 0.02), new THREE.Vector2(0.4, 0.0), new THREE.Vector2(0.18, 0.0)];
-    const roof = new THREE.Mesh(new THREE.LatheGeometry(roofProfile, 6), stone);
-    roof.position.y = 0.92; roof.castShadow = true; g.add(roof);
-    const knob = new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(0.001, 0.26), new THREE.Vector2(0.05, 0.22), new THREE.Vector2(0.1, 0.12), new THREE.Vector2(0.08, 0.04), new THREE.Vector2(0.06, 0.0)], 10), stone);
-    knob.position.y = 1.33; g.add(knob);
-    g.scale.setScalar(S);
+    const roofProfile = [new THREE.Vector2(0.0, 0.3), new THREE.Vector2(0.08, 0.29), new THREE.Vector2(0.3, 0.12), new THREE.Vector2(0.44, 0.035), new THREE.Vector2(0.48, 0.07), new THREE.Vector2(0.47, 0.0), new THREE.Vector2(0.2, -0.02), new THREE.Vector2(0.14, -0.02)];
+    add(new THREE.LatheGeometry(roofProfile, 6), 1.68);
+    for (let i = 0; i < 6; i++) {
+      const phi = (i / 6) * TAU;
+      const curl = add(new THREE.SphereGeometry(0.034, 8, 6), 1.76);
+      curl.position.x = Math.sin(phi) * 0.475; curl.position.z = Math.cos(phi) * 0.475;
+    }
+    add(new THREE.CylinderGeometry(0.07, 0.09, 0.05, 10), 1.99);
+    add(new THREE.LatheGeometry([new THREE.Vector2(0.001, 0.2), new THREE.Vector2(0.035, 0.17), new THREE.Vector2(0.075, 0.09), new THREE.Vector2(0.06, 0.03), new THREE.Vector2(0.045, 0.0)], 12), 2.01);
     g.position.copy(spot);
     g.rotation.y = r.range(0, TAU);
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.scene.add(g);
     this.lanternLight = new THREE.PointLight('#ffb062', 0, 12, 1.6);
-    this.lanternLight.position.copy(spot).add(new THREE.Vector3(0, 0.77 * S, 0));
+    this.lanternLight.position.copy(spot).add(new THREE.Vector3(0, 1.5, 0));
     this.scene.add(this.lanternLight);
     this.lanternPos = this.lanternLight.position.clone();
   }
+
+  /* ---------- floating paper lanterns (tōrō nagashi), only at night ---------- */
+  buildFloatLanterns() {
+    const r = this.rng.fork('floaters');
+    const n = Math.round(lerp(4, 7, this.q));
+    const paper = canvasTexture(128, 128, (g, w) => {
+      g.fillStyle = '#f6e6c8'; g.fillRect(0, 0, w, w);
+      for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(150,110,60,${r.range(0.02, 0.09)})`; g.fillRect(r.range(0, w), r.range(0, w), r.range(2, 14), 1); }
+      // a small vermilion lotus on each panel
+      g.fillStyle = 'rgba(196,58,40,0.9)';
+      for (let k = -2; k <= 2; k++) {
+        g.save(); g.translate(w / 2, w * 0.68); g.rotate(k * 0.42);
+        g.beginPath(); g.ellipse(0, -22, 7, 22, 0, 0, TAU); g.fill(); g.restore();
+      }
+      g.strokeStyle = '#3a2416'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, w - 8);
+      g.lineWidth = 3; g.beginPath(); g.moveTo(w / 2, 4); g.lineTo(w / 2, 18); g.stroke();
+    });
+    this.disposables.push(paper);
+    const boxGeo = new THREE.BoxGeometry(0.17, 0.2, 0.17); boxGeo.translate(0, 0.12, 0);
+    const baseGeo = new THREE.BoxGeometry(0.23, 0.03, 0.23); baseGeo.translate(0, 0.012, 0);
+    const baseMat = new THREE.MeshStandardMaterial({ color: '#3b2a1c', roughness: 0.8 });
+    this.floaters = [];
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.MeshStandardMaterial({ map: paper, emissiveMap: paper, emissive: '#ffb468', emissiveIntensity: 0, roughness: 0.9 });
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(baseGeo, baseMat), new THREE.Mesh(boxGeo, mat));
+      const p = this.randomInPond(r, 0.8, new THREE.Vector3());
+      g.position.set(p.x, WATER_Y, p.z);
+      g.rotation.y = r.range(0, TAU);
+      g.visible = false;
+      this.scene.add(g);
+      this.floaters.push({ group: g, mat, vel: new THREE.Vector3(), ph: r.range(0, TAU), spin: r.range(-0.08, 0.08) });
+    }
+    this.floatLight = new THREE.PointLight('#ffb468', 0, 7, 1.4);
+    this.scene.add(this.floatLight);
+  }
+
+  updateFloatLanterns(dt, time) {
+    if (!this.floaters) return;
+    const vis = smoothstep(0.3, 0.75, this.sunState ? this.sunState.night : 0);
+    const c = _v3.set(0, 0, 0);
+    let count = 0;
+    for (const f of this.floaters) {
+      const g = f.group;
+      g.visible = vis > 0.02;
+      if (!g.visible) continue;
+      const P = g.position;
+      // a slow swirl around the nearest lobe plus a gentle wander
+      const L = this.lobes.reduce((a, b) => (Math.hypot(P.x - a.x, P.z - a.z) - a.r < Math.hypot(P.x - b.x, P.z - b.z) - b.r ? a : b));
+      const dx = P.x - L.x, dz = P.z - L.z, d = Math.hypot(dx, dz) || 1;
+      f.vel.x += (-dz / d * 0.05 + Math.sin(time * 0.13 + f.ph) * 0.03 - f.vel.x) * dt * 0.5;
+      f.vel.z += (dx / d * 0.05 + Math.cos(time * 0.11 + f.ph) * 0.03 - f.vel.z) * dt * 0.5;
+      const e = this.sdf(P.x, P.z);
+      if (e > -0.55) { this.sdfGrad(P.x, P.z, _v); f.vel.addScaledVector(_v, -(e + 0.55) * dt * 0.8); }
+      for (const o of this.floaters) {
+        if (o === f || !o.group.visible) continue;
+        const ox = P.x - o.group.position.x, oz = P.z - o.group.position.z, od = Math.hypot(ox, oz);
+        if (od < 0.45 && od > 1e-4) { f.vel.x += ox / od * 0.05 * dt; f.vel.z += oz / od * 0.05 * dt; }
+      }
+      P.x += f.vel.x * dt; P.z += f.vel.z * dt;
+      P.y = WATER_Y + Math.sin(time * 1.3 + f.ph) * 0.006;
+      g.rotation.y += f.spin * dt;
+      g.rotation.x = Math.sin(time * 0.9 + f.ph) * 0.03;
+      g.scale.setScalar(Math.max(0.001, vis));
+      f.mat.emissiveIntensity = vis * (2.4 + Math.sin(time * 11 + f.ph * 7) * 0.12 + Math.sin(time * 23 + f.ph) * 0.08);
+      c.add(P); count++;
+    }
+    if (count) {
+      c.divideScalar(count);
+      this.floatLight.position.set(c.x, 0.55, c.z);
+    }
+    this.floatLight.intensity = vis * 5;
+  }
+
 
   /* ---------- cherry tree ---------- */
   buildTree() {
@@ -1405,7 +1479,7 @@ class KoiPond {
     this.scene.fog.density = lerp(0.01, 0.016, Math.max(night, S.golden * 0.5));
     // underwater look
     this.U.uCaustic.value = useMoon ? 0.08 : clamp(S.sunIntensity / 2.8, 0, 1.1);
-    this.U.uWaterColor.value.copy(new THREE.Color('#1d3a2b')).lerp(new THREE.Color('#06121a'), night).multiplyScalar(lerp(1, 0.5, night));
+    this.U.uWaterColor.value.copy(new THREE.Color('#1f4535')).lerp(new THREE.Color('#0b1a2c'), night).multiplyScalar(lerp(1, 0.85, night));
     // lantern
     const glow = smoothstep(0.15, 0.7, night);
     this.lanternGlow.emissiveIntensity = glow * 3.2;
@@ -1449,6 +1523,7 @@ class KoiPond {
     this.updatePads(dt, time);
     this.updateDrops(dt);
     this.updateFlies(time);
+    this.updateFloatLanterns(dt, time);
 
     // spout keeps the water alive
     this.spoutT = (this.spoutT || 0) - dt;
