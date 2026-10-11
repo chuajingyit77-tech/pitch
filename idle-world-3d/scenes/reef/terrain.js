@@ -372,13 +372,13 @@ export function buildRocks(ground, hm, W, env, rng) {
   addDetail(mat, W, { glsl: ROCK_GLSL, space: 'world', bump: 1.0, key: 'rock' });
   addFluor(mat, W, '#ff6fb0', 0.35, 'rock');
   const group = new THREE.Group();
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), e = new THREE.Euler();
   const meshes = [];
   for (let t = 0; t < all.length; t++) {
     const list = items.filter(it => it.t === t);
     if (!list.length) continue;
     const im = new THREE.InstancedMesh(all[t].geometry, mat, list.length);
-    list.forEach((it, i) => { q.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, q, it.scale); im.setMatrixAt(i, m4); });
+    list.forEach((it, i) => { qq.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, qq, it.scale); im.setMatrixAt(i, m4); });
     im.castShadow = true; im.receiveShadow = true;
     im.computeBoundingSphere();
     group.add(im); meshes.push(im);
@@ -386,7 +386,7 @@ export function buildRocks(ground, hm, W, env, rng) {
   const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, envMapIntensity: 0.3 });
   waterize(farMat, W, { caustics: false, key: 'far' });
   const fim = new THREE.InstancedMesh(farT.geometry, farMat, far.length);
-  far.forEach((it, i) => { q.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, q, it.scale); fim.setMatrixAt(i, m4); });
+  far.forEach((it, i) => { qq.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, qq, it.scale); fim.setMatrixAt(i, m4); });
   fim.computeBoundingSphere();
   group.add(fim);
   return { group, meshes, items, bommies, far, field };
