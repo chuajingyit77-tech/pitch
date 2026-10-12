@@ -157,12 +157,17 @@ export function createTerrain(env, rng, noise) {
       '#include <color_fragment>': /* glsl */`$&
         float tDist = length(cameraPosition - vTPos);
         float tAA = 1.0 - smoothstep(25.0, 70.0, tDist);
+        // metres covered by this pixel (longer axis): procedural detail finer than ~2 px fades to its mean
+        // instead of crawling as the camera drifts (no mip maps for noise)
+        vec2 tdx = dFdx(vTPos.xz), tdy = dFdy(vTPos.xz);
+        float tPx = max(sqrt(max(dot(tdx, tdx), dot(tdy, tdy))), 1e-4);
         vec4 tFld = texture2D(tField, (vTPos.xz - uField.xy) * uField.zw);
         float tU = -tFld.g;
         float tSw = swashHeight(vTPos.xz, tU, uWTime);
         float tSand = vMat.x;
         // grain and dune ripples
-        float grain = vnoise(vTPos.xz * 11.0) * 0.6 + vnoise(vTPos.xz * 31.0) * 0.4;
+        float grain = mix(vnoise(vTPos.xz * 11.0), 0.5, smoothstep(0.3, 0.75, tPx * 11.0)) * 0.6
+                    + mix(vnoise(vTPos.xz * 31.0), 0.5, smoothstep(0.3, 0.75, tPx * 31.0)) * 0.4;
         diffuseColor.rgb *= mix(1.0, 0.9 + 0.2 * grain, tSand * tAA);
         // wet band: everything the swash reaches stays dark, the freshly exposed strip glistens
         float tAbove = vTPos.y - tSw;
@@ -171,14 +176,17 @@ export function createTerrain(env, rng, noise) {
         float tWet = clamp(max(wetStatic * 0.8, wetNow), 0.0, 1.0) * max(tSand, 0.4 * vMat.z);
         diffuseColor.rgb *= mix(1.0, 0.6, tWet * smoothstep(-0.3, 0.0, vTPos.y));
         // grass: big soft patches, sun-bleached spots
-        float gp = vnoise(vTPos.xz * 0.35) * 0.65 + vnoise(vTPos.xz * 1.7) * 0.35;
+        float gp = vnoise(vTPos.xz * 0.35) * 0.65 + mix(vnoise(vTPos.xz * 1.7), 0.5, smoothstep(0.3, 0.75, tPx * 1.7)) * 0.35;
         diffuseColor.rgb *= mix(1.0, 0.82 + 0.34 * gp, vMat.y);
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.1, 0.75), vMat.y * smoothstep(0.62, 0.85, gp) * 0.6);
         // rock: crevices and strata
-        float rk = vnoise(vTPos.xz * 1.3 + vTPos.y * 0.7) * 0.6 + vnoise(vec2(vTPos.x + vTPos.z, vTPos.y * 6.0)) * 0.4;
+        vec2 rkQ = vec2(vTPos.x + vTPos.z, vTPos.y * 6.0);
+        vec2 rkdx = dFdx(rkQ), rkdy = dFdy(rkQ);
+        float rkPx = sqrt(max(dot(rkdx, rkdx), dot(rkdy, rkdy)));
+        float rk = vnoise(vTPos.xz * 1.3 + vTPos.y * 0.7) * 0.6 + mix(vnoise(rkQ), 0.5, smoothstep(0.3, 0.75, rkPx)) * 0.4;
         diffuseColor.rgb *= mix(1.0, 0.7 + 0.5 * rk, vMat.z);
       `,
-      '#include <roughnessmap_fragment>': '$&\n roughnessFactor = mix(roughnessFactor, 0.28, tWet * step(-0.02, vTPos.y));',
+      '#include <roughnessmap_fragment>': '$&\n roughnessFactor = mix(roughnessFactor, 0.28, tWet * smoothstep(-0.07, -0.01, vTPos.y));',
       '#include <normal_fragment_maps>': /* glsl */`$&
         {
           // sand ripples: wind ripples on the dry beach, finer wave ripples underwater
@@ -187,9 +195,11 @@ export function createTerrain(env, rng, noise) {
           vec2 dir = normalize(vec2(0.8, 0.6) + vec2(vnoise(p * 0.2) - 0.5, vnoise(p * 0.2 + 7.0) - 0.5) * 0.8);
           float k = mix(9.0, 16.0, step(vTPos.y, 0.0));
           float ph = dot(p, dir) * k + warp;
-          float amp = 0.06 * tSand * tAA * (1.0 - smoothstep(-6.0, -1.5, -vTPos.y) * 0.0);
+          // ripples (and rock grit) fade out before they get thinner than ~2 px: at golden hour the low sun
+          // turns them into high-contrast stripes that would crawl and moire
+          float amp = 0.06 * tSand * tAA * (1.0 - smoothstep(0.2, 0.42, tPx * k * 0.159));
           vec2 g = dir * cos(ph) * amp * (0.6 + 0.4 * vnoise(p * 2.0));
-          float rr = vMat.z * tAA * 0.35;
+          float rr = vMat.z * tAA * 0.35 * (1.0 - smoothstep(0.3, 0.75, tPx * 3.1));
           g += vec2(vnoise(p * 3.1) - 0.5, vnoise(p * 3.1 + 3.3) - 0.5) * rr;
           normal = normalize(normal + (viewMatrix * vec4(-g.x, 0.0, -g.y, 0.0)).xyz);
         }
@@ -198,7 +208,9 @@ export function createTerrain(env, rng, noise) {
         {
           float d = -vTPos.y;
           if (d > 0.0) {
-            float cs = caustics(vTPos.xz * 0.55, uWTime * 0.7) + caustics(vTPos.xz * 0.23 + 4.0, uWTime * 0.45) * 0.6;
+            // thin caustic lines become their average (~0.3) before they are thinner than a pixel or two
+            float cs = mix(caustics(vTPos.xz * 0.55, uWTime * 0.7), 0.3, smoothstep(0.12, 0.35, tPx * 0.75))
+                     + mix(caustics(vTPos.xz * 0.23 + 4.0, uWTime * 0.45), 0.3, smoothstep(0.12, 0.35, tPx * 0.32)) * 0.6;
             gl_FragColor.rgb += diffuseColor.rgb * uCaustic * cs * 0.3 * smoothstep(0.0, 0.3, d) * exp(-d * 0.2);
           }
           gl_FragColor.rgb = underwaterFog(gl_FragColor.rgb, vTPos);

@@ -330,7 +330,10 @@ export function buildFishGeometry(shape, { detail = 1 } = {}) {
     }
     for (let q = v0; q < v1; q++) {
       const o = (q - v0) * 3;
-      const l = Math.hypot(acc[o], acc[o + 1], acc[o + 2]) || 1;
+      const l = Math.hypot(acc[o], acc[o + 1], acc[o + 2]);
+      // a vertex touched only by zero-area triangles would get a zero normal, which the GPU turns into
+      // NaN pixels (bloom smears them into flashing blocks); fins lie roughly in the x-y plane
+      if (l < 1e-9) { nor[q * 3] = 0; nor[q * 3 + 1] = 0; nor[q * 3 + 2] = 1; continue; }
       nor[q * 3] = acc[o] / l; nor[q * 3 + 1] = acc[o + 1] / l; nor[q * 3 + 2] = acc[o + 2] / l;
     }
   }
@@ -765,7 +768,8 @@ export function applySwim(material, { waveK = 7.0, key = 'swim' } = {}) {
     vertexHeader: SWIM_HEADER,
     vertex: {
       '#include <beginnormal_vertex>': /* glsl */`$&
-        { float sl = fishSlope(position, FISH_SWIM); objectNormal.x += sl * objectNormal.z; objectNormal = normalize(objectNormal); }
+        { float sl = fishSlope(position, FISH_SWIM); objectNormal.x += sl * objectNormal.z;
+          float nl = length(objectNormal); objectNormal = nl > 1e-6 ? objectNormal / nl : vec3(0.0, 0.0, 1.0); }
       `,
       '#include <begin_vertex>': '$&\ntransformed = fishDisplace(transformed, FISH_SWIM);',
     },

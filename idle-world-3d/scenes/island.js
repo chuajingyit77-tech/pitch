@@ -59,7 +59,9 @@ export default {
     const sc = sun.shadow.camera;
     sc.left = -26; sc.right = 26; sc.top = 26; sc.bottom = -26; sc.near = 5; sc.far = 160;
     sun.shadow.bias = -0.0004;
-    sun.shadow.normalBias = 0.035;
+    // PCF-soft compares texels up to ~2 away; a normal offset of two texels keeps grazing light (golden
+    // hour, the moon low over the sea) free of acne stripes that crawl as the camera drifts
+    sun.shadow.normalBias = 2 * (sc.right - sc.left) / sm;
     sun.shadow.radius = 2.5;
     sun.target.position.set(0, 0, 0);
     scene.add(sun, sun.target);
@@ -99,7 +101,12 @@ export default {
       deepDay: new THREE.Color(0.0045, 0.042, 0.105), deepGold: new THREE.Color(0.012, 0.035, 0.08), deepNight: new THREE.Color(0.0012, 0.006, 0.02),
       horizon: new THREE.Color(), seaEnv: new THREE.Color(),
     };
-    const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
+    const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3(), keyDir = new THREE.Vector3();
+    // The key light is one shadow-casting DirectionalLight: the sun by day, the moon by night. It may only
+    // change direction while it is dark, so the sun's share fades to exactly 0 at KEY_SWAP (deg of sun
+    // elevation) and the moon's share starts from 0 there. (It used to jump between the two at full strength.)
+    const KEY_SWAP = -3.5;
+    const MIN_KEY_SIN = Math.sin(THREE.MathUtils.degToRad(0.5)); // never light the island from below the horizon
 
     function applyTime(force = false) {
       const h = env.hours();
@@ -108,9 +115,11 @@ export default {
       const s = sunState(h - SUN_SHIFT, { azimuthOffset: SUN_AZ });
       sunDir.copy(s.dir);
       {
-        const nightPhase = ((h + 24 - 18.5) % 24) / 11; // 0 at dusk → 1 at dawn
-        const el = THREE.MathUtils.degToRad(12 + 16 * Math.sin(clamp(nightPhase, 0, 1) * Math.PI));
-        const sway = (clamp(nightPhase, 0, 1) - 0.5) * 0.9;
+        // 0 at dusk → 1 at dawn; by day (moon invisible) it glides back, so the path never jumps at 18:30
+        const ph = (h + 24 - 18.5) % 24;
+        const nightPhase = ph <= 11 ? ph / 11 : 1 - (ph - 11) / 13;
+        const el = THREE.MathUtils.degToRad(12 + 16 * Math.sin(nightPhase * Math.PI));
+        const sway = (nightPhase - 0.5) * 0.9;
         const cx = moonFlat.x * Math.cos(sway) - moonFlat.y * Math.sin(sway), cz = moonFlat.x * Math.sin(sway) + moonFlat.y * Math.cos(sway);
         moonDir.set(cx * Math.cos(el), Math.sin(el), cz * Math.cos(el)).normalize();
       }
@@ -139,12 +148,24 @@ export default {
       su.uArtGain.value = lerp(1.18, 1.35, Math.max(golden, twi)) * (1 - night * 0.5);
       su.uSkySat.value = 1.25;
 
-      // key light: the sun by day, the moon by night
-      const sunVis = smoothstep(-3.5, 2.5, s.elevationDeg);
+      // key light: the sun by day, the moon by night (see KEY_SWAP)
+      const sunVis = smoothstep(KEY_SWAP, 2.5, s.elevationDeg);
       const sunI = s.sunIntensity * 1.15 * sunVis;
       const moonI = 0.36 * night;
-      if (sunVis > 0.02) { sun.position.copy(sunDir).multiplyScalar(80); sun.color.copy(C.sunCol); sun.intensity = sunI + moonI * 0.2; }
-      else { sun.position.copy(moonDir).multiplyScalar(80); sun.color.copy(C.moon); sun.intensity = moonI; }
+      if (s.elevationDeg > KEY_SWAP) {
+        keyDir.copy(sunDir);
+        if (keyDir.y < MIN_KEY_SIN) {
+          const k = Math.sqrt(1 - MIN_KEY_SIN * MIN_KEY_SIN) / (Math.hypot(keyDir.x, keyDir.z) || 1);
+          keyDir.set(keyDir.x * k, MIN_KEY_SIN, keyDir.z * k);
+        }
+        sun.color.copy(C.sunCol);
+        sun.intensity = sunI + moonI * 0.2 * sunVis;
+      } else {
+        keyDir.copy(moonDir);
+        sun.color.copy(C.moon);
+        sun.intensity = moonI * smoothstep(KEY_SWAP, KEY_SWAP - 3.5, s.elevationDeg);
+      }
+      sun.position.copy(keyDir).multiplyScalar(80);
       hemi.color.copy(s.skyAmbient);
       hemi.groundColor.copy(s.groundAmbient).lerp(C.tmp.set('#e2cfa0'), 0.35 * day);
       hemi.intensity = s.ambientIntensity * lerp(0.75, 0.45, day);
@@ -156,7 +177,7 @@ export default {
 
       // water surface
       const wu = water.uniforms;
-      wu.uSunDir.value.copy(sunVis > 0.02 ? sunDir : moonDir);
+      wu.uSunDir.value.copy(sunDir);
       wu.uSunCol.value.copy(C.sunCol).multiplyScalar(sunI * 1.1);
       wu.uMoonDir.value.copy(moonDir);
       wu.uMoonCol.value.copy(C.moon).multiplyScalar(night * 0.7);
@@ -170,9 +191,11 @@ export default {
 
       // clouds
       const cu = sky.clouds.uniforms;
-      cu.uSunDir.value.copy(sunVis > 0.02 ? sunDir : moonDir);
+      cu.uSunDir.value.copy(sunDir);
+      cu.uMoonDir.value.copy(moonDir);
       cu.uLit.value.copy(C.sunCol).multiplyScalar(sunI * 0.42 + 0.05).add(C.tmp.copy(s.skyAmbient).multiplyScalar(0.35 * s.ambientIntensity));
-      if (sunVis <= 0.02) cu.uLit.value.copy(C.moon).multiplyScalar(0.16 + 0.2 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.6));
+      cu.uLitMoon.value.copy(C.moon).multiplyScalar(0.16 + 0.2 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.6));
+      cu.uMoonW.value = smoothstep(-1.5, -4.5, s.elevationDeg);
       cu.uShade.value.copy(s.skyAmbient).multiplyScalar(0.55 * s.ambientIntensity).lerp(C.tmp.copy(s.horizon).multiplyScalar(0.55), 0.35);
       if (golden > 0) cu.uShade.value.lerp(C.tmp.setRGB(0.42, 0.26, 0.36), golden * 0.5);
       cu.uShade.value.multiplyScalar(1 - night * 0.2).add(C.tmp.copy(C.moon).multiplyScalar(0.035 * night));
@@ -192,8 +215,10 @@ export default {
       post.lift = [lerp(0.0, 0.006, night), lerp(0.004, 0.012, night), lerp(0.012, 0.035, night)];
       post.gain = [1 + golden * 0.05, 1 - golden * 0.005, 1 - golden * 0.06];
 
-      // environment map (PMREM of the sky), refreshed when the light changed noticeably
-      if (force || Math.abs(tod.envElev - s.elevationDeg) > 1.2 || Math.abs(tod.envNight - night) > 0.06) {
+      // environment map (PMREM of the sky), refreshed when the light changed noticeably. Small steps: each
+      // rebuild swaps the whole image-based light at once, so big steps read as a brightness pop at dusk.
+      // (The old texture is only disposed after the new one exists: never a frame without an env map.)
+      if (force || Math.abs(tod.envElev - s.elevationDeg) > 0.5 || Math.abs(tod.envNight - night) > 0.025) {
         tod.envElev = s.elevationDeg; tod.envNight = night;
         C.seaEnv.copy(waterUniforms.uDeep.value).multiplyScalar(2.5);
         scene.environment = sky.updateEnv(C.seaEnv);
@@ -253,17 +278,15 @@ export default {
 
     /* ---------------- per-frame ---------------- */
     let todTimer = 0;
-    const camPos = new THREE.Vector3();
     function update(dt, t) {
       waterUniforms.uWTime.value = t;
       sky.uniforms.uTime.value = t;
       wind.update(dt);
       todTimer -= dt;
       if (todTimer <= 0) { todTimer = 0.25; applyTime(); }
-      camera.getWorldPosition(camPos);
-      sky.clouds.update(dt, camPos);
+      sky.clouds.update(dt);
       // lantern + windows
-      const fl = 0.88 + 0.08 * Math.sin(t * 13.1) * Math.sin(t * 7.7 + 1.3) + 0.04 * Math.sin(t * 3.1);
+      const fl = 0.89 + 0.045 * Math.sin(t * 7.3) * Math.sin(t * 4.1 + 1.3) + 0.055 * Math.sin(t * 2.3);
       props.glassMat.emissiveIntensity = tod.lantern * 3.2 * fl;
       props.lanternLight.intensity = tod.lantern * 7.5 * fl;
       props.winMat.emissiveIntensity = tod.lantern * 2.0 * (0.95 + 0.05 * Math.sin(t * 5.3));

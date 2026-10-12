@@ -519,6 +519,8 @@ export function createGarden(env, shared, tex, wind) {
   stoneGeo = paint(stoneGeo, '#b8b2a3', { ao: 0.4 });
   const stepMesh = new THREE.InstancedMesh(stoneGeo, am.jadeMat, nSteps);
   stepMesh.castShadow = shadows;
+  // the instance matrices move every frame (bobbing) but an InstancedMesh's bounding sphere is computed once
+  stepMesh.frustumCulled = false;
   group.add(stepMesh);
 
   /* ---- mist falls ---- */
@@ -884,7 +886,8 @@ export function createGarden(env, shared, tex, wind) {
       }
       stepMesh.instanceMatrix.needsUpdate = true;
       lanterns.update(t, tod.night);
-      const fl = 0.85 + 0.1 * Math.sin(t * 8.1) + 0.05 * Math.sin(t * 19.7);
+      // a candle flicker, but no 3 Hz ±15% strobe: the flames are HDR-bright at night and bloom
+      const fl = 0.92 + 0.05 * Math.sin(t * 5.3) + 0.03 * Math.sin(t * 9.1 + 1.3);
       flameMat.color.setRGB(1, 0.58, 0.22).multiplyScalar(lerp(0.6, 7, tod.night) * fl);
     },
   };

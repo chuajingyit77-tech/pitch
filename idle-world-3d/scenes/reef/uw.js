@@ -9,6 +9,13 @@ import { GLSL, patchMaterial } from '../../lib/util.js';
 export function createWaterUniforms(surfY, refY) {
   return {
     uTime: { value: 0 },
+    // Wrapped clocks (see setWaterTime): float32 shader time loses precision after hours of uptime,
+    // so periodic motion runs on clocks that wrap exactly at a common period of their frequencies.
+    uTimeS: { value: 0 },   // sway, shaft drift, snow wobble, jelly pulse: every frequency a multiple of 0.01 rad/s
+    uTimeC: { value: 0 },   // caustics (already scaled by CAUSTIC_SPEED): frequencies multiples of 1/80 rad/s
+    uTimeW: { value: 0 },   // surface normal-map scroll: whole texture repeats every 2000 s
+    uTimeHi: { value: 0 },  // uTime split as hi + lo (hi a multiple of 1024 s) for linear drifts
+    uTimeLo: { value: 0 },
     uSurfY: { value: surfY },
     uRefY: { value: refY },
     uSigma: { value: new THREE.Vector3(0.085, 0.05, 0.042) },  // extinction per metre (r, g, b)
@@ -23,8 +30,27 @@ export function createWaterUniforms(surfY, refY) {
   };
 }
 
+/** Caustic animation speed (1 = the original pace; slower reads as calm water instead of flicker). */
+const CAUSTIC_SPEED = 0.6;
+const PERIOD_S = 200 * Math.PI, PERIOD_C = 160 * Math.PI, PERIOD_W = 2000;
+/** Advance the shared clocks. `time` is the world's unbounded seconds counter (kept in double precision). */
+export function setWaterTime(W, time) {
+  W.uTime.value = time;
+  W.uTimeS.value = time % PERIOD_S;
+  W.uTimeC.value = (time * CAUSTIC_SPEED) % PERIOD_C;
+  W.uTimeW.value = time % PERIOD_W;
+  const hi = Math.floor(time / 1024) * 1024;
+  W.uTimeHi.value = hi;
+  W.uTimeLo.value = time - hi;
+}
+
 const DECL = /* glsl */`
 uniform float uTime;
+uniform float uTimeS;
+uniform float uTimeC;
+uniform float uTimeW;
+uniform float uTimeHi;
+uniform float uTimeLo;
 uniform float uSurfY;
 uniform float uRefY;
 uniform float uCaustic;
@@ -71,7 +97,7 @@ ${DECL}
 varying vec3 vUwPos;
 // Surge sway: plants rock back and forth with the swell, plus a little turbulence.
 vec3 reefSway(vec3 o, float h, float amt, float flut, float len){
-  float t = uTime;
+  float t = uTimeS;
   float ph = dot(o.xz, vec2(0.23, 0.31));
   float surge = sin(t * 0.72 + ph) * 0.72 + sin(t * 1.23 + ph * 1.7 + 1.3) * 0.28;
   vec2 d = uCurDir * (surge + 0.22) * amt * uCurStr * h;
@@ -121,16 +147,38 @@ const CAUSTIC_GLSL = /* glsl */`
 #define REEF_CAUS
 float uwCaustics(vec3 wp){
   vec2 p = wp.xz - uSunW.xz / max(uSunW.y, 0.35) * (wp.y - uRefY);
-  p += 0.25 * vec2(sin(p.y * 0.6 + uTime * 0.5), cos(p.x * 0.5 - uTime * 0.4));
-  float c = caustics(p * 0.62, uTime * 1.25);
+  p += 0.25 * vec2(sin(p.y * 0.6 + uTimeC * 0.5), cos(p.x * 0.5 - uTimeC * 0.4));
+  vec2 q = p * 0.62;
+  float c = caustics(q, uTimeC * 1.25);
+  // Where a pixel spans more than ~a line width (distance, grazing sand) the thin bright lines crawl
+  // and sparkle as they move: fade them into their average brightness (0.356) instead.
+  c = mix(c, 0.356, smoothstep(0.05, 0.22, length(fwidth(q))));
   return c * exp(-0.03 * clamp(uSurfY - wp.y, 0.0, 60.0));
 }
 #endif
 `;
 
+// Caustics modulate the sun light around its old average (x1.43) with a softer swing than before
+// (0.82..3.0 instead of 0.68..3.4), so the floor shimmers instead of strobing.
 const LIGHTS_CAUSTIC = THREE.ShaderChunk.lights_fragment_begin
-  .replace('IncidentLight directLight;', 'IncidentLight directLight;\nfloat uwCm = 1.0 + uCaustic * (uwCaustics(vUwPos) * 2.1 - 0.32);')
+  .replace('IncidentLight directLight;', 'IncidentLight directLight;\nfloat uwCm = 1.0 + uCaustic * (uwCaustics(vUwPos) * 1.7 - 0.18);')
   .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= uwCm;');
+
+// Soft limit for direct specular highlights (knee 3, ceiling 6). Glossy fish, clam mantles and eyes
+// under the caustic-boosted sun produced single-pixel glints worth 100+ that bloom turned into
+// blinking blobs; everything below the knee is untouched.
+const SPEC_CLAMP = /* glsl */`
+#if defined( RE_Direct ) && ( defined( STANDARD ) || defined( PHYSICAL ) )
+{
+  float uwM = max(max(reflectedLight.directSpecular.r, reflectedLight.directSpecular.g), reflectedLight.directSpecular.b);
+  if (uwM > 3.0) reflectedLight.directSpecular *= (3.0 + (uwM - 3.0) / (1.0 + (uwM - 3.0) / 3.0)) / uwM;
+  #ifdef USE_CLEARCOAT
+  float uwC = max(max(clearcoatSpecularDirect.r, clearcoatSpecularDirect.g), clearcoatSpecularDirect.b);
+  if (uwC > 3.0) clearcoatSpecularDirect *= (3.0 + (uwC - 3.0) / (1.0 + (uwC - 3.0) / 3.0)) / uwC;
+  #endif
+}
+#endif
+`;
 
 const WPOS_FROM_MV = 'vUwPos = transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);';
 
@@ -141,13 +189,14 @@ const WPOS_FROM_MV = 'vUwPos = transpose(mat3(viewMatrix)) * (mvPosition.xyz - v
 export function waterize(mat, W, { caustics = true, fog = 'full', tint = true, rim = 0, key = '' } = {}) {
   const frag = {};
   if (caustics) frag['#include <lights_fragment_begin>'] = LIGHTS_CAUSTIC;
+  frag['#include <lights_fragment_end>'] = '$&\n' + SPEC_CLAMP;
   // rim: light scattered around silhouettes, so creatures read against the bright water
   const rimCode = rim > 0 ? 'outgoingLight += uwLc(vUwPos.y) * uRim * pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.0);\n' : '';
   if (tint || rim > 0) frag['#include <opaque_fragment>'] = (tint ? 'outgoingLight *= uwTint(vUwPos.y);\n' : '') + rimCode + '$&';
   frag['#include <fog_fragment>'] = fog === 'full' ? 'gl_FragColor.rgb = uwFog(gl_FragColor.rgb, vUwPos);'
     : fog === 'atten' ? 'gl_FragColor.rgb = uwAtten(gl_FragColor.rgb, vUwPos);' : '';
   return patchMaterial(mat, {
-    key: `uw${caustics ? 1 : 0}${fog}${tint ? 1 : 0}${rim > 0 ? 'r' : ''}${key}`,
+    key: `uw${caustics ? 1 : 0}${fog}${tint ? 1 : 0}${rim > 0 ? 'r' : ''}${key}sc`,
     uniforms: rim > 0 ? { ...W, uRim: { value: rim } } : W,
     vertexHeader: UW_VERT,
     fragmentHeader: UW_FRAG + (rim > 0 ? 'uniform float uRim;\n' : '') + (caustics ? NOISE_GLSL + CAUSTIC_GLSL : ''),
@@ -170,12 +219,20 @@ vec3 cellid(vec2 p){
   return vec3(sqrt(d1), sqrt(d2), hash12(id + 0.37));
 }
 // Mikkelsen bump with unnormalised screen derivatives: h in metres gives true geometric slope.
+// Edge-on and silhouette pixels drive det toward 0, where the old form flipped the normal at random
+// (sparkling speckles) or normalised a zero vector (NaN): the tilt is capped at ~56 degrees and a
+// degenerate result falls back to the surface normal.
 vec3 reefPerturb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDir){
   vec3 sx = dFdx(surf_pos), sy = dFdy(surf_pos);
   vec3 R1 = cross(sy, surf_norm), R2 = cross(surf_norm, sx);
   float det = dot(sx, R1) * faceDir;
-  vec3 g = sign(det) * (dHdxy.x * R1 + dHdxy.y * R2);
-  return normalize(abs(det) * surf_norm - g);
+  float ad = abs(det);
+  vec3 g = (det < 0.0 ? -1.0 : 1.0) * (dHdxy.x * R1 + dHdxy.y * R2);
+  float gl = length(g);
+  if (gl > 1.5 * ad) g *= 1.5 * ad / gl;
+  vec3 n = ad * surf_norm - g;
+  float l2 = dot(n, n);
+  return l2 > 1e-30 ? n * inversesqrt(l2) : surf_norm;
 }
 #endif
 `;
@@ -305,9 +362,9 @@ export function createSurface(W, n1, n2) {
       void main(){
         vec3 v = vWp - cameraPosition; float d = length(v); vec3 dir = v / d;
         vec2 p = vWp.xz;
-        vec3 a = texture2D(tN1, p * 0.035 + uTime * vec2(0.011, 0.006)).xyz * 2.0 - 1.0;
-        vec3 b = texture2D(tN2, p * 0.061 + uTime * vec2(-0.008, 0.012)).xyz * 2.0 - 1.0;
-        vec3 c = texture2D(tN1, p * 0.013 - uTime * vec2(0.004, 0.0065)).xyz * 2.0 - 1.0;
+        vec3 a = texture2D(tN1, p * 0.035 + uTimeW * vec2(0.011, 0.006)).xyz * 2.0 - 1.0;
+        vec3 b = texture2D(tN2, p * 0.061 + uTimeW * vec2(-0.008, 0.012)).xyz * 2.0 - 1.0;
+        vec3 c = texture2D(tN1, p * 0.013 - uTimeW * vec2(0.004, 0.0065)).xyz * 2.0 - 1.0;
         vec2 nxy = (a.xy + b.xy * 0.8 + c.xy * 1.2) * uRipple / (1.0 + d * 0.012);
         vec3 N = normalize(vec3(nxy.x, -1.0, nxy.y));
         vec3 R = refract(dir, N, 1.333);
@@ -373,7 +430,7 @@ export function createShafts(W, rng, { count = 32, radius = 26, center = new THR
       varying vec2 vUv; varying float vI, vPh, vFace; varying vec3 vWp;
       void main(){
         vec3 top = vec3(aC.x, uSurfY, aC.z);
-        top.xz += vec2(sin(uTime * 0.05 + aP.y * 6.28), cos(uTime * 0.04 + aP.y * 4.0)) * 1.6;
+        top.xz += vec2(sin(uTimeS * 0.05 + aP.y * 6.28), cos(uTimeS * 0.04 + aP.y * 4.0)) * 1.6;
         float len = aC.y;
         vec3 mid = top + uAxis * len * 0.5;
         vec3 side = normalize(cross(uAxis, cameraPosition - mid));
@@ -394,7 +451,7 @@ export function createShafts(W, rng, { count = 32, radius = 26, center = new THR
         st = 0.35 + 0.9 * st * st;
         float t = vUv.y;
         float vf = smoothstep(0.0, 0.12, t) * pow(max(1.0 - t, 0.0), 1.7);
-        float flick = 0.6 + 0.4 * sin(uTime * 0.53 + vPh * 31.0) * sin(uTime * 0.31 + vPh * 17.0);
+        float flick = 0.6 + 0.4 * sin(uTimeS * 0.53 + vPh * 31.0) * sin(uTimeS * 0.31 + vPh * 17.0);
         float d = length(vWp - cameraPosition);
         float nearF = smoothstep(2.0, 9.0, d);
         float face = smoothstep(0.05, 0.6, vFace);
@@ -406,22 +463,50 @@ export function createShafts(W, rng, { count = 32, radius = 26, center = new THR
   const mesh = new THREE.Mesh(g, mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = 5;
-  /** Set each shaft's length so it fades out above the ground under its lower end. */
-  const setLengths = (axis, groundAt) => {
+  /**
+   * Set each shaft's length so it fades out above the ground under its lower end. The crossing is
+   * refined by bisection (the old 0.5 m march made lengths jump as the light turned), and lengths
+   * ease toward their targets in tick() so a shaft that starts to miss a rock grows instead of popping.
+   */
+  const lenT = new Float32Array(count).fill(-1), lenC = new Float32Array(count).fill(-1);
+  const setLengths = (axis, groundAt, snap = false) => {
     const c = g.getAttribute('aC');
+    const sy = W.uSurfY.value;
     for (let i = 0; i < count; i++) {
       const x = c.getX(i * 4), z = c.getZ(i * 4);
-      let len = 4;
+      const below = s => sy + axis.y * s < groundAt(x + axis.x * s, z + axis.z * s) + 1.2;
+      let len = 39.5;
       for (let s = 2; s < 40; s += 0.5) {
-        const px = x + axis.x * s, py = W.uSurfY.value + axis.y * s, pz = z + axis.z * s;
+        if (!below(s)) continue;
         len = s;
-        if (py < groundAt(px, pz) + 1.2) break;
+        if (s > 2) {
+          let lo = s - 0.5, hi = s;
+          for (let k = 0; k < 6; k++) { const m = (lo + hi) / 2; if (below(m)) hi = m; else lo = m; }
+          len = (lo + hi) / 2;
+        }
+        break;
       }
-      for (let k = 0; k < 4; k++) c.setY(i * 4 + k, len * 1.05);
+      lenT[i] = len * 1.05;
+      if (snap || lenC[i] < 0) lenC[i] = lenT[i];
     }
+    write();
+  };
+  const write = () => {
+    const c = g.getAttribute('aC');
+    for (let i = 0; i < count; i++) for (let k = 0; k < 4; k++) c.setY(i * 4 + k, lenC[i]);
     c.needsUpdate = true;
   };
-  return { mesh, u, setLengths };
+  const tick = dt => {
+    const k = 1 - Math.exp(-dt / 1.5);
+    let moved = false;
+    for (let i = 0; i < count; i++) {
+      const d = lenT[i] - lenC[i];
+      if (Math.abs(d) < 1e-3) { if (d !== 0) { lenC[i] = lenT[i]; moved = true; } continue; }
+      lenC[i] += d * k; moved = true;
+    }
+    if (moved) write();
+  };
+  return { mesh, u, setLengths, tick };
 }
 
 /* ------------------------------------------------------------------ */
@@ -445,17 +530,21 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
       varying float vA, vTw, vBio; varying vec3 vWp;
       void main(){
         float s = aSeed.w;
-        vec3 p = aSeed.xyz * uBox;
-        p += vec3(0.06, -0.035 - s * 0.03, 0.045) * uTime * (0.4 + s);
-        p += 0.35 * vec3(sin(uTime * 0.31 + s * 40.0), sin(uTime * 0.23 + s * 23.0), cos(uTime * 0.27 + s * 31.0));
+        vec3 drift = vec3(0.06, -0.035 - s * 0.03, 0.045) * (0.4 + s);
+        vec3 p = aSeed.xyz * uBox + mod(drift * uTimeHi, uBox) + drift * uTimeLo;
+        p += 0.35 * vec3(sin(uTimeS * 0.31 + s * 40.0), sin(uTimeS * 0.23 + s * 23.0), cos(uTimeS * 0.27 + s * 31.0));
         vec3 c = cameraPosition - uBox * 0.5;
         p = c + mod(p - c, uBox);
         vec4 mv = viewMatrix * vec4(p, 1.0);
         float dist = -mv.z;
         float size = 0.022 + s * s * 0.06;
-        gl_PointSize = clamp(size * uScale / max(dist, 0.1), 1.0, 28.0);
+        // Sprites under ~3 px alias: a drifting speck pulses in brightness and hops between pixels
+        // (twinkling noise, worst without MSAA). Draw at least 3 px, dimmed by the area ratio.
+        float px = size * uScale / max(dist, 0.1);
+        float ps = clamp(px, 3.0, 28.0);
+        gl_PointSize = ps;
         float edge = 1.0 - smoothstep(uBox * 0.32, uBox * 0.5, length(p - cameraPosition));
-        vA = edge * smoothstep(0.4, 1.6, dist) * step(p.y, uSurfY - 0.1);
+        vA = edge * smoothstep(0.4, 1.6, dist) * step(p.y, uSurfY - 0.1) * max(px * px / (ps * ps), 0.12);
         // sparse bioluminescent sparkles at night
         float bio = step(0.82, fract(s * 13.7));
         vTw = pow(max(sin(uTime * (0.6 + s * 1.4) + s * 70.0), 0.0), 18.0) * bio;
@@ -513,25 +602,31 @@ export function createBubbles(W, rng, emitters, perEmitter = 36) {
     vertexShader: UW_VERT + /* glsl */`
       attribute vec4 aSeed;
       uniform float uScale;
-      varying float vA; varying vec3 vWp;
+      varying float vA, vSmall; varying vec3 vWp;
       void main(){
         float H = max(uSurfY - position.y, 1.0);
         float spd = 0.55 * aSeed.z;
-        float h = mod(uTime * spd + aSeed.x * H * 1.6, H * 1.6);
+        float cyc = H * 1.6;
+        float h = mod(mod(uTimeHi * spd, cyc) + uTimeLo * spd + aSeed.x * cyc, cyc);
         vec3 p = position;
         float wob = 0.03 + h * 0.012;
-        p += vec3(sin(uTime * 7.0 * aSeed.z + aSeed.y * 40.0) * wob, h, cos(uTime * 6.3 * aSeed.z + aSeed.w * 40.0) * wob);
+        // wobble keyed to the height risen (same 7 and 6.3 rad/s at 0.55 m/s), precise at any uptime
+        p += vec3(sin(h * 12.73 + aSeed.y * 40.0) * wob, h, cos(h * 11.45 + aSeed.w * 40.0) * wob);
         p.xz += vec2(0.18, 0.1) * h * h * 0.02;
         vec4 mv = viewMatrix * vec4(p, 1.0);
         float r = (0.012 + aSeed.w * 0.02) * (1.0 + h * 0.06);
-        gl_PointSize = clamp(r * 2.0 * uScale / max(-mv.z, 0.1), 1.0, 40.0);
-        vA = step(h, H - 0.15) * smoothstep(0.0, 0.2, h);
+        float px = r * 2.0 * uScale / max(-mv.z, 0.1);
+        float ps = clamp(px, 3.0, 40.0);
+        gl_PointSize = ps;
+        vSmall = 1.0 - smoothstep(3.0, 7.0, px);
+        // fade out just under the surface instead of vanishing in one frame
+        vA = (1.0 - smoothstep(H - 0.6, H - 0.15, h)) * smoothstep(0.0, 0.2, h) * max(px * px / (ps * ps), 0.12);
         vWp = p;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: UW_FRAG + /* glsl */`
       uniform float uBubI;
-      varying float vA; varying vec3 vWp;
+      varying float vA, vSmall; varying vec3 vWp;
       void main(){
         vec2 c = gl_PointCoord * 2.0 - 1.0;
         float r = length(c);
@@ -540,6 +635,10 @@ export function createBubbles(W, rng, emitters, perEmitter = 36) {
         float hl = smoothstep(0.38, 0.0, length(c - vec2(-0.3, -0.35)));
         vec3 lc = uwLc(vWp.y);
         vec3 col = (lc * 2.5 + vec3(0.15)) * (rim * 0.9 + 0.06) + (lc * 3.0 + vec3(0.6)) * hl * 0.9;
+        // a bubble a few pixels wide cannot show rim and highlight without sparkling: draw a soft dot
+        // with the same average light instead
+        vec3 dotc = ((lc * 2.5 + vec3(0.15)) * 1.434 + (lc * 3.0 + vec3(0.6)) * 0.141) * exp(-r * r * 3.5);
+        col = mix(col, dotc, vSmall);
         gl_FragColor = vec4(uwAtten(col * vA * uBubI, vWp), 1.0);
       }`,
   });

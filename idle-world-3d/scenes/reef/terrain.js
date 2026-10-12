@@ -32,8 +32,10 @@ float detailH(vec3 p){
   float ph = dot(x + w * 1.1, vec2(0.62, 0.78)) * 10.5;
   float r = sin(ph + 0.65 * sin(ph));
   float amp = 0.012 * (0.5 + 0.5 * snoise(vec3(x * 0.08, 2.0)));
-  float h = r * amp;
-  h += (vnoise(x * 8.0) - 0.5) * 0.003;
+  // Bump from screen derivatives: ripples narrower than a few pixels (far, grazing sand) alias into
+  // crawling moire, and the fine grain sparkles; fade each by its own pixel footprint.
+  float h = r * amp * (1.0 - smoothstep(0.7, 1.8, fwidth(ph)));
+  h += (vnoise(x * 8.0) - 0.5) * 0.003 * (1.0 - smoothstep(0.25, 0.6, length(fwidth(x * 8.0))));
   return h * fade;
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
@@ -133,7 +135,7 @@ vec3 reefPal(float i){
 }
 float detailH(vec3 p){
   float d = length(p - cameraPosition);
-  float fade = 1.0 - smoothstep(16.0, 36.0, d);
+  float fade = (1.0 - smoothstep(16.0, 36.0, d)) * (1.0 - smoothstep(0.25, 0.6, length(fwidth(p * 3.6))));
   gA = snoise(p * 1.05);
   gB = snoise(p * 1.5 + 7.0);
   gR = snoise(p * 3.6) * 0.6 + snoise(p * 8.5 + 2.0) * 0.4;

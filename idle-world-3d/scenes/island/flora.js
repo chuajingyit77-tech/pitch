@@ -464,8 +464,11 @@ export function createFlora(env, rng, terrain, wind, reserved) {
         diffuseColor.rgb = mix(diffuseColor.rgb, mossC, rkTop * 0.75 * smoothstep(0.25, 0.6, vRkPos.y));
         float rkWet = (1.0 - smoothstep(0.02, 0.32, vRkPos.y)) * smoothstep(-0.5, -0.1, vRkPos.y);
         diffuseColor.rgb *= mix(1.0, 0.55, rkWet);
-        // barnacle speckles near the waterline
-        float sp = step(0.82, fract(sin(dot(floor(vRkPos.xz * 22.0 + vRkPos.y * 9.0), vec2(12.9898, 78.233))) * 43758.5453));
+        // barnacle speckles near the waterline (4.5 cm cells: their average once a cell is under ~2 px)
+        vec2 bq = vRkPos.xz * 22.0 + vRkPos.y * 9.0;
+        vec2 bqx = dFdx(bq), bqy = dFdy(bq);
+        float sp = step(0.82, fract(sin(dot(floor(bq), vec2(12.9898, 78.233))) * 43758.5453));
+        sp = mix(sp, 0.18, smoothstep(0.3, 0.75, sqrt(max(dot(bqx, bqx), dot(bqy, bqy)))));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.82, 0.75), sp * rkWet * step(-0.3, vRkPos.y) * 0.6);
       `,
       '#include <roughnessmap_fragment>': '$&\n roughnessFactor = mix(roughnessFactor, 0.3, rkWet * step(-0.05, vRkPos.y));',

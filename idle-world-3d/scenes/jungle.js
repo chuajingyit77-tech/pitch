@@ -71,6 +71,8 @@ export default {
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 900);
     camera.layers.enable(1);
     const shared = createShared();
+    // cut-out leaves use alpha to coverage only when the frame really is multisampled (shading.js)
+    scene.onBeforeRender = (r, s, c, target) => { shared.uMsaa.value = target && target.samples > 0 ? 1 : 0; };
     const wind = createWind({ direction: new THREE.Vector2(1, 0.35), strength: 1, gust: 1 });
     const owned = []; // disposables not reachable from the scene graph
     const ONLY_MAIN = o => { o.layers.set(1); return o; };
@@ -315,7 +317,7 @@ export default {
       if (foliageMats.has(key)) return foliageMats.get(key);
       const m = new THREE.MeshStandardMaterial({ map: atlas.texture, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.58, envMapIntensity: 0.7 });
       if (preset) addWind(m, wind, preset);
-      jungleMaterial(m, shared, { translucent: 0.85, ...extra });
+      jungleMaterial(m, shared, { translucent: 0.85, a2c: true, ...extra });
       // wind presets only differ in uniform values: let them share one compiled program
       m.customProgramCacheKey = () => 'jgfoliage' + (preset ? 'w' : '') + JSON.stringify(extra);
       foliageMats.set(key, m);
@@ -482,7 +484,7 @@ export default {
       vertexHeader: 'uniform float uWT;',
       vertex: { '#include <begin_vertex>': '$&\n { float hd = clamp(-position.y / 4.5, 0.0, 1.2); vec3 io = vec3(0.0); \n #ifdef USE_INSTANCING\n io = instanceMatrix[3].xyz;\n #endif\n transformed.x += sin(uWT * 0.9 + io.x * 0.7 + position.y * 0.6) * hd * hd * 0.18; transformed.z += cos(uWT * 0.7 + io.z * 0.5) * hd * hd * 0.12; }' },
     });
-    jungleMaterial(curtMat, shared, { translucent: 0.8 });
+    jungleMaterial(curtMat, shared, { translucent: 0.8, a2c: true });
     instance(curtainGeo, curtMat, curtList, { shadow: false });
 
     // mushrooms (bioluminescent at night)
@@ -534,7 +536,7 @@ export default {
     const lilyGeo = P.lilyPad(atlas);
     const lilyMat = new THREE.MeshStandardMaterial({ map: atlas.texture, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.45, envMapIntensity: 0.9 });
     addWind(lilyMat, wind, { height: 0.05, amount: 0.012, stiffness: 1, flutter: 0.004 });
-    jungleMaterial(lilyMat, shared, { translucent: 0.4 });
+    jungleMaterial(lilyMat, shared, { translucent: 0.4, a2c: true });
     const rli = R('lily');
     const lilyList = [];
     const padSpots = [];
@@ -571,7 +573,7 @@ export default {
     const clumpGeoB = buildClumpOnAtlas(atlas, 'foliage', (seed % 1000) + 6, 9);
     const clumpMat = new THREE.MeshStandardMaterial({ map: atlas.texture, vertexColors: true, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.7, envMapIntensity: 0.5 });
     addWind(clumpMat, wind, { height: 2.0, amount: 0.12, stiffness: 1.2, flutter: 0.03 });
-    jungleMaterial(clumpMat, shared, { translucent: 1.0 });
+    jungleMaterial(clumpMat, shared, { translucent: 1.0, a2c: true });
     const rc = R('canopy');
     const clumpsA = [], clumpsB = [];
     // limb ends of the big trees
@@ -1237,6 +1239,7 @@ export default {
       // periodic motion gets its phase wrapped here in double precision (seamless), because the page runs
       // for days and float32 uTime * 70 or * 6 gets steppy within hours
       pond.setTime(t);
+      waterfall.userData.setTime(t);
       rain.material.uniforms.uRainT.value = t % rain.userData.period;
       splash.material.uniforms.uSplashT.value = t % splash.userData.period;
       dragonKit.mesh.material.uniforms.uWingPh.value = (t * 70) % TAU;

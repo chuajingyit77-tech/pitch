@@ -144,7 +144,6 @@ function createClouds(env, rng) {
   geo.setAttribute('uv', base.attributes.uv);
   const aPuff = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4);
   const aInfo = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4);
-  aPuff.setUsage(THREE.DynamicDrawUsage); aInfo.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('aPuff', aPuff);
   geo.setAttribute('aInfo', aInfo);
   geo.instanceCount = N;
@@ -153,7 +152,10 @@ function createClouds(env, rng) {
     tPuff: { value: tex },
     uSpin: { value: 0 },
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
     uLit: { value: new THREE.Color(1, 1, 1) },
+    uLitMoon: { value: new THREE.Color(0.3, 0.3, 0.4) },
+    uMoonW: { value: 0 },
     uShade: { value: new THREE.Color(0.5, 0.55, 0.65) },
     uRim: { value: new THREE.Color(1, 1, 1) },
     uHaze: { value: new THREE.Color(0.7, 0.8, 0.9) },
@@ -183,8 +185,8 @@ function createClouds(env, rng) {
       }`,
     fragmentShader: /* glsl */`
       uniform sampler2D tPuff;
-      uniform vec3 uSunDir, uLit, uShade, uRim, uHaze;
-      uniform float uOpacity;
+      uniform vec3 uSunDir, uMoonDir, uLit, uLitMoon, uShade, uRim, uHaze;
+      uniform float uOpacity, uMoonW;
       varying vec2 vUv;
       varying vec3 vPos, vRight, vUp, vMacro;
       varying float vRel;
@@ -196,9 +198,11 @@ function createClouds(env, rng) {
         float z = sqrt(max(0.0, 1.0 - dot(q, q)));
         vec3 fwd = normalize(cameraPosition - vPos);
         vec3 n = normalize(normalize(vRight * q.x + vUp * q.y + fwd * z) * 0.55 + vMacro * 0.85);
-        float ndl = dot(n, uSunDir);
-        float lit = smoothstep(-0.45, 0.85, ndl) * (0.5 + 0.5 * smoothstep(0.0, 0.8, vRel + 0.25));
-        vec3 col = mix(uShade, uLit, lit);
+        // lit by the sun, by the moon, or (around dusk and dawn) a cross-fade of both
+        float rel = 0.5 + 0.5 * smoothstep(0.0, 0.8, vRel + 0.25);
+        float litS = smoothstep(-0.45, 0.85, dot(n, uSunDir)) * rel;
+        float litM = smoothstep(-0.45, 0.85, dot(n, uMoonDir)) * rel;
+        vec3 col = uShade + (uLit - uShade) * litS * (1.0 - uMoonW) + (uLitMoon - uShade) * litM * uMoonW;
         col *= 0.86 + 0.24 * tx.g;
         float fs = pow(max(dot(-fwd, uSunDir), 0.0), 7.0);
         col += uRim * fs * (1.0 - tx.r) * 1.8;
@@ -217,31 +221,24 @@ function createClouds(env, rng) {
   mesh.renderOrder = 5;
   mesh.name = 'clouds';
 
-  // back-to-front sort (relative to the main camera), refreshed a few times per second
+  // Back-to-front order, fixed once: every view is within ~80 m of the island's axis while the clouds are
+  // 160–1500 m out, and the slow spin turns everything about that axis, so the distance from a point on
+  // the axis orders the puffs for any camera. The old live re-sort (every 0.4 s) let overlapping puffs
+  // swap places, which popped their shading.
+  const REF_Y = 12;
   const order = P.map((_, i) => i);
-  const dists = new Float32Array(N);
-  let sortTimer = 0;
-  function sort(camPos, spin) {
-    const c = Math.cos(spin), s = Math.sin(spin);
-    for (let i = 0; i < N; i++) {
-      const p = P[i];
-      const x = c * p.x - s * p.z, z = s * p.x + c * p.z;
-      dists[i] = (x - camPos.x) ** 2 + (p.y - camPos.y) ** 2 + (z - camPos.z) ** 2;
-    }
-    order.sort((a, b) => dists[b] - dists[a]);
-    for (let k = 0; k < N; k++) {
-      const p = P[order[k]];
-      aPuff.setXYZW(k, p.x, p.y, p.z, p.r);
-      aInfo.setXYZW(k, p.cx, p.cy, p.cz, p.rel);
-    }
-    aPuff.needsUpdate = true; aInfo.needsUpdate = true;
-  }
+  const dists = P.map(p => Math.hypot(p.x, p.y - REF_Y, p.z));
+  order.sort((a, b) => dists[b] - dists[a]);
+  order.forEach((i, k) => {
+    const p = P[i];
+    aPuff.setXYZW(k, p.x, p.y, p.z, p.r);
+    aInfo.setXYZW(k, p.cx, p.cy, p.cz, p.rel);
+  });
+  aPuff.needsUpdate = true; aInfo.needsUpdate = true;
   return {
     mesh, uniforms,
-    update(dt, camPos) {
-      uniforms.uSpin.value += dt * 0.0035;
-      sortTimer -= dt;
-      if (sortTimer <= 0) { sortTimer = 0.4; sort(camPos, uniforms.uSpin.value); }
+    update(dt) {
+      uniforms.uSpin.value = (uniforms.uSpin.value + dt * 0.0035) % TAU; // wrapped: float32 in the shader
     },
     dispose() { tex.dispose(); geo.dispose(); base.dispose(); material.dispose(); },
   };

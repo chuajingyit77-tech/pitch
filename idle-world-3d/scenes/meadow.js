@@ -136,7 +136,8 @@ export default {
     const envScene = new THREE.Scene();
     const envSky = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 16), skyMat);
     envScene.add(envSky);
-    let envRT = null, envKey = -999;
+    let envRT = null, envKey = -999, envRefL = 1, envMats = null;
+    const lumOf = c => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
     // sunset azimuth (from the torii, angle around -Z toward +X)
     const ss = THREE.MathUtils.degToRad;
     const sDir18 = (() => { const s = sunStateDir(17.9); return Math.atan2(s.x, -s.z); })();
@@ -226,7 +227,10 @@ export default {
     const colors = makeGrassColorUniforms();
     const plumeTex = own(TX.plumeTexture(env.seed & 0xffff));
     const grassMat = grassMaterial({ wind: windU, colors, fogU, plume: false, transl: 0.32 });
-    const plumeMat = grassMaterial({ wind: windU, colors, fogU, plume: true, map: plumeTex, transl: 0.45, wrap: 0.6, msaa: env.quality !== 'low' });
+    const plumeMat = grassMaterial({ wind: windU, colors, fogU, plume: true, map: plumeTex, transl: 0.45, wrap: 0.6 });
+    // plumes use alpha-to-coverage; on a target without multisampling they fall back to a plain cut-out
+    const plumeU = plumeMat.userData.U;
+    const probeMsaa = (r) => { const rt = r.getRenderTarget(); plumeU.uNoMsaa.value = rt && rt.samples > 0 ? 0 : 1; };
     {
       const camSamples = [];
       for (const d of [11, 16, 23]) for (let k = 0; k <= 8; k++) { const yaw = -0.9 + 1.8 * k / 8; camSamples.push([TARGET.x + d * Math.sin(yaw), TARGET.z + d * Math.cos(yaw)]); }
@@ -275,6 +279,7 @@ export default {
         plumes.sort((a, b) => a.d - b.d);
         const gm = instancedFrom(R.geo, grassMat, clumps);
         const pm = instancedFrom(R.pgeo, plumeMat, plumes);
+        pm.onBeforeRender = probeMsaa;
         R.geo.dispose(); R.pgeo.dispose();
         scene.add(gm, pm);
       }
@@ -600,7 +605,7 @@ export default {
           for (const o of obstacles) {
             const ox = this.pos.x - o.x, oz = this.pos.z - o.z, od = Math.hypot(ox, oz);
             const rr = o.r + 0.45;
-            if (od < rr + 0.8) { const k = (rr + 0.8 - od) / 0.8; dx += (ox / od) * k * 1.2; dz += (oz / od) * k * 1.2; }
+            if (od < rr + 0.8 && od > 1e-4) { const k = (rr + 0.8 - od) / 0.8; dx += (ox / od) * k * 1.2; dz += (oz / od) * k * 1.2; }
           }
           for (const f2 of foxes) {
             if (f2 === this) continue;
@@ -709,6 +714,8 @@ export default {
       cmat.color = new THREE.Color('#ffffff');
       cmat.emissive = new THREE.Color('#ffffff');
       cmat.emissiveIntensity = 0.0;
+      // always blended (opacity 1 by day) so the flock can fade out at dusk without a material/program switch
+      cmat.transparent = true;
       craneMat = cmat;
       own(cmat);
       const crng = rng.fork('cranes');
@@ -971,15 +978,28 @@ export default {
       post.contrast = 1.06;
       post.lift[0] = lerp(0.012, 0.0, night); post.lift[1] = lerp(0.006, 0.012, night); post.lift[2] = lerp(0.0, 0.03, night);
       post.gain[0] = lerp(1.03 + 0.03 * s.golden, 0.94, night); post.gain[1] = lerp(1.0, 1.0, night); post.gain[2] = lerp(0.95 - 0.04 * s.golden, 1.06, night);
-      // environment map (re-render the sky into PMREM when the hour moves)
-      const key = Math.round(hours * 12);
+      // environment map: re-render the sky into PMREM every 2 minutes (the new map is complete before it is
+      // swapped in). In between, the IBL strength of the standard materials follows the sky's brightness, so a
+      // rebuild at dusk never shows as a step on the torii, the stones or the foxes.
+      const skyL = 0.4 * lumOf(pal.hor) + 0.3 * lumOf(pal.zen) + 0.15 * lumOf(pal.cl) + 0.15 * lumOf(fogU.uFogSunColor.value);
+      const key = Math.round(hours * 30);
       if (key !== envKey) {
         envKey = key;
         const rt = env.pmrem.fromScene(envScene, 0, 0.1, 100);
         if (envRT) envRT.dispose();
         envRT = rt;
         scene.environment = rt.texture;
+        envRefL = skyL;
       }
+      if (!envMats) {
+        envMats = [];
+        const seen = new Set();
+        const addM = m => { if (m && m.isMeshStandardMaterial && !seen.has(m)) { seen.add(m); envMats.push({ m, base: m.envMapIntensity }); } };
+        scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(addM); });
+        [foxMat, whiteMat, tofuF.mat, craneMat].forEach(addM);
+      }
+      const envK = clamp(skyL / Math.max(envRefL, 1e-5), 0.6, 1.6);
+      for (const e of envMats) e.m.envMapIntensity = e.base * envK;
       return { el, sunVis };
     }
 
@@ -1017,19 +1037,17 @@ export default {
     }
 
     function updateCranes(dt, t) {
-      const vis = world.day > 0.15;
-      if (craneMat) craneMat.emissiveIntensity = 0.22 * world.day * (1 - world.golden);
+      // fade the flock over dusk / dawn instead of popping it in or out
+      const fade = smoothstep(0.1, 0.45, world.day);
+      const vis = fade > 0.003;
+      if (craneMat) { craneMat.emissiveIntensity = 0.22 * world.day * (1 - world.golden); craneMat.opacity = fade; }
       for (const c of cranes) {
         c.o.visible = vis;
         if (!vis) continue;
         const a = t * 0.045 + c.phase;
-        c.prev.copy(c.o.position);
         c.o.position.set(c.center.x + Math.cos(a) * c.rx + c.off.x, c.center.y + Math.sin(a * 2) * 3 + c.off.y, c.center.z + Math.sin(a) * c.rz + c.off.z);
-        tmpV.subVectors(c.o.position, c.prev);
-        if (tmpV.lengthSq() > 1e-8) {
-          const yaw = Math.atan2(tmpV.x, tmpV.z);
-          c.o.rotation.set(0, yaw, -Math.cos(a) * 0.25);
-        }
+        // heading from the path's analytic tangent (no stale previous position after being hidden)
+        c.o.rotation.set(0, Math.atan2(-Math.sin(a) * c.rx, Math.cos(a) * c.rz), -Math.cos(a) * 0.25);
         c.glide -= dt;
         if (c.glide < -5) c.glide = 4 + Math.random() * 3;
         c.act.timeScale = damp(c.act.timeScale, c.glide > 0 ? 0.08 : 0.85, 2, dt);

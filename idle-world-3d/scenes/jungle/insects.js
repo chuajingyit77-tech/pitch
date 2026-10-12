@@ -1,7 +1,7 @@
 // Blue morpho butterflies (plus a few ambient heliconius / sulphurs) and dragonflies.
 // One InstancedMesh each; wing flapping happens in the vertex shader from a per-instance angle.
 import * as THREE from 'three';
-import { TAU, clamp, lerp, damp, makeRng, makeCanvas } from '../../lib/util.js';
+import { TAU, clamp, lerp, damp, smoothstep, makeRng, makeCanvas } from '../../lib/util.js';
 import { JG_GLSL } from './shading.js';
 
 /* ------------------------------------------------------------------ */
@@ -201,6 +201,7 @@ export class Butterfly {
     this.vel = new THREE.Vector3();
     this.target = this.pos.clone();
     this.phase = rng.next() * TAU;
+    this.glidePh = this.phase; // fixed offset for the slow glide rhythm (this.phase becomes the wingbeat)
     this.freq = kind === 0 ? rng.range(4.2, 5.4) : rng.range(6, 8);
     this.angle = 0.5;
     this.state = 'fly';
@@ -227,9 +228,10 @@ export class Butterfly {
       _v.multiplyScalar(speed / Math.max(d, 0.4));
       _v.x += Math.sin(t * 1.3 + this.phase) * 0.7; _v.z += Math.cos(t * 1.1 + this.phase * 1.7) * 0.7;
       this.vel.lerp(_v, 1 - Math.exp(-2.2 * dt));
-      // flap: each downstroke gives lift → bouncy flight
-      const gl = this.kind === 0 && Math.sin(t * 0.7 + this.phase) > 0.75;
-      this.glide = damp(this.glide, gl ? 1 : 0, 5, dt);
+      // flap: each downstroke gives lift → bouncy flight. Morphos glide now and then: the rhythm used to be
+      // keyed to the wingbeat phase, so the glide toggled several times a second and the wings stuttered
+      const gl = this.kind === 0 ? smoothstep(0.65, 0.85, Math.sin(t * 0.7 + this.glidePh)) : 0;
+      this.glide = damp(this.glide, gl, 5, dt);
       this.phase += dt * this.freq * TAU * (1 - this.glide * 0.85);
       const s = Math.sin(this.phase);
       this.angle = lerp(lerp(-0.25, 1.25, 0.5 + 0.5 * s), 0.12, this.glide);
@@ -254,9 +256,9 @@ export class Butterfly {
     } else if (this.state === 'rest') {
       this.timer -= dt;
       this.phase += dt * 0.8;
-      // wings closed (brown underside), occasionally opening to flash blue
-      const open = Math.sin(this.phase) > 0.8 ? 1 : 0;
-      this.angle = damp(this.angle, open ? 0.25 : 1.5, 4, dt);
+      // wings closed (brown underside), occasionally opening to flash blue (eased, not a binary switch)
+      const open = smoothstep(0.7, 0.9, Math.sin(this.phase));
+      this.angle = damp(this.angle, lerp(1.5, 0.25, open), 4, dt);
       if (this.timer <= 0 || ctx.hasFoodFor(this)) { this.state = 'fly'; this.restSpot = null; this.timer = 0; this.pos.y += 0.05; }
     }
   }

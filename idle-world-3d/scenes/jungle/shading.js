@@ -37,6 +37,7 @@ export function createShared() {
     uMossColor: { value: new THREE.Color('#4d6b22') },
     uAbsorb: { value: new THREE.Vector3(1.1, 0.3, 0.42) },
     uWaterScatter: { value: new THREE.Color('#1d5a48') },
+    uMsaa: { value: 1 }, // 1 while the frame is drawn into a multisampled target (see the scene's onBeforeRender)
   };
 }
 
@@ -53,6 +54,7 @@ const HEADER_COMMON = /* glsl */`
   uniform vec4 uGlowPts[${GLOW_N}];
   uniform vec3 uGlowColor, uMossColor;
   uniform vec3 uAbsorb, uWaterScatter;
+  uniform float uMsaa;
   vec3 jgUnderwater(vec3 col, vec3 wp){
     float dw = uWaterY - wp.y;
     if (dw <= 0.0) return col;
@@ -110,6 +112,10 @@ export function jungleMaterial(material, shared, opts = {}) {
   if (opts.glowLight !== false) defines.JG_GLOWLIGHT = '';
   if (opts.glowLeaf) defines.JG_GLOWLEAF = '';
   if (opts.glowTint) defines.JG_GLOWTINT = '';
+  // Alpha to coverage for cut-out leaves: a hard alpha test is decided once per pixel, so MSAA cannot smooth
+  // it and leaf edges crawl as the wind and the camera move. A one-pixel alpha ramp turned into MSAA coverage
+  // gives soft, stable edges (where there is no MSAA it behaves like the plain alpha test).
+  if (opts.a2c && material.alphaTest > 0) { defines.JG_A2C = ''; material.alphaToCoverage = true; }
   const uniforms = {
     ...shared,
     uTranslucency: { value: translucent },
@@ -148,6 +154,19 @@ export function jungleMaterial(material, shared, opts = {}) {
       `,
     },
     fragment: {
+      '#include <alphatest_fragment>': /* glsl */`
+        #if defined(JG_A2C) && defined(USE_ALPHATEST)
+          float jgCov = clamp((diffuseColor.a - alphaTest) / max(fwidth(diffuseColor.a), 1e-4) + 0.5, 0.0, 1.0);
+          if (jgCov < 0.5 - 0.45 * uMsaa) discard; // without MSAA: exactly the old alpha test
+        #else
+          #include <alphatest_fragment>
+        #endif
+      `,
+      '#include <opaque_fragment>': /* glsl */`$&
+        #if defined(JG_A2C) && defined(USE_ALPHATEST)
+          gl_FragColor.a = jgCov;
+        #endif
+      `,
       '#include <color_fragment>': /* glsl */`$&
         #ifdef JG_MOSS
         {

@@ -1498,6 +1498,9 @@ class KoiPond {
     this.U.uWaterColor.value.copy(new THREE.Color('#1f4535')).lerp(new THREE.Color('#0b1a2c'), night).multiplyScalar(lerp(1, 0.85, night));
     // lantern
     const glow = smoothstep(0.15, 0.7, night);
+    // at night the lanterns' point lights would reflect in the mirror-flat pond as single pixels worth
+    // hundreds; a slightly less glossy surface turns them into soft glints instead
+    if (this.water) this.water.material.roughness = lerp(0.035, 0.12, glow);
     this.lanternGlow.emissiveIntensity = glow * 3.2;
     this.lanternLight.intensity = glow * 14;
     this.flyMat.uniforms.uNight.value = glow;

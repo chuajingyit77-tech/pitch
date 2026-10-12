@@ -210,6 +210,9 @@ export function fallPoint(tau, s, st = STREAMS[0]) {
   return [x, y, z];
 }
 export const fallT = (st = STREAMS[0]) => Math.sqrt(2 * (FALL.lipY - st.drop - WATER_Y) / G);
+// The waterfall clock wraps every FALL_PERIOD seconds. Every layer's advection rate times FALL_PERIOD is a whole
+// number of noise cells for each stream speed (x1, x1.25, x1.4), which is what makes the wrap seamless.
+const FALL_PERIOD = 2400;
 
 export function buildWaterfall(shared, q) {
   const NV = Math.round(40 * Math.max(0.6, q));
@@ -251,7 +254,8 @@ export function buildWaterfall(shared, q) {
   geo.setIndex(idx);
   geo.computeVertexNormals();
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...shared, uAmb: { value: new THREE.Color(0.3, 0.35, 0.33) }, uFallT: { value: T }, uMoon: { value: 0 }, uFlow: { value: 1 } },
+    // uFlowT: the clock (times uFlow) wrapped to FALL_PERIOD in JS; uMoonPh: (t * 6) mod 2pi
+    uniforms: { ...shared, uAmb: { value: new THREE.Color(0.3, 0.35, 0.33) }, uFallT: { value: T }, uMoon: { value: 0 }, uFlow: { value: 1 }, uFlowT: { value: 0 }, uMoonPh: { value: 0 } },
     vertexShader: /* glsl */`
       attribute float aLayer;
       varying vec2 vUv; varying float vLayer; varying vec3 vWorldP; varying vec3 vN;
@@ -264,27 +268,43 @@ export function buildWaterfall(shared, q) {
     fragmentShader: /* glsl */`
       ${JG_GLSL}
       ${GLSL.noise}
-      uniform vec3 uAmb; uniform float uFallT, uMoon, uFlow;
+      uniform vec3 uAmb; uniform float uFallT, uMoon, uFlow, uFlowT, uMoonPh;
       varying vec2 vUv; varying float vLayer; varying vec3 vN;
-      float fbm2(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * vnoise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+      // The streaks are noise advected down the sheet. The noise lattice repeats along the flow every 'per'
+      // cells, and per is exactly how far each layer advects in FALL_PERIOD seconds, so the clock can be wrapped
+      // in JS without a seam (a raw uTime of many hours made the streaks steppy and banded). Octaves whose
+      // cells are smaller than about a pixel fade to their mean instead of shimmering.
+      float vnoiseP(vec2 p, float per){
+        vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+        float y0 = mod(i.y, per), y1 = mod(i.y + 1.0, per);
+        return mix(mix(hash12(vec2(i.x, y0)), hash12(vec2(i.x + 1.0, y0)), u.x), mix(hash12(vec2(i.x, y1)), hash12(vec2(i.x + 1.0, y1)), u.x), u.y);
+      }
+      float fbm2P(vec2 p, float per, float fp){
+        float s = 0.0, a = 0.5;
+        for (int i = 0; i < 4; i++) { s += a * mix(0.5, vnoiseP(p, per), 1.0 - smoothstep(0.45, 0.9, fp)); p = p * 2.0 + 1.7; per *= 2.0; fp *= 2.0; a *= 0.5; }
+        return s;
+      }
+      float perOf(float k){ return floor(${FALL_PERIOD.toFixed(1)} * k + 0.5); }
       void main(){
         float s = vUv.x, tau = vUv.y;
-        float t = uTime * uFlow;
+        float t = uFlowT;
+        vec2 fst = fwidth(vUv); // sheet coordinates per pixel
         float lay = floor(vLayer + 0.01); float side = fract(vLayer + 0.01) > 0.1 ? 1.0 : 0.0;
         float sp = lay > 1.5 ? 1.4 : (lay > 0.5 ? 1.25 : 1.0);
         // streaks advected with the water: features are fixed in (s, tau - t)
-        float a1 = fbm2(vec2(s * 14.0 + lay * 7.0, (tau - t * 1.0 * sp) * 2.6));
-        float a2 = fbm2(vec2(s * 33.0 + 5.0 + lay * 3.0, (tau - t * 1.35 * sp) * 5.5));
-        float a3 = vnoise(vec2(s * 80.0 + 11.0, (tau - t * 1.7 * sp) * 12.0));
+        float a1 = fbm2P(vec2(s * 14.0 + lay * 7.0, (tau - t * 1.0 * sp) * 2.6), perOf(2.6 * sp), max(fst.x * 14.0, fst.y * 2.6));
+        float a2 = fbm2P(vec2(s * 33.0 + 5.0 + lay * 3.0, (tau - t * 1.35 * sp) * 5.5), perOf(7.425 * sp), max(fst.x * 33.0, fst.y * 5.5));
+        // the finest layer: stretched along the flow (it moved ~half a cell per frame and read as random flicker)
+        float a3 = mix(0.5, vnoiseP(vec2(s * 80.0 + 11.0, (tau - t * 1.7 * sp) * 6.0), perOf(10.2 * sp)), 1.0 - smoothstep(0.45, 0.9, max(fst.x * 80.0, fst.y * 6.0)));
         float streak = a1 * 0.55 + a2 * 0.33 + a3 * 0.2;
         // packets: rounder clumps of aerated water tumbling down
-        float pk = vnoise(vec2(s * 7.0 + lay * 3.0, (tau - t * 1.1 * sp) * 6.5));
-        float pk2 = vnoise(vec2(s * 13.0 + 4.0, (tau - t * 1.25 * sp) * 11.0));
+        float pk = vnoiseP(vec2(s * 7.0 + lay * 3.0, (tau - t * 1.1 * sp) * 6.5), perOf(7.15 * sp));
+        float pk2 = vnoiseP(vec2(s * 13.0 + 4.0, (tau - t * 1.25 * sp) * 7.0), perOf(8.75 * sp));
         streak = streak * 0.7 + smoothstep(0.45, 0.9, pk * 0.65 + pk2 * 0.35) * 0.45;
         float speed = max(tau, 0.0) * 9.8 + 1.5;
         // edges break up into spray
         float e = min(s, 1.0 - s);
-        float edgeN = vnoise(vec2(s * 6.0, (tau - t * 1.2) * 3.0)) * 0.12;
+        float edgeN = vnoiseP(vec2(s * 6.0, (tau - t * 1.2) * 3.0), perOf(3.6)) * 0.12;
         float edge = smoothstep(0.0, 0.16 + edgeN, e);
         float rim = 1.0 - smoothstep(0.0, 0.22, e);
         float top = smoothstep(-0.25, -0.05, tau);
@@ -305,17 +325,23 @@ export function buildWaterfall(shared, q) {
         vec3 lit = uAmb * 1.0 + uLightCol * cookie * (wrap * 0.55 + back * 0.8) * smoothstep(-0.1, 0.1, uLightDirW.y + 0.15);
         vec3 col = base * lit;
         // moonlight sheen on the streaks at night
-        col += vec3(0.55, 0.72, 0.95) * uMoon * pow(white, 3.0) * (0.6 + 0.4 * sin(tau * 9.0 - t * 6.0 + s * 20.0));
+        col += vec3(0.55, 0.72, 0.95) * uMoon * pow(white, 3.0) * (0.6 + 0.4 * sin(tau * 9.0 - uMoonPh + s * 20.0));
         col = jgFog(col, vWorldP);
         gl_FragColor = vec4(col, alpha);
       }`,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
+    extensions: { derivatives: true },
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 3;
   mesh.frustumCulled = false;
+  /** Clock for the sheet, wrapped seamlessly (see the shader); call every frame. */
+  mesh.userData.setTime = t => {
+    mat.uniforms.uFlowT.value = (t * mat.uniforms.uFlow.value) % FALL_PERIOD;
+    mat.uniforms.uMoonPh.value = (t * mat.uniforms.uFlow.value * 6) % TAU;
+  };
   return mesh;
 }
 

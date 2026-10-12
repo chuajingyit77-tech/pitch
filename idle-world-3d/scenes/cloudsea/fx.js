@@ -93,7 +93,7 @@ void main(){
   float D = max(sz, 3.0), dOld = max(sz, 2.0);
   vK = min(9.0, D * D / 2.9);
   vStar = smoothstep(6.0, 16.0, D);
-  vA *= dOld * dOld * vK / (9.0 * D * D);
+  vA *= dOld * dOld / (D * D) * mix(vK / 9.0, 1.0, aKind);   // (kind 1 is a soft disc, not a gaussian)
   gl_PointSize = D * alive;
 }`;
 const SPARK_FRAG = /* glsl */`

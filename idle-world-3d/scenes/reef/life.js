@@ -186,6 +186,11 @@ const SPEC = {
   emperorAngel: { shape: 'emperorAngel', painter: 'emperorAngel', size: 0.7, cruise: 0.5, sprint: 1.5, agility: 2.2, notice: 10 },
 };
 
+// Swimmer phases grow without bound in lib/fish.js and reach the GPU as float32 (tail-beat jitter
+// after hours); fin flutter reads uFishTime only through sin(5.5 t) and sin(3.7 t), both periodic in 20 pi.
+const FISH_PERIOD = 20 * Math.PI;
+const wrapSwimmer = s => { if (s.phase > 4096) s.phase %= TAU; if (s.flutter > 4096) s.flutter %= TAU; };
+
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _d = new THREE.Vector3(), _f = new THREE.Vector3();
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 
@@ -564,6 +569,8 @@ export async function createLife(ctx) {
     }
   } catch (e) { console.warn('[reef] barramundi unavailable', e); }
 
+  const swimLists = [school, silver, butter, cleaners, fus.fish, jacks, barra, ...hoverGroups.map(g => g.fish)];
+
   /* ---- food ---- */
   const food = new Food(W, env, 72);
   group.add(food.mesh, food.crumbPts, food.puffPts);
@@ -608,7 +615,7 @@ export async function createLife(ctx) {
   };
 
   /* ---- per-frame ---- */
-  let time = 0;
+  let time = 0, fishT = 0;
   const foodAvail = it => it.alive;
   function updateResidents(dt, t) {
     const anyFood = food.active > 0;
@@ -729,7 +736,7 @@ export async function createLife(ctx) {
     }
     for (const kind in species) species[kind].begin();
     for (const f of residents) species[f.kind].push(f.sw);
-    for (const kind in species) species[kind].end(t);
+    for (const kind in species) species[kind].end(fishT);
   }
 
   function updateTurtles(dt, t) {
@@ -779,6 +786,10 @@ export async function createLife(ctx) {
         _f.y = clamp(_f.y, -0.35, 0.35);
         const prevYaw = Math.atan2(tu.fwd.z, tu.fwd.x);
         tu.fwd.lerp(_f.normalize(), 1 - Math.exp(-1.2 * dt)).normalize();
+        // diving straight onto a pellet left no heading: near-vertical forward vectors made the roll
+        // frame (and the whole turtle) spin; keep the pitch within ~35 degrees
+        const hz = Math.hypot(tu.fwd.x, tu.fwd.z);
+        if (Math.abs(tu.fwd.y) > 0.57 && hz > 1e-4) { const k = 0.8216 / hz; tu.fwd.x *= k; tu.fwd.z *= k; tu.fwd.y = Math.sign(tu.fwd.y) * 0.57; }
         const yawRate = -((Math.atan2(tu.fwd.z, tu.fwd.x) - prevYaw + Math.PI * 3) % TAU - Math.PI) / Math.max(dt, 1e-3);
         tu.roll = lerp(tu.roll, clamp(-yawRate * 0.6, -0.35, 0.35), 1 - Math.exp(-1.5 * dt));
       }
@@ -850,7 +861,7 @@ export async function createLife(ctx) {
     chromInst.begin();
     for (const s of school) chromInst.push(s);
     for (const s of chromHover) chromInst.push(s);
-    chromInst.end(t);
+    chromInst.end(fishT);
   }
 
   function updateSilver(dt, t) {
@@ -876,7 +887,7 @@ export async function createLife(ctx) {
     c.x += Math.sin(t * 0.03) * dt * 0.15; c.z += Math.cos(t * 0.025) * dt * 0.15;
     silInst.begin();
     for (const s of silver) silInst.push(s);
-    silInst.end(t);
+    silInst.end(fishT);
   }
 
 
@@ -910,8 +921,8 @@ export async function createLife(ctx) {
         clampAbove(s, 0.25);
       }
     }
-    if (anthOInst) { anthOInst.begin(); for (const s of anthO) anthOInst.push(s); anthOInst.end(t); }
-    if (anthPInst) { anthPInst.begin(); for (const s of anthP) anthPInst.push(s); anthPInst.end(t); }
+    if (anthOInst) { anthOInst.begin(); for (const s of anthO) anthOInst.push(s); anthOInst.end(fishT); }
+    if (anthPInst) { anthPInst.begin(); for (const s of anthP) anthPInst.push(s); anthPInst.end(fishT); }
   }
 
   function updateButterfly(dt, t) {
@@ -949,7 +960,7 @@ export async function createLife(ctx) {
       s.steer(_d, dt).integrate(dt);
       clampAbove(s, 0.3);
     }
-    bfInst.begin(); for (const s of butter) bfInst.push(s); bfInst.end(t);
+    bfInst.begin(); for (const s of butter) bfInst.push(s); bfInst.end(fishT);
   }
 
   function updateCleaners(dt, t) {
@@ -973,7 +984,7 @@ export async function createLife(ctx) {
       }
       s.steer(_d, dt).integrate(dt);
     }
-    cleanerInst.begin(); for (const s of cleaners) cleanerInst.push(s); cleanerInst.end(t);
+    cleanerInst.begin(); for (const s of cleaners) cleanerInst.push(s); cleanerInst.end(fishT);
   }
 
   function updateFusiliers(dt, t) {
@@ -991,7 +1002,7 @@ export async function createLife(ctx) {
       const sp = _d.length(); if (sp > 1.8) _d.multiplyScalar(1.8 / sp);
       s.steer(_d, dt).integrate(dt);
     }
-    fusInst.begin(); for (const s of fus.fish) fusInst.push(s); fusInst.end(t);
+    fusInst.begin(); for (const s of fus.fish) fusInst.push(s); fusInst.end(fishT);
   }
 
   function updateJacks(dt, t) {
@@ -1007,7 +1018,7 @@ export async function createLife(ctx) {
       s.steer(_d, dt).integrate(dt);
     }
     c.x += Math.sin(t * 0.02) * dt * 0.2;
-    jackInst.begin(); for (const s of jacks) jackInst.push(s); jackInst.end(t);
+    jackInst.begin(); for (const s of jacks) jackInst.push(s); jackInst.end(fishT);
   }
 
   function updateBarra(dt, t) {
@@ -1052,7 +1063,7 @@ export async function createLife(ctx) {
     }
     barraInst.begin();
     for (const b of barra) barraInst.push(b);
-    barraInst.end(t);
+    barraInst.end(fishT);
   }
 
   return {
@@ -1060,6 +1071,7 @@ export async function createLife(ctx) {
     addMember(m) { addResident(m); },
     update(dt, t) {
       time = t;
+      fishT = t % FISH_PERIOD;
       food.update(dt, t, floorAt, W.uCurDir.value);
       updateResidents(dt, t);
       updateTurtles(dt, t);
@@ -1071,6 +1083,8 @@ export async function createLife(ctx) {
       updateCleaners(dt, t);
       updateJacks(dt, t);
       updateFusiliers(dt, t);
+      for (const f of residents) wrapSwimmer(f.sw);
+      for (const list of swimLists) for (const s of list) wrapSwimmer(s);
     },
     spawnFood(center, n) { const made = food.spawnCloud(center, n, rng, floorAt, surfY); if (made) food.puff(center); return made; },
     dispose() {

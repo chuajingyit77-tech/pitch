@@ -6,7 +6,7 @@ import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta } from '../..
 import { patchStd } from './common.js';
 
 const V = () => new THREE.Vector3();
-const _a = V(), _b = V(), _c3 = V(), _d = V(), _t = V(), _u = V(), _l = V(), _n = V(), _pw = V();
+const _a = V(), _b = V(), _c3 = V(), _d = V(), _t = V(), _u = V(), _l = V(), _n = V(), _pw = V(), _pole = V();
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _qi = new THREE.Quaternion();
 const _col = new THREE.Color();
 
@@ -125,8 +125,12 @@ function creatureMaterial(shared, uniforms) {
             if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
           }
           float edge = sqrt(d2) - sqrt(d1);
-          shellLine = 1.0 - smoothstep(0.035, 0.1, edge);
-          float rings = 0.5 + 0.5 * sin(edge * 55.0);
+          // At a distance the scute lines are thinner than a pixel and the growth rings several per pixel:
+          // keep the lines at least ~1 px wide (dimmed to the same weight) and fade rings out before they alias.
+          float fe = max(fwidth(edge), 1e-4);
+          float lw = max(0.0675, fe);
+          shellLine = (1.0 - smoothstep(lw - 0.0325 - fe * 0.5, lw + 0.0325 + fe * 0.5, edge)) * (0.0675 / lw);
+          float rings = 0.5 + 0.5 * sin(edge * 55.0) * (1.0 - smoothstep(0.4, 0.9, fe * 55.0 / 6.2832));
           vec3 base = mix(vec3(0.19, 0.25, 0.15), vec3(0.42, 0.40, 0.2), smoothstep(0.1, 0.6, edge)) * (0.85 + 0.15 * rings);
           diffuseColor.rgb = mix(base, vec3(0.78, 0.58, 0.22), shellLine);
         } else if (vMat > 1.5 && vMat < 2.5) {
@@ -365,11 +369,11 @@ class Tortoise {
     }
     // IK arms (poles: elbows down and out)
     const tw = this.mesh.localToWorld(_t.copy(hL));
-    const pole = this.mesh.localToWorld(_d.set(1.2, 0.6, -0.3));
-    ik2(B.shoulderL, B.elbowL, B.handL, tw, pole.clone());
+    const pole = this.mesh.localToWorld(_pole.set(1.2, 0.6, -0.3));
+    ik2(B.shoulderL, B.elbowL, B.handL, tw, pole);
     const tw2 = this.mesh.localToWorld(_t.copy(hR));
-    const pole2 = this.mesh.localToWorld(_d.set(-1.2, 0.6, -0.3));
-    ik2(B.shoulderR, B.elbowR, B.handR, tw2, pole2.clone());
+    const pole2 = this.mesh.localToWorld(_pole.set(-1.2, 0.6, -0.3));
+    ik2(B.shoulderR, B.elbowR, B.handR, tw2, pole2);
     B.handL.rotation.set(0.3 + 0.4 * cloud * Math.sin(ph), 0, 0.2);
     B.handR.rotation.set(0.3 + 0.4 * cloud * Math.sin(ph + Math.PI), 0, -0.2);
     // held peach follows the hand
@@ -387,8 +391,8 @@ class Tortoise {
       const swing = Math.sin(wp + (k ? Math.PI : 0));
       ft.set(s * lerp(0.23, stance, stanceW), 0.08 + Math.max(0, swing) * 0.1 * walkW, 0.07 + Math.cos(wp + (k ? Math.PI : 0)) * 0.13 * walkW);
       const fw = this.mesh.localToWorld(_t.copy(ft));
-      const fpole = this.mesh.localToWorld(_d.set(s * 0.3, 0.4, 1.4));
-      ik2(k ? B.hipR : B.hipL, k ? B.kneeR : B.kneeL, k ? B.footR : B.footL, fw, fpole.clone());
+      const fpole = this.mesh.localToWorld(_pole.set(s * 0.3, 0.4, 1.4));
+      ik2(k ? B.hipR : B.hipL, k ? B.kneeR : B.kneeL, k ? B.footR : B.footL, fw, fpole);
       // keep the foot flat
       const knee = k ? B.kneeR : B.kneeL, foot = k ? B.footR : B.footL;
       knee.updateWorldMatrix(true, false);
@@ -737,7 +741,9 @@ function birdMaterial(shared) {
     },
     fragmentHeader: 'varying float vGlow; varying float vPart;',
     fragment: {
-      '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance = mix(diffuseColor.rgb, vec3(0.4, 0.9, 1.0), 0.4) * vGlow;',
+      // the flapping wings glow a little less than the body: at night bright wing blades sweeping a pixel or
+      // more per frame strobe against the dark sky
+      '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance = mix(diffuseColor.rgb, vec3(0.4, 0.9, 1.0), 0.4) * vGlow * (vPart > 0.5 && vPart < 2.5 ? 0.65 : 1.0);',
     },
   });
 }
@@ -837,7 +843,10 @@ class BirdFlock {
         b.fold = damp(b.fold, 0, 6, dt);
         b.flap = b.vel.y > 0.3 ? 1.0 : 0.75 + 0.25 * Math.sin(t * 0.7 + k);
       }
-      b.ph += dt * (b.flap > 0.05 ? 13 + k : 2);
+      // flap ~1.5-2 Hz (was 2-3 Hz): at 60 fps (30 in power save) faster wings jumped more than their own
+      // width between frames and strobed; wrap the phase (sin(ph), sin(ph/2), sin(0.35 ph) all repeat in 40π)
+      b.ph += dt * (b.flap > 0.05 ? 9.5 + 0.6 * k : 2);
+      if (b.ph > BIRD_PHASE_WRAP) b.ph -= BIRD_PHASE_WRAP;
     }
   }
   write(mesh, anim, night) {
@@ -858,6 +867,7 @@ class BirdFlock {
   }
 }
 const _m4 = new THREE.Matrix4(), _e2 = new THREE.Euler(), _q2 = new THREE.Quaternion(), _s2 = new THREE.Vector3();
+const BIRD_PHASE_WRAP = 40 * Math.PI;
 
 /* ------------------------------------------------------------------ */
 /* Manager                                                             */

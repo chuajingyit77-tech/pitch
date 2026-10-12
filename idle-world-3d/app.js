@@ -1085,6 +1085,55 @@ window.__idle = {
     }
     return { nan, inf, nanAt, maxL: +maxL.toFixed(1), maxAt, over32, flickerPermille: +(1000 * osc / Math.max(1, total)).toFixed(3), meanDelta: +(meanDelta / Math.max(1, total)).toFixed(4), globalJump: +globalJump.toFixed(4), size: [W, H], map };
   },
+  /**
+   * Test-only NaN hunt: tags every material so a fragment that outputs NaN/Inf writes its material id
+   * instead, renders a few frames into a float target and reports which materials (and meshes) did it.
+   */
+  nanHunt({ frames = 12, dt = 1 / 30, w = 320, h = 180 } = {}) {
+    if (!current) return null;
+    const inst = current.inst, mats = [], owners = new Map();
+    inst.scene.traverse(o => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m) continue;
+        if (!mats.includes(m)) mats.push(m);
+        if (!owners.has(m)) owners.set(m, []);
+        if (owners.get(m).length < 3) owners.get(m).push(`${o.type}${o.name ? ':' + o.name : ''}${o.isInstancedMesh ? '[' + o.count + ']' : ''}`);
+      }
+    });
+    mats.forEach((m, i) => {
+      if (m.userData.nanTag) return;
+      m.userData.nanTag = i + 1;
+      const prev = m.onBeforeCompile;
+      const prevKey = m.customProgramCacheKey === THREE.Material.prototype.customProgramCacheKey ? () => prev.toString() : m.customProgramCacheKey.bind(m);
+      m.onBeforeCompile = function (sh, r) {
+        prev.call(this, sh, r);
+        const fs = sh.fragmentShader, end = fs.lastIndexOf('}');
+        sh.fragmentShader = fs.slice(0, end) + `\n#if __VERSION__ >= 300\n  if (any(isnan(gl_FragColor)) || any(isinf(gl_FragColor))) gl_FragColor = vec4(${(i + 1).toFixed(1)}, -1.0, 0.0, 1.0);\n#endif\n` + fs.slice(end);
+      };
+      m.customProgramCacheKey = () => prevKey() + '|nan' + (i + 1);
+      m.needsUpdate = true;
+    });
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.FloatType });
+    const fb = new Float32Array(w * h * 4), hits = {};
+    const prevTarget = renderer.getRenderTarget();
+    for (let f = 0; f < frames; f++) {
+      elapsed += dt; inst.update(dt, elapsed); updateRig(dt, elapsed);
+      renderer.setRenderTarget(rt); renderer.render(inst.scene, inst.camera);
+      renderer.readRenderTargetPixels(rt, 0, 0, w, h, fb);
+      for (let i = 0; i < w * h; i++) {
+        const r = fb[i * 4], g = fb[i * 4 + 1];
+        if (g === -1) { const id = Math.round(r); hits[id] = hits[id] || { n: 0, at: [+((i % w) / w).toFixed(3), +(1 - Math.floor(i / w) / h).toFixed(3)] }; hits[id].n++; }
+        else if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(fb[i * 4 + 2])) { hits.untagged = hits.untagged || { n: 0 }; hits.untagged.n++; }
+      }
+    }
+    renderer.setRenderTarget(prevTarget);
+    rt.dispose();
+    return Object.entries(hits).map(([id, v]) => {
+      const m = mats[+id - 1];
+      return m ? { id: +id, ...v, type: m.type, name: m.name, owners: owners.get(m), uniforms: m.uniforms ? Object.keys(m.uniforms).slice(0, 8) : undefined } : { id, ...v };
+    });
+  },
   get current() { return current; },
   get rig() { return rig; },
   renderer,

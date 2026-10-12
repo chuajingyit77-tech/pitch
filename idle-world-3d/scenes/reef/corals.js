@@ -2,7 +2,7 @@
 // soft tree corals, tube sponges, anemones, seagrass and kelp, starfish, urchins and rubble.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createNoise, clamp, lerp, smoothstep, TAU, canvasTexture, makeRng } from '../../lib/util.js';
+import { createNoise, clamp, lerp, smoothstep, TAU, canvasTexture, makeRng, patchMaterial } from '../../lib/util.js';
 import { waterize, addDetail, addFluor, addSway } from './uw.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -27,7 +27,9 @@ function stdMat(W, opts, { caustics = true, key } = {}) {
   waterize(m, W, { caustics, key });
   return m;
 }
-function instanced(geo, mat, list, { shadow = true, receive = true } = {}) {
+/** pad: how far (m) the vertex shader can push geometry out of its rest pose (surge sway), so the
+ *  culling sphere never drops a swaying tip that is still on screen. */
+function instanced(geo, mat, list, { shadow = true, receive = true, pad = 0 } = {}) {
   const im = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
   list.forEach((it, i) => {
     im.setMatrixAt(i, _m.compose(it.pos, it.quat, it.scale));
@@ -36,7 +38,32 @@ function instanced(geo, mat, list, { shadow = true, receive = true } = {}) {
   im.count = list.length;
   im.castShadow = shadow; im.receiveShadow = receive;
   im.computeBoundingSphere();
+  if (pad && im.boundingSphere && im.boundingSphere.radius > 0) im.boundingSphere.radius += pad;
   return im;
+}
+/**
+ * Alpha-tested lace (sea fans, feather stars, kelp): the painted lines are thinner than a pixel at a
+ * distance, so their mip-averaged alpha sinks below the cutoff and they sparkle and vanish as they
+ * sway. Scale alpha up with the mip level so the lace keeps its coverage. The cutoff itself is left to
+ * three (or to the shell, which turns it into alpha-to-coverage when the scene pass has MSAA), and the
+ * material's alphaTest is unchanged, so shadows look the same.
+ */
+function stableCutout(mat, tex) {
+  const img = tex.image || { width: 256, height: 256 };
+  return patchMaterial(mat, {
+    key: 'cutoutlod',
+    uniforms: { uTexSize: { value: new THREE.Vector2(img.width, img.height) } },
+    fragmentHeader: 'uniform vec2 uTexSize;',
+    fragment: {
+      '#include <alphatest_fragment>': `
+        #ifdef USE_MAP
+        { vec2 tp = vMapUv * uTexSize;
+          float lod = max(0.0, 0.5 * log2(max(max(dot(dFdx(tp), dFdx(tp)), dot(dFdy(tp), dFdy(tp))), 1e-8)));
+          diffuseColor.a *= 1.0 + lod * 0.3; }
+        #endif
+        $&`,
+    },
+  });
 }
 /** Quaternion that stands an object on a surface with normal n (blend toward up), plus spin. */
 function standOn(n, spin, upright = 0.5, out = new THREE.Quaternion()) {
@@ -386,7 +413,9 @@ vec3 detailCol(vec3 p, float h, vec3 c){
   float a = atan(p.z, p.x);
   vec2 q = p.xz * 22.0;
   float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
-  float st = sin(a * 70.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5;
+  // the 70 radial ridges converge at the centre: fade them where they get closer than ~2 px
+  float aas = 1.0 - smoothstep(0.6, 1.6, 70.0 * length(fwidth(p.xz)) / max(length(p.xz), 1e-3));
+  float st = mix(0.5, sin(a * 70.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5, aas);
   float cells = smoothstep(0.05, 0.4, cell2(q).x);
   vec3 col = c * (0.78 + (st * 0.12 + cells * 0.2) * aa + h * 20.0);
   return col * (0.8 + 0.3 * (snoise(p * 2.5) * 0.5 + 0.5));
@@ -736,6 +765,7 @@ export function buildReef(ctx) {
   const fanMat = new THREE.MeshStandardMaterial({ map: fanTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, envMapIntensity: 0.35 });
   waterize(fanMat, W, { key: 'fan' });
   addSway(fanMat, W, { height: 1.4, amount: 0.12, stiff: 1.4, flutter: 0.015, key: 'fan' });
+  stableCutout(fanMat, fanTex);
   const fanG = new THREE.PlaneGeometry(1.5, 1.4, 6, 6);
   fanG.translate(0, 0.68, 0);
   const fans = [];
@@ -747,7 +777,7 @@ export function buildReef(ctx) {
     const yaw = Math.atan2(curDir.x, curDir.y) + rng.range(-0.35, 0.35);
     fans.push({ pos: new THREE.Vector3(s.x, s.y - 0.05, s.z), quat: _q.setFromEuler(_e.set(rng.range(-0.12, 0.12), yaw, rng.range(-0.1, 0.1))).clone(), scale: new THREE.Vector3(sc, sc * rng.range(0.85, 1.15), sc), color: rng.chance(0.4) ? rng.pick(fanCols.slice(0, 3)) : rng.pick(fanCols.slice(3)) });
   }
-  group.add(instanced(fanG, fanMat, fans));
+  group.add(instanced(fanG, fanMat, fans, { pad: 0.25 }));
 
   /* ---- soft tree corals ---- */
   const softMat = stdMat(W, { vertexColors: true, roughness: 0.6 }, { key: 'soft' });
@@ -763,7 +793,7 @@ export function buildReef(ctx) {
     const sc = rng.range(1.0, 1.8);
     softLists[i % softGeos.length].push({ pos: new THREE.Vector3(s.x, s.y - 0.04, s.z), quat: standOn(nrm(s), rng.range(0, TAU), 0.55), scale: new THREE.Vector3(sc, sc, sc) });
   }
-  softGeos.forEach((g, i) => group.add(instanced(g, softMat, softLists[i])));
+  softGeos.forEach((g, i) => group.add(instanced(g, softMat, softLists[i], { pad: 0.12 })));
 
   /* ---- encrusting mound corals (Porites lumps) fill the gaps with colour ---- */
   const moundG = (() => {
@@ -809,6 +839,7 @@ export function buildReef(ctx) {
   const featherMat = new THREE.MeshStandardMaterial({ map: featherTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.7, envMapIntensity: 0.4 });
   waterize(featherMat, W, { key: 'feather' });
   addSway(featherMat, W, { height: 0.5, amount: 0.05, stiff: 1.2, flutter: 0.05, key: 'feather' });
+  stableCutout(featherMat, featherTex);
   const arms = [];
   const featherCols = [C('#ff8a1a'), C('#ffd23a'), C('#e8303a'), C('#2a2a2a'), C('#f0f0e0'), C('#9a3ad8')];
   for (let i = N(16); i > 0; i--) {
@@ -825,7 +856,7 @@ export function buildReef(ctx) {
       arms.push({ pos: base, quat: _q.clone().multiply(_q2), scale: new THREE.Vector3(1, sc * rng.range(0.8, 1.15), sc), color: col });
     }
   }
-  group.add(instanced(featherArmGeo(), featherMat, arms, { shadow: false }));
+  group.add(instanced(featherArmGeo(), featherMat, arms, { shadow: false, pad: 0.2 }));
 
   /* ---- mushroom corals on the sand and reef flats ---- */
   const mushMat = stdMat(W, { vertexColors: true, roughness: 0.6 }, { key: 'mush' });
@@ -865,7 +896,7 @@ export function buildReef(ctx) {
     }
     baseList.push({ pos: a.pos.clone(), quat: new THREE.Quaternion(), scale: new THREE.Vector3(a.r, 1, a.r), color: rng.pick([C('#8a1f3a'), C('#c0602a'), C('#5a2a8a')]) });
   });
-  group.add(instanced(tentG, tentMat, tents, { shadow: false }));
+  group.add(instanced(tentG, tentMat, tents, { shadow: false, pad: 0.15 }));
   const anBaseG = strip(new THREE.CylinderGeometry(0.62, 0.48, 0.16, 28, 2, false));
   anBaseG.translate(0, 0.06, 0);
   paint(anBaseG, () => [C('#ffffff'), 0.2]);
@@ -894,7 +925,7 @@ export function buildReef(ctx) {
       blades.push({ pos: new THREE.Vector3(x, ground.height(x, z) - 0.02, z), quat: _q.setFromEuler(_e.set(rng.range(-0.15, 0.15), rng.range(0, TAU), rng.range(-0.15, 0.15))).clone(), scale: new THREE.Vector3(1, h, 1), color: rng.pick(grassCols).clone().offsetHSL(0, 0, rng.range(-0.05, 0.05)) });
     }
   }
-  group.add(instanced(bladeG, grassMat, blades, { shadow: false }));
+  group.add(instanced(bladeG, grassMat, blades, { shadow: false, pad: 0.6 }));
 
   /* ---- garden eels poking out of the sand apron ---- */
   const eelG = (() => {
@@ -925,13 +956,14 @@ export function buildReef(ctx) {
       eels.push({ pos: new THREE.Vector3(x, ground.height(x, z) - 0.03, z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), eelYaw + rng.range(-0.4, 0.4), rng.range(-0.06, 0.06))).clone(), scale: new THREE.Vector3(1, h, 1) });
     }
   }
-  group.add(instanced(eelG, eelMat, eels, { shadow: false }));
+  group.add(instanced(eelG, eelMat, eels, { shadow: false, pad: 0.25 }));
 
   /* ---- a few ribbon-kelp clumps far out on the slope ---- */
   const kelpTex = kelpTexture(env.seed ^ 5);
   const kelpMat = new THREE.MeshStandardMaterial({ map: kelpTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.6, envMapIntensity: 0.3 });
   waterize(kelpMat, W, { key: 'kelp' });
   addSway(kelpMat, W, { height: 1, amount: 0.9, stiff: 1.25, flutter: 0.06, key: 'kelp' });
+  stableCutout(kelpMat, kelpTex);
   const kelpG = new THREE.PlaneGeometry(1, 1, 1, 20);
   kelpG.translate(0, 0.5, 0);
   const kelps = [];
@@ -944,7 +976,7 @@ export function buildReef(ctx) {
       for (const extra of [0, Math.PI / 2]) kelps.push({ pos: new THREE.Vector3(x, ground.height(x, z) - 0.1, z), quat: _q.setFromEuler(_e.set(0, yaw + extra, 0)).clone(), scale: new THREE.Vector3(w, h, 1), color: _c.setHSL(0.11, 0.5, rng.range(0.55, 0.75)).clone() });
     }
   }
-  group.add(instanced(kelpG, kelpMat, kelps, { shadow: false }));
+  group.add(instanced(kelpG, kelpMat, kelps, { shadow: false, pad: 1.6 }));
 
   /* ---- starfish ---- */
   const starMat = stdMat(W, { vertexColors: true, roughness: 0.7 }, { key: 'star' });

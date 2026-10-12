@@ -5,36 +5,46 @@ import { addFog } from './sky.js';
 
 /* ------------------------------------------------------------------ */
 /* Shared wind for the field. Gust noise is periodic (256 lattice      */
-/* units) so the scroll can wrap without a visible jump.               */
+/* units) so the scroll can wrap without a visible jump; the sway and  */
+/* flutter phases are advanced and wrapped (mod 2π) on the CPU, so the */
+/* motion stays smooth however long the page has been open.            */
 /* ------------------------------------------------------------------ */
+export const SWAY_RATE = 1.1;     // rad/s, per-clump lean in the wind direction
+export const FLUTTER_RATE = 3.3;  // rad/s, small side-to-side flutter (~0.5 Hz: wind, not vibration)
 export function makeWindUniforms() {
   return {
     uTime: { value: 0 },
+    uWindPh: { value: new THREE.Vector2() },
     uWindDir: { value: new THREE.Vector2(1, 0) },
     uWindScroll: { value: new THREE.Vector2() },
     uWindStr: { value: 1 },
     uPress: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, -100, 0, 0)) },
+    // screen-space minimum blade width: half the drawing-buffer size (px) and the width floor (px)
+    uHalfRes: { value: new THREE.Vector2(640, 360) },
+    uMinPx: { value: 1.05 },
   };
 }
 
 export const WIND_GLSL = /* glsl */`
-uniform float uTime, uWindStr;
-uniform vec2 uWindDir, uWindScroll;
+uniform float uWindStr;
+uniform vec2 uWindDir, uWindScroll, uWindPh;
 uniform vec4 uPress[4];
 float mHash(vec2 p){ p = mod(p, 256.0); return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
 float mNoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
   return mix(mix(mHash(i), mHash(i+vec2(1.0,0.0)), u.x), mix(mHash(i+vec2(0.0,1.0)), mHash(i+vec2(1.0,1.0)), u.x), u.y); }
+// big, slow, soft gust fronts (second octave at 2x, wide ramp) rolling across the field
 float gustAt(vec2 p){
   vec2 q = p * 0.045 - uWindScroll;
-  float g = mNoise(q) * 0.62 + mNoise(q * 3.0 + vec2(7.1, 3.3)) * 0.38;
-  return smoothstep(0.3, 0.8, g);
+  float g = mNoise(q) * 0.62 + mNoise(q * 2.0 + vec2(7.1, 3.3)) * 0.38;
+  return smoothstep(0.22, 0.86, g);
 }
-vec3 bendPlant(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, out float gust){
+// per-plant wind state (evaluated once per vertex, shared by the extra points bent below)
+void windInst(vec3 root, float rnd, float flex, out vec2 dir, out float squash, out float gust){
   gust = gustAt(root.xz);
-  float sway = sin(uTime * 1.35 + dot(root.xz, vec2(0.23, 0.19)) + rnd * 6.2831);
+  float sway = sin(uWindPh.x + dot(root.xz, vec2(0.23, 0.19)) + rnd * 6.2831);
   float bend = uWindStr * (0.1 + 0.55 * gust + 0.08 * sway) * flex;
-  vec2 dir = uWindDir * bend;
-  float squash = 0.0;
+  dir = uWindDir * bend;
+  squash = 0.0;
   for (int i = 0; i < 4; i++) {
     vec2 dv = root.xz - uPress[i].xz;
     float dd = length(dv) + 1e-3;
@@ -42,10 +52,13 @@ vec3 bendPlant(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, out
     dir += dv / dd * k * 1.1;
     squash = max(squash, uPress[i].w * (1.0 - smoothstep(0.4, 2.0, dd)));
   }
+}
+// bend one point of the plant (hN = normalised height, H = plant height)
+vec3 bendAt(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, vec2 dir, float squash){
   float w = hN * hN;
   vec2 off = dir * w * H;
   vec2 perp = vec2(-uWindDir.y, uWindDir.x);
-  off += perp * sin(uTime * 4.7 + rnd * 37.0 + hN * 2.5) * 0.03 * w * H * uWindStr * flex;
+  off += perp * sin(uWindPh.y + rnd * 37.0 + hN * 2.5) * 0.022 * w * H * uWindStr * flex;
   float y = wp.y - root.y;
   float l2 = dot(off, off);
   float ny = max(y - l2 / max(2.0 * y, 0.05), y * 0.2);
@@ -56,11 +69,50 @@ vec3 bendPlant(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, out
 }
 `;
 
+// Vertex body shared by blades and plumes. Bends the vertex, its blade centre line and a point further along
+// the blade, then pushes the edge outward in screen space so that no blade is ever narrower than uMinPx: thin
+// sub-pixel blades otherwise fall between pixel centres and sparkle at the slightest motion (wind, camera bob
+// or drift), worst with no MSAA. vCov = true / drawn width carries the lost coverage to the fragment shader.
+const BLADE_VERTEX = flex => /* glsl */`
+  vec3 root = instanceMatrix[3].xyz;
+  float Hs = length(instanceMatrix[1].xyz);
+  vec2 wdir; float wsq, gst;
+  windInst(root, aInst.z, ${flex}, wdir, wsq, gst);
+  vec3 pC = transformed - aW;
+  vec3 pT = pC + aTan * 0.06;
+  mat3 im3 = mat3(instanceMatrix);
+  vec4 wp4 = instanceMatrix * vec4(transformed, 1.0);
+  vec3 wC = wp4.xyz - im3 * aW;
+  vec3 wT = wC + im3 * (aTan * 0.06);
+  float hN = clamp(transformed.y, 0.0, 1.3);
+  wp4.xyz = bendAt(wp4.xyz, root, hN, Hs, aInst.z, ${flex}, wdir, wsq);
+  wC = bendAt(wC, root, clamp(pC.y, 0.0, 1.3), Hs, aInst.z, ${flex}, wdir, wsq);
+  wT = bendAt(wT, root, clamp(pT.y, 0.0, 1.3), Hs, aInst.z, ${flex}, wdir, wsq);
+  vec4 mvPosition = modelViewMatrix * wp4;
+  vec4 cE = projectionMatrix * mvPosition;
+  vec4 cC = projectionMatrix * (modelViewMatrix * vec4(wC, 1.0));
+  vec4 cT = projectionMatrix * (modelViewMatrix * vec4(wT, 1.0));
+  float cov = 1.0;
+  if (cE.w > 0.05 && cC.w > 0.05 && cT.w > 0.05) {
+    vec2 sE = cE.xy / cE.w * uHalfRes, sC = cC.xy / cC.w * uHalfRes, sT = cT.xy / cT.w * uHalfRes;
+    vec2 td = sT - sC; float tl = length(td);
+    vec2 n2 = tl > 1e-4 ? vec2(-td.y, td.x) / tl : vec2(1.0, 0.0);
+    float hw = dot(sE - sC, n2);
+    float want = 0.5 * uMinPx;
+    float sg = abs(hw) > 1e-3 ? sign(hw) : aSide;
+    cov = clamp(abs(hw) / want, 0.0, 1.0);
+    cE.xy += n2 * (sg * max(want - abs(hw), 0.0)) / uHalfRes * cE.w;
+  }
+  gl_Position = cE;
+  vH = hN; vGust = gst; vInst = aInst; vSide = aSide; vCov = cov;`;
+
 const NFB_NOFLIP = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '');
+// Plumes: soft alpha-to-coverage. When the target has no multisampling (uNoMsaa, set per draw), partial coverage
+// is impossible and the same alpha becomes a plain cut-out at the old no-MSAA threshold.
 const A2C_SOFT = /* glsl */`
 #ifdef USE_ALPHATEST
   diffuseColor.a = clamp((diffuseColor.a - alphaTest * 0.5) / (1.0 - alphaTest * 0.5), 0.0, 1.0);
-  if (diffuseColor.a < 0.06) discard;
+  if (diffuseColor.a < mix(0.06, 0.32, uNoMsaa)) discard;
 #endif
 `;
 const A2C_ALPHATEST = /* glsl */`
@@ -96,54 +148,49 @@ export function makeGrassColorUniforms() {
   };
 }
 
-/** Material for susuki leaves (plume=false) or plume stalks (plume=true). */
-export function grassMaterial({ wind, colors, fogU, plume = false, map = null, transl = 0.35, wrap = 0.35, msaa = true }) {
-  const soft = plume && msaa;
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, map, alphaTest: plume ? (msaa ? 0.3 : 0.42) : 0, alphaToCoverage: plume && msaa });
-  const U = { ...wind, ...colors, uTransl: { value: transl }, uWrap: { value: wrap } };
+/** Material for susuki leaves (plume=false) or plume stalks (plume=true). Plumes use soft alpha-to-coverage
+ * (every tier renders the scene with MSAA where the GPU allows); set U.uNoMsaa to 1 for targets without it. */
+export function grassMaterial({ wind, colors, fogU, plume = false, map = null, transl = 0.35, wrap = 0.35 }) {
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, map, alphaTest: plume ? 0.3 : 0, alphaToCoverage: plume });
+  const U = { ...wind, ...colors, uTransl: { value: transl }, uWrap: { value: wrap }, uNoMsaa: { value: 0 } };
   mat.userData.U = U;
   patchMaterial(mat, {
-    key: plume ? (soft ? 'mgPlumeS' : 'mgPlumeH') : 'mgGrass2',
+    key: plume ? 'mgPlumeS2' : 'mgGrass3',
     uniforms: U,
     vertexHeader: WIND_GLSL + `
-      attribute vec4 aInst; attribute float aSide; ${plume ? 'attribute float aPart;' : ''}
-      varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide;`,
+      attribute vec4 aInst; attribute float aSide; attribute vec3 aW, aTan; ${plume ? 'attribute float aPart;' : ''}
+      uniform vec2 uHalfRes; uniform float uMinPx;
+      varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;`,
     fragmentHeader: `
-      uniform vec3 uRootCol, uMidCol, uTipCol, uPlumeCol; uniform float uTransl, uWrap, uGustBright;
-      varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide;`,
+      uniform vec3 uRootCol, uMidCol, uTipCol, uPlumeCol; uniform float uTransl, uWrap, uGustBright, uNoMsaa;
+      varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;`,
     vertex: {
-      '#include <project_vertex>': /* glsl */`
-        vec3 root = instanceMatrix[3].xyz;
-        float Hs = length(instanceMatrix[1].xyz);
-        float hN = clamp(transformed.y, 0.0, 1.3);
-        vec4 wp4 = instanceMatrix * vec4(transformed, 1.0);
-        float gst;
-        wp4.xyz = bendPlant(wp4.xyz, root, hN, Hs, aInst.z, ${plume ? '1.3' : '1.0'}, gst);
-        vH = hN; vGust = gst; vInst = aInst; vPart = ${plume ? 'aPart' : '0.0'}; vSide = aSide;
-        vec4 mvPosition = modelViewMatrix * wp4;
-        gl_Position = projectionMatrix * mvPosition;`,
+      '#include <project_vertex>': BLADE_VERTEX(plume ? '1.3' : '1.0') + `\n vPart = ${plume ? 'aPart' : '0.0'};`,
       '#include <worldpos_vertex>': 'vec4 worldPosition = modelMatrix * wp4;',
     },
     fragment: {
+      // Blades narrower than the width floor were widened: blend them toward the field's mid colour by the
+      // lost coverage (a filtered look), so far-off or edge-on blades carry no high-contrast sparkle.
       '#include <color_fragment>': /* glsl */`
         {
-          float h = vH;
+          float h = mix(0.62, vH, vCov);
           vec3 c = mix(uRootCol, uMidCol, smoothstep(0.0, 0.5, h));
           c = mix(c, uTipCol, smoothstep(0.42, 1.02, h));
           float hv = vInst.x;
           c *= mix(vec3(1.0), hv > 0.0 ? vec3(0.78, 0.95, 0.6) : vec3(1.1, 0.78, 0.58), abs(hv) * 0.65);
           c *= 0.78 + 0.44 * vInst.y;
           c *= mix(0.55, 1.0, smoothstep(0.0, 0.55, h));
-          c *= 1.0 + 0.22 * (1.0 - smoothstep(0.0, 0.35, abs(vSide))) * smoothstep(0.1, 0.5, h);
+          c *= 1.0 + 0.22 * vCov * (1.0 - smoothstep(0.0, 0.35, abs(vSide))) * smoothstep(0.1, 0.5, h);
           c *= 1.0 + vGust * uGustBright * h;
           ${plume ? `
           vec3 pc = uPlumeCol * (0.82 + 0.3 * vInst.y) * mix(vec3(1.07, 0.94, 0.9), vec3(0.95, 0.99, 1.05), vInst.w);
           pc *= 1.0 + vGust * uGustBright * 0.7;
-          diffuseColor.rgb = mix(c * 1.15, pc * diffuseColor.rgb, vPart);` : 'diffuseColor.rgb = c;'}
+          diffuseColor.rgb = mix(c * 1.15, pc * diffuseColor.rgb, vPart);
+          diffuseColor.a *= vCov;` : 'diffuseColor.rgb = c;'}
         }`,
-      '#include <alphatest_fragment>': soft ? A2C_SOFT : A2C_ALPHATEST,
+      '#include <alphatest_fragment>': plume ? A2C_SOFT : '',
       '#include <normal_fragment_begin>': NFB_NOFLIP,
-      '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * vH * vH'),
+      '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * pow2(mix(0.62, vH, vCov))'),
       '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
     },
   });
@@ -154,9 +201,11 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
 /* ------------------------------------------------------------------ */
 /* Geometry                                                            */
 /* ------------------------------------------------------------------ */
-/** A susuki tussock: arching, twisted, tapering leaf blades. Unit height. */
+/** A susuki tussock: arching, twisted, tapering leaf blades. Unit height. Every vertex is one edge of a blade
+ * (aSide ±1) and carries its offset from the blade's centre line (aW) and the blade direction (aTan), which the
+ * vertex shader uses to keep blades at least a pixel wide on screen. */
 export function buildClump(rng, { blades = 12, segs = 4, width = 0.04, spread = 0.1, leanMin = 0.15, leanMax = 0.6 } = {}) {
-  const P = [], N = [], S = [], I = [];
+  const P = [], N = [], S = [], W = [], T = [], I = [];
   const up = new THREE.Vector3(0, 1, 0);
   const tan = new THREE.Vector3(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), c0 = new THREE.Vector3(), c1 = new THREE.Vector3();
   for (let k = 0; k < blades; k++) {
@@ -183,31 +232,31 @@ export function buildClump(rng, { blades = 12, segs = 4, width = 0.04, spread = 
       nrm.crossVectors(tan, side).normalize();
       if (nrm.y < 0) nrm.negate();
       nrm.lerp(up, 0.5).normalize();
-      if (s < segs) {
-        const ww = w * (1 - Math.pow(t, 1.8)) * 0.5;
-        P.push(c0.x - side.x * ww, c0.y - side.y * ww, c0.z - side.z * ww, c0.x + side.x * ww, c0.y + side.y * ww, c0.z + side.z * ww);
-        N.push(nrm.x, nrm.y, nrm.z, nrm.x, nrm.y, nrm.z);
-        S.push(-1, 1);
-      } else {
-        P.push(c0.x, c0.y, c0.z); N.push(nrm.x, nrm.y, nrm.z); S.push(0);
-      }
+      // tapering blade; the tip keeps a sliver of width (a flat end) so it can be widened on screen as well
+      const ww = w * Math.max(1 - Math.pow(t, 1.8), 0.12) * 0.5;
+      P.push(c0.x - side.x * ww, c0.y - side.y * ww, c0.z - side.z * ww, c0.x + side.x * ww, c0.y + side.y * ww, c0.z + side.z * ww);
+      N.push(nrm.x, nrm.y, nrm.z, nrm.x, nrm.y, nrm.z);
+      S.push(-1, 1);
+      W.push(-side.x * ww, -side.y * ww, -side.z * ww, side.x * ww, side.y * ww, side.z * ww);
+      T.push(tan.x, tan.y, tan.z, tan.x, tan.y, tan.z);
     }
-    for (let s = 0; s < segs - 1; s++) { const a = base + s * 2; I.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
-    const a = base + (segs - 1) * 2;
-    I.push(a, a + 1, a + 2);
+    for (let s = 0; s < segs; s++) { const a = base + s * 2; I.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
   g.setAttribute('aSide', new THREE.Float32BufferAttribute(S, 1));
+  g.setAttribute('aW', new THREE.Float32BufferAttribute(W, 3));
+  g.setAttribute('aTan', new THREE.Float32BufferAttribute(T, 3));
   g.setIndex(I);
   return g;
 }
 
 /** Flower stalk with a drooping feathery plume made of crossed cards. Unit height. */
 export function buildPlumeStalk({ planes = 3, segs = 3, plumeFrom = 0.64, width = 0.085, droop = 0.1 } = {}) {
-  const P = [], N = [], UV = [], PART = [], S = [], I = [];
+  const P = [], N = [], UV = [], PART = [], S = [], W = [], T = [], I = [];
   const lean = y => 0.05 * y * y;
+  const tv = new THREE.Vector3();
   for (let r = 0; r < 2; r++) {
     const ang = r * Math.PI / 2, sx = Math.cos(ang), sz = Math.sin(ang);
     const base = P.length / 3;
@@ -216,6 +265,8 @@ export function buildPlumeStalk({ planes = 3, segs = 3, plumeFrom = 0.64, width 
       const y = top * s / 4, x = lean(y), hw = 0.0065 * (1 - s / 6);
       P.push(x - sx * hw, y, -sz * hw, x + sx * hw, y, sz * hw);
       N.push(0, 1, 0, 0, 1, 0); UV.push(0.012, 0.5, 0.02, 0.5); PART.push(0, 0); S.push(-1, 1);
+      W.push(-sx * hw, 0, -sz * hw, sx * hw, 0, sz * hw);
+      tv.set(0.1 * y, 1, 0).normalize(); T.push(tv.x, tv.y, tv.z, tv.x, tv.y, tv.z);
     }
     for (let s = 0; s < 4; s++) { const a = base + s * 2; I.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
   }
@@ -231,6 +282,9 @@ export function buildPlumeStalk({ planes = 3, segs = 3, plumeFrom = 0.64, width 
       const nx = -sz * 0.3, nz = sx * 0.3;
       N.push(nx, 0.95, nz, -nx, 0.95, -nz);
       UV.push(0.06, t, 1.0, t); PART.push(1, 1); S.push(-1, 1);
+      W.push(-sx * hw, 0, -sz * hw, sx * hw, 0, sz * hw);
+      const dy = (1 - plumeFrom) - droop * 0.7 * t;
+      tv.set(0.1 * y * dy + 2 * droop * t, dy, 0).normalize(); T.push(tv.x, tv.y, tv.z, tv.x, tv.y, tv.z);
     }
     for (let s = 0; s < segs; s++) { const a = base + s * 2; I.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
   }
@@ -240,6 +294,8 @@ export function buildPlumeStalk({ planes = 3, segs = 3, plumeFrom = 0.64, width 
   g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
   g.setAttribute('aPart', new THREE.Float32BufferAttribute(PART, 1));
   g.setAttribute('aSide', new THREE.Float32BufferAttribute(S, 1));
+  g.setAttribute('aW', new THREE.Float32BufferAttribute(W, 3));
+  g.setAttribute('aTan', new THREE.Float32BufferAttribute(T, 3));
   g.setIndex(I);
   return g;
 }

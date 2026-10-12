@@ -3,7 +3,7 @@
 // (the living reef), reef/life.js (fish, turtles, feeding), reef/pelagic.js (manta, jellies).
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU } from '../lib/util.js';
-import { createWaterUniforms, createBackground, createSurface, createShafts, createSnow, createBubbles, createEnvBuilder, DETAIL } from './reef/uw.js';
+import { createWaterUniforms, setWaterTime, createBackground, createSurface, createShafts, createSnow, createBubbles, createEnvBuilder, DETAIL } from './reef/uw.js';
 import { createGround, buildTerrain, buildRocks, HeightMap } from './reef/terrain.js';
 import { buildReef } from './reef/corals.js';
 import { createLife } from './reef/life.js';
@@ -122,47 +122,107 @@ export default {
       return out;
     };
     const cur = mkP(), tmpP = mkP();
+    // Targets are evaluated when the clock moves (once a minute). Brightness and colour then ease toward
+    // them (~1 s), so dusk and dawn glide instead of stepping every minute; directions (light, shadows,
+    // caustic projection, shafts) still step in their tiny per-minute increments, as the shell intends.
+    const mkT = () => ({ L0: lin(0, 0, 0), glow: lin(0, 0, 0), caus: 0, fluor: 0, lightCol: C('#fff'), light: 0, sky: C('#fff'), gnd: C('#fff'), hemi: 0,
+      sunCol: C('#fff'), sunI: 0, skyZen: C('#fff'), skyHor: C('#fff'), shaftCol: C('#fff'), shaftI: 0, bio: 0, night: 0, day: 1, golden: 0 });
+    const tgt = mkT(), app = mkT();
+    const NUM = ['caus', 'fluor', 'light', 'hemi', 'sunI', 'shaftI', 'bio', 'night', 'day', 'golden'];
+    const VEC = ['L0', 'glow', 'lightCol', 'sky', 'gnd', 'sunCol', 'skyZen', 'skyHor', 'shaftCol'];
+    const su = surface.userData.u;
+    let todSettled = false;
+    function blendTod(k) {
+      if (todSettled) return;
+      let err = 0;
+      for (const n of NUM) { app[n] += (tgt[n] - app[n]) * k; err = Math.max(err, Math.abs(tgt[n] - app[n])); }
+      for (const n of VEC) {
+        const a = app[n], b = tgt[n];
+        if (a.isColor) { a.r += (b.r - a.r) * k; a.g += (b.g - a.g) * k; a.b += (b.b - a.b) * k; err = Math.max(err, Math.abs(b.r - a.r), Math.abs(b.g - a.g), Math.abs(b.b - a.b)); }
+        else { a.lerp(b, k); err = Math.max(err, Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z)); }
+      }
+      if (err < 1e-5) todSettled = true;
+      W.uL0.value.copy(app.L0);
+      W.uGlow.value.copy(app.glow);
+      W.uCaustic.value = app.caus;
+      W.uFluor.value = app.fluor;
+      sunL.color.copy(app.lightCol);
+      sunL.intensity = app.light;
+      hemi.color.copy(app.sky); hemi.groundColor.copy(app.gnd); hemi.intensity = app.hemi;
+      su.uSunCol.value.copy(app.sunCol);
+      su.uSunI.value = app.sunI;
+      su.uSkyZen.value.copy(app.skyZen);
+      su.uSkyHor.value.copy(app.skyHor);
+      shafts.u.uShaftCol.value.copy(app.shaftCol);
+      shafts.u.uShaftI.value = app.shaftI;
+      snow.u.uBio.value = app.bio;
+      tod.night = app.night; tod.day = app.day; tod.golden = app.golden;
+    }
+    // The environment map is rebuilt from the targets whenever they have moved enough to matter (at
+    // most once a clock minute, mostly around dawn and dusk) instead of in a visible step every 12 min.
+    const envLast = { L0: lin(-1, -1, -1), glow: lin(-1, -1, -1), sunW: new THREE.Vector3(0, -1, 0) };
+    const _keepL0 = new THREE.Vector3(), _keepGlow = new THREE.Vector3();
+    function envMoved() {
+      let d = 1 - tod.sunW.dot(envLast.sunW) > 0.0014; // ~3 degrees
+      for (const k of ['x', 'y', 'z']) {
+        if (Math.abs(tgt.L0[k] - envLast.L0[k]) > Math.max(envLast.L0[k], 0.004) * 0.04) d = true;
+        if (Math.abs(tgt.glow[k] - envLast.glow[k]) > 0.06) d = true;
+      }
+      return d;
+    }
+    function rebuildEnv() {
+      envLast.L0.copy(tgt.L0); envLast.glow.copy(tgt.glow); envLast.sunW.copy(tod.sunW);
+      _keepL0.copy(W.uL0.value); _keepGlow.copy(W.uGlow.value);
+      W.uL0.value.copy(tgt.L0); W.uGlow.value.copy(tgt.glow);
+      envB.u.uEnvY.value = 4;
+      envB.u.uWin.value.setRGB(tgt.L0.x, tgt.L0.y, tgt.L0.z).multiplyScalar(3);
+      const r = envB.build();
+      scene.environment = r.texture;
+      r.old?.dispose();
+      W.uL0.value.copy(_keepL0); W.uGlow.value.copy(_keepGlow);
+    }
+    const groundAt = (x, z) => ground.height(x, z);
 
     function applyTod(force) {
       const h = env.hours();
       if (!force && Math.abs(h - tod.hours) < 0.003) return;
+      // a changed clock setting (or the first frame) snaps; the minute tick glides
+      const jump = force || Math.abs(h - tod.hours) > 0.25;
       tod.hours = h;
       const s = env.sun();
-      tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       mixP(pal.night, pal.day, s.day, tmpP);
       mixP(tmpP, pal.gold, Math.min(1, s.golden * 1.1), cur);
-      const useSun = s.elevationDeg > -3;
+      // Sun and moon hand over at -3 deg. This used to flip light direction, shadows, shafts, glow and
+      // the sun disc in a single frame; now the direct light fades out around the hand-over (it is
+      // twilight, the sun is already down) and the swap happens while nothing depends on it.
+      const u = smoothstep(-5, -1, s.elevationDeg);
+      const useSun = u >= 0.5;
+      const fade = (2 * u - 1) * (2 * u - 1);
       refract(useSun ? s.dir : s.moonDir, tod.sunW);
       tod.axis.copy(tod.sunW).negate();
       W.uSunW.value.copy(tod.sunW);
-      W.uL0.value.copy(cur.L0);
-      W.uGlow.value.copy(cur.glow).multiplyScalar(useSun ? 1 : 0.5);
-      W.uCaustic.value = cur.caus;
-      W.uFluor.value = smoothstep(0.2, 0.9, s.night) * 0.32;
-      sunL.color.copy(cur.lightCol);
-      sunL.intensity = cur.light;
       sunL.position.copy(center).addScaledVector(tod.sunW, 45);
-      hemi.color.copy(cur.sky); hemi.groundColor.copy(cur.gnd); hemi.intensity = cur.hemi;
-      const su = surface.userData.u;
       su.uSunAir.value.copy(useSun ? s.dir : s.moonDir);
-      su.uSunCol.value.copy(useSun ? s.sunColor : _c1.set('#c8d8ff'));
-      su.uSunI.value = useSun ? s.sunIntensity * 0.6 : 0.08;
-      su.uSkyZen.value.copy(s.zenith).multiplyScalar(lerp(0.15, 1.1, s.day));
-      su.uSkyHor.value.copy(s.horizon).multiplyScalar(lerp(0.15, 1.1, s.day));
       shafts.u.uAxis.value.copy(tod.axis);
-      _c2.setRGB(cur.shaft.x, cur.shaft.y, cur.shaft.z);
-      shafts.u.uShaftCol.value.copy(_c2);
-      shafts.u.uShaftI.value = lerp(0.35, 1.0, s.day) * (useSun ? 1 : 0.6);
-      shafts.setLengths(tod.axis, (x, z) => ground.height(x, z));
-      snow.u.uBio.value = smoothstep(0.3, 1, s.night);
-      if (force || Math.abs(h - tod.envHours) > 0.2) {
-        tod.envHours = h;
-        envB.u.uEnvY.value = 4;
-        envB.u.uWin.value.setRGB(cur.L0.x, cur.L0.y, cur.L0.z).multiplyScalar(3);
-        const r = envB.build();
-        scene.environment = r.texture;
-        r.old?.dispose();
-      }
+      shafts.setLengths(tod.axis, groundAt, jump);
+      tgt.L0.copy(cur.L0);
+      tgt.glow.copy(cur.glow).multiplyScalar(lerp(0.5, 1, u) * fade);
+      tgt.caus = cur.caus;
+      tgt.fluor = smoothstep(0.2, 0.9, s.night) * 0.32;
+      tgt.lightCol.copy(cur.lightCol);
+      tgt.light = cur.light * fade;
+      tgt.sky.copy(cur.sky); tgt.gnd.copy(cur.gnd); tgt.hemi = cur.hemi;
+      tgt.sunCol.copy(useSun ? s.sunColor : _c1.set('#c8d8ff'));
+      tgt.sunI = (useSun ? s.sunIntensity * 0.6 : 0.08) * fade;
+      tgt.skyZen.copy(s.zenith).multiplyScalar(lerp(0.15, 1.1, s.day));
+      tgt.skyHor.copy(s.horizon).multiplyScalar(lerp(0.15, 1.1, s.day));
+      tgt.shaftCol.setRGB(cur.shaft.x, cur.shaft.y, cur.shaft.z);
+      tgt.shaftI = lerp(0.35, 1.0, s.day) * lerp(0.6, 1, u) * fade;
+      tgt.bio = smoothstep(0.3, 1, s.night);
+      tgt.night = s.night; tgt.day = s.day; tgt.golden = s.golden;
+      todSettled = false;
+      if (jump || envMoved()) rebuildEnv();
+      if (jump) blendTod(1);
     }
     applyTod(true);
 
@@ -208,8 +268,10 @@ export default {
       debug: { anemones: reef.anemones, bommies: rocks.bommies, life, manta, eagle, hm },
       update(dt, t) {
         time += dt;
-        W.uTime.value = time;
+        setWaterTime(W, time);
         applyTod(false);
+        blendTod(1 - Math.exp(-dt / 1.2));
+        shafts.tick(dt);
         bg.position.copy(camera.position);
         surface.position.set(camera.position.x, SURF_Y, camera.position.z);
         const ph = env.renderer.getDrawingBufferSize(_v2).y || 720;

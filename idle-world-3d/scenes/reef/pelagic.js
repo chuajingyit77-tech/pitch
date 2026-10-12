@@ -125,6 +125,15 @@ export class Manta {
     });
     waterize(mat, W, { key: 'manta', rim: 1.0 });
     if (eagle) addDetail(mat, W, { space: 'object', bump: 0, key: 'eaglespots', glsl: EAGLE_GLSL });
+    // uVis dissolves the ray into the open-water colour behind it, so visits fade in and out of the haze
+    // instead of the mesh appearing and vanishing in one frame.
+    this.u.uVis = { value: eagle ? 1 : 0 };
+    patchMaterial(mat, {
+      key: 'mantavis',
+      uniforms: { uVis: this.u.uVis },
+      fragmentHeader: 'uniform float uVis;',
+      fragment: { '#include <premultiplied_alpha_fragment>': 'gl_FragColor.rgb = mix(uwScatter(normalize(vUwPos - cameraPosition), cameraPosition.y, 2000.0), gl_FragColor.rgb, uVis);\n$&' },
+    });
     this.mesh = new THREE.Mesh(mantaGeometry(eagle), mat);
     this.mesh.castShadow = true;
     this.mesh.frustumCulled = false;
@@ -151,7 +160,9 @@ export class Manta {
     this.wig = this.rng.range(0, TAU);
     this.dur = 72 / this.rng.range(1.05, 1.3);
     // the first visit starts part-way in so a new viewer meets the manta within half a minute
-    this.t = this.first === false ? 0 : this.dur * 0.22; this.first = false; this.active = true;
+    this.t = this.first === false ? 0 : this.dur * 0.1; this.first = false; this.active = true;
+    this.age = 0;
+    this.u.uVis.value = 0;
     this.mesh.visible = true;
   }
   update(dt, time, floorAt) {
@@ -162,8 +173,10 @@ export class Manta {
       return;
     }
     this.t += dt;
+    this.age += dt;
     const k = this.t / this.dur;
     if (k >= 1) { this.active = false; this.mesh.visible = false; this.wait = this.rng.range(45, 110); return; }
+    this.u.uVis.value = smoothstep(0, 1, this.age / 5) * (1 - smoothstep(0.86, 1, k));
     const s = k;
     this.pos.lerpVectors(this.start, this.end, s);
     const sway = Math.sin(s * TAU * 1.1 + this.wig) * 3.0;
@@ -182,7 +195,7 @@ export class Manta {
     this.mesh.quaternion.copy(this.quat);
     // slow majestic wing beats with glides
     const beat = 0.55 + 0.45 * Math.sin(time * 0.11 + this.wig);
-    this.flap += dt * TAU / 5.2 * (0.6 + 0.4 * beat);
+    this.flap = (this.flap + dt * TAU / 5.2 * (0.6 + 0.4 * beat)) % TAU; // the shader only takes sin/cos of it
     this.u.uFlap.value = this.flap;
     this.u.uAmp.value = lerp(0.07, 0.24, smoothstep(0.2, 0.8, beat));
   }
@@ -194,7 +207,13 @@ export class Manta {
     const th = this.theta;
     const R = 15.5 + 2.2 * Math.sin(th * 2 + 1.3);
     const x = this.center.x + Math.cos(th) * R, z = this.center.z + Math.sin(th) * R;
-    const y = Math.max(floorAt(x, z) + 0.75, this.center.y - 30) + 0.25 * Math.sin(time * 0.3);
+    // follow the reef top smoothly: the raw height map steps up over boulders and made the ray hop
+    const yT = Math.max(floorAt(x, z) + 0.75, this.center.y - 30);
+    const ahead = Math.max(floorAt(this.center.x + Math.cos(th + 0.06) * R, this.center.z + Math.sin(th + 0.06) * R) + 0.75, this.center.y - 30);
+    const want = Math.max(yT, ahead);
+    if (this.yS === undefined) this.yS = want;
+    this.yS = Math.max(this.yS + (want - this.yS) * (1 - Math.exp(-(want > this.yS ? 2.5 : 0.8) * dt)), yT - 0.35);
+    const y = this.yS + 0.25 * Math.sin(time * 0.3);
     _tmpV.set(x, y, z);
     this.fwd.subVectors(_tmpV, this.pos);
     const sp = this.fwd.length();
@@ -210,7 +229,7 @@ export class Manta {
     this.mesh.position.copy(this.pos);
     this.mesh.quaternion.copy(this.quat);
     const beat = 0.5 + 0.5 * Math.sin(time * 0.17 + 1.0);
-    this.flap += dt * TAU / 3.4 * (0.7 + 0.3 * beat);
+    this.flap = (this.flap + dt * TAU / 3.4 * (0.7 + 0.3 * beat)) % TAU;
     this.u.uFlap.value = this.flap;
     this.u.uAmp.value = lerp(0.05, 0.17, smoothstep(0.3, 0.8, beat));
   }
@@ -243,7 +262,7 @@ export class Jellies {
         attribute float aPh, aHue;
         varying vec3 vN, vWp, vL; varying float vHue, vPulse;
         void main(){
-          float pulse = pow(max(sin(uTime * 1.25 + aPh), 0.0), 2.0);
+          float pulse = pow(max(sin(uTimeS * 1.25 + aPh), 0.0), 2.0);
           vec3 p = position;
           float r = length(p.xz);
           p.xz *= 1.0 - 0.2 * pulse * smoothstep(0.0, 0.36, r);

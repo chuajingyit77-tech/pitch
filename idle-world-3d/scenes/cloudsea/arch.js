@@ -231,12 +231,14 @@ export function archMaterials(shared, tex) {
           float Hx = dH * dFdx(tph), Hy = dH * dFdy(tph);
           vec3 r1 = cross(dpy, normal), r2 = cross(normal, dpx);
           float det = dot(dpx, r1);
-          normal = normalize(abs(det) * normal - sign(det) * (Hx * r1 + Hy * r2));
+          // (+ normal * 1e-10: if the screen derivatives degenerate, det is 0 and normalize(0) would be NaN)
+          normal = normalize(abs(det) * normal - sign(det) * (Hx * r1 + Hy * r2) + normal * 1e-10);
         }
       `,
     },
   });
-  const goldMat = patchStd(new THREE.MeshStandardMaterial({ vertexColors: true, color: '#ffffff', metalness: 0.9, roughness: 0.3, envMapIntensity: 1.4 }), shared, { key: 'gold' });
+  // roughness 0.38 (was 0.3): flat gilded faces aligned with the sun flared to ~25-35x in thin one-pixel lines
+  const goldMat = patchStd(new THREE.MeshStandardMaterial({ vertexColors: true, color: '#ffffff', metalness: 0.9, roughness: 0.38, envMapIntensity: 1.4 }), shared, { key: 'gold' });
   return { paintMat, jadeMat, roofMat, goldMat };
 }
 
@@ -553,7 +555,8 @@ export function createLanterns(shared, list) {
     meshes: [bodies, capsM], state,
     update(t, night) {
       write(t);
-      glowU.value = lerp(0.12, 2.6, night) * (0.92 + 0.08 * Math.sin(t * 7.3));
+      // every lantern shares this value: a fast ±8% pulse made all of them throb together at night
+      glowU.value = lerp(0.12, 2.6, night) * (0.97 + 0.03 * Math.sin(t * 2.7));
     },
   };
 }
