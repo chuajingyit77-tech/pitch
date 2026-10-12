@@ -77,6 +77,7 @@ export class Macaw {
     this.perch = perch; perch.taken = this;
     this.pos.copy(perch.pos);
     this.state = 'perch';
+    this.timer = this.rng.range(7, 18);
     this.fold = 1; this.flapAmt = 0;
     this.faceYaw = Math.atan2(perch.face.x, perch.face.z);
   }
@@ -113,7 +114,11 @@ export class Macaw {
           ctx.bite(this, this.carry);
           if (this.carry.dead) this.carry = null;
         }
-      } else if (this.timer <= 0) ctx.decide(this);
+      } else {
+        this.foodT = (this.foodT ?? 1) - dt;
+        if (this.foodT <= 0) { this.foodT = 1.2; if (ctx.wantsFood(this)) this.timer = 0; }
+        if (this.timer <= 0) ctx.decide(this);
+      }
       if (this.perch) this.pos.copy(this.perch.pos);
     } else if (this.state === 'fly') {
       const P = this.path;

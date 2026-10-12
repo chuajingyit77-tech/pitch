@@ -210,7 +210,7 @@ export class Butterfly {
     this.food = null;
     this.restSpot = null;
     this.biteT = 0;
-    this.size = (kind === 0 ? 0.3 : 0.2) * (member ? (0.85 + 0.15 * member.size) : rng.range(0.85, 1.05));
+    this.size = (kind === 0 ? 0.38 : 0.22) * (member ? (0.85 + 0.15 * member.size) : rng.range(0.85, 1.05));
   }
   update(dt, t, ctx) {
     const r = this.rng;

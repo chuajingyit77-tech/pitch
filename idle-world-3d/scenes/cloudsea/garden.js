@@ -65,7 +65,7 @@ function lawnMaterial(shared, tex) {
         vec4 nz = texture2D(tNoise, vWPos.xz * 0.045);
         vec4 nz2 = texture2D(tNoise, vWPos.xz * 0.21);
         float patchv = nz.r * 0.6 + nz2.g * 0.4;
-        vec3 lawnA = vec3(0.2, 0.36, 0.14), lawnB = vec3(0.36, 0.5, 0.2), lawnC = vec3(0.58, 0.6, 0.28);
+        vec3 lawnA = vec3(0.25, 0.43, 0.16), lawnB = vec3(0.42, 0.58, 0.22), lawnC = vec3(0.68, 0.68, 0.32);
         vec3 lawn = mix(lawnA, lawnB, smoothstep(0.25, 0.8, patchv));
         lawn = mix(lawn, lawnC, smoothstep(0.62, 0.92, nz2.b) * 0.35);
         float isLawn = smoothstep(0.25, 0.6, vColor.g - vColor.r * 0.6);
@@ -86,8 +86,9 @@ function lawnMaterial(shared, tex) {
           float sheen = pow(1.0 - clamp(dot(Nw, Vw), 0.0, 1.0), 3.0);
           float lit = clamp(dot(Nw, uLightDir) * 0.7 + 0.3, 0.0, 1.0);
           float back = pow(max(dot(-Vw, uLightDir), 0.0), 3.0);
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * uLightCol * (sheen * 1.1 * lit + back * 0.9 + 0.08) * isLawn;
-          reflectedLight.indirectDiffuse += vec3(0.85, 0.9, 0.6) * uAmbient * (sheen * 0.5 + 0.15) * isLawn;
+          // velvet: a soft bright fuzz at grazing angles, warm glow through the blades against the sun
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * uLightCol * (sheen * 1.4 * lit + back * 1.1 + 0.12) * isLawn;
+          reflectedLight.indirectDiffuse += vec3(0.9, 1.0, 0.7) * (uAmbient * (sheen * 0.8 + 0.3) + uBounce * 0.15) * isLawn;
         }
       `,
     },
@@ -600,7 +601,7 @@ export function createGarden(env, shared, tex, wind) {
     }
     tuftGeo = mergeGeometries(lumps);
     const p = tuftGeo.getAttribute('position'), col = new Float32Array(p.count * 3);
-    const base = new THREE.Color('#2c4c1e'), tip = new THREE.Color('#7a9a3e');
+    const base = new THREE.Color('#3a6326'), tip = new THREE.Color('#9cbc54');
     for (let i = 0; i < p.count; i++) {
       _c.copy(base).lerp(tip, smoothstep(0.0, 0.95, p.getY(i)));
       col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
@@ -642,9 +643,11 @@ export function createGarden(env, shared, tex, wind) {
   const flowerGeo = mergeGeometries(fparts.map(g => g.translate(0, 0.16, 0)).concat([paint(new THREE.CylinderGeometry(0.006, 0.008, 0.16, 4), '#4f7a2c').translate(0, 0.08, 0)]));
   const flowerMat = softMaterial(shared, { vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }, { key: 'flower', trans: 0.7, wrap: 0.6 });
   addWind(flowerMat, wind, { height: 0.25, amount: 0.05, stiffness: 1.2, key: 'flowerwind' });
-  const flowerPts = scatter(main, 0, 0, 0, Math.round(160 * q + 60), 0, freeMain).concat(scatter(islA, A.x, A.y, A.z, Math.round(30 * q), 0, (x, z) => Math.hypot(x, z) > 3.8));
+  // flowers bloom in soft drifts
+  const drifts = (x, z) => freeMain(x, z) && noise.noise2(x * 0.16 + 3, z * 0.16) > -0.15;
+  const flowerPts = scatter(main, 0, 0, 0, Math.round(260 * q + 80), 0, drifts).concat(scatter(islA, A.x, A.y, A.z, Math.round(36 * q + 8), 0, (x, z) => Math.hypot(x, z) > 3.8), scatter(islB, Bp.x, Bp.y, Bp.z, Math.round(20 * q + 6), 0, (x, z) => Math.abs(z) > 1.5));
   const flowers = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerPts.length);
-  const fcols = ['#ffffff', '#ffd6e2', '#fff1b8', '#e6d8ff', '#ffc2d4', '#ffffff'].map(c => new THREE.Color(c));
+  const fcols = ['#ffffff', '#ffd0de', '#fff0a8', '#e2d4ff', '#ffb8cc', '#fffaf0'].map(c => new THREE.Color(c));
   flowerPts.forEach((p, i) => {
     // flowers grow in drifts
     const s = rng.range(0.7, 1.35);

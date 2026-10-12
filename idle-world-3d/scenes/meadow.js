@@ -744,7 +744,7 @@ export default {
         this.claimed = null;
         this.scale = 1;
         this.age = 0;
-        this.glow = fx.glow('#ffd49a', 0.75, 0.75);
+        this.glow = fx.glow('#ffd49a', 1.1, 0.9);
         this.glow.material.depthTest = false;
         this.glow.renderOrder = 9;
         this.glow.position.copy(pos).y += 0.25;
@@ -765,15 +765,15 @@ export default {
           this.mesh.position.y += this.vy * dt;
           this.mesh.rotation.x = damp(this.mesh.rotation.x, 0, 3, dt);
           this.mesh.rotation.z = damp(this.mesh.rotation.z, 0, 3, dt);
-          if (this.mesh.position.y <= this.pos.y + 0.045) {
-            this.mesh.position.y = this.pos.y + 0.045;
+          if (this.mesh.position.y <= this.pos.y + 0.06) {
+            this.mesh.position.y = this.pos.y + 0.06;
             if (Math.abs(this.vy) > 1.2) { this.vy = -this.vy * 0.28; env.sfx('tok'); } else { this.vy = 0; this.landed = true; this.mesh.rotation.x = this.mesh.rotation.z = 0; }
           }
         }
         const s = damp(this.mesh.scale.x, this.scale, 10, dt);
         this.mesh.scale.setScalar(Math.max(s, 0.001));
         const eaten = this.claimed && this.claimed.state === 'eat' ? 0.35 : 1;
-        this.glow.material.opacity = (0.32 + 0.14 * Math.sin(t * 3)) * (this.landed ? 1 : 0.5) * eaten;
+        this.glow.material.opacity = (0.5 + 0.18 * Math.sin(t * 3)) * (this.landed ? 1 : 0.6) * eaten;
         this.glow.position.set(this.pos.x, this.pos.y + 0.22 + Math.sin(t * 2) * 0.03, this.pos.z);
         if (this.age > 90 && !this.claimed) this.kill();
       }
@@ -1050,7 +1050,7 @@ export default {
       feed(raycaster) {
         const hit = rayGround(raycaster.ray, new THREE.Vector3());
         if (!hit) return null;
-        if (Math.hypot(hit.x - TARGET.x, hit.z - TARGET.z) > 30) return null;
+        if (Math.hypot(hit.x - TARGET.x, hit.z - TARGET.z) > 24) return null;
         spawnFood(hit);
         return hit;
       },

@@ -187,7 +187,7 @@ function tortoiseRig() {
     .bone('hipL', 'root', 0.19, 0.6, 0.0).bone('kneeL', 'hipL', 0.22, 0.33, 0.06).bone('footL', 'kneeL', 0.23, 0.08, 0.07)
     .bone('hipR', 'root', -0.19, 0.6, 0.0).bone('kneeR', 'hipR', -0.22, 0.33, 0.06).bone('footR', 'kneeR', -0.23, 0.08, 0.07)
     .bone('tail', 'root', 0, 0.48, -0.28);
-  const skin = new THREE.Color('#7f8c5c'), skinDark = new THREE.Color('#525c3c'), belly = new THREE.Color('#b9b27e');
+  const skin = new THREE.Color('#93a46a'), skinDark = new THREE.Color('#62704a'), belly = new THREE.Color('#c8c08a');
   const skinFn = (p, n) => _col.copy(skin).lerp(skinDark, smoothstep(0.1, -0.8, n.z) * 0.6).lerp(belly, smoothstep(0.3, 0.9, n.z) * smoothstep(1.0, 1.5, p.y) * 0.3);
   const torso = ['root', 'spine', 'chest'];
   // body core, plastron, carapace
@@ -237,7 +237,7 @@ class Tortoise {
     const inst = rigDef.instantiate(geo, creatureMaterial(sys.shared, this.uniforms));
     Object.assign(this, inst);
     this.mesh.castShadow = sys.env.shadows;
-    this.scale = 1.12 * (member ? member.size || 1 : 1);
+    this.scale = 1.42 * (member ? member.size || 1 : 1);
     this.mesh.scale.setScalar(this.scale);
     this.home = sys.world.taijiSpot(index);
     this.pos = this.home.p.clone();
@@ -473,7 +473,7 @@ class Crane {
     this.mesh.scale.setScalar(this.scale);
     this.rng = rng;
     const a = rng.range(0, TAU);
-    this.orbit = { r: ambient ? rng.range(140, 260) : rng.range(22, 42), h: ambient ? rng.range(10, 60) : rng.range(6, 18), a, w: (ambient ? 0.025 : rng.range(0.05, 0.08)) * rng.sign(), tilt: rng.range(-0.3, 0.3), ph: rng.range(0, TAU) };
+    this.orbit = { r: ambient ? rng.range(140, 260) : rng.range(17, 34), h: ambient ? rng.range(10, 60) : rng.range(5, 14), a, w: (ambient ? 0.025 : rng.range(0.07, 0.1)) * rng.sign(), tilt: rng.range(-0.3, 0.3), ph: rng.range(0, TAU) };
     this.pos = new THREE.Vector3(Math.cos(a) * this.orbit.r, this.orbit.h, Math.sin(a) * this.orbit.r);
     this.vel = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(6 * Math.sign(this.orbit.w));
     this.yaw = Math.atan2(this.vel.x, this.vel.z); this.pitch = 0; this.bank = 0;
@@ -901,7 +901,7 @@ export function createCreatures(env, shared, world, fx) {
       const c = new Crane(sys, m, cRig, cGeo, rng.fork(m.id));
       sys.cranes.push(c); group.add(c.mesh);
       // start some cranes on the ground for a calmer first impression
-      if (sys.cranes.length % 2 === 0) {
+      if (sys.cranes.length % 3 === 0) {
         const spot = world.landingSpot(c.rng, null);
         if (spot) { c.pos.copy(spot); c.state = 'stand'; c.vel.set(0, 0, 0); c.pose.fly = 0; c.pose.fold = 1; c.timer = 0; c.restTime = c.rng.range(15, 40); }
       }
@@ -957,6 +957,9 @@ export function createCreatures(env, shared, world, fx) {
         f.noticeT = (f.noticeT || 0) + dt;
         if (f.noticeT > 6) { f.noticeT = 0; const busy = sys.cranes.some(c => c.food === f) || sys.flocks.some(fl => fl.food === f) || sys.tortoises.some(tt => tt.food === f); if (!busy) notice(f); }
       }
+    },
+    dispose() {
+      for (const c of [...sys.tortoises, ...sys.cranes, ...sys.ambient]) c.mesh.skeleton && c.mesh.skeleton.dispose();
     },
     list() {
       const out = [];

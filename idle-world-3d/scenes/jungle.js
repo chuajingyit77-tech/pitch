@@ -62,7 +62,6 @@ export default {
 
   async create(env) {
     const { renderer, q } = env;
-    const T0 = performance.now(); const mark = l => console.warn('[jungle]', l, Math.round(performance.now() - T0));
     const seed = env.seed >>> 0;
     RAIN_SALT = seed % 9973;
     const rng = env.rng;
@@ -90,7 +89,6 @@ export default {
     const wN2 = env.loadTexture('textures/Water_2_M_Normal.jpg', { srgb: false, repeat: true });
 
     const camPos0 = new THREE.Vector3(VIEW_TARGET.x, VIEW_TARGET.y + 14 * Math.sin(VIEW_PITCH), VIEW_TARGET.z + 14 * Math.cos(VIEW_PITCH));
-    mark('textures');
     /* ---------------- layout + ground ---------------- */
     const L = createLayout((seed % 100000) + 17);
     const groundMat = new THREE.MeshStandardMaterial({ map: ground.map, normalMap: ground.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), vertexColors: true, roughness: 0.93, envMapIntensity: 0.45 });
@@ -157,7 +155,6 @@ export default {
       return m;
     });
 
-    mark('terrain');
     /* ---------------- trees ---------------- */
     const barkMat = new THREE.MeshStandardMaterial({ map: bark.map, normalMap: bark.normalMap, normalScale: new THREE.Vector2(1.3, 1.3), vertexColors: true, roughness: 0.9, envMapIntensity: 0.5 });
     jungleMaterial(barkMat, shared, { moss: 0.75, specks: true });
@@ -200,6 +197,22 @@ export default {
       const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(x, y, z), new THREE.Vector3(x + rb.range(-0.5, 0.5), y + h * 0.5, z), new THREE.Vector3(x + rb.range(-1, 1), y + h, z + rb.range(-1, 1))]);
       bgParts.push(taperTube(curve, t => lerp(r0 * 1.5, r0 * 0.5, Math.pow(t, 0.7)), { tubular: 8, radial: 7, uvScale: [2, 0.4] }));
       bgTops.push(curve.getPointAt(1));
+    }
+    // two low, gnarled branches reaching over the pond: visible macaw perches
+    const lowPerches = [];
+    for (const [ti, y0, len, rise] of [[0, 5.0, 5.8, 1.1], [1, 6.2, 5.0, 0.8]]) {
+      const t = trees[ti];
+      const base = t.axis(y0);
+      const dir = new THREE.Vector3(POND.cx - base.x, 0, POND.cz + 1.5 - base.z).normalize();
+      const pts = [base.clone().addScaledVector(dir, -0.4), base.clone().addScaledVector(dir, len * 0.35).add(new THREE.Vector3(0, rise, 0)), base.clone().addScaledVector(dir, len * 0.7).add(new THREE.Vector3(0, rise * 1.2, 0.3)), base.clone().addScaledVector(dir, len).add(new THREE.Vector3(0, rise * 0.8, 0.4))];
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const r0 = t.rTrunk(y0) * 0.3;
+      bgParts.push(taperTube(curve, u => lerp(r0, 0.07, Math.pow(u, 0.8)), { tubular: 22, radial: 9, tintFn: (u, nn) => { const m = clamp(nn.y, 0, 1); return [lerp(1, 0.6, m), lerp(1, 1.15, m), lerp(1, 0.45, m)]; }, uvScale: [2, 0.4] }));
+      for (const u of [0.45, 0.62, 0.8]) {
+        const p = curve.getPointAt(u);
+        lowPerches.push({ pos: p.add(new THREE.Vector3(0, lerp(r0, 0.07, Math.pow(u, 0.8)) * 0.9, 0)), r: 0.1 });
+      }
+      t.hangs.push(curve.getPointAt(0.55), curve.getPointAt(0.85));
     }
     const barkGeo = mergeGeometries([...trees.map(t => t.geometry), ...bgParts]);
     trees.forEach(t => t.geometry.dispose()); bgParts.forEach(g => g.dispose());
@@ -289,7 +302,6 @@ export default {
       }
     }
 
-    mark('trees');
     /* ---------------- plants ---------------- */
     const WIND_LOW = { height: 1.0, amount: 0.07, stiffness: 1.5, flutter: 0.012 };
     const WIND_MID = { height: 2.2, amount: 0.13, stiffness: 1.7, flutter: 0.02 };
@@ -326,6 +338,8 @@ export default {
         else { _e.set(p.tiltX || 0, p.rot, p.tiltZ || 0, 'YXZ'); _q.setFromEuler(_e); }
         _m4.compose(_v.set(p.x, p.y, p.z), _q, _s.set(p.s * (p.sx || 1), p.s * (p.sy || 1), p.s * (p.sx || 1)));
         m.setMatrixAt(i, _m4);
+        const v = rtint.range(0.8, 1.08);
+        m.setColorAt(i, _c.setRGB(v * rtint.range(0.93, 1.07), v, v * rtint.range(0.84, 1.0)));
       });
       m.castShadow = shadow; m.receiveShadow = true;
       m.computeBoundingSphere();
@@ -335,6 +349,7 @@ export default {
       return m;
     };
     const rp = R('plants');
+    const rtint = R('tint');
     const scatter = (n, { region, minR = 0.5, test, s = [1, 1], y = 0 }) => {
       const out = [];
       let guard = 0;
@@ -594,7 +609,6 @@ export default {
     const canopyA = instance(clumpGeoA, clumpMat, clumpsA, { shadow: false, mainOnly: true });
     const canopyB = instance(clumpGeoB, clumpMat, clumpsB, { shadow: false });
 
-    mark('plants');
     /* ---------------- water ---------------- */
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const pond = buildPond(env, shared, L, { normal1: wN1, normal2: wN2, rtScale: q >= 0.9 ? 0.5 : q >= 0.6 ? 0.4 : 0.32 });
@@ -704,7 +718,6 @@ export default {
     });
     fishGeo.dispose();
 
-    mark('fx+fish');
     /* ---------------- residents ---------------- */
     const members = env.members;
     const fruits = new FruitSystem(shared, 8, env.shadows);
@@ -717,7 +730,7 @@ export default {
       if (z < FALL.lipZ + 3) continue;
       frogSpots.push({ pos: new THREE.Vector3(x, L.groundH(x, z), z), r: 0.3, kind: 'ground' });
     }
-    frogSpots.forEach(s => { s.camD = s.pos.distanceTo(camPos0); });
+    frogSpots.forEach(s => { s.camD = s.pos.distanceTo(camPos0); s.visible = (s.kind === 'pad' || s.kind === 'rock' || s.kind === 'log') && Math.abs(camAng(s.pos.x, s.pos.z)) < 0.45 && s.camD > 6; });
     const frogKit = createFrogMesh(shared, 16, env.shadows);
     ONLY_MAIN(frogKit.mesh);
     scene.add(frogKit.mesh);
@@ -740,8 +753,9 @@ export default {
 
     // perches for macaws: limb perches facing the clearing + cliff rim spots
     const perches = [];
+    for (const p of lowPerches) perches.push({ pos: p.pos.clone(), face: new THREE.Vector3(camPos0.x - p.pos.x, 0, camPos0.z - p.pos.z).normalize(), taken: null, low: true });
     for (const t of trees.slice(0, 4)) for (const p of t.perches) {
-      if (p.pos.y < 4.5 || p.pos.y > 17) continue;
+      if (p.pos.y < 3.5 || p.pos.y > 11 || Math.abs(camAng(p.pos.x, p.pos.z)) > 0.62) continue;
       const face = new THREE.Vector3(VIEW_TARGET.x - p.pos.x, 0, VIEW_TARGET.z + 8 - p.pos.z).normalize();
       perches.push({ pos: p.pos.clone(), face, taken: null });
     }
@@ -761,7 +775,8 @@ export default {
       constructor(member) {
         this.member = member;
         this.rng = R('frog' + member.id);
-        const free = frogSpots.filter(s => !s.taken);
+        let free = frogSpots.filter(s => !s.taken && s.visible);
+        if (!free.length) free = frogSpots.filter(s => !s.taken);
         this.spot = free.length ? free[this.rng.int(0, free.length - 1)] : frogSpots[0];
         this.spot.taken = this;
         this.pos = this.spot.pos.clone();
@@ -772,7 +787,7 @@ export default {
         this.hop = null; this.food = null; this.flicks = 0; this.flickT = 0;
         this.swim = false;
       }
-      get scale() { return 0.26 * (0.85 + 0.15 * (this.member.size || 1)); }
+      get scale() { return 0.3 * (0.85 + 0.15 * (this.member.size || 1)); }
       hopTo(target, spot = null) {
         const from = this.pos.clone();
         const dist = from.distanceTo(target);
@@ -797,10 +812,11 @@ export default {
             const d = Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z);
             if (d < 0.55 && f.pos.y - this.pos.y < 1.0 && f.pos.y - this.pos.y > -0.6) { this.state = 'eat'; this.flicks = 0; this.flickT = 0.3; this.yaw = Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z); }
             else if (this.timer <= 0) this.stepToward(f.pos);
-          } else if (this.timer <= 0) {
+          } else if (this.timer <= 0 || (this.foodT = (this.foodT ?? 1) - dt) <= 0) {
+            this.foodT = 1.5;
             const food = findFoodFor(this);
             if (food) { this.food = food; food.claims.push(this); this.timer = 0.2; }
-            else this.wander();
+            else if (this.timer <= 0) this.wander();
           }
         } else if (this.state === 'hop') {
           const H = this.hop;
@@ -862,6 +878,7 @@ export default {
         const hungry = env.fullness(this.member) < 0.3;
         const r = this.rng;
         let cands = frogSpots.filter(s => !s.taken && s.pos.distanceTo(this.pos) < (hungry ? 6 : 3.2) && s.pos.distanceTo(this.pos) > 0.3);
+        if (cands.some(s => s.visible) && r.chance(0.75)) cands = cands.filter(s => s.visible);
         if (hungry) cands = cands.filter(s => s.camD < this.pos.distanceTo(camPos0) + 0.5);
         if (!cands.length || r.chance(0.25)) {
           // just turn around on the spot (small hop in place)
@@ -891,7 +908,7 @@ export default {
     const findFoodFor = (c) => {
       const list = fruits.alive();
       if (!list.length) return null;
-      const hungry = env.fullness(c.member) < 0.75;
+      const hungry = c.member ? env.fullness(c.member) < 0.75 : false;
       let best = null, bd = Infinity;
       for (const f of list) {
         if (f.heldBy) continue;
@@ -905,9 +922,9 @@ export default {
       }
       return best;
     };
-    const bite = (c, f) => {
+    const bite = (c, f, amount = 1) => {
       if (!f || f.dead || f.bites <= 0) return;
-      fruits.bite(f);
+      fruits.bite(f, amount);
       const pos = c.member ? f.pos.clone().add(_v.set(0, 0.25, 0)) : f.pos;
       env.onEat(c.member || null, pos);
       if (f.state === 'float') pond.addRipple(f.pos.x, f.pos.z, 0.3, shared.uTime.value);
@@ -936,6 +953,10 @@ export default {
       bite: (b, f) => bite(b, f),
     };
     const macawCtx = {
+      wantsFood(m) {
+        const f = fruits.alive().find(f => !f.heldBy && !macaws.some(o => o.target === f));
+        return !!f && (env.fullness(m.member) < 0.6 || wf.chance(0.35));
+      },
       decide(m) {
         const hungry = env.fullness(m.member) < 0.3;
         const f = fruits.alive().find(f => !f.heldBy && !macaws.some(o => o.target === f));
@@ -1101,6 +1122,9 @@ export default {
       wu.uMurk.value.copy(pal.murkDay).lerp(pal.murkNight, night);
       wu.uRain.value = rainA;
       wu.uCalm.value = 0.2 + rainA * 0.15;
+      wu.uMurkAmt.value = 0.12 + rainA * 0.2;
+      wu.uMurk.value.lerp(_c.set('#20403a'), rainA * 0.6);
+      wu.uReflBoost.value = 1 - rainA * 0.35;
       waterfall.material.uniforms.uAmb.value.copy(amb);
       waterfall.material.uniforms.uMoon.value = night * (1 - rainA * 0.6);
       mist.material.uniforms.uAmb.value.copy(amb);
@@ -1121,7 +1145,7 @@ export default {
       spores.visible = spores.material.uniforms.uAmt.value > 0.01;
       motes.visible = motes.material.uniforms.uAmt.value > 0.01;
       rain.material.uniforms.uAmb.value.copy(amb);
-      mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.5 + night * 0.3 + dusk * 0.25 + 0.03, 0, 0.95);
+      mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.18 + night * 0.3 + dusk * 0.25 + 0.03, 0, 0.95);
       mistSheets.material.uniforms.uAmb.value.copy(amb);
       // environment map (re-filtered when the light changes noticeably)
       const key = Math.round(h * 4) + ':' + Math.round(rainA * 4);
@@ -1152,7 +1176,7 @@ export default {
 
     /* ---------------- update ---------------- */
     let simT = 0;
-    let fishNibble = 0;
+    const floating = [];
     const fishGoal = new THREE.Vector3();
     function update(dt, t) {
       if (compileRTLive && simT > 0) {
@@ -1183,7 +1207,8 @@ export default {
       dragonflies.forEach((d, i) => { d.update(dt, t); d.write(dragonKit.mesh, i, 0.22); });
       dragonKit.mesh.instanceMatrix.needsUpdate = true;
       // fish
-      const floating = fruits.items.filter(f => !f.dead && f.state === 'float' && f.bites > 0);
+      floating.length = 0;
+      for (const f of fruits.items) if (!f.dead && f.state === 'float' && f.bites > 0) floating.push(f);
       for (const set of fishSets) {
         set.inst.begin();
         for (const sw of set.fish) {
@@ -1202,9 +1227,9 @@ export default {
           if (!L.inPond(sw.pos.x + sw.vel.x * 0.8, sw.pos.z + sw.vel.z * 0.8, 0.3)) des.add(_v2.set(POND.cx - sw.pos.x, 0, POND.cz - sw.pos.z).normalize().multiplyScalar(0.4));
           sw.steer(des, dt).integrate(dt);
           sw.pos.y = Math.min(sw.pos.y, WATER_Y - 0.08);
-          if (fr && sw.pos.distanceTo(goal) < 0.25) {
+          if (fr && fr.age > 8 && sw.pos.distanceTo(goal) < 0.25) {
             sw.nibbleT -= dt;
-            if (sw.nibbleT <= 0) { sw.nibbleT = 2 + Math.random() * 3; bite({ member: null }, fr); }
+            if (sw.nibbleT <= 0) { sw.nibbleT = 4 + Math.random() * 4; bite({ member: null }, fr, 0.35); }
           }
           set.inst.push(sw);
         }
@@ -1220,7 +1245,6 @@ export default {
     if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, post, view, L };
     // initial pose
     update(1 / 60, 0);
-    mark('done');
 
     /* ---------------- instance API ---------------- */
     const pickPool = [];
@@ -1277,6 +1301,8 @@ export default {
         pond.mesh.getRenderTarget().setSize(Math.max(256, Math.round(sz.x * k)), Math.max(144, Math.round(sz.y * k)));
       },
       dispose() {
+        compileRT.dispose();
+        sun.dispose();
         pond.dispose();
         envRT?.dispose();
         envScene.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });

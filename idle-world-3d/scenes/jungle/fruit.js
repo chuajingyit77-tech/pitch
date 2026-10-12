@@ -129,8 +129,8 @@ export class FruitSystem {
     return f;
   }
   alive() { return this.items.filter(f => !f.dead && f.state !== 'fall' && f.bites > 0); }
-  bite(f) {
-    f.bites -= 1;
+  bite(f, amount = 1) {
+    f.bites -= amount;
     if (f.bites <= 0) { f.bites = 0; f.dying = true; }
   }
   update(dt, t, hooks) {

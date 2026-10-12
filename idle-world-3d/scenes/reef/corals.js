@@ -373,11 +373,11 @@ const POLYP_GLSL = /* glsl */`
 // shade in 2x2 blocks); a gentle low-frequency bump keeps the surface lumpy.
 float detailH(vec3 p){ return snoise(p * 6.0) * 0.006; }
 vec3 detailCol(vec3 p, float h, vec3 c){
-  vec2 q = p.xz * 26.0 + p.y * 19.0;
-  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
+  vec2 q = p.xz * 18.0 + p.y * 13.0;
+  float aa = 1.0 - smoothstep(0.15, 0.45, length(fwidth(q)));
   vec2 cc = cell2(q);
   float dots = smoothstep(0.42, 0.12, cc.x);
-  return c * (0.9 + (dots - 0.45) * 0.35 * aa) * (0.92 + h * 12.0);
+  return c * (0.92 + (dots - 0.45) * 0.2 * aa) * (0.92 + h * 12.0);
 }
 `;
 const TABLE_GLSL = /* glsl */`

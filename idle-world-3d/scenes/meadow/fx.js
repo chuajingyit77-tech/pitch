@@ -152,7 +152,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     const fwd = sFwd.set(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
     const right = sRight.set(-fwd.z, 0, fwd.x);
     let leafSlots = leaves.filter(l => l.stream && !l.active);
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0; i < 56; i++) {
       const s = {
         p0: new THREE.Vector3(), p1: new THREE.Vector3(), p2: new THREE.Vector3(), pos: new THREE.Vector3(), to: to.clone(),
         t: -srng.range(0, 1.1), dur: srng.range(1.5, 2.4), orbit: srng.range(0.25, 0.7), phase: srng.range(0, TAU), leaf: null,
@@ -167,7 +167,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       else s.kind = 'fluff';
       streamers.push(s);
     }
-    while (streamers.length > 60) { const s = streamers.shift(); if (s.leaf) s.leaf.active = false; }
+    while (streamers.length > 120) { const s = streamers.shift(); if (s.leaf) s.leaf.active = false; }
   };
 
   /* ---------------- crumbs / sparkles ---------------- */
@@ -320,7 +320,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
         SP.pos[np * 3] = s.pos.x; SP.pos[np * 3 + 1] = s.pos.y; SP.pos[np * 3 + 2] = s.pos.z;
         const b = (1.6 + golden) * a;
         SP.col[np * 3] = light.r * b; SP.col[np * 3 + 1] = light.g * b * 0.97; SP.col[np * 3 + 2] = light.b * b * 0.9;
-        SP.sz[np] = 38;
+        SP.sz[np] = 75;
         np++;
       }
     }

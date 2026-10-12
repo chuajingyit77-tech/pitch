@@ -193,11 +193,11 @@ export function buildRocks({ rng, noise, list, heightAt, stoneMat }) {
 /* Fried tofu (aburaage) offering                                      */
 /* ------------------------------------------------------------------ */
 export function makeTofuFactory({ maps, fogU }) {
-  const geo = new RoundedBoxGeometry(0.2, 0.085, 0.13, 3, 0.03);
+  const geo = new RoundedBoxGeometry(0.27, 0.11, 0.17, 3, 0.04);
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const puff = 1 + 0.12 * (1 - Math.min(1, (x * x) / 0.01 + (z * z) / 0.0042));
+    const puff = 1 + 0.12 * (1 - Math.min(1, (x * x) / 0.018 + (z * z) / 0.0072));
     p.setY(i, y > 0 ? y * puff : y);
   }
   geo.computeVertexNormals();

@@ -198,7 +198,7 @@ class Food {
     this.max = max;
     const g = new THREE.IcosahedronGeometry(1, 0);
     g.scale(1, 0.38, 0.8);
-    const mat = new THREE.MeshStandardMaterial({ color: '#e8902e', roughness: 0.5, emissive: '#c0541a', emissiveIntensity: 0.9, envMapIntensity: 0.6, flatShading: true });
+    const mat = new THREE.MeshStandardMaterial({ color: '#ffe6a0', roughness: 0.5, emissive: '#b08a30', emissiveIntensity: 0.9, envMapIntensity: 0.6, flatShading: true });
     waterize(mat, W, { key: 'food' });
     this.mesh = new THREE.InstancedMesh(g, mat, max);
     this.mesh.count = 0;
@@ -214,7 +214,7 @@ class Food {
     for (let i = 0; i < NC; i++) this.crumbs.push({ life: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3() });
     const cg = new THREE.BufferGeometry();
     cg.setAttribute('position', new THREE.BufferAttribute(this.crumbPos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.crumbMat = new THREE.PointsMaterial({ color: '#ffb060', size: 0.05, sizeAttenuation: true, transparent: true, opacity: 0.95, depthWrite: false });
+    this.crumbMat = new THREE.PointsMaterial({ color: '#fff0b0', size: 0.05, sizeAttenuation: true, transparent: true, opacity: 0.95, depthWrite: false });
     waterize(this.crumbMat, W, { caustics: false, key: 'crumb' });
     this.crumbPts = new THREE.Points(cg, this.crumbMat);
     this.crumbPts.frustumCulled = false;

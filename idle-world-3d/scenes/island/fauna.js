@@ -637,11 +637,11 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
     },
     remove(member) {
       const i = gulls.findIndex(g => g.member === member);
-      if (i >= 0) { const g = gulls[i]; group.remove(g.root); g.mixer.stopAllAction(); if (g.perch) perchTaken.delete(g.perch); gulls.splice(i, 1); }
+      if (i >= 0) { const g = gulls[i]; group.remove(g.root); g.mixer.stopAllAction(); g.mixer.uncacheRoot(g.root); if (g.perch) perchTaken.delete(g.perch); gulls.splice(i, 1); }
     },
     dispose() {
-      for (const g of gulls) g.mixer.stopAllAction();
-      for (const b of flock.birds) b.mixer.stopAllAction();
+      for (const g of gulls) { g.mixer.stopAllAction(); g.mixer.uncacheRoot(g.root); }
+      for (const b of flock.birds) { b.mixer.stopAllAction(); b.mixer.uncacheRoot(b.root); }
       disposables.forEach(d => d.dispose());
     },
   };

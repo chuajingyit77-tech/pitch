@@ -248,9 +248,9 @@ export default {
       const md = tod.moonDir;
       yaw0 = Math.atan2(-md.x, -md.z) - 0.35;
     }
-    const target = new THREE.Vector3(0.6, 2.4, 0.3);
+    const target = new THREE.Vector3(1.6, 2.3, 0.25);
     const view = {
-      target, dist: 28, distRange: [16, 60],
+      target, dist: 24, distRange: [14, 60], idleDist: 25,
       yaw: yaw0, yawRange: null, pitch: 0.13, pitchRange: [0.04, 0.45],
       drift: 0.025, fov: 42,
     };
@@ -328,8 +328,9 @@ export default {
       const n = tod.night, g = tod.golden;
       post.bloom.threshold = lerp(lerp(2.6, 1.5, g), 0.9, n);
       post.bloom.strength = lerp(lerp(0.55, 0.8, g), 0.95, n);
-      post.exposure = lerp(lerp(0.86, 1.0, g), 1.35, n);
-      post.saturation = lerp(1.05, 1.1, g);
+      post.exposure = lerp(lerp(0.86, 0.97, g), 1.35, n);
+      post.saturation = lerp(1.06, 1.12, g);
+      post.contrast = lerp(0.98, 1.04, g);
       post.lift[0] = lerp(0.02, 0.03, n); post.lift[1] = lerp(0.012, 0.02, n); post.lift[2] = lerp(0.045, 0.07, n);
     }
 
@@ -372,6 +373,7 @@ export default {
       addMember(m) { creatures.addMember(m); },
       dispose() {
         envMap.dispose();
+        creatures.dispose();
         for (const k of ['billow', 'detail']) tex[k].tex.dispose();
         tex.cirrus.dispose(); tex.noise.dispose(); tex.rock.dispose();
       },

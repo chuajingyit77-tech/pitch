@@ -163,7 +163,7 @@ void main() {
   vec3 R = reflect(-V, N);
   float sd = max(dot(R, uSunDir), 0.0);
   float spk = sparkle(p * 3.1, t, 0.085) + sparkle(p * 5.7 + 17.0, t * 1.3, 0.07) * 0.8;
-  vec3 spec = uSunCol * (pow(sd, 1200.0) * 9.0 + pow(sd, 160.0) * 0.45 + pow(sd, 48.0) * spk * 14.0 * farK);
+  vec3 spec = uSunCol * (pow(sd, 1200.0) * 9.0 + pow(sd, 240.0) * 0.3 + pow(sd, 48.0) * spk * 14.0 * farK);
   float md = max(dot(R, uMoonDir), 0.0);
   spec += uMoonCol * (pow(md, 2600.0) * 2.2 + pow(md, 160.0) * 0.12 + pow(md, 30.0) * spk * 8.0 * farK);
 

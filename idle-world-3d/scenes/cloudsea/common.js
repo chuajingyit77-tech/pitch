@@ -28,8 +28,8 @@ const DAWN = [
   DUSK[0], DUSK[1],
   { e: -7, zen: '#14205a', mid: '#3a4488', hzA: '#6a64a8', hzB: '#b07aa8', glow: '#603050', light: '#a8a0e0', li: 0.08, amb: '#4a4a90', ai: 0.32, bounce: '#5a5098', bi: 0.28, sky: 1.0, fog: 0.0012 },
   { e: -2, zen: '#334a92', mid: '#8a86c4', hzA: '#d4a8c8', hzB: '#ffbfa0', glow: '#d07a60', light: '#ffaa90', li: 0.5, amb: '#8a84c4', ai: 0.45, bounce: '#c0a0c0', bi: 0.4, sky: 1.0, fog: 0.0013 },
-  { e: 1.5, zen: '#4a68b0', mid: '#aaa8dc', hzA: '#f2c8d6', hzB: '#ffd6b4', glow: '#ffc49a', light: '#ffc6a4', li: 1.1, amb: '#a6a2d8', ai: 0.55, bounce: '#ecc8d4', bi: 0.6, sky: 1.0, fog: 0.0013 },
-  { e: 6, zen: '#5a7cc4', mid: '#b4bce6', hzA: '#f6d4dc', hzB: '#ffe2c4', glow: '#ffd8b0', light: '#ffdcbc', li: 1.5, amb: '#b0b2e2', ai: 0.6, bounce: '#f4dcdc', bi: 0.7, sky: 1.0, fog: 0.0012 },
+  { e: 1.5, zen: '#4262ae', mid: '#a49ed8', hzA: '#f0bccc', hzB: '#ffcca4', glow: '#ffb888', light: '#ffbe98', li: 1.35, amb: '#a09cd6', ai: 0.5, bounce: '#ecc0cc', bi: 0.6, sky: 1.0, fog: 0.0011 },
+  { e: 6, zen: '#5076c2', mid: '#aab4e4', hzA: '#f4c8d4', hzB: '#ffdab8', glow: '#ffcc9c', light: '#ffd4b0', li: 1.7, amb: '#a8acdf', ai: 0.52, bounce: '#f2d2d4', bi: 0.7, sky: 1.0, fog: 0.001 },
   { e: 14, zen: '#4a7ccc', mid: '#94b6e4', hzA: '#e2e2f0', hzB: '#fdeedc', glow: '#ffe8cc', light: '#fff0dc', li: 1.8, amb: '#acbce2', ai: 0.62, bounce: '#ecebf2', bi: 0.72, sky: 1.0, fog: 0.0010 },
   DUSK[7], DUSK[8],
 ];
