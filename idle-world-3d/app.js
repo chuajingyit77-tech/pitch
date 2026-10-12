@@ -347,7 +347,13 @@ async function enterWorld(id, { first = false } = {}) {
     configureRig(inst.view);
     updateRig(0, 0);
     applyPost(inst.post);
-    try { await renderer.compileAsync(inst.scene, inst.camera); } catch (e) { /* older drivers */ }
+    // compile against the post-processing target so the programs match what the frames will use
+    try {
+      const prevTarget = renderer.getRenderTarget();
+      renderer.setRenderTarget(composer.renderTarget1);
+      await renderer.compileAsync(inst.scene, inst.camera);
+      renderer.setRenderTarget(prevTarget);
+    } catch (e) { renderer.setRenderTarget(null); }
     // warm-up: let the world settle for a moment before revealing
     for (let i = 0; i < 3; i++) { inst.update(1 / 60, i / 60); composer.render(1 / 60); }
     save.scene = meta.id; dirty = true;
