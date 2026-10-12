@@ -54,6 +54,9 @@ if (TEST) {
   if (TEST.hours !== undefined) { save.timeMode = 'manual'; save.manualHour = TEST.hours; }
   if (TEST.quality) save.quality = TEST.quality;
 }
+// A link ending in #koi, #reef, #meadow, #island, #jungle or #cloudsea opens that world on this computer.
+const hashWorld = () => decodeURIComponent((location.hash || '').slice(1)).trim().toLowerCase();
+if (!TEST && WORLDS.some(w => w.id === hashWorld())) save.scene = hashWorld();
 if (!WORLDS.some(w => w.id === save.scene)) save.scene = 'reef';
 let dirty = false;
 function persist() { try { localStorage.setItem(STORE_KEY, JSON.stringify(save)); } catch (e) {} dirty = false; }
@@ -594,6 +597,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'Escape') closeSettings();
 });
 window.addEventListener('resize', resize);
+window.addEventListener('hashchange', () => { const id = hashWorld(); if (WORLDS.some(w => w.id === id)) enterWorld(id); });
 
 $('btnFeed').addEventListener('click', feedHandful);
 $('btnAdd').addEventListener('click', () => { wake(); addResident(); });

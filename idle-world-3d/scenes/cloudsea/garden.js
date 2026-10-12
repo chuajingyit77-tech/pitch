@@ -89,6 +89,8 @@ function lawnMaterial(shared, tex) {
           // velvet: a soft bright fuzz at grazing angles, warm glow through the blades against the sun
           reflectedLight.indirectDiffuse += diffuseColor.rgb * uLightCol * (sheen * 1.4 * lit + back * 1.1 + 0.12) * isLawn;
           reflectedLight.indirectDiffuse += vec3(0.9, 1.0, 0.7) * (uAmbient * (sheen * 0.8 + 0.3) + uBounce * 0.15) * isLawn;
+          // soft sky fill so shaded lawn stays a gentle blue-green instead of going black
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * (uAmbient * 1.2 + uBounce * 0.45) * isLawn;
         }
       `,
     },
@@ -404,7 +406,7 @@ export function createGarden(env, shared, tex, wind) {
   terrace.receiveShadow = shadows;
   group.add(terrace);
   const taijiTex = taijiTexture();
-  const taijiMat = patchStd(new THREE.MeshStandardMaterial({ map: taijiTex, roughness: 0.5 }), shared, { key: 'taiji' });
+  const taijiMat = patchStd(new THREE.MeshStandardMaterial({ map: taijiTex, roughness: 0.88 }), shared, { key: 'taiji' });
   const taijiTop = new THREE.Mesh(new THREE.CircleGeometry(2.28, 48).rotateX(-Math.PI / 2), taijiMat);
   taijiTop.position.set(taiji.x, taiji.y + 0.245, taiji.z);
   taijiTop.rotation.y = 0;

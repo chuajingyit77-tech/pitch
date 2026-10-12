@@ -310,6 +310,7 @@ export function createPeaches(shared, treeSpots, maxFood = 12) {
   const foodMat = peachMaterial(shared, foodGlowU);
   const hanging = peachGeometry({ tipUp: false });
   const tree = new THREE.InstancedMesh(hanging, mat, Math.max(1, treeSpots.length));
+  tree.count = treeSpots.length;
   const treeState = treeSpots.map((p, i) => ({ p, ph: i * 1.3, s: 0.13 + (i % 3) * 0.015 }));
   tree.castShadow = true;
   const food = new THREE.InstancedMesh(peachGeometry({ tipUp: true }), foodMat, maxFood);

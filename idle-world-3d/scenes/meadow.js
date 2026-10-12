@@ -672,6 +672,7 @@ export default {
       mouthDist() { return 0.43 * this.s / FOX_SCALE; }
       dispose() {
         this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.root);
+        this.root.traverse(o => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
         scene.remove(this.obj);
         this.wisps.forEach(s => { scene.remove(s); s.material.dispose(); });
       }
@@ -712,14 +713,18 @@ export default {
       own(cmat);
       const crng = rng.fork('cranes');
       const nC = 3 + (q > 0.6 ? 1 : 0);
+      // Stork.glb nodes are unnamed, so its tracks bind by the original node's uuid; retarget a cloned
+      // clip onto a named mesh so the mixer on each scene clone actually drives the flap morphs.
+      const flapClip = storkG.animations[0].clone();
+      flapClip.tracks.forEach(tr => { tr.name = 'craneBody' + tr.name.slice(tr.name.indexOf('.')); });
       const center = new THREE.Vector3(crng.range(-12, 8), crng.range(11, 14), crng.range(-62, -52));
       for (let i = 0; i < nC; i++) {
         const o = storkG.scene.clone();
-        o.traverse(m => { if (m.isMesh) { m.material = cmat; m.castShadow = false; m.frustumCulled = false; } });
+        o.traverse(m => { if (m.isMesh) { m.name = 'craneBody'; m.material = cmat; m.castShadow = false; m.frustumCulled = false; } });
         o.scale.setScalar(0.0135);
         scene.add(o);
         const mixer = new THREE.AnimationMixer(o);
-        const a = mixer.clipAction(storkG.animations[0]);
+        const a = mixer.clipAction(flapClip);
         a.play(); a.time = crng.range(0, 1.2); a.timeScale = crng.range(0.75, 0.9);
         cranes.push({ o, mixer, act: a, off: new THREE.Vector3(-i * 3.2 * (i % 2 ? 1 : -1) * 0.5, crng.range(-1.5, 1.5), i * 3.5), phase: crng.range(0, 0.15), center, rx: crng.range(34, 44), rz: crng.range(14, 20), glide: crng.range(0, 6), prev: new THREE.Vector3() });
       }
@@ -1077,6 +1082,9 @@ export default {
         foxes.forEach(f => f.dispose());
         cranes.forEach(c => { c.mixer.stopAllAction(); c.mixer.uncacheRoot(c.o); });
         foods.forEach(f => f.kill());
+        scene.traverse(o => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
+        sunLight.dispose();
+        lanternLights.forEach(l => l.dispose());
         if (envRT) envRT.dispose();
         envSky.geometry.dispose();
         disposables.forEach(d => d && d.dispose && d.dispose());

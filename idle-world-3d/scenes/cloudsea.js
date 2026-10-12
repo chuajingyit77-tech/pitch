@@ -242,12 +242,8 @@ export default {
       lift: [0.02, 0.01, 0.045], gain: [1.02, 1.0, 0.98], ca: 0.0015,
     };
 
-    // frame the moon at night, the sunset in the evening
-    let yaw0 = 1.2;
-    if (tod.night > 0.5) {
-      const md = tod.moonDir;
-      yaw0 = Math.atan2(-md.x, -md.z) - 0.35;
-    }
+    // the default view looks west-southwest: the sunset (and the evening moon) sit to the left of the tree
+    const yaw0 = 1.2;
     const target = new THREE.Vector3(1.6, 2.3, 0.25);
     const view = {
       target, dist: 24, distRange: [14, 60], idleDist: 25,
@@ -327,7 +323,7 @@ export default {
       // grade with the time of day
       const n = tod.night, g = tod.golden;
       post.bloom.threshold = lerp(lerp(2.6, 2.0, g), 0.9, n);
-      post.bloom.strength = lerp(lerp(0.55, 0.8, g), 0.95, n);
+      post.bloom.strength = lerp(lerp(0.55, 0.68, g), 0.95, n);
       post.exposure = lerp(lerp(0.86, 0.97, g), 1.35, n);
       post.saturation = lerp(1.06, 1.12, g);
       post.contrast = lerp(0.98, 1.04, g);
@@ -343,7 +339,9 @@ export default {
           const p = hits[0].point;
           const g = garden.groundAt(p.x, p.z);
           const onLawn = g !== null && Math.abs(g - p.y) < 1.2;
-          const f = spawnPeach(p, { ground: onLawn ? g : p.y, onMain: onLawn && garden.mainGround(p.x, p.z) !== null });
+          // on lawns the peach drops and rests; on roofs, rails or rock faces it hovers just off the surface
+          const f = onLawn ? spawnPeach(p, { ground: g, onMain: garden.mainGround(p.x, p.z) !== null })
+            : spawnPeach(_ray.copy(p).addScaledVector(raycaster.ray.direction, -0.8), { float: true });
           return f ? p.clone() : null;
         }
         const o = raycaster.ray.origin, d = raycaster.ray.direction;

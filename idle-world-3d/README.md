@@ -29,9 +29,18 @@ screensaver, and anyone walking past can feed the residents.
   (30 fps power saving by default). Settings can rotate through the worlds every 10/30/60 minutes.
 - Quality is automatic: it drops a level if the first seconds run below ~38 fps.
 
-To run it full-screen on a desk all day, open the page in a kiosk browser window, or load the
-URL in a live-wallpaper tool that accepts web pages (for example Lively Wallpaper on Windows,
-or a WebView screensaver on macOS).
+## Setting it up on several office computers
+
+- Open the same link on every computer. Each browser keeps its own world, seed, residents and
+  feeding history.
+- To pin a computer to one world, add an anchor to the link: `#reef`, `#koi`, `#meadow`,
+  `#island`, `#jungle` or `#cloudsea`.
+- When leaving the desk, press `F` (or the fullscreen button). After 8 seconds the HUD fades and the
+  world becomes a screensaver; anyone walking past can click to feed.
+- For an always-on display, keep the page open in a full-screen or kiosk browser window, or set it
+  as an interactive live wallpaper with a tool that accepts web pages (for example Lively Wallpaper
+  on Windows). A classic OS screensaver closes on the first mouse movement, so feeding only works
+  in a browser window or live wallpaper.
 
 ## Running locally
 

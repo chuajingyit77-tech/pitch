@@ -192,7 +192,7 @@ function tube(points, r, color, radial = 6) {
 /* ------------------------------------------------------------------ */
 export function archMaterials(shared, tex) {
   const paintMat = patchStd(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.0 }), shared, { key: 'lacquer' });
-  const jadeMat = patchStd(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0 }), shared, {
+  const jadeMat = patchStd(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.0 }), shared, {
     key: 'jade',
     uniforms: { tRock: { value: tex.rock } },
     fragmentHeader: 'uniform sampler2D tRock;',
