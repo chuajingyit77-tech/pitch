@@ -312,6 +312,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
         mesh.setMatrixAt(i, _m);
       });
       mesh.computeBoundingSphere();
+      mesh.boundingSphere.radius += 1.2; // the wind bends fronds up to ~0.8 m past their rest shape
       disposables.push(m, depth);
       palmMeshes.push(mesh);
       group.add(mesh);
@@ -378,6 +379,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
     });
     mesh.count = sites.length;
     mesh.computeBoundingSphere();
+    mesh.boundingSphere.radius += 0.4; // wind sway
     disposables.push(m, depth);
     group.add(mesh);
     return mesh;
@@ -446,6 +448,7 @@ export function createFlora(env, rng, terrain, wind, reserved) {
   grass.receiveShadow = true;
   grass.layers.set(LAYER_NO_REFLECT);
   grass.computeBoundingSphere();
+  grass.boundingSphere.radius += 0.4; // wind sway
   group.add(grass);
   disposables.push(grassTex, grassGeo, grassMat);
 

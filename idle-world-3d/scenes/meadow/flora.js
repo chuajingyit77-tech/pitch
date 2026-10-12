@@ -166,34 +166,38 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
       varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;`,
     fragmentHeader: `
       uniform vec3 uRootCol, uMidCol, uTipCol, uPlumeCol; uniform float uTransl, uWrap, uGustBright, uNoMsaa;
-      varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;`,
+      varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;
+      // blade colour at normalised height h: root-to-tip gradient, per-clump tint, darkening toward the root, gust sheen
+      vec3 susukiCol(float h, vec3 tint){
+        vec3 c = mix(uRootCol, uMidCol, smoothstep(0.0, 0.5, h));
+        c = mix(c, uTipCol, smoothstep(0.42, 1.02, h));
+        return c * tint * mix(0.55, 1.0, smoothstep(0.0, 0.55, h)) * (1.0 + vGust * uGustBright * h);
+      }
+      // what lies behind a blade: the dark lower field when looking down into it, other blade tops at grazing range
+      float susukiBgH(){ vec3 vd = vFogWorld - cameraPosition; return mix(0.6, 0.12, smoothstep(0.02, 0.12, -vd.y / max(length(vd), 1e-3))); }`,
     vertex: {
       '#include <project_vertex>': BLADE_VERTEX(plume ? '1.3' : '1.0') + `\n vPart = ${plume ? 'aPart' : '0.0'};`,
       '#include <worldpos_vertex>': 'vec4 worldPosition = modelMatrix * wp4;',
     },
     fragment: {
-      // Blades narrower than the width floor were widened: blend them toward the field's mid colour by the
-      // lost coverage (a filtered look), so far-off or edge-on blades carry no high-contrast sparkle.
+      // A blade narrower than the width floor was widened on screen: give the extra area the colour of what lies
+      // behind it (lost coverage), so the pixel keeps its true average and far / edge-on blades lose their sparkle.
+      // Plumes carry the lost coverage in alpha instead (alpha-to-coverage blends them with the real background).
       '#include <color_fragment>': /* glsl */`
         {
-          float h = mix(0.62, vH, vCov);
-          vec3 c = mix(uRootCol, uMidCol, smoothstep(0.0, 0.5, h));
-          c = mix(c, uTipCol, smoothstep(0.42, 1.02, h));
           float hv = vInst.x;
-          c *= mix(vec3(1.0), hv > 0.0 ? vec3(0.78, 0.95, 0.6) : vec3(1.1, 0.78, 0.58), abs(hv) * 0.65);
-          c *= 0.78 + 0.44 * vInst.y;
-          c *= mix(0.55, 1.0, smoothstep(0.0, 0.55, h));
-          c *= 1.0 + 0.22 * vCov * (1.0 - smoothstep(0.0, 0.35, abs(vSide))) * smoothstep(0.1, 0.5, h);
-          c *= 1.0 + vGust * uGustBright * h;
+          vec3 tint = mix(vec3(1.0), hv > 0.0 ? vec3(0.78, 0.95, 0.6) : vec3(1.1, 0.78, 0.58), abs(hv) * 0.65) * (0.78 + 0.44 * vInst.y);
+          vec3 c = susukiCol(vH, tint);
+          c *= 1.0 + 0.22 * (1.0 - smoothstep(0.0, 0.35, abs(vSide))) * smoothstep(0.1, 0.5, vH);
           ${plume ? `
           vec3 pc = uPlumeCol * (0.82 + 0.3 * vInst.y) * mix(vec3(1.07, 0.94, 0.9), vec3(0.95, 0.99, 1.05), vInst.w);
           pc *= 1.0 + vGust * uGustBright * 0.7;
           diffuseColor.rgb = mix(c * 1.15, pc * diffuseColor.rgb, vPart);
-          diffuseColor.a *= vCov;` : 'diffuseColor.rgb = c;'}
+          diffuseColor.a *= vCov;` : 'diffuseColor.rgb = mix(susukiCol(susukiBgH(), tint), c, vCov);'}
         }`,
       '#include <alphatest_fragment>': plume ? A2C_SOFT : '',
       '#include <normal_fragment_begin>': NFB_NOFLIP,
-      '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * pow2(mix(0.62, vH, vCov))'),
+      '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * pow2(mix(susukiBgH(), vH, vCov))'),
       '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
     },
   });

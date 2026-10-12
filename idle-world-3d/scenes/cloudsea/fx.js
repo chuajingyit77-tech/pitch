@@ -172,6 +172,9 @@ void main(){
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
   vA = smoothstep(0.0, 0.08, age / life) * (1.0 - smoothstep(0.75, 1.0, age / life));
+  // settle softly onto the lawn (y ~0..0.5) instead of vanishing in one frame when the sprite's centre
+  // drops below the ground and fails the depth test
+  vA *= smoothstep(0.1, 0.7, p.y);
   vRot = age * aParam.w + aSpawn.w * 6.28;
   vShade = 0.75 + 0.25 * sw;
   // A spinning petal outline sampled by 2-3 pixels blinks on and off. Small petals become a soft speck

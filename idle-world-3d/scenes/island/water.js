@@ -42,12 +42,23 @@ vec3 swellDisp(vec2 p, float atten) {
 }
 `;
 
-/** Vertical wave displacement on the CPU (for floating things). depth = seabed depth below 0. */
+/** Height of the swell at (x, z) on the CPU (for floating things). depth = seabed depth below 0. */
 export function waveHeight(x, z, t, depth = 20) {
   const atten = smoothstep(0.3, 5.5, depth);
   if (atten <= 0) return 0;
+  // the water mesh also moves its points sideways: first find the point that the swell carries onto
+  // (x, z), as the GPU surface does, so floating things sit on the drawn surface instead of dipping in
+  let gx = x, gz = z;
+  for (let it = 0; it < 3; it++) {
+    let ox = 0, oz = 0;
+    for (const w of WV) {
+      const c = w.a * atten * Math.cos(w.k * (w.dx * gx + w.dz * gz - w.c * t));
+      ox += w.dx * c; oz += w.dz * c;
+    }
+    gx = x - ox; gz = z - oz;
+  }
   let y = 0;
-  for (const w of WV) y += w.a * Math.sin(w.k * (w.dx * x + w.dz * z - w.c * t));
+  for (const w of WV) y += w.a * Math.sin(w.k * (w.dx * gx + w.dz * gz - w.c * t));
   return y * atten;
 }
 
