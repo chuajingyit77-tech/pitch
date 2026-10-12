@@ -239,7 +239,7 @@ export class Butterfly {
         ctx.foodTarget(this, this.target);
         if (this.pos.distanceTo(this.target) < 0.12) { this.state = 'feed'; this.biteT = r.range(1.5, 3); }
       } else if (this.food) this.food = null;
-      if (this.restSpot && this.pos.distanceTo(this.restSpot) < 0.1) { this.state = 'rest'; this.timer = r.range(5, 14); }
+      if (this.restSpot && this.pos.distanceTo(this.restSpot) < 0.1) { this.state = 'rest'; this.timer = r.range(5, 14) * (ctx.raining && ctx.raining() ? 3 : 1); }
       if (this.vel.lengthSq() > 0.01) this.yaw = Math.atan2(this.vel.x, this.vel.z);
     } else if (this.state === 'feed') {
       if (!this.food || this.food.dead) { this.state = 'fly'; this.food = null; this.timer = 0; }

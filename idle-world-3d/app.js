@@ -82,14 +82,14 @@ function makeMember(def, kind, rng, used) {
 }
 function ensureMembers(def, id) {
   const w = worldSave(id);
-  if (!Array.isArray(w.members)) {
+  // drop residents of kinds this world no longer knows (a world can be redesigned between versions)
+  if (Array.isArray(w.members)) w.members = w.members.filter(m => def.kinds && def.kinds[m.kind]);
+  if (!Array.isArray(w.members) || !w.members.length) {
     const rng = makeRng(hashString(save.seed + ':' + id + ':members'));
     w.members = [];
     for (const kind of def.starter || []) w.members.push(makeMember(def, kind, rng, w.members.map(m => m.name)));
     dirty = true;
   }
-  // drop residents of kinds this scene no longer knows
-  w.members = w.members.filter(m => def.kinds && def.kinds[m.kind]);
   return w.members;
 }
 const fullness = m => clamp(1 - (Date.now() - (m.lastAte || 0)) / (4 * 3600e3), 0, 1);

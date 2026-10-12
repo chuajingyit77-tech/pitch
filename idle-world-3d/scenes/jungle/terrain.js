@@ -45,7 +45,7 @@ export function createLayout(seed) {
     return h;
   };
   /** Is (x,z) open water (with margin)? */
-  const inPond = (x, z, margin = 0) => groundH(x, z) < WATER_Y - margin;
+  const inPond = (x, z, margin = 0) => z > cliffZ(x) + 0.5 + margin && groundH(x, z) < WATER_Y - margin;
   return { noise: n, cliffZ, cliffH, pondD, groundH, inPond };
 }
 

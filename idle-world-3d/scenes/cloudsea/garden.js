@@ -65,12 +65,13 @@ function lawnMaterial(shared, tex) {
         vec4 nz = texture2D(tNoise, vWPos.xz * 0.045);
         vec4 nz2 = texture2D(tNoise, vWPos.xz * 0.21);
         float patchv = nz.r * 0.6 + nz2.g * 0.4;
-        vec3 lawnA = vec3(0.25, 0.43, 0.16), lawnB = vec3(0.42, 0.58, 0.22), lawnC = vec3(0.68, 0.68, 0.32);
+        // linear albedos: deep jade green -> fresh green -> sun-bleached yellow-green patches
+        vec3 lawnA = vec3(0.055, 0.15, 0.03), lawnB = vec3(0.1, 0.23, 0.042), lawnC = vec3(0.19, 0.27, 0.07);
         vec3 lawn = mix(lawnA, lawnB, smoothstep(0.25, 0.8, patchv));
-        lawn = mix(lawn, lawnC, smoothstep(0.62, 0.92, nz2.b) * 0.35);
+        lawn = mix(lawn, lawnC, smoothstep(0.62, 0.92, nz2.b) * 0.4);
         // vertex colours are linear: lawn ~(0.08,0.2,0.03), soil ~(0.16,0.1,0.06)
         float isLawn = smoothstep(0.03, 0.11, vColor.g - vColor.r * 0.6);
-        diffuseColor.rgb = mix(diffuseColor.rgb, lawn * (0.85 + 0.3 * vColor.g), isLawn);
+        diffuseColor.rgb = mix(diffuseColor.rgb, lawn, isLawn);
       `,
       '#include <normal_fragment_maps>': /* glsl */`$&
         {
@@ -87,11 +88,11 @@ function lawnMaterial(shared, tex) {
           float sheen = pow(1.0 - clamp(dot(Nw, Vw), 0.0, 1.0), 3.0);
           float lit = clamp(dot(Nw, uLightDir) * 0.7 + 0.3, 0.0, 1.0);
           float back = pow(max(dot(-Vw, uLightDir), 0.0), 3.0);
-          // velvet: a soft bright fuzz at grazing angles, warm glow through the blades against the sun
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * uLightCol * (sheen * 1.4 * lit + back * 1.1 + 0.12) * isLawn;
-          reflectedLight.indirectDiffuse += vec3(0.9, 1.0, 0.7) * (uAmbient * (sheen * 0.8 + 0.3) + uBounce * 0.15) * isLawn;
-          // soft sky fill so shaded lawn stays a gentle blue-green instead of going black
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * (uAmbient * 1.2 + uBounce * 0.45) * isLawn;
+          // velvet: a soft fuzz at grazing angles, warm glow through the blades against the sun
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * uLightCol * (sheen * 0.6 * lit + back * 1.1 + 0.04) * isLawn;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * uAmbient * sheen * 0.8 * isLawn;
+          // soft sky fill (mostly at low sun) so shaded lawn stays a gentle green instead of going black
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * (uAmbient * 1.2 + uBounce * 0.45) * (1.0 - 0.7 * uDay) * isLawn;
         }
       `,
     },
@@ -604,7 +605,7 @@ export function createGarden(env, shared, tex, wind) {
     }
     tuftGeo = mergeGeometries(lumps);
     const p = tuftGeo.getAttribute('position'), col = new Float32Array(p.count * 3);
-    const base = new THREE.Color('#3a6326'), tip = new THREE.Color('#9cbc54');
+    const base = new THREE.Color('#2f5a22'), tip = new THREE.Color('#729e3c');
     for (let i = 0; i < p.count; i++) {
       _c.copy(base).lerp(tip, smoothstep(0.0, 0.95, p.getY(i)));
       col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;

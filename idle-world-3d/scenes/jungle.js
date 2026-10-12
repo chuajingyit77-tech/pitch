@@ -487,7 +487,7 @@ export default {
     // mushrooms (bioluminescent at night)
     const mushGeo = P.mushroomCluster(R('mush'), { count: 6 });
     const mushMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
-    jungleMaterial(mushMat, shared, { glowAttr: true, glowGain: 4.0, translucent: 0.3 });
+    jungleMaterial(mushMat, shared, { glowAttr: true, glowGain: 3.3, translucent: 0.3 });
     const mushList = [];
     const rmu = R('mushL');
     for (const lg of logs) for (let k = 0; k < 4; k++) {
@@ -935,7 +935,7 @@ export default {
       pickTarget(b, out) {
         const hungry = b.member && env.fullness(b.member) < 0.3;
         if (!b.food) { const f = findFoodFor(b); if (f && (hungry || wf.chance(0.6))) { const claims = f.claims.filter(x => x.food === f).length; if (claims < 4) { b.food = f; f.claims.push(b); return; } } }
-        if (wf.chance(0.18)) {
+        if (wf.chance(rainNow > 0.3 ? 0.85 : 0.18)) {
           const spots = [...boulderSpots.filter(s => s.pos.y > WATER_Y + 0.1), ...logSpots];
           const s = spots[wf.int(0, spots.length - 1)];
           b.restSpot = s.pos.clone().add(_v.set(wf.range(-0.1, 0.1), 0.02, wf.range(-0.1, 0.1)));
@@ -954,6 +954,7 @@ export default {
       },
       hasFoodFor(b) { if (b.food) return true; const f = findFoodFor(b); if (f && b.member && env.fullness(b.member) < 0.6) { b.food = f; f.claims.push(b); return true; } return false; },
       bite: (b, f) => bite(b, f),
+      raining: () => rainNow > 0.3,
     };
     const macawCtx = {
       wantsFood(m) {
@@ -993,6 +994,7 @@ export default {
     const choosePerch = (m) => {
       const hungry = env.fullness(m.member) < 0.3;
       let free = perches.filter(p => !p.taken || p.taken === m);
+      if (!hungry && wf.chance(0.6) && free.some(p => p.low)) free = free.filter(p => p.low);
       if (hungry) { free.sort((a, b) => a.camD - b.camD); free = free.slice(0, Math.max(2, Math.ceil(free.length / 3))); }
       return free.length ? free[wf.int(0, free.length - 1)] : perches[0];
     };
@@ -1001,7 +1003,8 @@ export default {
       if (member.kind === 'frog') frogs.push(new Frog(member));
       else if (member.kind === 'macaw') {
         const m = new Macaw(macawKit, member, R('macaw' + member.id), { shadows: env.shadows });
-        const free = perches.filter(p => !p.taken);
+        let free = perches.filter(p => !p.taken && p.low);
+        if (!free.length) free = perches.filter(p => !p.taken);
         m.placeAt(free.length ? free[R('mp' + member.id).int(0, free.length - 1)] : perches[0]);
         m.timer = m.rng.range(3, 12);
         scene.add(m.mesh);
@@ -1018,7 +1021,7 @@ export default {
     /* ---------------- feeding ---------------- */
     const rcast = new THREE.Raycaster();
     rcast.layers.enableAll();
-    const feedTargets = [terrain, ...boulders, ...logs.map(l => l.mesh)];
+    const feedTargets = [terrain, cliff, ...boulders, ...logs.map(l => l.mesh)];
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -WATER_Y);
     const rfood = R('food');
     const dropFruit = (pt, onWater) => {
@@ -1063,7 +1066,7 @@ export default {
     };
 
     /* ---------------- time of day ---------------- */
-    let night = 0;
+    let night = 0, rainNow = 0;
     const lightCol = new THREE.Color();
     const state = { lastH: -1, wet: 0 };
     const pal = {
@@ -1078,6 +1081,7 @@ export default {
       const h = env.hours();
       const s = env.sun({ latitude: LATITUDE, azimuthOffset: SUN_AZ });
       const rainA = rainAmount(h);
+      rainNow = rainA;
       const wetT = wetAmount(h);
       state.wet = force ? wetT : damp(state.wet, wetT, 0.5, dt);
       const e = s.elevationDeg;
@@ -1169,7 +1173,7 @@ export default {
       }
       // post
       const b = post.bloom;
-      b.strength = lerp(0.32 + golden * 0.12, 0.95, night) * (1 - rainA * 0.25);
+      b.strength = lerp(0.32 + golden * 0.12, 0.82, night) * (1 - rainA * 0.25);
       b.radius = lerp(0.65, 0.85, night);
       b.threshold = lerp(0.85, 0.42, night);
       post.exposure = lerp(1.06, 1.18, night) * lerp(1, 1.06, rainA) * lerp(1, 1.05, dawnMist);
@@ -1268,6 +1272,10 @@ export default {
           dropFruit(pt, true);
           return pt;
         }
+        if (ground && ground.object === cliff) {
+          const n = ground.face ? ground.face.normal : null;
+          if (!n || n.y < 0.6) return null; // steep rock: nothing to land on
+        }
         if (ground && ground.point.distanceTo(camera.position) < 40) {
           const pt = ground.point.clone();
           dropFruit(pt, false);
@@ -1284,7 +1292,6 @@ export default {
               if (L.inPond(x, z, 0.3)) { dropFruit(new THREE.Vector3(x, WATER_Y, z), true); break; }
             }
           } else {
-            const spots = [...boulderSpots.filter(s => s.pos.y > WATER_Y + 0.1 && s.camD !== 0), ...logSpots];
             for (let k = 0; k < 12; k++) {
               const x = POND.cx + rr2.range(-6, 6), z = POND.cz + rr2.range(3.5, 8);
               if (!L.inPond(x, z, -0.2)) { dropFruit(new THREE.Vector3(x, L.groundH(x, z), z), false); break; }

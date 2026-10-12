@@ -367,7 +367,6 @@ export default {
         return k;
       },
       creatures: () => creatures.list(),
-      _debug: { creatures, garden, foods, spawnPeach },
       addMember(m) { creatures.addMember(m); },
       dispose() {
         envMap.dispose();
