@@ -1067,6 +1067,9 @@ export default {
       fogDay: new THREE.Color('#86ad97'), fogDawn: new THREE.Color('#a9b9b3'), fogGold: new THREE.Color('#7f8c78'), fogDusk: new THREE.Color('#4f5a82'), fogNight: new THREE.Color('#0b1d29'), fogRain: new THREE.Color('#6d8077'),
       hemiSkyDay: new THREE.Color('#bcd6c4'), hemiGround: new THREE.Color('#2b3a1c'), hemiSkyNight: new THREE.Color('#1d4258'), hemiGroundNight: new THREE.Color('#0a1712'),
       moon: new THREE.Color('#9fbcff'), murkDay: new THREE.Color('#2c6a52'), murkNight: new THREE.Color('#06222b'),
+      rainAmb: new THREE.Color('#9aa8a2'), zenTint: new THREE.Color('#3e6f8a'), zenNight: new THREE.Color('#071622'), zenRain: new THREE.Color('#7d8a88'),
+      scatter: new THREE.Color('#1b5a49'), scatterRain: new THREE.Color('#3a5a50'), murkRain: new THREE.Color('#20403a'),
+      envGreen: new THREE.Color('#3d6a3a'), envLow: new THREE.Color('#1d2414'), envLowNight: new THREE.Color('#05090b'),
     };
     function applyTime(dt, force) {
       const h = env.hours();
@@ -1094,7 +1097,7 @@ export default {
       shared.uLightCol.value.copy(lc).multiplyScalar(li);
       sun.position.copy(sun.target.position).addScaledVector(L0, 70);
       // ambient
-      hemi.color.copy(pal.hemiSkyDay).lerp(s.skyAmbient, 0.35).lerp(pal.hemiSkyNight, night).lerp(_c2.set('#9aa8a2'), rainA * 0.5);
+      hemi.color.copy(pal.hemiSkyDay).lerp(s.skyAmbient, 0.35).lerp(pal.hemiSkyNight, night).lerp(pal.rainAmb, rainA * 0.5);
       hemi.groundColor.copy(pal.hemiGround).lerp(pal.hemiGroundNight, night);
       hemi.intensity = lerp(s.ambientIntensity * 1.05, 0.5, night) + rainA * 0.25 + dawnMist * 0.1;
       const amb = _c2.copy(hemi.color).multiplyScalar(hemi.intensity * 0.8);
@@ -1106,13 +1109,13 @@ export default {
       shared.uFogDensity.value = 0.011 + dawnMist * 0.018 + rainA * 0.026 + night * 0.01 + dusk * 0.008 - golden * (morning ? 0 : 0.003);
       shared.uFogFalloff.value = lerp(0.09, 0.22, dawnMist);
       shared.uCookieMin.value = lerp(lerp(0.17, 0.3, night), 0.75, rainA);
-      shared.uWaterScatter.value.set('#1b5a49').multiplyScalar(lerp(0.5 + day * 0.7, 0.12, night)).lerp(_c.set('#3a5a50'), rainA * 0.3);
+      shared.uWaterScatter.value.copy(pal.scatter).multiplyScalar(lerp(0.5 + day * 0.7, 0.12, night)).lerp(pal.scatterRain, rainA * 0.3);
       shared.uNight.value = smoothstep(-2, -10, e);
       shared.uWet.value = state.wet;
       shared.uCaustic.value = (1 - rainA * 0.8) * lerp(1, 0.35, night);
       // sky
       const su = sky.material.uniforms;
-      su.uZenith.value.copy(s.zenith).lerp(_c.set('#3e6f8a'), 0.15 * day).lerp(_c.set('#071622'), night * 0.6).lerp(_c.set('#7d8a88'), rainA * day);
+      su.uZenith.value.copy(s.zenith).lerp(pal.zenTint, 0.15 * day).lerp(pal.zenNight, night * 0.6).lerp(pal.zenRain, rainA * day);
       su.uHorizon.value.copy(s.horizon).lerp(fog, 0.35);
       su.uSunDir.value.copy(s.dir); su.uSunCol.value.copy(s.sunColor).multiplyScalar(s.sunIntensity * 0.5);
       su.uMoonDir.value.copy(s.moonDir); su.uOvercast.value = rainA; su.uDay.value = day;
@@ -1123,7 +1126,7 @@ export default {
       wu.uRain.value = rainA;
       wu.uCalm.value = 0.2 + rainA * 0.15;
       wu.uMurkAmt.value = 0.12 + rainA * 0.2;
-      wu.uMurk.value.lerp(_c.set('#20403a'), rainA * 0.6);
+      wu.uMurk.value.lerp(pal.murkRain, rainA * 0.6);
       wu.uReflBoost.value = 1 - rainA * 0.35;
       waterfall.material.uniforms.uAmb.value.copy(amb);
       waterfall.material.uniforms.uMoon.value = night * (1 - rainA * 0.6);
@@ -1153,8 +1156,8 @@ export default {
         envKey = key;
         const eu = envMat.uniforms;
         eu.uTop.value.copy(su.uZenith.value).lerp(fog, 0.3).multiplyScalar(lerp(1.0, 0.5, night));
-        eu.uMid.value.copy(fog).lerp(_c.set('#3d6a3a'), 0.55 * (1 - night)).multiplyScalar(0.8);
-        eu.uLow.value.set('#1d2414').lerp(_c.set('#05090b'), night);
+        eu.uMid.value.copy(fog).lerp(pal.envGreen, 0.55 * (1 - night)).multiplyScalar(0.8);
+        eu.uLow.value.copy(pal.envLow).lerp(pal.envLowNight, night);
         eu.uSunDir.value.copy(L0); eu.uSunCol.value.copy(lc).multiplyScalar(li * 0.12);
         const old = envRT;
         envRT = env.pmrem.fromScene(envScene, 0.02, 0.1, 100);

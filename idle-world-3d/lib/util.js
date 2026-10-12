@@ -364,10 +364,15 @@ export function createWind({ direction = new THREE.Vector2(1, 0.3), strength = 1
     uWindDir: { value: direction.clone().normalize() },
     uWindStrength: { value: strength },
     uWindGust: { value: gust },
+    uWindScroll: { value: new THREE.Vector2() },
   };
   return {
     uniforms,
-    update(dt) { uniforms.uWindTime.value += dt; },
+    update(dt) {
+      uniforms.uWindTime.value += dt;
+      // gusts travel with the wind; integrating keeps them continuous when the direction changes
+      uniforms.uWindScroll.value.addScaledVector(uniforms.uWindDir.value, dt * 0.45 * Math.max(0.3, uniforms.uWindStrength.value));
+    },
     set(dir, strength) { if (dir) uniforms.uWindDir.value.copy(dir).normalize(); if (strength !== undefined) uniforms.uWindStrength.value = strength; },
   };
 }
@@ -378,7 +383,7 @@ export function addWind(material, wind, { height = 1, amount = 0.2, stiffness = 
     uniforms: { ...wind.uniforms, uWindHeight: { value: height }, uWindAmount: { value: amount }, uWindStiff: { value: stiffness }, uWindFlutter: { value: flutter } },
     vertexHeader: /* glsl */`
       uniform float uWindTime, uWindStrength, uWindGust, uWindHeight, uWindAmount, uWindStiff, uWindFlutter;
-      uniform vec2 uWindDir;
+      uniform vec2 uWindDir, uWindScroll;
       float windHash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
       float windNoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
         return mix(mix(windHash(i), windHash(i+vec2(1,0)), u.x), mix(windHash(i+vec2(0,1)), windHash(i+vec2(1,1)), u.x), u.y); }
@@ -395,11 +400,11 @@ export function addWind(material, wind, { height = 1, amount = 0.2, stiffness = 
         float wh = clamp(transformed.y / uWindHeight, 0.0, 1.5);
         float bendW = pow(wh, uWindStiff);
         // Large travelling gusts plus a smaller per-plant sway.
-        float gust = windNoise(wo.xz * 0.06 - uWindDir * uWindTime * 0.45) * uWindGust;
+        float gust = windNoise(wo.xz * 0.06 - uWindScroll) * uWindGust;
         float sway = sin(uWindTime * 1.7 + wo.x * 0.7 + wo.z * 0.9) * 0.35 + sin(uWindTime * 3.1 + wo.z * 1.3) * 0.15;
         float push = uWindStrength * uWindAmount * bendW * (0.35 + gust * 1.1 + sway * 0.6);
         vec3 disp = vec3(uWindDir.x, 0.0, uWindDir.y) * push;
-        disp.y -= push * push * 0.35 / max(uWindAmount, 0.001) * uWindAmount; // keep length roughly constant
+        disp.y -= push * push * 0.35; // keep the plant's length roughly constant
         disp += vec3(sin(uWindTime * 9.0 + wo.x * 5.0 + transformed.y * 7.0), 0.0, cos(uWindTime * 8.0 + wo.z * 5.0)) * uWindFlutter * bendW * uWindStrength;
         mvPosition.xyz += (inverse(mat3(modelMatrix)) * disp);
         mvPosition = modelViewMatrix * mvPosition;
@@ -416,6 +421,8 @@ export function addWind(material, wind, { height = 1, amount = 0.2, stiffness = 
 export function disposeObject(root) {
   const seen = new Set();
   root.traverse(o => {
+    if (o.isSkinnedMesh && o.skeleton && !seen.has(o.skeleton)) { seen.add(o.skeleton); o.skeleton.dispose(); }
+    if (o.isLight && o.shadow && o.shadow.map) { o.shadow.map.dispose(); o.shadow.map = null; }
     if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); }
     const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
     for (const m of mats) {

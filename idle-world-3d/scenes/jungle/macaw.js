@@ -32,7 +32,8 @@ export async function loadMacawKit(env, shared) {
   const track = clip.tracks[0];
   const nT = track.getValueSize();
   const interp = track.createInterpolant(new Float32Array(nT));
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0 });
+  // Parrot.glb has no normals: flat shading derives them per pixel (and follows the morphs)
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0, flatShading: true });
   jungleMaterial(mat, shared, { translucent: 0.1 });
   return { geo, mat, interp, nT, duration: clip.duration, foldIndex: nT };
 }
