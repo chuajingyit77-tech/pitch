@@ -237,7 +237,8 @@ export function archMaterials(shared, tex) {
       `,
     },
   });
-  // roughness 0.38 (was 0.3): flat gilded faces aligned with the sun flared to ~25-35x in thin one-pixel lines
+  // roughness 0.38 (was 0.3): the sun's highlight on flat gilded strips (one pixel wide at a distance) peaked
+  // around 20-30x when aligned; now ~2.5x dimmer and broader, so the trims glint instead of sparkling
   const goldMat = patchStd(new THREE.MeshStandardMaterial({ vertexColors: true, color: '#ffffff', metalness: 0.9, roughness: 0.38, envMapIntensity: 1.4 }), shared, { key: 'gold' });
   return { paintMat, jadeMat, roofMat, goldMat };
 }
