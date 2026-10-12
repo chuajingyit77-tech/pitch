@@ -812,15 +812,17 @@ export function createFishMaterial(painted, overrides = {}) {
     envMapIntensity: p.envMapIntensity ?? 1,
   });
   applySwim(mat, { waveK: p.waveK ?? 7.0 });
-  // three r160 forces alpha to 1 on opaque materials, which defeats alpha-to-coverage; keep the fin alpha
+  // three r160 forces alpha to 1 on opaque materials, which defeats alpha-to-coverage; keep the fin alpha.
+  // The chunk itself stays in place so later patches that hook it (underwater tint, fog, rim) still apply.
   patchMaterial(mat, {
     key: 'a2c',
     fragment: {
-      '#include <opaque_fragment>': `
+      '#include <opaque_fragment>': `float fishAlpha = diffuseColor.a;
+        $&
+        gl_FragColor.a = fishAlpha;
         #ifdef USE_TRANSMISSION
-          diffuseColor.a *= material.transmissionAlpha;
-        #endif
-        gl_FragColor = vec4(outgoingLight, diffuseColor.a);`,
+          gl_FragColor.a *= material.transmissionAlpha;
+        #endif`,
     },
   });
   return mat;

@@ -886,7 +886,9 @@ export function createCreatures(env, shared, world, fx) {
   const birdMesh = new THREE.InstancedMesh(bGeo, birdMaterial(shared), maxBirds);
   birdMesh.count = 0;
   birdMesh.frustumCulled = false;
-  birdMesh.castShadow = env.shadows;
+  // no shadows from the little birds: their thin wing shadows crossing the sunlit terrace and lawn at flight
+  // speed shade each pixel for about one frame and flickered (and the depth pass ignores the wing flap anyway)
+  birdMesh.castShadow = false;
   group.add(birdMesh);
   const sys = {
     env, shared, world, rng, fx, camera: null, tod: null,
