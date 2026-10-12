@@ -56,7 +56,8 @@ body.noui .hud,body.noui .clock{display:none}
 .dock::-webkit-scrollbar{display:none}
 .card{position:relative;flex:0 0 auto;width:124px;height:76px;border-radius:12px;overflow:hidden;text-align:left;padding:10px 12px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;border:1px solid transparent;transition:transform .2s,border-color .2s}
 .card::before{content:"";position:absolute;inset:0;background:var(--g);z-index:0;transition:filter .2s}
-.card::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.55));z-index:0}
+.card::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 22%,rgba(0,0,0,.72));z-index:0}
+.card .nm,.card .sb{text-shadow:0 1px 6px rgba(0,0,0,.6)}
 .card>*{position:relative;z-index:1}
 .card:hover{transform:translateY(-2px)}
 .card:hover::before{filter:brightness(1.15)}
