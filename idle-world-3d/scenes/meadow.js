@@ -958,7 +958,7 @@ export default {
         const dirR = lowSun >= moonRays ? sunDirV : moonDir;
         rays.position.copy(camera.position).addScaledVector(dirR, 140);
         rays.scale.setScalar(260);
-        raysMat.rotation = t * 0.004;
+        raysMat.rotation = (t * 0.004) % TAU;
         raysMat.color.copy(lowSun >= moonRays ? pal.halo : MOONRAY).multiplyScalar(a * 0.55);
       }
       // lanterns / shrine glow

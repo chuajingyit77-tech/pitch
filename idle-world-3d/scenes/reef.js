@@ -157,6 +157,23 @@ export default {
       shafts.u.uShaftI.value = app.shaftI;
       snow.u.uBio.value = app.bio;
       tod.night = app.night; tod.day = app.day; tod.golden = app.golden;
+      applyEnvScale();
+    }
+    // Reflections: the environment map is built from the minute's targets while the rest eases toward
+    // them, so every material's envMapIntensity follows (eased L0 / L0 the map was built with).
+    const envMats = new Map();
+    const collectEnvMats = () => scene.traverse(o => {
+      for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
+        if (m.isMeshStandardMaterial && !envMats.has(m)) envMats.set(m, m.envMapIntensity);
+      }
+    });
+    const lumV = v => 0.2126 * v.x + 0.7152 * v.y + 0.0722 * v.z;
+    let envScale = 1;
+    function applyEnvScale() {
+      const k = lumV(app.L0) / Math.max(lumV(envLast.L0), 1e-5);
+      if (Math.abs(k - envScale) < 1e-4) return;
+      envScale = k;
+      for (const [m, base] of envMats) m.envMapIntensity = base * k;
     }
     // The environment map is rebuilt from the targets whenever they have moved enough to matter (at
     // most once a clock minute, mostly around dawn and dusk) instead of in a visible step every 12 min.
@@ -224,6 +241,7 @@ export default {
       if (jump || envMoved()) rebuildEnv();
       if (jump) blendTod(1);
     }
+    collectEnvMats();
     applyTod(true);
 
     /* ---------------- camera + post ---------------- */
@@ -307,7 +325,7 @@ export default {
         }
         return made ? n : 0;
       },
-      addMember(m) { life.addMember(m); },
+      addMember(m) { life.addMember(m); collectEnvMats(); for (const [mat, base] of envMats) mat.envMapIntensity = base * envScale; },
       creatures() {
         let i = 0;
         for (const f of life.residents) { const c = tag(i++); c.member = f.m; c.label = null; c.pos = f.sw.pos; c.radius = Math.max(0.35, f.size * 0.9); }
