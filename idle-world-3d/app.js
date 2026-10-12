@@ -54,8 +54,11 @@ function randomSeed() {
 function loadSave() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || null; } catch (e) { return null; } }
 let save = Object.assign({
   name: '我的电脑', seed: randomSeed(), scene: 'reef', quality: 'auto', autoQuality: null,
-  timeMode: 'real', manualHour: 12, rotate: 0, sound: false, powerSave: true, showClock: true, worlds: {},
+  timeMode: 'real', manualHour: 12, rotate: 0, sound: false, idle30: false, showClock: true, worlds: {},
 }, loadSave() || {});
+// 'powerSave' (30 fps in screensaver mode) used to be on by default; screensaver mode now stays smooth
+// unless 30 fps is chosen in the settings
+delete save.powerSave;
 if (TEST) {
   if (TEST.seed !== undefined) save.seed = TEST.seed;
   if (TEST.scene) save.scene = TEST.scene;
@@ -164,18 +167,17 @@ const MAX_SAMPLES = IS_WEBGL2 ? Math.min(renderer.capabilities.maxSamples || 0, 
 const QUALITY = {
   high: { pr: 1.5, maxPixels: 2.6e6, samples: 4, shadows: true, q: 1 },
   medium: { pr: 1.25, maxPixels: 1.5e6, samples: 2, shadows: true, q: 0.7 },
-  low: { pr: 1.5, maxPixels: 0.8e6, samples: 4, shadows: false, q: 0.45 },
-  // old iPads / iPhones: fewer creatures and plants, a smaller picture, and 30 frames per second at most
-  lite: { pr: 1, maxPixels: 0.5e6, samples: 2, shadows: false, q: 0.3, fps30: true },
+  // phones and tablets (older iPads too): the adaptive resolution and frame cap below fit it to the device
+  low: { pr: 1.5, maxPixels: 1.2e6, samples: 4, shadows: false, q: 0.45 },
 };
 function effectiveQuality() {
   if (save.quality && save.quality !== 'auto' && QUALITY[save.quality]) return save.quality;
-  if (OLD_APPLE) return 'lite';
-  if (IS_MOBILE) return 'low';
+  if (IS_MOBILE || OLD_APPLE) return 'low';
   return WEAK_GPU ? 'medium' : 'high';
 }
 let qName = effectiveQuality();
-let Q = QUALITY[qName];
+const tier = name => ({ ...QUALITY[name], shadows: QUALITY[name].shadows && IS_WEBGL2 });
+let Q = tier(qName);
 
 // Removes NaN/Inf from the HDR frame and soft-limits extreme highlights. A single NaN pixel (or a
 // one-pixel specular sparkle worth 1000×) would otherwise be smeared by bloom into flashing blocks.
@@ -296,38 +298,71 @@ function buildComposer() {
 
 /* Dynamic resolution. Frame times are judged against the display's own refresh interval (so 30 Hz
    screens, 75 Hz monitors and phones in low-power mode are not mistaken for slow GPUs). It steps down
-   quickly when frames are late and creeps back up only after a long comfortable stretch, backing off
-   when a step up does not hold — so the picture settles instead of pumping between sharp and soft.
-   Each world remembers its own level per detail tier. */
-const DYN_STEPS = [1, 0.87, 0.76, 0.66, 0.57, 0.5];
-const dyn = { i: 0, ema: 0, slow: 0, fast: 0, settleUntil: 0, vsync: Infinity, lastUpAt: -1e9, upBlockedUntil: 0, backoff: 300e3 };
-const dynKey = id => `qijing-res-${qName}-${id}`;
+   quickly when frames are late — slow on average, or ragged (a picture that keeps missing refreshes
+   stutters even when the average looks fine) — and creeps back up only after a long comfortable stretch,
+   backing off when a step up does not hold, so the picture settles instead of pumping between sharp and
+   soft. Above the tier's pixel budget there is one sharper step, tried only after a long smooth stretch
+   (never past the screen's own pixels). Past the smallest picture there is one more step, an even 30 fps,
+   which looks smoother than a ragged 40. Each world remembers its own level per detail tier and starts
+   there next time. */
+const DYN_STEPS = [1.15, 1, 0.87, 0.76, 0.66, 0.57, 0.5];
+const DYN_START = 1; // the tier's own budget
+const DYN_CAP = DYN_STEPS.length; // the extra last step: smallest picture at 30 fps
+const dyn = { i: DYN_START, ema: 0, late: 0, slow: 0, fast: 0, settleUntil: 0, vsync: Infinity, lastUpAt: -1e9, upBlockedUntil: 0, backoff: 300e3 };
+const dynScale = () => DYN_STEPS[Math.min(dyn.i, DYN_STEPS.length - 1)];
+const dynCapped = () => dyn.i >= DYN_CAP;
+const dynKey = id => `qijing-r2-${qName}-${id}`;
 function dynRestore(id) {
-  let i = 0;
-  try { const v = parseInt(localStorage.getItem(dynKey(id)), 10); if (v >= 0 && v < DYN_STEPS.length) i = v; } catch (e) {}
-  dyn.i = Math.max(0, i - 1); // try one step sharper than last time
-  dyn.ema = 0; dyn.slow = dyn.fast = 0; dyn.lastUpAt = -1e9;
+  let i = DYN_START;
+  try { const v = parseInt(localStorage.getItem(dynKey(id)), 10); if (v >= 0 && v <= DYN_CAP) i = v; } catch (e) {}
+  dyn.i = i; // a sharper step is tried later, once frames have been comfortable for a while
+  dyn.ema = dyn.late = 0; dyn.slow = dyn.fast = 0; dyn.lastUpAt = -1e9;
   dyn.settleUntil = performance.now() + 3000;
   needsResize = true;
 }
-// every rAF tick, rendered or not: track the display refresh interval (fast down, very slow drift up)
+// Every rAF tick, rendered or not, tracks the display refresh: dyn.vsync follows the shortest interval
+// (fast down, very slow drift up); pace.v averages whole refresh intervals (dropped frames count as 2, 3…
+// intervals), which is precise enough to pace the animation by.
+const pace = { v: 0, n: 0, carry: 0, e30: 0, e75: 0, slowRun: 0, slowMin: Infinity };
 function dynTick(rawMs) {
-  if (rawMs > 3 && rawMs < 120) dyn.vsync = Math.min(rawMs, dyn.vsync + 0.0005);
+  if (!(rawMs > 3 && rawMs < 120)) return;
+  dyn.vsync = Math.min(rawMs, dyn.vsync + 0.0005);
+  const k = pace.v ? Math.max(1, Math.round(rawMs / pace.v)) : 1;
+  const per = rawMs / k;
+  if (!pace.v || per < pace.v * 0.7) { pace.v = per; pace.n = 0; } // first tick, or a faster screen than we thought
+  else if (k <= 4 && Math.abs(per - pace.v) < pace.v * 0.12) { pace.v += (per - pace.v) * 0.02; pace.n++; }
+  // a screen that has slowed its refresh (a phone in low-power mode runs pages at 30 Hz): after 30 s
+  // without a single interval near the old one, take the new cadence instead of shrinking the picture
+  if (rawMs > pace.v * 1.6) {
+    pace.slowRun += rawMs; pace.slowMin = Math.min(pace.slowMin, rawMs);
+    if (pace.slowRun > 30e3) { pace.v = pace.slowMin; pace.n = 0; pace.slowRun = 0; pace.slowMin = Infinity; }
+  } else { pace.slowRun = 0; pace.slowMin = Infinity; }
+}
+const refreshMs = () => pace.n > 20 ? pace.v : isFinite(dyn.vsync) ? clamp(dyn.vsync, 4, 70) : 1000 / 60;
+// rendered frames per refresh: 30 fps when throttled; at most ~75 fps on fast (> 90 Hz) screens. The
+// choice is sticky: on a 75 Hz screen 30 fps is 2.5 refreshes, and flipping between 2 and 3 would judder.
+function frameEvery(throttled) {
+  const v = refreshMs(), r = throttled ? 1000 / 30 / v : v < 11 ? 1000 / 75 / v : 1, key = throttled ? 'e30' : 'e75';
+  let e = pace[key] || Math.max(1, Math.round(r));
+  if (Math.abs(r - e) > 0.6) e = Math.max(1, Math.round(r));
+  return (pace[key] = e);
 }
 function dynSample(frameMs, now, throttled) {
   if (TEST || now < dyn.settleUntil || frameMs > 250 || !isFinite(dyn.vsync)) return;
   dyn.ema = dyn.ema ? dyn.ema * 0.9 + frameMs * 0.1 : frameMs;
-  const vs = clamp(dyn.vsync, 4, 70);
-  // the frame cadence we expect when the GPU keeps up: every refresh, or the 75 fps cap on fast screens,
-  // or the 30 fps screensaver cadence. Awake we accept down to ~43 fps (or every refresh on slow screens).
-  const cadence = throttled ? 1000 / 31 : vs < 11 ? 1000 / 75 : 0;
-  const expect = cadence ? vs * Math.max(1, Math.ceil(cadence / vs - 0.05)) : vs;
+  const vs = refreshMs();
+  // the frame cadence we expect when the GPU keeps up (every refresh, every other refresh at 30 fps…).
+  // Awake we accept down to ~43 fps on average, but not a picture that keeps missing refreshes.
+  const expect = vs * frameEvery(throttled);
+  dyn.late = dyn.late * 0.95 + (frameMs > expect + vs * 0.5 ? 0.05 : 0);
   const budget = throttled ? expect * 1.3 : Math.max(23, expect * 1.3);
   const roomy = expect * 1.04;
-  dyn.slow = dyn.ema > budget ? dyn.slow + frameMs : 0;
-  dyn.fast = dyn.ema < roomy ? dyn.fast + frameMs : 0;
+  dyn.slow = dyn.ema > budget || dyn.late > 0.08 ? dyn.slow + frameMs : 0;
+  dyn.fast = dyn.ema < roomy && dyn.late < 0.015 ? dyn.fast + frameMs : 0;
   let next = dyn.i;
-  if (dyn.slow > (throttled ? 2500 : 1500) && dyn.i < DYN_STEPS.length - 1) {
+  // the 30 fps step is only taken from an un-throttled picture (screensaver 30 fps is already there)
+  const lowest = throttled ? Math.max(dyn.i, DYN_STEPS.length - 1) : DYN_CAP;
+  if (dyn.slow > (throttled ? 2500 : 1500) && dyn.i < lowest) {
     next = dyn.i + 1;
     if (now - dyn.lastUpAt < 30e3) { dyn.upBlockedUntil = now + dyn.backoff; dyn.backoff = Math.min(dyn.backoff * 2, 3600e3); }
   } else if (dyn.fast > 20e3 && dyn.i > 0 && now > dyn.upBlockedUntil) {
@@ -335,7 +370,7 @@ function dynSample(frameMs, now, throttled) {
     dyn.lastUpAt = now;
   }
   if (next !== dyn.i) {
-    dyn.i = next; dyn.slow = dyn.fast = 0; dyn.ema = 0; dyn.settleUntil = now + 1500;
+    dyn.i = next; dyn.slow = dyn.fast = 0; dyn.ema = dyn.late = 0; dyn.settleUntil = now + 1500;
     needsResize = true;
     if (current) try { localStorage.setItem(dynKey(current.meta.id), String(next)); } catch (e) {}
   }
@@ -349,7 +384,7 @@ function resize(force = false) {
   const w = Math.max(1, Math.round(rect.width) || window.innerWidth), h = Math.max(1, Math.round(rect.height) || window.innerHeight);
   let pr = Math.min(window.devicePixelRatio || 1, Q.pr);
   if (w * h * pr * pr > Q.maxPixels) pr = Math.sqrt(Q.maxPixels / (w * h));
-  pr = Math.max(0.35, pr * DYN_STEPS[dyn.i]);
+  pr = Math.max(0.35, Math.min(pr * dynScale(), Math.max(pr, window.devicePixelRatio || 1)));
   const key = `${w}x${h}@${pr.toFixed(3)}`;
   if (!force && key === lastSize) return;
   lastSize = key;
@@ -445,20 +480,29 @@ function smoothCutouts(root) {
 
 /* WebGL 1 (Safari 14 / iOS 14): GLSL ES 1.0 only has screen-space derivatives (fwidth, dFdx — used by
    the anti-aliasing tricks in every world) behind an extension, which three.js turns on per material. */
+function gl1Material(m, o) {
+  if (!m.userData.gl1) {
+    m.userData.gl1 = true;
+    if (!(m.extensions && m.extensions.derivatives)) {
+      m.extensions = Object.assign({}, m.extensions || {}, { derivatives: true });
+      m.needsUpdate = true;
+    }
+  }
+  if (o.isSkinnedMesh && o.skeleton && !m.userData.gl1skin) webgl1Skinning(m, o.skeleton);
+}
 function webgl1Materials(root) {
   if (IS_WEBGL2 || !root) return;
   root.traverse(o => {
     if (!o.material) return;
-    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-      if (!m) continue;
-      if (!m.userData.gl1 && !(m.extensions && m.extensions.derivatives)) {
-        m.userData.gl1 = true;
-        m.extensions = Object.assign({}, m.extensions || {}, { derivatives: true });
-        m.needsUpdate = true;
-      }
-      if (o.isSkinnedMesh && o.skeleton && !m.userData.gl1skin) webgl1Skinning(m, o.skeleton);
-    }
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m) gl1Material(m, o);
   });
+}
+// Objects and materials a world makes later (food, effects) get the same treatment just before their
+// first draw, so they compile once, correctly, instead of failing and being fixed up afterwards.
+if (!IS_WEBGL2) {
+  THREE.Object3D.prototype.onBeforeRender = function (r, scene, camera, geometry, m) {
+    if (m && (!m.userData.gl1 || (this.isSkinnedMesh && !m.userData.gl1skin))) gl1Material(m, this);
+  };
 }
 // three.js r160 reads bones with texelFetch/textureSize (WebGL 2 only). For WebGL 1, read the same bone
 // texture (4 RGBA texels per matrix, size × size) with texture2D at texel centres.
@@ -634,7 +678,7 @@ function makeEnv(meta, def) {
   const members = ensureMembers(def, meta.id);
   return {
     THREE, renderer, pmrem,
-    quality: qName === 'lite' ? 'low' : qName, q: Q.q, shadows: Q.shadows,
+    quality: qName, q: Q.q, shadows: Q.shadows,
     get msaa() { return scenePass ? scenePass.target.samples : 0; }, // MSAA samples of the scene buffer (0 = none)
     seed, rng: makeRng(seed),
     hours, sun: opts => sunState(hours(), opts),
@@ -998,12 +1042,12 @@ function openSettings() {
   seg('segQuality', save.quality, v => { save.quality = v; dirty = true; setQuality(effectiveQuality()); updateQualityHint(); });
   updateQualityHint();
   seg('segRotate', save.rotate, v => { save.rotate = +v; dirty = true; });
-  seg('segPower', save.powerSave ? 1 : 0, v => { save.powerSave = v === '1'; dirty = true; });
+  seg('segPower', save.idle30 ? 1 : 0, v => { save.idle30 = v === '1'; dirty = true; });
   seg('segClock', save.showClock ? 1 : 0, v => { save.showClock = v === '1'; dirty = true; document.body.classList.toggle('hide-clock', !save.showClock); });
 }
 function updateQualityHint() {
-  const pct = Math.round(DYN_STEPS[dyn.i] * 100);
-  $('qualityHint').textContent = `当前：${{ high: '高', medium: '中', low: '低', lite: '省电' }[qName]}画质，渲染分辨率 ${pct}%。“自动”会按这台设备的显卡选择画质，并根据流畅度平滑调整分辨率，不会重新加载画面。`;
+  const pct = Math.round(dynScale() * 100);
+  $('qualityHint').textContent = `当前：${{ high: '高', medium: '中', low: '低' }[qName]}画质，渲染分辨率 ${pct}%${dynCapped() ? '，每秒 30 帧' : ''}。“自动”会按这台设备的显卡选择画质，并根据流畅度平滑调整分辨率，不会重新加载画面。`;
 }
 function closeSettings() { $('settings').classList.remove('open'); $('settings').setAttribute('aria-hidden', 'true'); $('reseedConfirm').hidden = true; }
 $('hourRange').addEventListener('input', e => { save.manualHour = parseFloat(e.target.value); $('hourText').textContent = fmtHour(save.manualHour); dirty = true; });
@@ -1027,7 +1071,7 @@ $('reseedYes').addEventListener('click', () => {
 // so the world is rebuilt once). Automatic adaptation is resolution-only and never reloads.
 function setQuality(name) {
   if (name === qName) return;
-  qName = name; Q = QUALITY[name];
+  qName = name; Q = tier(name);
   dynRestore(current ? current.meta.id : save.scene);
   renderer.shadowMap.enabled = Q.shadows;
   buildComposer();
@@ -1070,7 +1114,6 @@ function frame(now) {
   dynTick(rawMs);
   const rawDt = Math.min(0.1, Math.max(0, rawMs) / 1000);
   minuteTimer += rawDt;
-  if (!IS_WEBGL2 && current && !loading && (minuteTimer % 3) < rawDt) webgl1Materials(current.inst.scene);
   if (minuteTimer > 15) {
     minuteTimer = 0;
     tickClock();
@@ -1097,12 +1140,25 @@ function frame(now) {
   // idle state
   const idleNow = !(TEST && TEST.noIdle) && performance.now() - lastInput > 8000 && !$('settings').classList.contains('open') && document.activeElement?.tagName !== 'INPUT';
   if (idleNow !== idle) { idle = idleNow; document.body.classList.toggle('idle', idle); }
-  // power save: 30 fps in screensaver mode; awake, at most ~75 fps (120/144 Hz screens would otherwise
-  // run a phone hot rendering twice as many frames as anyone can see)
-  const throttled = ((idle && save.powerSave) || Q.fps30) && !TEST;
+  // 30 fps in screensaver mode when chosen in the settings, or on the last resolution step; otherwise
+  // every refresh, at most ~75 fps (120/144 Hz screens would run a phone hot rendering twice as many
+  // frames as anyone can see). Frames are skipped in whole refresh intervals so the cadence stays even.
+  const throttled = ((idle && save.idle30) || dynCapped()) && !TEST;
   acc += rawDt;
-  if (throttled ? acc < 1 / 31 : (!TEST && dyn.vsync < 11 && acc < 1 / 75)) return;
-  const dt = Math.min(0.05, acc);
+  const every = TEST ? 1 : frameEvery(throttled);
+  if (every > 1 && acc * 1000 < (every - 0.5) * refreshMs()) return;
+  // Frame pacing: the screen shows frames at an exact cadence, but rAF timestamps wobble by a millisecond
+  // or two (Safari rounds them to whole milliseconds). Animating by the raw intervals makes everything
+  // that moves wobble with them, so each step is snapped to whole refresh intervals; the rounding error
+  // is carried and fed back slowly, which keeps the animation clock on real time.
+  let dt = acc;
+  if (!TEST && pace.n > 20) {
+    const v = pace.v / 1000, want = acc + pace.carry;
+    const k = Math.max(1, Math.round(acc / v));
+    dt = k * v + (want - k * v) * 0.1;
+    pace.carry = want - dt;
+  }
+  if (dt > 0.05) { dt = 0.05; pace.carry = 0; }
   acc = 0;
   if (contextLost) return;
   if (needsResize) { needsResize = false; resize(); }

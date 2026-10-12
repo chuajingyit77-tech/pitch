@@ -874,7 +874,7 @@ export class FishInstances {
 /* ------------------------------------------------------------------ */
 /* Steering                                                            */
 /* ------------------------------------------------------------------ */
-const _tmp = new THREE.Vector3(), _fw = new THREE.Vector3();
+const _tmp = new THREE.Vector3(), _fw = new THREE.Vector3(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
 
 /**
  * A swimming body with smooth heading, tail-beat synced to speed, body curvature on turns and
@@ -917,7 +917,15 @@ export class Swimmer {
       _fw.y = clamp(_fw.y, -maxY, maxY);
       _fw.normalize();
       const prevYaw = Math.atan2(this.fwd.z, this.fwd.x);
-      this.fwd.lerp(_fw, 1 - Math.exp(-5 * dt)).normalize();
+      // turn the body toward the direction of travel along the arc, quickly at first and never slower
+      // than ~1 rad/s: a straight vector lerp all but stalls when the fish reverses, and it would swim
+      // backwards or sideways for seconds
+      const ang = this.fwd.angleTo(_fw);
+      if (ang > 1e-5) {
+        const step = Math.min(ang, Math.max(ang * (1 - Math.exp(-5 * dt)), 1.0 * dt));
+        _qa.setFromUnitVectors(this.fwd, _fw);
+        this.fwd.applyQuaternion(_qb.identity().slerp(_qa, step / ang)).normalize();
+      }
       const yaw = Math.atan2(this.fwd.z, this.fwd.x);
       const rate = -angleDelta(prevYaw, yaw) / Math.max(dt, 1e-4); // + = turning left seen from above
       this.yawRate = lerp(this.yawRate, rate, 1 - Math.exp(-8 * dt));

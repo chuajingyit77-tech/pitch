@@ -25,12 +25,16 @@ screensaver, and anyone walking past can feed the residents.
 
 - Click water or ground to feed. Space scatters a handful. Drag to look around, scroll to zoom.
 - Keys `1`–`6` switch worlds, `F` fullscreen screensaver, `M` sound, `H` hide the HUD.
-- After 8 seconds without input the HUD fades and the camera drifts: screensaver mode
-  (30 fps power saving by default). Settings can rotate through the worlds every 10/30/60 minutes.
+- After 8 seconds without input the HUD fades and the camera drifts: screensaver mode. It keeps the
+  full frame rate; Settings can switch on 30 fps power saving for it, and rotate through the worlds
+  every 10/30/60 minutes.
 - Quality is automatic and never reloads the picture. The detail tier comes from the device (phones
-  `low`, integrated GPUs `medium`, others `high`). Rendering resolution then adapts smoothly to how
-  fast this computer actually draws, judged against the screen's own refresh rate. Each world
-  remembers its level.
+  and tablets `low`, integrated GPUs `medium`, others `high`). Rendering resolution then adapts to how
+  fast this device actually draws, judged against the screen's own refresh rate. It steps down when
+  frames are slow on average or keep missing refreshes, and tries one step sharper than the tier's
+  budget after a long smooth stretch. Only when even the smallest picture cannot hold the refresh
+  rate does it settle at an even 30 fps, which looks smoother than a ragged 40. Each world remembers
+  its level and starts there next time.
 
 ## Stability (no flashing)
 
@@ -48,7 +52,9 @@ The picture is kept steady on purpose:
 - There is no backdrop blur over the 3D view, and no tap-highlight flash on phones.
 - A lost GPU context (driver reset, phone memory pressure) shows a calm "restoring" message and
   rebuilds itself.
-- Frames are capped at ~75 fps on 120/144 Hz screens and at 30 fps in screensaver mode.
+- Frames are capped at ~75 fps on 120/144 Hz screens. Skipped frames are always whole screen refreshes,
+  and animation advances in whole refresh intervals, so motion stays even although browser timers
+  wobble by a millisecond or two (Safari rounds them to whole milliseconds).
 
 ## An always-on iPad (or any kiosk screen)
 
@@ -67,9 +73,10 @@ To set the iPad up:
 3. Optional: Settings → Accessibility → Guided Access (triple-click the side or Home button to start)
    keeps it locked to the world.
 
-Older iPads and iPhones (iOS before 17) get a lighter "lite" tier automatically: fewer creatures and
-plants, a smaller picture, and 30 fps. Every 15 minutes the page checks `version.json`. When a new build
-has been pushed, it reloads by itself during screensaver mode, after saving the world.
+iPads and phones use the `low` tier: fewer creatures and plants, no shadows, and a picture of about
+1.2 megapixels that adapts to what the device sustains at 60 fps (see Quality above). Every 15 minutes
+the page checks `version.json`. When a new build has been pushed, it reloads by itself during
+screensaver mode, after saving the world. The home-screen icon always opens the newest build.
 
 If that host is ever unavailable, turn on GitHub Pages for the repository (Settings → Pages → branch
 `idle-worlds-3d`, folder `/`). The page is then at
