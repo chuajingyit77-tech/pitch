@@ -8,6 +8,15 @@ import { translucentLambert } from './flora.js';
 /* ------------------------------------------------------------------ */
 /* GPU drifting points (fluff by day, fireflies by night)              */
 /* ------------------------------------------------------------------ */
+// Every wobble / blink frequency is snapped to a whole number of cycles per PERIOD seconds, so the time
+// uniform can wrap (t mod PERIOD) without a visible jump and stays precise in float32 after hours of uptime.
+export const FX_PERIOD = 600;
+// Drift speeds come in 0.05 steps (0.65..1.35), so the accumulated drift can wrap every 20 boxes seamlessly.
+export const DRIFT_WRAP = 20;
+// Points never shrink below this many pixels (alpha falls off with the lost area instead), so tiny motes do
+// not pop between pixel centres as they drift.
+export const MIN_POINT_PX = 2.5;
+const QF_GLSL = `const float TQ = 6.28318530718 / ${FX_PERIOD.toFixed(1)}; float qf(float f){ return floor(f / TQ + 0.5) * TQ; }`;
 function driftPoints({ count, rng, color, size, box, blink = false, back = 0 }) {
   const seeds = new Float32Array(count * 4);
   for (let i = 0; i < count * 4; i++) seeds[i] = rng.next();
@@ -15,7 +24,7 @@ function driftPoints({ count, rng, color, size, box, blink = false, back = 0 }) 
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 4));
   const uniforms = {
-    uTime: { value: 0 }, uPR: { value: 1 }, uSize: { value: size },
+    uTime: { value: 0 }, uPR: { value: 1 }, uSize: { value: size }, uMinPx: { value: MIN_POINT_PX },
     uCenter: { value: new THREE.Vector3() }, uBox: { value: new THREE.Vector3(...box) },
     uDrift: { value: new THREE.Vector2() }, uColor: { value: new THREE.Color(color) },
     uSunDir: { value: new THREE.Vector3(0, 0.2, -1) }, uBack: { value: back }, uAlpha: { value: 1 },
@@ -25,24 +34,28 @@ function driftPoints({ count, rng, color, size, box, blink = false, back = 0 }) 
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */`
       attribute vec4 aSeed;
-      uniform float uTime, uPR, uSize; uniform vec3 uCenter, uBox, uSunDir; uniform vec2 uDrift;
+      uniform float uTime, uPR, uSize, uMinPx; uniform vec3 uCenter, uBox, uSunDir; uniform vec2 uDrift;
       varying float vA; varying float vB;
+      ${QF_GLSL}
       void main(){
         vec3 p = aSeed.xyz * uBox - uBox * 0.5;
-        float sp = 0.65 + aSeed.w * 0.7;
+        float sp = (13.0 + floor(aSeed.w * 14.999)) / 20.0;
         p.xz += uDrift * sp;
-        p.x += sin(uTime * (0.5 + aSeed.y) + aSeed.z * 20.0) * 0.5;
-        p.z += cos(uTime * (0.4 + aSeed.x * 0.5) + aSeed.y * 25.0) * 0.5;
-        p.y += sin(uTime * (0.35 + aSeed.w * 0.6) + aSeed.x * 30.0) * 0.35;
+        p.x += sin(uTime * qf(0.5 + aSeed.y) + aSeed.z * 20.0) * 0.5;
+        p.z += cos(uTime * qf(0.4 + aSeed.x * 0.5) + aSeed.y * 25.0) * 0.5;
+        p.y += sin(uTime * qf(0.35 + aSeed.w * 0.6) + aSeed.x * 30.0) * 0.35;
         p = mod(p + uBox * 0.5, uBox) - uBox * 0.5;
         vec3 wp = uCenter + p;
         vec4 mv = viewMatrix * vec4(wp, 1.0);
         gl_Position = projectionMatrix * mv;
         float d = -mv.z;
-        gl_PointSize = uSize * uPR * (0.55 + aSeed.w * 0.9) / max(d, 0.6);
+        float ps = uSize * uPR * (0.55 + aSeed.w * 0.9) / max(d, 0.6);
+        float pc = max(ps, uMinPx);
+        gl_PointSize = pc;
         vec3 e = abs(p) / (uBox * 0.5);
         vA = (1.0 - smoothstep(0.7, 1.0, max(e.x, e.z))) * (1.0 - smoothstep(0.75, 1.0, e.y)) * smoothstep(0.4, 2.0, d);
-        ${blink ? 'float ph = uTime * (0.7 + aSeed.w * 1.3) + aSeed.x * 40.0; vA *= pow(max(sin(ph), 0.0), 3.0) * 0.9 + 0.1 * (0.5 + 0.5 * sin(ph * 0.31));' : ''}
+        vA *= (ps * ps) / (pc * pc);
+        ${blink ? 'float fb = 0.7 + aSeed.w * 1.3; float ph = uTime * qf(fb) + aSeed.x * 40.0; vA *= pow(max(sin(ph), 0.0), 3.0) * 0.9 + 0.1 * (0.5 + 0.5 * sin(uTime * qf(fb * 0.31) + aSeed.x * 12.4));' : ''}
         vec3 vd = normalize(wp - cameraPosition);
         vB = pow(max(dot(vd, uSunDir), 0.0), 5.0);
       }`,
@@ -70,13 +83,14 @@ function cpuPoints(max) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3).setUsage(THREE.DynamicDrawUsage));
   geo.setAttribute('aSize', new THREE.BufferAttribute(sz, 1).setUsage(THREE.DynamicDrawUsage));
-  const uniforms = { uPR: { value: 1 } };
+  const uniforms = { uPR: { value: 1 }, uMinPx: { value: MIN_POINT_PX } };
   const mat = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
     vertexShader: /* glsl */`
-      attribute float aSize; uniform float uPR; varying vec3 vC;
-      void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
-        gl_PointSize = aSize * uPR / max(-mv.z, 0.3); }`,
+      attribute float aSize; uniform float uPR, uMinPx; varying vec3 vC;
+      void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+        float ps = aSize * uPR / max(-mv.z, 0.3); float pc = max(ps, uMinPx);
+        gl_PointSize = pc; vC = color * (ps * ps) / (pc * pc); }`,
     fragmentShader: /* glsl */`
       varying vec3 vC;
       void main(){ float r = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.05, r); gl_FragColor = vec4(vC, a * a); }`,
@@ -253,13 +267,20 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   };
 
   const mtx = new THREE.Matrix4(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), e = new THREE.Euler();
+  // wing-beat shaders: 55 and 17 rad/s (and 0.9) all complete whole cycles in 20π s, so their clock wraps seamlessly
+  const FLAP_PERIOD = 20 * Math.PI;
+  let birdsShown = false;
   fx.update = (dt, t, ctx) => {
-    const { camera, target, windDir, windSpeed, drift, light, day, night, golden, sunDir, pr } = ctx;
-    // fluff / fireflies
-    fluff.uniforms.uTime.value = t; flies.uniforms.uTime.value = t;
+    const { camera, target, windDir, windSpeed, light, day, night, golden, sunDir, pr } = ctx;
+    // fluff / fireflies (clocks and drift wrap seamlessly, see FX_PERIOD / DRIFT_WRAP)
+    const tw = t % FX_PERIOD;
+    fluff.uniforms.uTime.value = tw; flies.uniforms.uTime.value = tw;
     fluff.uniforms.uPR.value = pr; flies.uniforms.uPR.value = pr;
-    fluff.uniforms.uDrift.value.copy(drift);
-    flies.uniforms.uDrift.value.copy(drift).multiplyScalar(0.06);
+    const dvx = windDir.x * windSpeed * 0.5 * dt, dvz = windDir.y * windSpeed * 0.5 * dt;
+    const fd = fluff.uniforms.uDrift.value, fw = fluff.uniforms.uBox.value.x * DRIFT_WRAP;
+    fd.set((fd.x + dvx) % fw, (fd.y + dvz) % fw);
+    const ld = flies.uniforms.uDrift.value, lw = flies.uniforms.uBox.value.x * DRIFT_WRAP;
+    ld.set((ld.x + dvx * 0.06) % lw, (ld.y + dvz * 0.06) % lw);
     tmp.lerpVectors(camera.position, target, 0.55);
     fluff.uniforms.uCenter.value.set(tmp.x, heightAt(tmp.x, tmp.z) + 2.4, tmp.z);
     flies.uniforms.uCenter.value.set(target.x * 0.6 + tmp.x * 0.4, heightAt(tmp.x, tmp.z) + 1.0, target.z * 0.5 + tmp.z * 0.5);
@@ -343,10 +364,10 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     SP.geo.attributes.position.needsUpdate = SP.geo.attributes.color.needsUpdate = SP.geo.attributes.aSize.needsUpdate = true;
     SP.uniforms.uPR.value = pr;
 
-    // dragonflies: hover, dart, hover; daytime only
-    const dfVis = day * (1 - night);
-    dfBody.visible = dfWing.visible = dfVis > 0.05;
-    wingU.uTime.value = t;
+    // dragonflies: hover, dart, hover; daytime only (they shrink away at dusk instead of popping out)
+    const dfVis = smoothstep(0.05, 0.35, day * (1 - night));
+    dfBody.visible = dfWing.visible = dfVis > 0.001;
+    wingU.uTime.value = t % FLAP_PERIOD;
     if (dfBody.visible) {
       for (let i = 0; i < dflies.length; i++) {
         const d = dflies[i];
@@ -376,7 +397,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
         if (d.vel.lengthSq() > 0.04) d.heading = Math.atan2(d.vel.x, d.vel.z);
         e.set(0, d.heading, 0);
         tmpQ.setFromEuler(e);
-        sc.setScalar(1.5);
+        sc.setScalar(1.5 * dfVis);
         mtx.compose(d.pos, tmpQ, sc);
         dfBody.setMatrixAt(i, mtx); dfWing.setMatrixAt(i, mtx);
       }
@@ -384,9 +405,11 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     }
   };
   fx.updateBirds = (dt, t, day) => {
-    birds.visible = day > 0.35;
-    if (!birds.visible) return;
-    birdU.uTime.value = t;
+    // the flock shrinks away over dusk instead of vanishing in one frame
+    const show = smoothstep(0.3, 0.6, day);
+    birds.visible = show > 0.001;
+    if (!birds.visible) { birdsShown = false; return; }
+    birdU.uTime.value = t % FLAP_PERIOD;
     leaderPrev.copy(leader);
     leader.set(fc.x + Math.sin(t * 0.07) * 38 + Math.sin(t * 0.19) * 8, 9 + Math.sin(t * 0.11) * 3.5, fc.z + Math.sin(t * 0.05 + 1.3) * 16);
     leader.y += heightAt(leader.x, leader.z);
@@ -396,13 +419,16 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       b.pos.copy(leader).add(b.off);
       b.pos.x += Math.sin(t * 0.6 + b.ph) * 1.6; b.pos.y += Math.sin(t * 0.9 + b.ph * 2) * 0.6; b.pos.z += Math.cos(t * 0.5 + b.ph) * 1.6;
       tmp.subVectors(b.pos, b.prev);
+      // after being hidden the previous position is stale: keep the old heading for that one frame
+      if (!birdsShown) tmp.set(0, 0, 0);
       if (tmp.lengthSq() > 1e-6) b.heading = Math.atan2(tmp.x, tmp.z);
-      e.set(-tmp.y * 2, b.heading, Math.sin(t + b.ph) * 0.3);
+      e.set(clamp(-tmp.y * 2, -0.6, 0.6), b.heading, Math.sin(t + b.ph) * 0.3);
       tmpQ.setFromEuler(e);
-      sc.setScalar(1);
+      sc.setScalar(show);
       mtx.compose(b.pos, tmpQ, sc);
       birds.setMatrixAt(i, mtx);
     }
+    birdsShown = true;
     birds.instanceMatrix.needsUpdate = true;
   };
   fx.dispose = () => {};

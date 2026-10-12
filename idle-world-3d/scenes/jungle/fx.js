@@ -231,23 +231,35 @@ export function buildRain(shared, q, rng, center) {
   geo.setAttribute('aPrm', new THREE.InstancedBufferAttribute(prm, 4));
   geo.instanceCount = n;
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...shared, uRain: { value: 0 }, uCenter: { value: center.clone() }, uAmb: { value: new THREE.Color(0.3, 0.3, 0.3) }, uBox: { value: new THREE.Vector3(34, 16, 30) } },
+    // uRainT: the clock wrapped in JS to rain.userData.period; uPxK: world size of one pixel at 1 m
+    uniforms: { ...shared, uRain: { value: 0 }, uRainT: { value: 0 }, uPxK: { value: 0.001 }, uCenter: { value: center.clone() }, uAmb: { value: new THREE.Color(0.3, 0.3, 0.3) }, uBox: { value: new THREE.Vector3(34, 16, 30) } },
     vertexShader: /* glsl */`
-      uniform float uTime, uRain; uniform vec3 uCenter, uBox;
+      uniform float uRainT, uRain, uPxK; uniform vec3 uCenter, uBox;
       attribute vec4 aPrm;
       varying vec2 vUv; varying float vA; varying vec3 vWorldP;
       void main(){
-        float fall = 9.0 * aPrm.w;
-        float y = fract(aPrm.y - uTime * fall / uBox.y);
+        // fall speeds sit on a 1/16 grid, so every streak's cycle repeats exactly after uBox.y * 16 / 9 seconds
+        // and the clock can be wrapped there (a raw uTime of many hours lost the precision to place the drops)
+        float w = floor(aPrm.w * 16.0 + 0.5) / 16.0;
+        float y = fract(aPrm.y - uRainT * 9.0 * w / uBox.y);
         vec3 c = uCenter + vec3((aPrm.x - 0.5) * uBox.x, y * uBox.y - 1.0, (aPrm.z - 0.5) * uBox.z);
         c.x += (1.0 - y) * 0.6; // slight wind slant
         vec3 D = normalize(vec3(0.06, -1.0, 0.0));
-        vec3 toCam = normalize(cameraPosition - c);
-        vec3 side = normalize(cross(D, toCam));
-        float len = 0.55 * aPrm.w;
-        vec3 p = c + side * position.x * 0.012 - D * position.y * len;
+        vec3 toC = cameraPosition - c;
+        float dc = length(toC);
+        vec3 sideV = cross(D, toC);
+        float sl = length(sideV);
+        vec3 side = sl > 1e-5 ? sideV / sl : vec3(1.0, 0.0, 0.0);
+        // at least about a pixel wide (thinner streaks break up into crawling dots, worst without MSAA),
+        // dimmed by the same factor so the shower keeps its weight
+        float wd = max(0.012, dc * uPxK);
+        float len = 0.55 * w;
+        vec3 p = c + side * position.x * wd - D * position.y * len;
         vWorldP = p; vUv = uv;
-        vA = step(aPrm.x * 0.999, uRain) * smoothstep(0.0, 0.08, y) ;
+        // each streak fades in as the shower builds (they used to pop on one by one), fades at both ends of its
+        // fall, and vanishes right in front of the lens (a drop passing the camera flashed a pale bar on screen)
+        float th = aPrm.x * 0.9;
+        vA = smoothstep(th, th + 0.1, uRain) * smoothstep(0.0, 0.08, y) * (1.0 - smoothstep(0.92, 1.0, y)) * smoothstep(0.8, 2.5, dc) * (0.012 / wd);
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: /* glsl */`
@@ -269,6 +281,7 @@ export function buildRain(shared, q, rng, center) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = 8;
+  mesh.userData.period = mat.uniforms.uBox.value.y * 16 / 9;
   return mesh;
 }
 

@@ -49,6 +49,7 @@ const LATITUDE = 25;
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m4 = new THREE.Matrix4(), _s = new THREE.Vector3(), _c = new THREE.Color(), _c2 = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
+const _px2 = new THREE.Vector2();
 
 export default {
   id: 'jungle',
@@ -1233,6 +1234,16 @@ export default {
       simT += dt;
       shared.uTime.value = t;
       shared.uCookieDrift.value.set(Math.sin(t * 0.05) * 0.004, Math.cos(t * 0.043) * 0.004);
+      // periodic motion gets its phase wrapped here in double precision (seamless), because the page runs
+      // for days and float32 uTime * 70 or * 6 gets steppy within hours
+      pond.setTime(t);
+      rain.material.uniforms.uRainT.value = t % rain.userData.period;
+      splash.material.uniforms.uSplashT.value = t % splash.userData.period;
+      dragonKit.mesh.material.uniforms.uWingPh.value = (t * 70) % TAU;
+      sky.material.uniforms.uStarPh.value = (t * 2) % TAU;
+      // world size of one pixel at 1 m (rain streaks never get thinner than that)
+      renderer.getDrawingBufferSize(_px2);
+      rain.material.uniforms.uPxK.value = 2 * Math.tan(camera.fov * Math.PI / 360) / Math.max(1, _px2.y);
       wind.update(dt);
       applyTime(dt, simT < 0.2);
       // fruit

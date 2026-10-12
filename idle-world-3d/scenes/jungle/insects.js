@@ -302,15 +302,15 @@ export function createDragonflyMesh(shared, max) {
   const col = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4);
   geo.setAttribute('aCol', col);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...shared, uAmb: { value: new THREE.Color(0.3, 0.35, 0.3) } },
+    uniforms: { ...shared, uAmb: { value: new THREE.Color(0.3, 0.35, 0.3) }, uWingPh: { value: 0 } },
     vertexShader: /* glsl */`
-      uniform float uTime;
+      uniform float uWingPh; // (t * 70) mod 2pi from JS: uTime * 70 runs out of float precision within hours
       attribute float aPart; attribute vec4 aCol;
       varying vec3 vWorldP; varying vec3 vN; varying float vPart; varying vec3 vCol; varying vec2 vW;
       void main(){
         vec3 p = position;
         if (aPart > 0.5) {
-          float ang = sin(uTime * 70.0 + aCol.w * 10.0 + p.z * 4.0) * 0.25 * (aPart - 0.5) * 2.0;
+          float ang = sin(uWingPh + aCol.w * 10.0 + p.z * 4.0) * 0.25 * (aPart - 0.5) * 2.0;
           float r = abs(p.x);
           p.y += r * ang;
         }

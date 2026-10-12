@@ -472,6 +472,9 @@ class KoiPond {
     sc.left = -15; sc.right = 15; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 80;
     sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
     this.scene.add(sun, sun.target);
+    // the moon is its own soft light, cross-faded with the sun through dusk and dawn (no shadow map)
+    this.moon = new THREE.DirectionalLight('#a9bfff', 0);
+    this.scene.add(this.moon, this.moon.target);
     this.hemi = new THREE.HemisphereLight('#bcd4e6', '#3a3a24', 0.8);
     this.scene.add(this.hemi);
   }
@@ -1467,16 +1470,19 @@ class KoiPond {
     const S = this.env.sun({ azimuthOffset: 0.7 });
     const night = S.night, day = S.day;
     this.sunState = S;
-    // sun or moon drives the key light: the sun fades out after sunset, the light swaps direction while
-    // it is dark, then the moon fades in (no sudden jump of shadows or brightness at dusk)
+    // Sun and moon are two lights cross-fading through dusk and dawn: the key light never jumps to the
+    // other side of the sky and there is no dark gap in between.
     const e = S.elevationDeg;
-    const useMoon = e < -3;
-    const dir = useMoon ? S.moonDir : S.dir;
+    const sunK = smoothstep(-3.5, 0.5, e);
     const center = new THREE.Vector3(0, 0, 0);
-    this.sun.position.copy(center).addScaledVector(dir, 40);
+    const sd = _v.copy(S.dir); sd.y = Math.max(sd.y, 0.04); sd.normalize(); // never light from below the ground
+    this.sun.position.copy(center).addScaledVector(sd, 40);
     this.sun.target.position.copy(center);
-    this.sun.color.copy(useMoon ? new THREE.Color('#a9bfff') : S.sunColor);
-    this.sun.intensity = useMoon ? 0.95 * smoothstep(-3, -8, e) : (S.sunIntensity * 1.15 + S.golden * 0.6) * smoothstep(-3, 0.5, e);
+    this.sun.color.copy(S.sunColor);
+    this.sun.intensity = (S.sunIntensity * 1.15 + S.golden * 0.6) * sunK;
+    this.moon.position.copy(center).addScaledVector(S.moonDir, 40);
+    this.moon.target.position.copy(center);
+    this.moon.intensity = 0.95 * smoothstep(0.5, -5, e);
     this.hemi.color.copy(S.skyAmbient).lerp(new THREE.Color('#3a5288'), night * 0.6);
     this.hemi.groundColor.copy(S.groundAmbient).lerp(new THREE.Color('#3a4a22'), 0.4);
     this.hemi.intensity = Math.max(0.45, S.ambientIntensity) * 0.95 + night * 0.75;
@@ -1488,7 +1494,7 @@ class KoiPond {
     this.scene.fog.color.copy(S.horizon).lerp(S.zenith, 0.35).multiplyScalar(lerp(1, 0.75, night));
     this.scene.fog.density = lerp(0.01, 0.016, Math.max(night, S.golden * 0.5));
     // underwater look
-    this.U.uCaustic.value = useMoon ? 0.08 : clamp(S.sunIntensity / 2.8, 0, 1.1);
+    this.U.uCaustic.value = lerp(0.08, clamp(S.sunIntensity / 2.8, 0, 1.1), sunK);
     this.U.uWaterColor.value.copy(new THREE.Color('#1f4535')).lerp(new THREE.Color('#0b1a2c'), night).multiplyScalar(lerp(1, 0.85, night));
     // lantern
     const glow = smoothstep(0.15, 0.7, night);

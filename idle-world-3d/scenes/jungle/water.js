@@ -32,6 +32,7 @@ const WaterShader = {
     uniform float uRain, uCalm, uMurkAmt, uReflBoost;
     uniform vec4 uRipples[${RIPPLES}];
     uniform vec4 uFall;
+    uniform vec4 uScrollA, uScrollB; // normal-map scrolls wrapped to [0,1) and the plunge-wave phase, set in JS
     varying vec4 vRUv;
     vec2 rainRipples(vec2 p, float t){
       vec2 acc = vec2(0.0);
@@ -53,13 +54,17 @@ const WaterShader = {
     }
     void main(){
       vec2 wp = vWorldP.xz;
-      vec3 n1 = texture2D(tNormal1, wp * 0.085 + vec2(uTime * 0.011, uTime * 0.006)).xyz * 2.0 - 1.0;
-      vec3 n2 = texture2D(tNormal2, wp * 0.13 + vec2(-uTime * 0.008, uTime * 0.012)).xyz * 2.0 - 1.0;
-      vec3 n3 = texture2D(tNormal2, wp * 0.45 + vec2(uTime * 0.02, -uTime * 0.017)).xyz * 2.0 - 1.0;
+      // world size of this pixel on the water: high-frequency ripples fade out where a pixel cannot hold them
+      float fw = length(fwidth(wp));
+      vec3 n1 = texture2D(tNormal1, wp * 0.085 + uScrollA.xy).xyz * 2.0 - 1.0;
+      vec3 n2 = texture2D(tNormal2, wp * 0.13 + uScrollA.zw).xyz * 2.0 - 1.0;
+      vec3 n3 = texture2D(tNormal2, wp * 0.45 + uScrollB.xy).xyz * 2.0 - 1.0;
       vec2 nxz = (n1.xy + n2.xy) * 0.5 * uCalm + n3.xy * 0.08 * (uCalm + uRain);
       float dep = texture2D(tDepth, (wp - uDepthBox.xy) / uDepthBox.zw).r * 2.0;
-      // event ripples (food, frogs, fish, drops)
+      // event ripples (food, frogs, fish, drops); far away the ring keeps its soft swell but loses the fine
+      // carrier wave, which could not be resolved there and shimmered
       float rippleFoam = 0.0;
+      float carrierK = smoothstep(0.07, 0.2, fw);
       for (int i = 0; i < ${RIPPLES}; i++) {
         vec4 R = uRipples[i];
         float age = uTime - R.z;
@@ -69,18 +74,19 @@ const WaterShader = {
         float front = age * 0.65;
         float dd = r - front;
         float env = R.w * exp(-age * 0.75) * exp(-dd * dd * 10.0);
-        nxz += (dv / max(r, 1e-3)) * sin(dd * 22.0) * env * 0.5;
+        nxz += (dv / max(r, 1e-3)) * mix(sin(dd * 22.0), -dd * 2.5, carrierK) * env * 0.5;
         rippleFoam += env * smoothstep(0.6, 0.0, age) * 0.6;
       }
       // waterfall: concentric waves and turbulence around the plunge point
       vec2 fv = (wp - uFall.xy) * vec2(1.0, 1.4);
       float fr = length(fv);
-      float wave = sin(fr * 6.5 - uTime * 6.0) * exp(-fr * 0.42) * 0.22 * uFall.z;
+      float wave = sin(fr * 6.5 - uScrollB.w) * exp(-fr * 0.42) * 0.22 * uFall.z;
       nxz += (fv / max(fr, 1e-3)) * wave;
       float turb = exp(-fr * fr * 0.18) * uFall.z;
-      vec3 tn = texture2D(tNormal1, wp * 0.6 + vec2(0.0, uTime * 0.35)).xyz * 2.0 - 1.0;
+      vec3 tn = texture2D(tNormal1, wp * 0.6 + vec2(0.0, uScrollB.z)).xyz * 2.0 - 1.0;
       nxz += tn.xy * turb * 0.6;
-      nxz += rainRipples(wp * 2.2, uTime) * uRain * 0.9;
+      // rain rings are ~5 cm across: only where a pixel is small enough to show them
+      nxz += rainRipples(wp * 2.2, uTime) * uRain * 0.9 * (1.0 - smoothstep(0.012, 0.035, fw));
       vec3 N = normalize(vec3(-nxz.x, 1.0, -nxz.y));
       vec3 V = normalize(cameraPosition - vWorldP);
       float NdV = max(dot(N, V), 0.0);
@@ -89,8 +95,15 @@ const WaterShader = {
       vec3 refl = texture2D(tDiffuse, ruv).rgb * uReflBoost;
       float cookie = jgCookie(vWorldP);
       vec3 H = normalize(uLightDirW + V);
-      float spec = pow(max(dot(N, H), 0.0), 420.0) * 9.0 + pow(max(dot(N, H), 0.0), 60.0) * 0.18;
-      vec3 specCol = uLightCol * spec * cookie * smoothstep(-0.05, 0.1, uLightDirW.y);
+      // sun glint: where the ripple normal changes a lot within one pixel, widen and dim the lobe (same energy)
+      // instead of letting single pixels flare to hundreds and blink from frame to frame
+      vec2 dn = fwidth(nxz);
+      float nvar = dot(dn, dn);
+      float NdH = max(dot(N, H), 0.0);
+      float e1 = max(2.0 / (2.0 / 422.0 + nvar) - 2.0, 1.0);
+      float e2 = max(2.0 / (2.0 / 62.0 + nvar) - 2.0, 1.0);
+      float spec = pow(NdH, e1) * 9.0 * (e1 + 2.0) / 422.0 + pow(NdH, e2) * 0.18 * (e2 + 2.0) / 62.0;
+      vec3 specCol = min(uLightCol * spec * cookie * smoothstep(-0.05, 0.1, uLightDirW.y), vec3(8.0));
       // foam near the plunge
       float fn = vnoise(wp * 3.5 + vec2(0.0, uTime * 0.8)) * 0.6 + vnoise(wp * 9.0 - vec2(uTime * 0.6, 0.0)) * 0.4;
       float foam = smoothstep(0.35, 0.85, fn * exp(-fr * 0.45) * 1.6) * uFall.z;
@@ -101,8 +114,10 @@ const WaterShader = {
       vec3 col = (refl * F * 1.1 + uMurk * lightAmt * uMurkAmt) / max(a, 1e-3);
       col = mix(col, vec3(0.85, 0.92, 0.9) * lightAmt * 1.1, foam);
       a = max(a, foam * 0.9);
-      col += specCol / max(a, 0.05) * 0.5;
-      a = clamp(a + length(specCol) * 0.2, 0.0, 1.0) * shore;
+      // the glint is added premultiplied (dividing it by a small alpha used to multiply it up to 20x)
+      float aS = clamp(a + length(specCol) * 0.2, 0.0, 1.0);
+      col = (col * a + specCol * 0.5) / max(aS, 1e-3);
+      a = aS * shore;
       col = jgFog(col, vWorldP);
       gl_FragColor = vec4(col, a);
     }`,
@@ -149,7 +164,9 @@ export function buildPond(env, shared, L, { normal1, normal2, rtScale = 0.5 }) {
     uRain: { value: 0 }, uCalm: { value: 0.22 }, uReflBoost: { value: 1 },
     uRipples: { value: ripples },
     uFall: { value: new THREE.Vector4(FALL.x, FALL.lipZ + 2.0, 1, 0) },
+    uScrollA: { value: new THREE.Vector4() }, uScrollB: { value: new THREE.Vector4() },
   });
+  water.material.extensions.derivatives = true;
   water.material.transparent = true;
   water.material.depthWrite = false;
   water.renderOrder = 1;
@@ -157,6 +174,13 @@ export function buildPond(env, shared, L, { normal1, normal2, rtScale = 0.5 }) {
   return {
     mesh: water,
     depthTex,
+    /** Scroll offsets and wave phase from the clock, wrapped in double precision (seamless: the normal maps
+     * repeat and the wave is periodic) so the water still moves smoothly after days of uptime. */
+    setTime(t) {
+      const fr = x => x - Math.floor(x);
+      u.uScrollA.value.set(fr(t * 0.011), fr(t * 0.006), fr(-t * 0.008), fr(t * 0.012));
+      u.uScrollB.value.set(fr(t * 0.02), fr(-t * 0.017), fr(t * 0.35), (t * 6) % TAU);
+    },
     addRipple(x, z, amp = 1, t) {
       const r = ripples[next];
       r.set(x, z, t, amp);
@@ -373,21 +397,28 @@ export function buildSplash(shared, spriteTex, q, rng, { count = 260, origin } =
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aPrm', new THREE.BufferAttribute(prm, 4));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...shared, tSprite: { value: spriteTex }, uOrigin: { value: origin.clone() }, uAmb: { value: new THREE.Color(0.3, 0.35, 0.33) }, uScale: { value: 300 } },
+    uniforms: { ...shared, tSprite: { value: spriteTex }, uOrigin: { value: origin.clone() }, uAmb: { value: new THREE.Color(0.3, 0.35, 0.33) }, uScale: { value: 300 }, uSplashT: { value: 0 } },
     vertexShader: /* glsl */`
-      uniform vec3 uOrigin; uniform float uTime, uScale;
+      uniform vec3 uOrigin; uniform float uSplashT, uScale;
       attribute vec4 aPrm;
       varying float vA; varying vec3 vWorldP;
       void main(){
-        float age = fract(uTime * aPrm.y * 0.9 + aPrm.x);
+        // rates on a 1/16 grid: every droplet's cycle repeats after 16 / 0.9 s, where JS wraps uSplashT
+        float rate = floor(aPrm.y * 16.0 + 0.5) / 16.0;
+        float age = fract(uSplashT * rate * 0.9 + aPrm.x);
         float ang = aPrm.z;
         vec3 v = vec3(cos(ang) * aPrm.w * 0.55, aPrm.w * 0.9, sin(ang) * aPrm.w * 0.35 + 0.8);
         float tt = age * 0.75;
         vec3 p = uOrigin + position + v * tt + vec3(0.0, -4.9 * tt * tt, 0.0);
         vWorldP = p;
-        vA = (1.0 - age) * step(${WATER_Y.toFixed(3)} - 0.05, p.y);
+        // fade in at birth and out as the droplet drops back into the pool (both used to be hard cuts)
+        vA = (1.0 - age) * smoothstep(0.0, 0.05, age) * smoothstep(${WATER_Y.toFixed(3)} - 0.08, ${WATER_Y.toFixed(3)} + 0.02, p.y);
         vec4 mv = viewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp(uScale * (0.03 + aPrm.x * 0.04) / -mv.z, 1.0, 12.0);
+        // at least 2.5 px wide and soft, with the light of the old one-pixel point (see fx.js pointsMaterial)
+        float ps = uScale * (0.03 + aPrm.x * 0.04) / max(-mv.z, 0.01);
+        float psd = clamp(ps, 2.5, 12.0);
+        vA *= min(1.0, max(1.0, 0.226 * ps * ps) / (0.226 * psd * psd));
+        gl_PointSize = psd;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
@@ -407,5 +438,6 @@ export function buildSplash(shared, spriteTex, q, rng, { count = 260, origin } =
   const pts = new THREE.Points(geo, mat);
   pts.frustumCulled = false;
   pts.renderOrder = 5;
+  pts.userData.period = 16 / 0.9;
   return pts;
 }

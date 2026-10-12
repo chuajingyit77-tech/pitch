@@ -75,7 +75,7 @@ attribute vec4 aStart;   // xyz, birth time
 attribute vec4 aVel;     // xyz velocity, life
 attribute vec4 aCol;     // rgb, size
 attribute float aKind;   // 0 star, 1 soft disc
-varying vec3 vCol; varying float vA; varying float vKind;
+varying vec3 vCol; varying float vA; varying float vKind; varying float vK; varying float vStar;
 void main(){
   float age = uTime - aStart.w;
   float life = aVel.w;
@@ -87,15 +87,22 @@ void main(){
   float alive = step(0.0, age) * step(age, life);
   vA = alive * smoothstep(0.0, 0.08, t) * (1.0 - t) * (1.0 - t);
   vCol = aCol.rgb; vKind = aKind;
-  gl_PointSize = max(aCol.w * uPix / max(-mv.z, 0.1) * (0.6 + 0.4 * (1.0 - t)), 2.0) * alive;
+  // sub-pixel sprites pop between one bright pixel and a few dim ones as they move: draw at least 3 px,
+  // keep the core >= ~0.6 px wide and the same total light, and grow the thin star arms in only when large
+  float sz = aCol.w * uPix / max(-mv.z, 0.1) * (0.6 + 0.4 * (1.0 - t));
+  float D = max(sz, 3.0), dOld = max(sz, 2.0);
+  vK = min(9.0, D * D / 2.9);
+  vStar = smoothstep(6.0, 16.0, D);
+  vA *= dOld * dOld * vK / (9.0 * D * D);
+  gl_PointSize = D * alive;
 }`;
 const SPARK_FRAG = /* glsl */`
-varying vec3 vCol; varying float vA; varying float vKind;
+varying vec3 vCol; varying float vA; varying float vKind; varying float vK; varying float vStar;
 void main(){
   vec2 d = gl_PointCoord * 2.0 - 1.0;
   float r = length(d);
-  float core = exp(-r * r * 9.0);
-  float star = (exp(-abs(d.x) * 14.0) * exp(-abs(d.y) * 2.5) + exp(-abs(d.y) * 14.0) * exp(-abs(d.x) * 2.5)) * 0.8;
+  float core = exp(-r * r * vK);
+  float star = (exp(-abs(d.x) * 14.0) * exp(-abs(d.y) * 2.5) + exp(-abs(d.y) * 14.0) * exp(-abs(d.x) * 2.5)) * 0.8 * vStar;
   float a = mix(core + star * (1.0 - smoothstep(0.6, 1.0, r)), smoothstep(1.0, 0.0, r), vKind) * vA;
   if (a < 0.003) discard;
   gl_FragColor = vec4(vCol * a, 0.0);
@@ -117,6 +124,7 @@ export function createSparkles(max = 800) {
   points.frustumCulled = false;
   points.renderOrder = 6;
   let head = 0, lo = max, hi = -1;
+  const ranged = [aStart, aVel, aCol];
   const mark = i => { lo = Math.min(lo, i); hi = Math.max(hi, i); };
   function emit(x, y, z, vx, vy, vz, life, r, g, b, size, kind = 0) {
     const i = head; head = (head + 1) % max;
@@ -139,7 +147,7 @@ export function createSparkles(max = 800) {
       uniforms.uTime.value = t;
       uniforms.uPix.value = pixelScale;
       if (hi >= lo) {
-        for (const a of [aStart, aVel, aCol]) { a.clearUpdateRanges(); a.addUpdateRange(lo * 4, (hi - lo + 1) * 4); a.needsUpdate = true; }
+        for (const a of ranged) { a.clearUpdateRanges(); a.addUpdateRange(lo * 4, (hi - lo + 1) * 4); a.needsUpdate = true; }
         aKind.clearUpdateRanges(); aKind.addUpdateRange(lo, hi - lo + 1); aKind.needsUpdate = true;
         lo = max; hi = -1;
       }
@@ -155,7 +163,7 @@ uniform float uTime, uPix;
 uniform vec3 uWind;
 attribute vec4 aSpawn;   // xyz spawn, phase 0..1
 attribute vec4 aParam;   // life, fall speed, size, spin
-varying float vA; varying float vRot; varying float vShade;
+varying float vA; varying float vRot; varying float vShade; varying float vShape;
 void main(){
   float life = aParam.x;
   float age = mod(uTime + aSpawn.w * life, life);
@@ -166,20 +174,26 @@ void main(){
   vA = smoothstep(0.0, 0.08, age / life) * (1.0 - smoothstep(0.75, 1.0, age / life));
   vRot = age * aParam.w + aSpawn.w * 6.28;
   vShade = 0.75 + 0.25 * sw;
-  gl_PointSize = max(aParam.z * uPix / max(-mv.z, 0.1), 2.2);
+  // A spinning petal outline sampled by 2-3 pixels blinks on and off. Small petals become a soft speck
+  // (at least 4 px, same coverage as before); the outline fades in once it spans enough pixels.
+  float sz = aParam.z * uPix / max(-mv.z, 0.1);
+  float D = max(sz, 4.0), dOld = max(sz, 2.2);
+  vShape = smoothstep(4.0, 8.0, sz);
+  vA *= min(1.0, 0.3 * dOld * dOld / (mix(0.2, 0.3, vShape) * D * D));
+  gl_PointSize = D;
 }`;
 const PETAL_FRAG = /* glsl */`
 uniform vec3 uLightCol, uAmbient;
 uniform vec3 uTint;
-varying float vA; varying float vRot; varying float vShade;
+varying float vA; varying float vRot; varying float vShade; varying float vShape;
 void main(){
-  vec2 d = gl_PointCoord * 2.0 - 1.0;
+  vec2 d0 = gl_PointCoord * 2.0 - 1.0;
   float c = cos(vRot), s = sin(vRot);
-  d = vec2(c * d.x - s * d.y, s * d.x + c * d.y);
+  vec2 d = vec2(c * d0.x - s * d0.y, s * d0.x + c * d0.y);
   d.x *= 1.0 + 0.6 * abs(sin(vRot * 0.7));  // tumbling foreshortening
   float petal = smoothstep(1.0, 0.75, length(vec2(d.x * 1.5, d.y + 0.15 * d.x * d.x)));
   float notch = smoothstep(0.0, 0.18, length(d - vec2(0.0, 0.85)));
-  float a = petal * notch * vA;
+  float a = mix(exp(-dot(d0, d0) * 4.0), petal * notch, vShape) * vA;
   if (a < 0.02) discard;
   vec3 col = uTint * (uLightCol * 0.55 * vShade + uAmbient * 1.1 + 0.05);
   gl_FragColor = vec4(col * a, a);
@@ -208,7 +222,7 @@ const MOTE_VERT = /* glsl */`
 uniform float uTime, uPix, uNight;
 attribute vec4 aHome;   // xyz, phase
 attribute vec4 aMove;   // radius, speed, size, kind (0 dust, 1 firefly)
-varying float vA; varying float vKind;
+varying float vA; varying float vKind; varying float vK; varying float vCore;
 void main(){
   float ph = aHome.w * 6.2831;
   float t = uTime * aMove.y;
@@ -218,15 +232,23 @@ void main(){
   float blink = aMove.w > 0.5 ? smoothstep(0.2, 0.9, sin(uTime * (0.8 + aHome.w) + ph * 3.0)) : 0.6 + 0.4 * sin(uTime * 2.0 + ph);
   vA = blink * (aMove.w > 0.5 ? uNight : 0.35 + 0.4 * (1.0 - uNight));
   vKind = aMove.w;
-  gl_PointSize = max(aMove.z * uPix / max(-mv.z, 0.1), 1.5);
+  // A 1.5 px dot flips between one bright pixel and four dim ones as it drifts across the pixel grid (it
+  // twinkles). Draw at least 4 px with a gaussian >= ~0.6 px wide and the same total light; the hot core
+  // only appears once it spans several pixels. Large motes are unchanged.
+  float sz = aMove.z * uPix / max(-mv.z, 0.1);
+  float D = max(sz, 4.0), dOld = max(sz, 1.5);
+  vK = min(7.0, D * D / 2.9);
+  vCore = smoothstep(6.0, 14.0, D);
+  vA *= dOld * dOld * 0.168 / (D * D * (1.0 / vK + vCore * 0.025));
+  gl_PointSize = D;
 }`;
 const MOTE_FRAG = /* glsl */`
 uniform vec3 uDust, uFly;
-varying float vA; varying float vKind;
+varying float vA; varying float vKind; varying float vK; varying float vCore;
 void main(){
   vec2 d = gl_PointCoord * 2.0 - 1.0;
   float r2 = dot(d, d);
-  float a = (exp(-r2 * 7.0) + exp(-r2 * 40.0)) * 0.6 * vA;
+  float a = (exp(-r2 * vK) + vCore * exp(-r2 * 40.0)) * 0.6 * vA;
   if (a < 0.004) discard;
   gl_FragColor = vec4(mix(uDust, uFly, vKind) * a, 0.0);
 }`;
@@ -255,28 +277,35 @@ export function createMotes(shared, centers, count) {
 /* ------------------------------------------------------------------ */
 /* Sky lanterns (孔明灯) rising out of the clouds at dusk and night    */
 /* ------------------------------------------------------------------ */
+// uTime is the scene clock wrapped every SKYL_PERIOD s: speeds are multiples of 1/20 and the flame flicker
+// frequencies whole cycles per period, so the wrap is seamless and float32 stays precise for days.
+export const SKYL_PERIOD = 5200;
 const SKYL_VERT = /* glsl */`
-uniform float uTime;
+uniform float uTime, uPix;
 attribute vec4 aL;   // x, z start, phase, speed
-varying float vA; varying vec2 vUv; varying float vFl;
+varying float vA; varying vec2 vUv; varying float vFl; varying float vDim;
 void main(){
   float life = 260.0;
   float age = mod(uTime * aL.w + aL.z * life, life);
   float y = ${CLOUD_TOP.toFixed(1)} - 8.0 + age * 0.75;
   vec3 c = vec3(aL.x + sin(age * 0.05 + aL.z * 9.0) * 6.0 + age * 0.12, y, aL.y + cos(age * 0.04 + aL.z * 5.0) * 6.0);
-  vec3 p = position * (1.0 + 0.0 * aL.z);
-  vec4 mv = modelViewMatrix * vec4(c + p, 1.0);
+  // Far lanterns are sub-pixel and HDR-bright: they would pop on and off the pixel grid (and bloom would
+  // blink with them). Draw them at least ~2.5 px tall and dim them by the same area, so they glow steadily.
+  float px = 0.9 * uPix / max(-(modelViewMatrix * vec4(c, 1.0)).z, 0.1);
+  float grow = max(1.0, 2.5 / max(px, 1e-3));
+  vDim = 1.0 / (grow * grow);
+  vec4 mv = modelViewMatrix * vec4(c + position * grow, 1.0);
   gl_Position = projectionMatrix * mv;
   vA = smoothstep(0.0, 0.08, age / life) * (1.0 - smoothstep(0.7, 1.0, age / life));
-  vUv = uv; vFl = sin(uTime * 9.0 + aL.z * 50.0) * 0.08 + sin(uTime * 3.7 + aL.z * 20.0) * 0.06;
+  vUv = uv; vFl = sin(uTime * ${(TAU * 7448 / 5200).toFixed(6)} + aL.z * 50.0) * 0.08 + sin(uTime * ${(TAU * 3062 / 5200).toFixed(6)} + aL.z * 20.0) * 0.06;
 }`;
 const SKYL_FRAG = /* glsl */`
 uniform float uShow;
-varying float vA; varying vec2 vUv; varying float vFl;
+varying float vA; varying vec2 vUv; varying float vFl; varying float vDim;
 void main(){
   float glow = 0.55 + 0.45 * smoothstep(1.0, 0.0, vUv.y) + vFl;
   vec3 col = vec3(1.0, 0.55, 0.2) * glow * 4.0 + vec3(1.0, 0.85, 0.5) * smoothstep(0.35, 0.0, vUv.y) * 4.0;
-  float a = vA * uShow;
+  float a = vA * uShow * vDim;
   if (a < 0.01) discard;
   gl_FragColor = vec4(col * a, a);
 }`;
@@ -289,11 +318,11 @@ export function createSkyLanterns(count, rng) {
   const aL = new Float32Array(count * 4);
   for (let i = 0; i < count; i++) {
     const a = rng.range(0, TAU), d = rng.range(60, 420);
-    aL.set([Math.cos(a) * d, Math.sin(a) * d, rng.next(), rng.range(0.7, 1.3)], i * 4);
+    aL.set([Math.cos(a) * d, Math.sin(a) * d, rng.next(), Math.round(rng.range(0.7, 1.3) * 20) / 20], i * 4);
   }
   ig.setAttribute('aL', new THREE.InstancedBufferAttribute(aL, 4));
   ig.instanceCount = count;
-  const uniforms = { uTime: { value: 0 }, uShow: { value: 0 } };
+  const uniforms = { uTime: { value: 0 }, uShow: { value: 0 }, uPix: { value: 600 } };
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: SKYL_VERT, fragmentShader: SKYL_FRAG, transparent: true, depthWrite: false, premultipliedAlpha: true, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(ig, mat);
   mesh.frustumCulled = false;
@@ -348,24 +377,26 @@ export function createPeaches(shared, treeSpots, maxFood = 12) {
 const HALO_VERT = /* glsl */`
 uniform float uPix;
 attribute vec4 aHalo;   // size, pulse phase, intensity, unused
-varying float vI; varying float vPh;
+varying float vI; varying float vPh; varying float vFk;
 void main(){
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
   vI = aHalo.z; vPh = aHalo.y;
-  gl_PointSize = clamp(aHalo.x * uPix / max(-mv.z, 0.1), 6.0, 260.0);
+  float D = clamp(aHalo.x * uPix / max(-mv.z, 0.1), 6.0, 260.0);
+  gl_PointSize = D;
+  vFk = min(30.0, D * 0.9);   // flare lines never thinner than ~1 px (a rotating hairline crawls)
 }`;
 const HALO_FRAG = /* glsl */`
 uniform float uTime;
 uniform vec3 uCol;
-varying float vI; varying float vPh;
+varying float vI; varying float vPh; varying float vFk;
 void main(){
   vec2 d = gl_PointCoord * 2.0 - 1.0;
   float r = length(d);
   float pulse = 0.85 + 0.15 * sin(uTime * 2.6 + vPh);
   float c = cos(uTime * 0.3 + vPh), s = sin(uTime * 0.3 + vPh);
   vec2 e = vec2(c * d.x - s * d.y, s * d.x + c * d.y);
-  float flare = exp(-abs(e.x) * 30.0) * exp(-abs(e.y) * 3.2) + exp(-abs(e.y) * 30.0) * exp(-abs(e.x) * 3.2);
+  float flare = (exp(-abs(e.x) * vFk) * exp(-abs(e.y) * 3.2) + exp(-abs(e.y) * vFk) * exp(-abs(e.x) * 3.2)) * (vFk / 30.0);
   float a = (exp(-r * r * 7.0) * 0.55 + exp(-r * r * 40.0) * 0.5 + flare * 0.5) * (1.0 - smoothstep(0.75, 1.0, r)) * vI * pulse;
   if (a < 0.003) discard;
   gl_FragColor = vec4(uCol * a, 0.0);

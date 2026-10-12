@@ -8,7 +8,11 @@ import { createSky, createEnvironment } from './cloudsea/sky.js';
 import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './cloudsea/clouds.js';
 import { createGarden } from './cloudsea/garden.js';
 import { createCreatures } from './cloudsea/creatures.js';
-import { createSparkles, createPetals, createMotes, createSkyLanterns, createPeaches, createHalos } from './cloudsea/fx.js';
+import { createSparkles, createPetals, createMotes, createSkyLanterns, createPeaches, createHalos, SKYL_PERIOD } from './cloudsea/fx.js';
+
+// lib/util.js addWind() uses uWindTime at 1.7, 3.1, 8 and 9 rad/s: all whole cycles in 20π s, so wrapping the
+// clock there is seamless and keeps the sway precise in float32 however long the page stays open.
+const WIND_PERIOD = 20 * Math.PI;
 
 const NAME_POOL = ['寿星', '团团', '云朵', '桃桃', '阿福', '仙仙', '青青', '鹤鹤', '如意', '吉祥', '平安', '小满', '星星', '月饼', '糯米', '汤圆'];
 
@@ -83,7 +87,7 @@ export default {
     const nSwirls = q >= 0.7 ? 5 : 3;
     for (let i = 0; i < nSwirls; i++) {
       const a = crng.range(0, TAU), d = i < 2 ? crng.range(45, 70) : crng.range(90, 170);
-      const sw = { a, d, y: crng.range(-4, 16) + (i < 2 ? 0 : 10), speed: crng.range(0.005, 0.01) * crng.sign(), size: i < 2 ? crng.range(2.6, 3.4) : crng.range(4.5, 7), pts: [], dir: crng.sign() };
+      const sw = { a, d, y: crng.range(-4, 16) + (i < 2 ? 0 : 10), speed: crng.range(0.005, 0.01) * crng.sign(), size: i < 2 ? crng.range(2.6, 3.4) : crng.range(4.5, 7), pts: [], dir: crng.sign(), c: { x: 0, y: 0, z: 0 } };
       const S = sw.size;
       const curl = (cx, cy, R0, turns, sign, k0) => {
         const n = Math.round(26 * turns);
@@ -97,7 +101,9 @@ export default {
       curl(sw.dir * 2.3, -0.35, 1.05, 1.1, -sw.dir, 0);
       // trailing tail
       for (let k = 0; k < 16; k++) { const t = k / 15; sw.pts.push({ u: -sw.dir * (1.2 + t * 4.4), v: -1.25 + Math.sin(t * 3.2) * 0.35, w: 0, r: (0.85 - t * 0.55) * S * 0.7 }); }
-      for (const p of sw.pts) { p.it = { x: 0, y: 0, z: 0, r: p.r * 1.15, seed: crng.next(), shade: 1.0, alpha: 0.5, cx: 0, cy: 0, cz: 0, cr: 4 * S }; nearItems.push(p.it); }
+      // the swirl is sorted as one unit; inside it the puffs keep a fixed back-to-front order (by their offset
+      // toward the viewer), so overlapping puffs never swap places and pop as the camera moves
+      sw.pts.forEach((p, k) => { p.it = { x: 0, y: 0, z: 0, r: p.r * 1.15, seed: crng.next(), shade: 1.0, alpha: 0.5, cx: 0, cy: 0, cz: 0, cr: 4 * S, grp: sw.c, ord: p.w + k * 1e-4 }; nearItems.push(p.it); });
       swirls.push(sw);
     }
     // collars where the islets dip toward the sea, and mist where the falls meet the clouds
@@ -251,20 +257,23 @@ export default {
       drift: 0.025, fov: 42,
     };
 
-    envMap.update(env.hours(), 0, true);
+    envMap.update(0, true);
     scene.environment = envMap.texture;
 
     function update(dt, t) {
       shared.uTime.value = t;
-      tod.update();
+      shared.uMistT.value = t % 31.25;
+      tod.update(false, dt);
       wind.update(dt);
-      if (envMap.update(tod.hours, t, false)) scene.environment = envMap.texture;
+      if (wind.uniforms.uWindTime.value > WIND_PERIOD) wind.uniforms.uWindTime.value -= WIND_PERIOD;
+      if (envMap.update(t, false)) scene.environment = envMap.texture;
       sky.mesh.position.copy(camera.position);
       sea.update(dt);
       // swirls drift around the garden and turn to face the viewer
       for (const sw of swirls) {
         sw.a += sw.speed * dt;
         const cx = Math.cos(sw.a) * sw.d, cz = Math.sin(sw.a) * sw.d, cy = sw.y + Math.sin(t * 0.12 + sw.d) * 1.2;
+        sw.c.x = cx; sw.c.y = cy; sw.c.z = cz;
         let rx = camera.position.z - cz, rz = -(camera.position.x - cx);
         const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
         const fx = -rz, fz = rx;
@@ -304,8 +313,8 @@ export default {
       const pix = env.renderer.domElement.height * 0.5 * camera.projectionMatrix.elements[5];
       halos.update(t, pix, foods, tod.night);
       fx.sparkles.update(t, pix);
-      petals.uniforms.uPix.value = pix; motes.uniforms.uPix.value = pix;
-      skyLanterns.uniforms.uTime.value = t;
+      petals.uniforms.uPix.value = pix; motes.uniforms.uPix.value = pix; skyLanterns.uniforms.uPix.value = pix;
+      skyLanterns.uniforms.uTime.value = t % SKYL_PERIOD;
       skyLanterns.uniforms.uShow.value = clamp(smoothstep(0.2, 0.7, tod.night) + tod.golden * 0.35, 0, 1);
 
       // key light follows the sun / moon
@@ -316,7 +325,9 @@ export default {
       hemi.color.copy(shared.uAmbient.value).multiplyScalar(1.2);
       hemi.groundColor.copy(shared.uBounce.value).multiplyScalar(1.2);
       hemi.intensity = Math.PI * lerp(0.9, 0.6, tod.day);
-      const fl = 0.9 + 0.1 * Math.sin(t * 7.7) * Math.sin(t * 3.1);
+      // lantern light: a slow, shallow flicker (±3%): at night these lights cover the terrace and pavilion,
+      // and the old ±10% at ~1-2 Hz made large parts of the screen pulse
+      const fl = 0.97 + 0.03 * Math.sin(t * 2.1) * Math.sin(t * 1.3 + 0.7);
       warmLight.intensity = lerp(0.6, 16, tod.night) * fl;
       terraceLight.intensity = lerp(0.3, 9, tod.night) * fl;
 

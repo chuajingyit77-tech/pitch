@@ -120,6 +120,7 @@ export function addFog(material, U, key = 'mfog') {
 /* ------------------------------------------------------------------ */
 /* Sky dome: gradient, sun halo + disk, painted clouds, moon, stars    */
 /* ------------------------------------------------------------------ */
+export const SKY_PERIOD = 600;
 export function createSkyMaterial(fogU) {
   const uniforms = {
     ...fogU,
@@ -135,7 +136,9 @@ export function createSkyMaterial(fogU) {
     uCloudCover: { value: 0.52 },
     uCloudAmt: { value: 1 },
     uCloudOff: { value: new THREE.Vector2() },
+    // uTime wraps every SKY_PERIOD s (star twinkle rates are snapped to it); the slow cloud warp has its own clock
     uTime: { value: 0 },
+    uCloudWarp: { value: 0 },
   };
   return new THREE.ShaderMaterial({
     uniforms,
@@ -149,8 +152,9 @@ export function createSkyMaterial(fogU) {
     fragmentShader: /* glsl */`
       varying vec3 vDir;
       uniform vec3 uZenith, uSunDir, uSunHalo, uSunDisk, uMoonDir, uCloudLit, uCloudDark;
-      uniform float uTime, uStars, uMoonAmt, uCloudCover, uCloudAmt;
+      uniform float uTime, uStars, uMoonAmt, uCloudCover, uCloudAmt, uCloudWarp;
       uniform vec2 uCloudOff;
+      const float TQ = 6.28318530718 / ${SKY_PERIOD.toFixed(1)};
       ${FOG_GLSL}
       float sh12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
       float sh13(vec3 p3){ p3 = fract(p3 * .1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
@@ -158,7 +162,7 @@ export function createSkyMaterial(fogU) {
         return mix(mix(sh12(i), sh12(i+vec2(1.0,0.0)), u.x), mix(sh12(i+vec2(0.0,1.0)), sh12(i+vec2(1.0,1.0)), u.x), u.y); }
       float sfbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += a * svn(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; } return s; }
       float cloudDen(vec2 p){
-        vec2 w = vec2(sfbm(p * 0.55 + vec2(0.0, uTime * 0.003)), sfbm(p * 0.55 + vec2(5.2, 1.3)));
+        vec2 w = vec2(sfbm(p * 0.55 + vec2(0.0, uCloudWarp)), sfbm(p * 0.55 + vec2(5.2, 1.3)));
         float n = sfbm(p + w * 1.3 + uCloudOff);
         // streaky cirrus on top
         float ci = sfbm(vec2(p.x * 0.35, p.y * 2.4) + uCloudOff * 0.5 + 20.0);
@@ -193,7 +197,7 @@ export function createSkyMaterial(fogU) {
           vec3 f = fract(sp) - 0.5;
           float star = step(0.991, r) * smoothstep(0.32, 0.0, length(f));
           float b = (r - 0.991) / 0.009;
-          float tw = 0.6 + 0.4 * sin(uTime * (1.3 + b * 4.0) + r * 80.0);
+          float tw = 0.6 + 0.4 * sin(uTime * (floor((1.3 + b * 4.0) / TQ + 0.5) * TQ) + r * 80.0);
           float vis = uStars * smoothstep(0.02, 0.3, y) * (1.0 - cden);
           col += mix(vec3(0.75, 0.82, 1.0), vec3(1.0, 0.9, 0.78), fract(r * 37.0)) * star * tw * (0.5 + 4.0 * b * b) * vis;
           vec3 bandN = normalize(vec3(0.55, 0.42, 0.72));
@@ -291,13 +295,15 @@ export function buildMountains({ noise, rng, fogU, sunsetAz }) {
     mesh.frustumCulled = false;
     group.add(mesh);
   });
-  /** Elevation angle (rad) of the highest ridge seen from the origin toward azimuth a. */
+  /** Elevation angle (rad) of the highest ridge seen from the origin toward azimuth a (interpolated, so the
+   * sun's occlusion fades continuously as it slides behind the ridge line). */
   group.userData.horizonAt = a => {
     let best = -1;
     for (const r of ridgeAt) {
       const t = (a - r.a0) / (r.a1 - r.a0);
       if (t < 0 || t > 1) continue;
-      const h = r.ridge[Math.round(t * (r.ridge.length - 1))];
+      const f = t * (r.ridge.length - 1), i0 = Math.floor(f), i1 = Math.min(i0 + 1, r.ridge.length - 1);
+      const h = r.ridge[i0] + (r.ridge[i1] - r.ridge[i0]) * (f - i0);
       best = Math.max(best, Math.atan2(h - 4, r.R));
     }
     return best;
