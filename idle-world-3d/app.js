@@ -1030,7 +1030,7 @@ window.__idle = {
   /** Advance the simulation without rendering (test harness). */
   simulate(seconds, step = 1 / 30) {
     if (!current) return;
-    for (let s = 0; s < seconds; s += step) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); }
+    for (let s = 0; s < seconds; s += step) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); applyPost(current.inst.post || {}, step); }
   },
   setView(v) { Object.assign(rig, v); if (v.yaw !== undefined) rig.yawT = v.yaw; if (v.pitch !== undefined) rig.pitchT = v.pitch; if (v.dist !== undefined) rig.distT = v.dist; },
   /**
