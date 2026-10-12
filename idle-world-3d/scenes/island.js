@@ -95,7 +95,7 @@ export default {
       lift: [0, 0.004, 0.012], gain: [1, 1, 1], ca: 0.0012,
       tilt: { amount: 0.22, center: 0.52, width: 0.24 },
     };
-    const tod = { hours: -1, elev: 0, day: 1, night: 0, golden: 0, lantern: 0, dusk: 0, envElev: -999, envNight: -1, timer: 0 };
+    const tod = { hours: -1, keyHours: -1, elev: 0, day: 1, night: 0, golden: 0, lantern: 0, dusk: 0, envElev: -999, envNight: -1, timer: 0 };
     const C = {
       sunCol: new THREE.Color(), moon: new THREE.Color('#9fb6ff'), tmp: new THREE.Color(), tmp2: new THREE.Color(),
       deepDay: new THREE.Color(0.0045, 0.042, 0.105), deepGold: new THREE.Color(0.012, 0.035, 0.08), deepNight: new THREE.Color(0.0012, 0.006, 0.02),
@@ -108,21 +108,29 @@ export default {
     const KEY_SWAP = -3.5;
     const MIN_KEY_SIN = Math.sin(THREE.MathUtils.degToRad(0.5)); // never light the island from below the horizon
 
-    function applyTime(force = false) {
-      const h = env.hours();
-      if (!force && Math.abs(h - tod.hours) < 0.0015) return;
-      tod.hours = h;
+    function moonDirAt(h, out) {
+      // 0 at dusk → 1 at dawn; by day (moon invisible) it glides back, so the path never jumps at 18:30
+      const ph = (h + 24 - 18.5) % 24;
+      const nightPhase = ph <= 11 ? ph / 11 : 1 - (ph - 11) / 13;
+      const el = THREE.MathUtils.degToRad(12 + 16 * Math.sin(nightPhase * Math.PI));
+      const sway = (nightPhase - 0.5) * 0.9;
+      const cx = moonFlat.x * Math.cos(sway) - moonFlat.y * Math.sin(sway), cz = moonFlat.x * Math.sin(sway) + moonFlat.y * Math.cos(sway);
+      return out.set(cx * Math.cos(el), Math.sin(el), cz * Math.cos(el)).normalize();
+    }
+
+    /**
+     * h: the (eased) hour all colours, the sky and the water follow; hKey: the clock's own hour, which
+     * only steps once a minute and sets the shadow-casting light's direction (stepping shadows beat
+     * shadows that slide and shimmer). Easing h over ~1 s turns each minute's small step in sky, ambient
+     * and water brightness into a glide instead of a once-a-minute pulse.
+     */
+    function applyTime(force = false, h = env.hours(), hKey = h) {
+      if (!force && h === tod.hours && hKey === tod.keyHours) return;
+      tod.hours = h; tod.keyHours = hKey;
       const s = sunState(h - SUN_SHIFT, { azimuthOffset: SUN_AZ });
       sunDir.copy(s.dir);
-      {
-        // 0 at dusk → 1 at dawn; by day (moon invisible) it glides back, so the path never jumps at 18:30
-        const ph = (h + 24 - 18.5) % 24;
-        const nightPhase = ph <= 11 ? ph / 11 : 1 - (ph - 11) / 13;
-        const el = THREE.MathUtils.degToRad(12 + 16 * Math.sin(nightPhase * Math.PI));
-        const sway = (nightPhase - 0.5) * 0.9;
-        const cx = moonFlat.x * Math.cos(sway) - moonFlat.y * Math.sin(sway), cz = moonFlat.x * Math.sin(sway) + moonFlat.y * Math.cos(sway);
-        moonDir.set(cx * Math.cos(el), Math.sin(el), cz * Math.cos(el)).normalize();
-      }
+      moonDirAt(h, moonDir);
+      const sKey = hKey === h ? s : sunState(hKey - SUN_SHIFT, { azimuthOffset: SUN_AZ });
       tod.elev = s.elevationDeg; tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       const day = s.day, night = s.night, golden = s.golden;
       tod.dusk = smoothstep(-6, 1, s.elevationDeg) * (1 - smoothstep(9, 16, s.elevationDeg));
@@ -152,8 +160,8 @@ export default {
       const sunVis = smoothstep(KEY_SWAP, 2.5, s.elevationDeg);
       const sunI = s.sunIntensity * 1.15 * sunVis;
       const moonI = 0.36 * night;
-      if (s.elevationDeg > KEY_SWAP) {
-        keyDir.copy(sunDir);
+      if (sKey.elevationDeg > KEY_SWAP) {
+        keyDir.copy(sKey.dir);
         if (keyDir.y < MIN_KEY_SIN) {
           const k = Math.sqrt(1 - MIN_KEY_SIN * MIN_KEY_SIN) / (Math.hypot(keyDir.x, keyDir.z) || 1);
           keyDir.set(keyDir.x * k, MIN_KEY_SIN, keyDir.z * k);
@@ -161,7 +169,7 @@ export default {
         sun.color.copy(C.sunCol);
         sun.intensity = sunI + moonI * 0.2 * sunVis;
       } else {
-        keyDir.copy(moonDir);
+        moonDirAt(hKey, keyDir);
         sun.color.copy(C.moon);
         sun.intensity = moonI * smoothstep(KEY_SWAP, KEY_SWAP - 3.5, s.elevationDeg);
       }
@@ -195,7 +203,7 @@ export default {
       cu.uMoonDir.value.copy(moonDir);
       cu.uLit.value.copy(C.sunCol).multiplyScalar(sunI * 0.42 + 0.05).add(C.tmp.copy(s.skyAmbient).multiplyScalar(0.35 * s.ambientIntensity));
       cu.uLitMoon.value.copy(C.moon).multiplyScalar(0.16 + 0.2 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.6));
-      cu.uMoonW.value = smoothstep(-1.5, -4.5, s.elevationDeg);
+      cu.uMoonW.value = smoothstep(0.5, -7, s.elevationDeg);
       cu.uShade.value.copy(s.skyAmbient).multiplyScalar(0.55 * s.ambientIntensity).lerp(C.tmp.copy(s.horizon).multiplyScalar(0.55), 0.35);
       if (golden > 0) cu.uShade.value.lerp(C.tmp.setRGB(0.42, 0.26, 0.36), golden * 0.5);
       cu.uShade.value.multiplyScalar(1 - night * 0.2).add(C.tmp.copy(C.moon).multiplyScalar(0.035 * night));
@@ -277,13 +285,19 @@ export default {
     }
 
     /* ---------------- per-frame ---------------- */
-    let todTimer = 0;
+    let todTimer = 0, hEased = env.hours();
     function update(dt, t) {
       waterUniforms.uWTime.value = t;
       sky.uniforms.uTime.value = t;
       wind.update(dt);
+      // ease toward the clock (it steps once a minute); snap on big jumps (time set by hand, a new day)
+      const hClock = env.hours();
+      let dh = hClock - hEased;
+      if (dh > 12) dh -= 24; else if (dh < -12) dh += 24;
+      if (Math.abs(dh) > 0.25 || Math.abs(dh) < 2e-5) hEased = hClock;
+      else hEased = (hEased + dh * (1 - Math.exp(-dt / 0.4)) + 24) % 24;
       todTimer -= dt;
-      if (todTimer <= 0) { todTimer = 0.25; applyTime(); }
+      if (todTimer <= 0 || hEased !== tod.hours || hClock !== tod.keyHours) { todTimer = 0.25; applyTime(false, hEased, hClock); }
       sky.clouds.update(dt);
       // lantern + windows
       const fl = 0.89 + 0.045 * Math.sin(t * 7.3) * Math.sin(t * 4.1 + 1.3) + 0.055 * Math.sin(t * 2.3);

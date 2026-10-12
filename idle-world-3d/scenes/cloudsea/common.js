@@ -237,7 +237,13 @@ export function patchStd(material, shared, opts = {}) {
   `;
   vertex['#include <fog_vertex>'] = (vertex['#include <fog_vertex>'] || '$&') + fogV;
   const fragment = Object.assign({}, opts.fragment || {});
-  fragment['#include <fog_fragment>'] = (fragment['#include <fog_fragment>'] || '') + `\n gl_FragColor.rgb = applyFog(min(gl_FragColor.rgb, vec3(24.0)), vWPos);`;
+  // Cap highlights at 10 (hue kept). Lit surfaces here peak around 3 and lantern glow around 3.5, but
+  // grazing-angle sun glints on the glazed roofs, gilding and lantern caps (Fresnel -> 1 and the GGX
+  // visibility term blowing up at silhouettes) reached the old cap of 24 in one-pixel sparkles that bloom.
+  fragment['#include <fog_fragment>'] = (fragment['#include <fog_fragment>'] || '') + `
+ { float csM = max(max(gl_FragColor.r, gl_FragColor.g), gl_FragColor.b);
+   gl_FragColor.rgb *= min(1.0, 10.0 / max(csM, 1e-4)); }
+ gl_FragColor.rgb = applyFog(gl_FragColor.rgb, vWPos);`;
   return patchMaterial(material, {
     key: 'cs-' + (opts.key || 'std'),
     uniforms: Object.assign({}, shared, opts.uniforms || {}),
