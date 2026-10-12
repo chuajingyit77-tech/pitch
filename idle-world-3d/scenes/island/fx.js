@@ -1,9 +1,10 @@
 // 晴岛 effects: 小鱼干 food items, billboard particles (sand puffs, splashes, plankton glow) and ripples.
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep } from '../../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, GLSL } from '../../lib/util.js';
 import { driedFishTexture } from './textures.js';
-import { waveHeight } from './water.js';
-import { LAYER_NO_REFLECT } from './shared.js';
+import { waveHeight, swellUniforms, SWELL_GLSL } from './water.js';
+import { LAYER_NO_REFLECT, waterUniforms } from './shared.js';
+import { fieldUniforms, SWASH_GLSL } from './terrain.js';
 
 const V3 = THREE.Vector3;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new V3(), _p = new V3(), _e = new THREE.Euler();
@@ -115,7 +116,7 @@ export function createFx(env, terrain, props) {
 
   /* ---------------- ripples ---------------- */
   const MAXR = 40;
-  const rgeo0 = new THREE.PlaneGeometry(2, 2);
+  const rgeo0 = new THREE.PlaneGeometry(2, 2, 12, 12); // subdivided: it rides the swell (vertex shader)
   rgeo0.rotateX(-Math.PI / 2);
   const rgeo = new THREE.InstancedBufferGeometry();
   rgeo.index = rgeo0.index;
@@ -126,28 +127,45 @@ export function createFx(env, terrain, props) {
   aR.setUsage(THREE.DynamicDrawUsage); aRA.setUsage(THREE.DynamicDrawUsage);
   rgeo.setAttribute('aR', aR); rgeo.setAttribute('aRA', aRA);
   rgeo.instanceCount = 0;
-  const rUniforms = { uRipCol: { value: new THREE.Color(1, 1, 1) } };
+  const rUniforms = { uRipCol: { value: new THREE.Color(1, 1, 1) }, uWTime: waterUniforms.uWTime, ...swellUniforms, ...fieldUniforms };
   const rmat = new THREE.ShaderMaterial({
     uniforms: rUniforms,
+    // The rings follow the same swell as the water mesh (a flat quad 2 m wide cut through the waves, so
+    // parts of the ring kept vanishing under the surface and popping back as the swell rolled by).
     vertexShader: /* glsl */`
       attribute vec4 aR; attribute float aRA;
+      uniform float uWTime;
+      uniform vec4 uWaves[4];
+      uniform sampler2D tField;
+      uniform vec4 uField;
+      ${GLSL.noise}
+      ${SWASH_GLSL}
+      ${SWELL_GLSL}
       varying vec2 vUv; varying float vA;
       void main() {
-        vec3 wp = aR.xyz + position * aR.w;
+        vec2 q = aR.xz + position.xz * aR.w;
+        vec4 fld = texture2D(tField, (q - uField.xy) * uField.zw);
+        float depth = -fld.r;
+        float atten = smoothstep(0.3, 5.5, depth) * (1.0 - smoothstep(160.0, 520.0, length(q)));
+        // the water grid point the swell carries onto q (fixed point; the swell's slope is < 0.35)
+        vec2 g = q;
+        for (int i = 0; i < 3; i++) g = q - swellDisp(g, atten).xz;
+        float y = swellDisp(g, atten).y + swashHeight(g, -fld.g, uWTime) * (1.0 - smoothstep(1.5, 5.0, depth));
         vUv = uv; vA = aRA;
-        gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * vec4(q.x, y + 0.035, q.y, 1.0);
       }`,
     fragmentShader: /* glsl */`
       uniform vec3 uRipCol;
       varying vec2 vUv; varying float vA;
       void main() {
         float r = length(vUv - 0.5) * 2.0;
-        float ring = smoothstep(0.78, 0.9, r) * smoothstep(1.0, 0.9, r) + smoothstep(0.5, 0.6, r) * smoothstep(0.7, 0.6, r) * 0.5;
+        float ring = smoothstep(0.78, 0.9, r) * (1.0 - smoothstep(0.9, 1.0, r)) + smoothstep(0.5, 0.6, r) * (1.0 - smoothstep(0.6, 0.7, r)) * 0.5;
         float a = ring * vA;
         if (a < 0.003) discard;
         gl_FragColor = vec4(uRipCol * a, a);
       }`,
     transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
     blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
   });
   const rmesh = new THREE.Mesh(rgeo, rmat);
@@ -274,8 +292,7 @@ export function createFx(env, terrain, props) {
       rp.age += dt;
       if (rp.age >= rp.life) { rp.alive = false; continue; }
       const k = rp.age / rp.life;
-      const y = waveHeight(rp.x, rp.z, t, -H(rp.x, rp.z)) + 0.03;
-      aR.setXYZW(m, rp.x, y, rp.z, lerp(0.15, rp.r1, 1 - Math.pow(1 - k, 2)));
+      aR.setXYZW(m, rp.x, 0, rp.z, lerp(0.15, rp.r1, 1 - Math.pow(1 - k, 2))); // height: vertex shader
       aRA.setX(m, rp.a * (1 - k));
       m++;
     }

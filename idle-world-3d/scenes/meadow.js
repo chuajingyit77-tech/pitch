@@ -6,7 +6,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture, sunState } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
-import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL } from './meadow/flora.js';
+import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
 import { buildTorii, buildHokora, buildLantern, buildRocks, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
 import * as TX from './meadow/tex.js';
 import { createFx } from './meadow/fx.js';
@@ -206,7 +206,7 @@ export default {
                 float pm = 1.0 - smoothstep(edge - 0.2, edge + 0.15, pd);
                 float wear = 1.0 - smoothstep(edge * 0.2, edge * 0.9, pd);
                 vec3 dirt = uDirtCol * (0.72 + 0.4 * mNoise(wp.xz * 4.7) + 0.15 * wear);
-                dirt *= 1.0 - 0.3 * step(0.8, mNoise(wp.xz * 13.0 + 5.0));
+                dirt *= 1.0 - 0.3 * smoothstep(0.74, 0.86, mNoise(wp.xz * 13.0 + 5.0)) * (1.0 - smoothstep(9.0, 22.0, dc));
                 c = mix(c, dirt, pm);
               }
               diffuseColor.rgb = c;
@@ -329,6 +329,8 @@ export default {
       const grp = new THREE.Group();
       grp.position.set(spot.x, spot.y, spot.z);
       grp.rotation.y = trng.range(0, TAU);
+      // the wind sways branches and leaves up to ~0.35 m: pad the culling bounds so the tree never pops at the frame edge
+      for (const g of [t.branches, t.leaves]) { g.computeBoundingSphere(); g.boundingSphere.radius += 0.6; }
       const bm = new THREE.Mesh(t.branches, bmat); bm.castShadow = true; bm.receiveShadow = true;
       const lm = new THREE.Mesh(t.leaves, lmat); lm.castShadow = true; lm.receiveShadow = true;
       lm.customDepthMaterial = mapleLeafDepthMaterial({ map: mapleTex, wind, height: t.height });
@@ -848,7 +850,6 @@ export default {
     const lightCol = new THREE.Color();
     const sunDirV = new THREE.Vector3(), lightDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
     const windDir = new THREE.Vector2().copy(baseWind);
-    const drift = new THREE.Vector2();
     let windSpeed = 2.4;
     const post = {
       bloom: { strength: 0.45, radius: 0.7, threshold: 0.9 },
@@ -872,6 +873,7 @@ export default {
       view.minY = maxH + 1.4;
     }
     const prVec = new THREE.Vector2();
+    const fxCtx = { camera, target: view.target, windDir, windSpeed: 0, light: lightCol, day: 1, night: 0, golden: 0, sunDir: sunDirV, pr: 1 };
 
     // env.hours() moves in whole-minute steps. Easing it over ~2 s turns every step into a short glide, so sun
     // and moon light, shadows, sky, fog, exposure and bloom never change in a single frame (around sunset one
@@ -1017,16 +1019,19 @@ export default {
       const str = gustiness * (1 + 0.65 * gw);
       windU.uWindStr.value = damp(windU.uWindStr.value, str, 2, dt);
       windU.uWindDir.value.copy(windDir);
-      const sp = 0.32 * (1 + 0.9 * gw);
+      // gust fronts roll across the field at ~4.7 m/s (was 7): big, slow waves rather than fast whipping
+      const sp = 0.21 * (1 + 0.9 * gw);
       const sc = windU.uWindScroll.value;
       sc.x = (sc.x + windDir.x * sp * dt) % 256;
       sc.y = (sc.y + windDir.y * sp * dt) % 256;
-      windU.uTime.value = t;
+      // sway / flutter phases advance here and wrap at 2π: smooth however long the page stays open
+      const ph = windU.uWindPh.value;
+      ph.x = (ph.x + SWAY_RATE * dt) % TAU;
+      ph.y = (ph.y + FLUTTER_RATE * dt) % TAU;
       windSpeed = 2.2 * str;
-      drift.x += windDir.x * windSpeed * 0.5 * dt;
-      drift.y += windDir.y * windSpeed * 0.5 * dt;
-      if (Math.abs(drift.x) > 1e5 || Math.abs(drift.y) > 1e5) drift.set(0, 0);
       wind.update(dt);
+      // the tree wind's rates (1.7, 3.1, 8, 9 rad/s) all complete whole cycles in 20π s, so its clock wraps seamlessly
+      wind.uniforms.uWindTime.value %= 20 * Math.PI;
       // press grass around food so the offering stays visible
       const press = windU.uPress.value;
       for (let i = 0; i < 4; i++) {
@@ -1079,10 +1084,10 @@ export default {
         }
         sky.position.copy(camera.position);
         env.renderer.getDrawingBufferSize(prVec);
-        fx.update(dt, t, {
-          camera, target: view.target, windDir, windSpeed, drift, light: lightCol, day: world.day, night: world.night, golden: world.golden,
-          sunDir: sunDirV, pr: prVec.y / 720 * 1.0 + 0.0001,
-        });
+        windU.uHalfRes.value.set(prVec.x * 0.5, prVec.y * 0.5);
+        fxCtx.windSpeed = windSpeed; fxCtx.day = world.day; fxCtx.night = world.night; fxCtx.golden = world.golden;
+        fxCtx.pr = prVec.y / 720 + 0.0001;
+        fx.update(dt, t, fxCtx);
         void tod;
       },
       feed(raycaster) {

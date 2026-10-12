@@ -129,9 +129,12 @@ $&
 void RE_Direct_Meadow( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in LambertMaterial material, inout ReflectedLight reflectedLight ) {
   float nl = dot( geometryNormal, directLight.direction );
   float wrapNL = saturate( ( nl + uWrap ) / ( 1.0 + uWrap ) );
-  reflectedLight.directDiffuse += wrapNL * directLight.color * BRDF_Lambert( material.diffuseColor );
+  // no single light delivers more than ~1.6x the noon sun: blades brushing a stone lantern otherwise blow out
+  // to HDR 10+ and sparkle (and bloom) as they sway
+  vec3 lc = min( directLight.color, vec3( 5.0 ) );
+  reflectedLight.directDiffuse += wrapNL * lc * BRDF_Lambert( material.diffuseColor );
   float back = pow( saturate( dot( -geometryViewDir, directLight.direction ) ), 4.0 );
-  reflectedLight.directDiffuse += directLight.color * material.diffuseColor * back * uTransl * (${weightExpr});
+  reflectedLight.directDiffuse += lc * material.diffuseColor * back * uTransl * (${weightExpr});
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Meadow

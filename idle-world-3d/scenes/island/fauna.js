@@ -531,10 +531,11 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
     // ---- animation ----
     gl.fold = damp(gl.fold, fold, 6, dt);
     const act = gl.action;
-    if (fold > 0.5) { act.paused = true; act.time = 0.0; }
-    else if (flap) { act.paused = false; act.timeScale = gl.state === 'dive' || gl.state === 'takeoff' ? 1.7 : 1.15; }
+    if (flap && fold <= 0.5) { act.paused = false; act.timeScale = gl.state === 'dive' || gl.state === 'takeoff' ? 1.7 : 1.15; }
     else if (!act.paused) {
-      // glide: settle on the wings-level frame
+      // glide or land: finish the current wing beat and settle on the wings-level frame (landing used to
+      // snap the wings to that frame mid-beat)
+      if (fold > 0.5) act.timeScale = 2.2;
       const ph = act.time % gullClip.duration;
       if (ph < 0.06 || ph > gullClip.duration - 0.04) { act.paused = true; act.time = 0; }
     }
@@ -585,7 +586,7 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
     mesh.frustumCulled = false;
     mesh.castShadow = true;
     root.add(mesh);
-    root.scale.setScalar(0.012);
+    root.scale.setScalar(0.012 * 0.002);
     root.visible = false;
     group.add(root);
     const mixer = new THREE.AnimationMixer(root);
@@ -597,6 +598,10 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
     flock.birds.push({ root, mixer, offset: new V3(side * 2.1, Math.sin(i * 1.7) * 0.6, -Math.abs(side) * 2.6) });
   }
   const frng = makeRng(env.seed ^ 0xf1a);
+  // A pass starts and ends far out over the sea and the birds grow in / shrink out over the first and
+  // last few seconds, so they never pop into or out of view (they used to appear 34 m from the island,
+  // well inside the picture, and vanish mid-air the minute dusk ended).
+  const FLOCK_R = 72, FLOCK_LEN = FLOCK_R * 2 + 10, FLOCK_SCALE = 0.012;
   function updateFlock(dt, t, dusk) {
     if (!flock.active) {
       flock.cooldown -= dt;
@@ -605,25 +610,27 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
         const a = frng.range(0, TAU);
         const off = frng.range(-10, 10);
         flock.dir.set(Math.cos(a), 0, Math.sin(a));
-        flock.origin.set(-Math.cos(a) * 34 - Math.sin(a) * off, frng.range(7, 11), -Math.sin(a) * 34 + Math.cos(a) * off);
-        for (const b of flock.birds) b.root.visible = true;
+        flock.origin.set(-Math.cos(a) * FLOCK_R - Math.sin(a) * off, frng.range(7, 11), -Math.sin(a) * FLOCK_R + Math.cos(a) * off);
       }
       return;
     }
-    if (dusk < 0.02) { flock.active = false; flock.cooldown = 2; for (const b of flock.birds) b.root.visible = false; return; }
+    // a pass that has started always finishes, even if dusk ends meanwhile
     flock.t += dt;
     const speed = 7.5;
     const dist = flock.t * speed;
     const yaw = Math.atan2(flock.dir.x, flock.dir.z);
+    const grow = smoothstep(0, 3, flock.t) * (1 - smoothstep(FLOCK_LEN - 24, FLOCK_LEN, dist));
     for (let i = 0; i < flock.birds.length; i++) {
       const b = flock.birds[i];
+      b.root.visible = grow > 0.002; // (a zero scale would give the normals NaN)
+      b.root.scale.setScalar(FLOCK_SCALE * Math.max(grow, 0.002));
       b.mixer.update(dt);
       _a.copy(b.offset).applyAxisAngle(UP, yaw);
       b.root.position.copy(flock.origin).addScaledVector(flock.dir, dist).add(_a);
       b.root.position.y += Math.sin(t * 0.9 + i) * 0.25;
       b.root.rotation.set(0, yaw, Math.sin(t * 0.7 + i) * 0.06);
     }
-    if (dist > 80) {
+    if (dist >= FLOCK_LEN) {
       flock.active = false; flock.cooldown = frng.range(25, 55);
       for (const b of flock.birds) b.root.visible = false;
     }
@@ -1163,7 +1170,12 @@ export async function createFauna(env, ctx) {
     }
     return null;
   }
-  const _tag = [];
+  const _tag = [], _tagPool = [];
+  const tagOf = (member, pos, radius) => {
+    const o = _tagPool[_tag.length] || (_tagPool[_tag.length] = { member: null, pos: null, radius: 0 });
+    o.member = member; o.pos = pos; o.radius = radius;
+    _tag.push(o);
+  };
   return {
     group, crabs, birds, turtles, dolphins, fish, addMember, ambientDolphin,
     update(dt, t, info) {
@@ -1175,10 +1187,10 @@ export async function createFauna(env, ctx) {
     },
     creatures() {
       _tag.length = 0;
-      for (const c of crabs.list) _tag.push({ member: c.member, pos: c.pos, radius: c.radius + 0.2 });
-      for (const g of birds.gulls) if (g.member) _tag.push({ member: g.member, pos: g.pos, radius: 1.0 });
-      for (const tr of turtles.list) _tag.push({ member: tr.member, pos: tr.pos, radius: tr.radius + 0.2 });
-      for (const d of dolphins.list) if (d.member) _tag.push({ member: d.member, pos: d.pos, radius: d.radius + 0.2 });
+      for (const c of crabs.list) tagOf(c.member, c.pos, c.radius + 0.2);
+      for (const g of birds.gulls) if (g.member) tagOf(g.member, g.pos, 1.0);
+      for (const tr of turtles.list) tagOf(tr.member, tr.pos, tr.radius + 0.2);
+      for (const d of dolphins.list) if (d.member) tagOf(d.member, d.pos, d.radius + 0.2);
       return _tag;
     },
     dispose() { crabs.dispose(); birds.dispose(); turtles.dispose(); dolphins.dispose(); fish.dispose(); },
