@@ -41,27 +41,48 @@ function instanced(geo, mat, list, { shadow = true, receive = true, pad = 0 } = 
   if (pad && im.boundingSphere && im.boundingSphere.radius > 0) im.boundingSphere.radius += pad;
   return im;
 }
+/** Does the shell's scene pass have MSAA? Mirrors app.js (every quality tier asks for samples; the
+ *  device may not support them for the HDR format, in which case the shell falls back to FXAA). */
+function sceneMSAA(renderer) {
+  try {
+    if (!renderer || !renderer.capabilities.isWebGL2 || !(renderer.capabilities.maxSamples > 0)) return false;
+    const gl = renderer.getContext();
+    const half = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+    const s = gl.getInternalformatParameter(gl.RENDERBUFFER, half ? gl.RGBA16F : gl.RGBA8, gl.SAMPLES);
+    return !!(s && s.length && Math.max(...s) > 0);
+  } catch (e) { return false; }
+}
 /**
  * Alpha-tested lace (sea fans, feather stars, kelp): the painted lines are thinner than a pixel at a
- * distance, so their mip-averaged alpha sinks below the cutoff and they sparkle and vanish as they
- * sway. Scale alpha up with the mip level so the lace keeps its coverage. The cutoff itself is left to
- * three (or to the shell, which turns it into alpha-to-coverage when the scene pass has MSAA), and the
- * material's alphaTest is unchanged, so shadows look the same.
+ * distance, so their mip-averaged alpha hovers around the cutoff and they sparkle and vanish as they
+ * sway. With MSAA the material manages its own alpha-to-coverage (the shell then leaves it alone):
+ * near, a sharpened one-pixel edge; far, where the mip has averaged the lines away, the mip alpha is
+ * the lace's real coverage and goes to the samples as is, so distant fans read as soft, steady lace
+ * instead of a threshold flickering on and off. Without MSAA the alpha is scaled up with the mip level
+ * so the lace keeps its coverage under the plain cutoff. alphaTest itself is unchanged (same shadows).
  */
-function stableCutout(mat, tex) {
+function stableCutout(mat, tex, env) {
   const img = tex.image || { width: 256, height: 256 };
+  const msaa = sceneMSAA(env.renderer);
+  if (msaa) mat.alphaToCoverage = true;
   return patchMaterial(mat, {
-    key: 'cutoutlod',
+    key: 'cutoutlod' + (msaa ? 'a2c' : ''),
     uniforms: { uTexSize: { value: new THREE.Vector2(img.width, img.height) } },
     fragmentHeader: 'uniform vec2 uTexSize;',
     fragment: {
       '#include <alphatest_fragment>': `
+        float cutLod = 0.0, cutCov = 1.0;
         #ifdef USE_MAP
         { vec2 tp = vMapUv * uTexSize;
-          float lod = max(0.0, 0.5 * log2(max(max(dot(dFdx(tp), dFdx(tp)), dot(dFdy(tp), dFdy(tp))), 1e-8)));
-          diffuseColor.a *= 1.0 + lod * 0.3; }
+          cutLod = max(0.0, 0.5 * log2(max(max(dot(dFdx(tp), dFdx(tp)), dot(dFdy(tp), dFdy(tp))), 1e-8))); }
         #endif
-        $&`,
+        #ifdef USE_ALPHATEST
+        ${msaa ? `cutCov = mix(clamp((diffuseColor.a - alphaTest) / max(fwidth(diffuseColor.a), 1e-4) + 0.5, 0.0, 1.0),
+                     clamp(diffuseColor.a, 0.0, 1.0), smoothstep(0.75, 2.25, cutLod));
+        if (cutCov < 0.02) discard;` : `diffuseColor.a *= 1.0 + cutLod * 0.3;
+        if (diffuseColor.a < alphaTest) discard;`}
+        #endif`,
+      ...(msaa ? { '#include <opaque_fragment>': '#include <opaque_fragment>\n\tgl_FragColor.a = cutCov;' } : {}),
     },
   });
 }
@@ -765,7 +786,7 @@ export function buildReef(ctx) {
   const fanMat = new THREE.MeshStandardMaterial({ map: fanTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, envMapIntensity: 0.35 });
   waterize(fanMat, W, { key: 'fan' });
   addSway(fanMat, W, { height: 1.4, amount: 0.12, stiff: 1.4, flutter: 0.015, key: 'fan' });
-  stableCutout(fanMat, fanTex);
+  stableCutout(fanMat, fanTex, env);
   const fanG = new THREE.PlaneGeometry(1.5, 1.4, 6, 6);
   fanG.translate(0, 0.68, 0);
   const fans = [];
@@ -839,7 +860,7 @@ export function buildReef(ctx) {
   const featherMat = new THREE.MeshStandardMaterial({ map: featherTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.7, envMapIntensity: 0.4 });
   waterize(featherMat, W, { key: 'feather' });
   addSway(featherMat, W, { height: 0.5, amount: 0.05, stiff: 1.2, flutter: 0.05, key: 'feather' });
-  stableCutout(featherMat, featherTex);
+  stableCutout(featherMat, featherTex, env);
   const arms = [];
   const featherCols = [C('#ff8a1a'), C('#ffd23a'), C('#e8303a'), C('#2a2a2a'), C('#f0f0e0'), C('#9a3ad8')];
   for (let i = N(16); i > 0; i--) {
@@ -963,7 +984,7 @@ export function buildReef(ctx) {
   const kelpMat = new THREE.MeshStandardMaterial({ map: kelpTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.6, envMapIntensity: 0.3 });
   waterize(kelpMat, W, { key: 'kelp' });
   addSway(kelpMat, W, { height: 1, amount: 0.9, stiff: 1.25, flutter: 0.06, key: 'kelp' });
-  stableCutout(kelpMat, kelpTex);
+  stableCutout(kelpMat, kelpTex, env);
   const kelpG = new THREE.PlaneGeometry(1, 1, 1, 20);
   kelpG.translate(0, 0.5, 0);
   const kelps = [];

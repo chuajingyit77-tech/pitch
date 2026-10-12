@@ -726,7 +726,8 @@ function birdMaterial(shared) {
           // fold: pull the wing in and sweep it back along the body
           float sx = 0.03 + (span - 0.03) * (1.0 - 0.75 * fold);
           float sz = transformed.z - (span - 0.03) * 0.8 * fold;
-          float ang = sin(aAnim.x) * aAnim.y * (1.0 - fold) * (1.0 + (span - 0.03) * 3.0);
+          // stroke ~±45° at the tip (was ~±70°): thin wing blades sweeping a pixel or more per frame strobe
+          float ang = sin(aAnim.x) * aAnim.y * 0.8 * (1.0 - fold) * (1.0 + (span - 0.03) * 1.8);
           transformed.x = side * sx * cos(ang);
           transformed.y = transformed.y + sx * sin(ang);
           transformed.z = sz;
@@ -743,7 +744,7 @@ function birdMaterial(shared) {
     fragment: {
       // the flapping wings glow a little less than the body: at night bright wing blades sweeping a pixel or
       // more per frame strobe against the dark sky
-      '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance = mix(diffuseColor.rgb, vec3(0.4, 0.9, 1.0), 0.4) * vGlow * (vPart > 0.5 && vPart < 2.5 ? 0.65 : 1.0);',
+      '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance = mix(diffuseColor.rgb, vec3(0.4, 0.9, 1.0), 0.4) * vGlow * (vPart > 0.5 && vPart < 2.5 ? 0.4 : 1.0);',
     },
   });
 }

@@ -145,14 +145,25 @@ vec3 uwTint(float y){ return clamp(exp(uKd * (y - uRefY)), vec3(0.35), vec3(1.7)
 const CAUSTIC_GLSL = /* glsl */`
 #ifndef REEF_CAUS
 #define REEF_CAUS
+// The caustic web of lib caustics(), pre-filtered for the pixel footprint fw (in cells): where a
+// pixel spans more than a line width (distance, grazing sand) the thin lines used to crawl and sparkle;
+// each line profile is now widened by the footprint with its energy kept, so far away the web turns
+// soft and calm instead of aliasing. Identical to caustics() when fw -> 0.
+float uwCausticsAA(vec2 p, float t, float fw){
+  // box-filter width in edge-distance units, tuned against a supersampled reference
+  float w1 = 1.3 * fw, w2 = 1.78 * fw;
+  float k1 = 1.0 / (1.0 / 55.0 + w1 * w1 / 6.0), k2 = 1.0 / (1.0 / 70.0 + w2 * w2 / 6.0);
+  float e1 = causticEdge(p, t * 0.9);
+  float e2 = causticEdge(p * 1.37 + vec2(3.1, 1.7), t * 1.15 + 2.0);
+  float c = exp(-e1 * e1 * k1) * 0.75 * sqrt(k1 / 55.0) + exp(-e2 * e2 * k2) * 0.55 * sqrt(k2 / 70.0);
+  c += min(0.2 * fw * fw + 0.03 * fw, 0.12);   // wide lines overlap their cell: keep the mean light
+  return mix(c, 0.356, smoothstep(0.6, 1.2, fw));
+}
 float uwCaustics(vec3 wp){
   vec2 p = wp.xz - uSunW.xz / max(uSunW.y, 0.35) * (wp.y - uRefY);
   p += 0.25 * vec2(sin(p.y * 0.6 + uTimeC * 0.5), cos(p.x * 0.5 - uTimeC * 0.4));
   vec2 q = p * 0.62;
-  float c = caustics(q, uTimeC * 1.25);
-  // Where a pixel spans more than ~a line width (distance, grazing sand) the thin bright lines crawl
-  // and sparkle as they move: fade them into their average brightness (0.356) instead.
-  c = mix(c, 0.356, smoothstep(0.05, 0.22, length(fwidth(q))));
+  float c = uwCausticsAA(q, uTimeC * 1.25, length(fwidth(q)));
   return c * exp(-0.03 * clamp(uSurfY - wp.y, 0.0, 60.0));
 }
 #endif
