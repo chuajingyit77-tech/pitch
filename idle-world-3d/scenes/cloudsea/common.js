@@ -107,7 +107,7 @@ export function createTimeOfDay(env, shared) {
     // A waxing moon hanging low in the west-southwest through the evening: it sits in the
     // default view of the garden and drifts slowly across the sky during the night.
     const nightT = ((h - 18 + 24) % 24) / 12;               // 0 at 18:00 .. 1 at 06:00
-    const ma = -2.66 + 0.5 * nightT, me = 0.165 + 0.05 * Math.sin(Math.min(nightT, 1) * Math.PI);
+    const ma = -2.74 + 0.5 * nightT, me = 0.13 + 0.04 * Math.sin(Math.min(nightT, 1) * Math.PI);
     st.moonDir.set(Math.cos(ma) * Math.cos(me), Math.sin(me), Math.sin(ma) * Math.cos(me));
     const e = st.elev;
     st.morning = h < 12 ? 1 : 0;

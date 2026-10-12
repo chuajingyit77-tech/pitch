@@ -901,7 +901,9 @@ export function createCreatures(env, shared, world, fx) {
       sys.tortoises.push(tt); group.add(tt.mesh);
     } else if (m.kind === 'crane') {
       const c = new Crane(sys, m, cRig, cGeo, rng.fork(m.id));
-      c.orbit.a = 2.9 + sys.cranes.length * 2.1; c.pos.set(Math.cos(c.orbit.a) * c.orbit.r, c.orbit.h, Math.sin(c.orbit.a) * c.orbit.r);
+      c.orbit.a = 2.9 + sys.cranes.length * 2.1;
+      c.orbit.r = sys.cranes.length % 2 ? c.rng.range(32, 42) : c.rng.range(14, 18); c.orbit.h = c.rng.range(6, 12);
+      c.pos.set(Math.cos(c.orbit.a) * c.orbit.r, c.orbit.h, Math.sin(c.orbit.a) * c.orbit.r);
       c.vel.set(-Math.sin(c.orbit.a), 0, Math.cos(c.orbit.a)).multiplyScalar(6 * Math.sign(c.orbit.w));
       sys.cranes.push(c); group.add(c.mesh);
       // start some cranes on the ground for a calmer first impression

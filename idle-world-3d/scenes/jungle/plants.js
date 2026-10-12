@@ -431,7 +431,7 @@ export function glowPods(rng, { stems = 5 } = {}) {
     const nb = b.toNonIndexed();
     nb.deleteAttribute('uv');
     nb.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(nb.attributes.position.count).fill(1), 1));
-    nb.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nb.attributes.position.count * 3).map((_, k) => [0.85, 0.95, 0.88][k % 3]), 3));
+    nb.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nb.attributes.position.count * 3).map((_, k) => [0.62, 0.78, 0.6][k % 3]), 3));
     parts.push(nb);
   }
   const m = mergeGeometries(parts);

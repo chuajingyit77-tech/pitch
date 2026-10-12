@@ -68,7 +68,8 @@ function lawnMaterial(shared, tex) {
         vec3 lawnA = vec3(0.25, 0.43, 0.16), lawnB = vec3(0.42, 0.58, 0.22), lawnC = vec3(0.68, 0.68, 0.32);
         vec3 lawn = mix(lawnA, lawnB, smoothstep(0.25, 0.8, patchv));
         lawn = mix(lawn, lawnC, smoothstep(0.62, 0.92, nz2.b) * 0.35);
-        float isLawn = smoothstep(0.25, 0.6, vColor.g - vColor.r * 0.6);
+        // vertex colours are linear: lawn ~(0.08,0.2,0.03), soil ~(0.16,0.1,0.06)
+        float isLawn = smoothstep(0.03, 0.11, vColor.g - vColor.r * 0.6);
         diffuseColor.rgb = mix(diffuseColor.rgb, lawn * (0.85 + 0.3 * vColor.g), isLawn);
       `,
       '#include <normal_fragment_maps>': /* glsl */`$&

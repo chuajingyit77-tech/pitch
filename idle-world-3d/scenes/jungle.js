@@ -200,10 +200,10 @@ export default {
     }
     // two low, gnarled branches reaching over the pond: visible macaw perches
     const lowPerches = [];
-    for (const [ti, y0, len, rise] of [[0, 5.0, 5.8, 1.1], [1, 6.2, 5.0, 0.8]]) {
+    for (const [ti, y0, len, rise, tz] of [[0, 5.0, 5.8, 1.1, 1.5], [1, 6.2, 5.0, 0.8, 1.5], [0, 3.6, 5.2, 0.7, 6.5]]) {
       const t = trees[ti];
       const base = t.axis(y0);
-      const dir = new THREE.Vector3(POND.cx - base.x, 0, POND.cz + 1.5 - base.z).normalize();
+      const dir = new THREE.Vector3(POND.cx - base.x, 0, POND.cz + tz - base.z).normalize();
       const pts = [base.clone().addScaledVector(dir, -0.4), base.clone().addScaledVector(dir, len * 0.35).add(new THREE.Vector3(0, rise, 0)), base.clone().addScaledVector(dir, len * 0.7).add(new THREE.Vector3(0, rise * 1.2, 0.3)), base.clone().addScaledVector(dir, len).add(new THREE.Vector3(0, rise * 0.8, 0.4))];
       const curve = new THREE.CatmullRomCurve3(pts);
       const r0 = t.rTrunk(y0) * 0.3;
@@ -241,8 +241,10 @@ export default {
     const allHangs = trees.slice(0, 2).flatMap(t => t.hangs);
     const innerHangs = trees.slice(0, 4).flatMap(t => t.limbs.map(lb => lb.curve.getPointAt(0.25 + rl.next() * 0.3)));
     const lianaTint = (t, n) => { const m = clamp(n.y, 0, 1) * 0.6; return [lerp(0.55, 0.4, m), lerp(0.48, 0.6, m), lerp(0.36, 0.25, m)]; };
+    const sideHangs = allHangs.filter(h => Math.abs(Math.atan2(h.x - VIEW_TARGET.x, -(h.z - (VIEW_TARGET.z + 14)))) > 0.36);
     for (let i = 0; i < Math.min(9, allHangs.length); i++) {
-      const a = allHangs[rl.int(0, allHangs.length - 1)];
+      let a = allHangs[rl.int(0, allHangs.length - 1)];
+      if (sideHangs.length && rl.chance(0.85)) a = sideHangs[rl.int(0, sideHangs.length - 1)];
       if (rl.chance(0.35)) {
         const curve = dropCurve(a, L.groundH(a.x, a.z), rl);
         const g = taperTube(curve, t => lerp(0.09, 0.06, t), { tubular: 28, radial: 6, tintFn: lianaTint, uvScale: [1, 0.5] });
@@ -730,7 +732,7 @@ export default {
       if (z < FALL.lipZ + 3) continue;
       frogSpots.push({ pos: new THREE.Vector3(x, L.groundH(x, z), z), r: 0.3, kind: 'ground' });
     }
-    frogSpots.forEach(s => { s.camD = s.pos.distanceTo(camPos0); s.visible = (s.kind === 'pad' || s.kind === 'rock' || s.kind === 'log') && Math.abs(camAng(s.pos.x, s.pos.z)) < 0.45 && s.camD > 6; });
+    frogSpots.forEach(s => { s.camD = s.pos.distanceTo(camPos0); s.visible = (s.kind === 'pad' || s.kind === 'rock' || s.kind === 'log') && Math.abs(camAng(s.pos.x, s.pos.z)) < 0.45 && s.camD > 6 && s.camD < 12.5; });
     const frogKit = createFrogMesh(shared, 16, env.shadows);
     ONLY_MAIN(frogKit.mesh);
     scene.add(frogKit.mesh);
@@ -787,7 +789,7 @@ export default {
         this.hop = null; this.food = null; this.flicks = 0; this.flickT = 0;
         this.swim = false;
       }
-      get scale() { return 0.3 * (0.85 + 0.15 * (this.member.size || 1)); }
+      get scale() { return 0.36 * (0.85 + 0.15 * (this.member.size || 1)); }
       hopTo(target, spot = null) {
         const from = this.pos.clone();
         const dist = from.distanceTo(target);
@@ -941,6 +943,7 @@ export default {
           return;
         }
         if (hungry) out.set(camera.position.x * 0.55 + wf.range(-2.5, 2.5), wf.range(1.2, 3.2), lerp(VIEW_TARGET.z, camera.position.z, 0.62) + wf.range(-1.5, 1.5));
+        else if (b.kind === 0) out.set(POND.cx + wf.range(-5, 5), wf.range(0.9, 3.6), POND.cz + wf.range(-1, 6.5));
         else out.set(POND.cx + wf.range(-8, 8), wf.range(0.6, 4.5), POND.cz + wf.range(-5, 7));
       },
       foodTarget(b, out) {

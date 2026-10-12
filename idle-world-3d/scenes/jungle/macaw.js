@@ -68,7 +68,7 @@ export class Macaw {
     this.biteT = 0;
     this.lookYaw = 0;
     this.headBob = 0;
-    this.scale = 0.0088;
+    this.scale = 0.0098;
   }
   get size() { return 0.85 + 0.15 * (this.member ? this.member.size : 1); }
   /** Beak position in world space. */
