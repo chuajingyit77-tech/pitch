@@ -402,7 +402,7 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
       pos: new V3(th.x + Math.cos(a) * th.r, th.h, th.z + Math.sin(a) * th.r),
       vel: new V3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(6 * th.dir),
       thermal: th, ang: a, state: 'soar', timer: r.range(8, 25), flapT: r.range(0, 3), gliding: false,
-      perch: null, food: null, roll: 0, biteT: 0, fold: 0, up: new V3(0, 1, 0), fwd: new V3(1, 0, 0), radius: 0.9,
+      perch: null, food: null, roll: 0, biteT: 0, fold: 0, lastPh: 0, up: new V3(0, 1, 0), fwd: new V3(1, 0, 0), radius: 0.9,
       speed: r.range(5.5, 7),
     };
     gulls.push(gl);
@@ -537,8 +537,9 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
       // snap the wings to that frame mid-beat)
       if (fold > 0.5) act.timeScale = 2.2;
       const ph = act.time % gullClip.duration;
-      if (ph < 0.06 || ph > gullClip.duration - 0.04) { act.paused = true; act.time = 0; }
+      if (ph < 0.06 || ph > gullClip.duration - 0.04 || ph < gl.lastPh) { act.paused = true; act.time = 0; }
     }
+    gl.lastPh = act.time % gullClip.duration;
     // ---- orientation (bank into turns) ----
     _acc.subVectors(gl.vel, _prevVel).divideScalar(Math.max(dt, 1e-3));
     const sp = gl.vel.length();

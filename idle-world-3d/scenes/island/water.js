@@ -218,13 +218,18 @@ void main() {
   vec2 ruv = vMirror.xy / vMirror.w + N.xz * mix(0.03, 0.075, rough) / (1.0 + dist * 0.006);
   vec3 refl = mix(uSkyFallback, textureLod(tMirror, ruv, mix(1.1, 3.6, rough)).rgb, uMirrorOn);
 
-  // sun + moon speculars and a glittering path made of discrete sparkles
+  // sun + moon speculars and a glittering path made of discrete sparkles (each part is skipped while its
+  // light is off or far from the reflection, which keeps the per-pixel cost down)
   vec3 R = reflect(-V, N);
-  float sd = max(dot(R, uSunDir), 0.0);
-  float spk = sparkle(p, t, 0.085, 3.1, fp) + sparkle(p + 17.0 / 5.7, t * 1.3, 0.07, 5.7, fp) * 0.8;
-  vec3 spec = uSunCol * (lobe(sd, 1200.0, sig2) * 9.0 + lobe(sd, 240.0, sig2) * 0.3 + pow(sd, 48.0) * spk * 14.0 * farK);
-  float md = max(dot(R, uMoonDir), 0.0);
-  spec += uMoonCol * (lobe(md, 2600.0, sig2) * 2.2 + lobe(md, 160.0, sig2) * 0.12 + pow(md, 30.0) * spk * 8.0 * farK);
+  float sunOn = max(max(uSunCol.r, uSunCol.g), uSunCol.b), moonOn = max(max(uMoonCol.r, uMoonCol.g), uMoonCol.b);
+  float sd = max(dot(R, uSunDir), 0.0), md = max(dot(R, uMoonDir), 0.0);
+  float gSun = sunOn > 0.0 ? pow(sd, 48.0) : 0.0;
+  float gMoon = moonOn > 0.0 ? pow(md, 30.0) : 0.0;
+  float spk = 0.0;
+  if (max(gSun * sunOn, gMoon * moonOn) > 0.002) spk = sparkle(p, t, 0.085, 3.1, fp) + sparkle(p + 17.0 / 5.7, t * 1.3, 0.07, 5.7, fp) * 0.8;
+  vec3 spec = vec3(0.0);
+  if (sunOn > 0.0) spec += uSunCol * (lobe(sd, 1200.0, sig2) * 9.0 + lobe(sd, 240.0, sig2) * 0.3 + gSun * spk * 14.0 * farK);
+  if (moonOn > 0.0) spec += uMoonCol * (lobe(md, 2600.0, sig2) * 2.2 + lobe(md, 160.0, sig2) * 0.12 + gMoon * spk * 8.0 * farK);
   // no highlight brighter than 8 (hue kept): bloom would turn a moving hot pixel into a blinking blob
   spec *= 8.0 / max(max(max(spec.r, spec.g), spec.b), 8.0);
 
@@ -262,7 +267,7 @@ void main() {
 
   // bioluminescent plankton: the shore foam and the shallows glow blue at night
   float bio = (foamEdge * 1.0 + lines * 1.1 + lace * 0.3 + ob * 0.5 + reef * 0.06) * (0.7 + 0.3 * sin(t * 2.3 + p.x * 3.1 + p.y * 2.3) * (1.0 - aaFade(0.61, fp)));
-  bio += sparkle(p + 3.0 / 2.7, t * 0.7, 0.12, 2.7, fp) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4;
+  if (uGlow.b > 0.0 && u < 4.0) bio += sparkle(p + 3.0 / 2.7, t * 0.7, 0.12, 2.7, fp) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4;
   vec3 glow = uGlow * bio;
 
   vec3 surf = refl * F + spec + sss * (1.0 - F);

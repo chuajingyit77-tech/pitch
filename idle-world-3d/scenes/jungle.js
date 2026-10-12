@@ -1177,16 +1177,17 @@ export default {
       const ru = godRays.material.uniforms;
       ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.26 : (0.075 + golden * 0.12 + dawnMist * 0.06) * Math.min(li, 4));
       ru.uRayAmt.value = (1 - rainA * 0.85) * (useMoon ? smoothstep(-4, -12, e) : smoothstep(0, 8, e));
-      godRays.visible = ru.uRayAmt.value > 0.01;
+      godRays.visible = ru.uRayAmt.value > 0.002;
       motes.material.uniforms.uAmt.value = (0.35 + day * 0.65) * (1 - rainA) * (1 - night * 0.7);
       motes.material.uniforms.uAmb.value.copy(amb);
       fireflies.material.uniforms.uAmt.value = smoothstep(2, -5, e) * (1 - rainA * 0.85);
       spores.material.uniforms.uAmt.value = shared.uNight.value * (1 - rainA * 0.5);
       rain.material.uniforms.uRain.value = rainA;
       rain.visible = rainA > 0.002;
-      fireflies.visible = fireflies.material.uniforms.uAmt.value > 0.01;
-      spores.visible = spores.material.uniforms.uAmt.value > 0.01;
-      motes.visible = motes.material.uniforms.uAmt.value > 0.01;
+      // switched off only once they are fully faded (their brightness scales with uAmt, so nothing pops)
+      fireflies.visible = fireflies.material.uniforms.uAmt.value > 0.002;
+      spores.visible = spores.material.uniforms.uAmt.value > 0.002;
+      motes.visible = motes.material.uniforms.uAmt.value > 0.002;
       rain.material.uniforms.uAmb.value.copy(amb);
       mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.18 + night * 0.3 + dusk * 0.25 + 0.03, 0, 0.95);
       mistSheets.material.uniforms.uAmb.value.copy(amb);
