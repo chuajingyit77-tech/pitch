@@ -226,7 +226,20 @@ const rgbeLoader = new RGBELoader();
 const assetCache = new Map();
 const asset = p => new URL(p, ASSET_BASE).href;
 function cached(key, fn) { if (!assetCache.has(key)) assetCache.set(key, fn()); return assetCache.get(key); }
-const loadGLTF = path => cached('g:' + path, () => gltfLoader.loadAsync(asset(path)));
+// .glb models ship as base64 script modules (`<name>.glb.js`) because the artifact host only serves
+// web media types; decode and hand the bytes to GLTFLoader.
+function decodeBase64(b64) {
+  const s = atob(b64), out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out.buffer;
+}
+const loadGLTF = path => cached('g:' + path, async () => {
+  if (path.endsWith('.glb')) {
+    const mod = await import(asset(path + '.js'));
+    return gltfLoader.parseAsync(decodeBase64(mod.default), new URL('.', asset(path)).href);
+  }
+  return gltfLoader.loadAsync(asset(path));
+});
 function loadTexture(path, { srgb = true, repeat = false } = {}) {
   const t = texLoader.load(asset(path));
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
