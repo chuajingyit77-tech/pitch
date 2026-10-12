@@ -173,8 +173,8 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
         c = mix(c, uTipCol, smoothstep(0.42, 1.02, h));
         return c * tint * mix(0.55, 1.0, smoothstep(0.0, 0.55, h)) * (1.0 + vGust * uGustBright * h);
       }
-      // what lies behind a blade: the dark lower field when looking down into it, other blade tops at grazing range
-      float susukiBgH(){ vec3 vd = vFogWorld - cameraPosition; return mix(0.6, 0.12, smoothstep(0.02, 0.12, -vd.y / max(length(vd), 1e-3))); }`,
+      // what lies behind a blade: the darker lower field when looking down into it, other blade tops at grazing range
+      float susukiBgH(){ vec3 vd = vFogWorld - cameraPosition; return mix(0.6, 0.22, smoothstep(0.02, 0.12, -vd.y / max(length(vd), 1e-3))); }`,
     vertex: {
       '#include <project_vertex>': BLADE_VERTEX(plume ? '1.3' : '1.0') + `\n vPart = ${plume ? 'aPart' : '0.0'};`,
       '#include <worldpos_vertex>': 'vec4 worldPosition = modelMatrix * wp4;',

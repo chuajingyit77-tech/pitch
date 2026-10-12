@@ -1125,7 +1125,7 @@ export default {
       let li;
       const lc = lightCol;
       if (useMoon) { lc.copy(pal.moon); li = 0.55 * smoothstep(-3, -10, e); }
-      else { lc.copy(s.sunColor); li = s.sunIntensity * 1.9 * smoothstep(-3, -1, e); }
+      else { lc.copy(s.sunColor); li = s.sunIntensity * 1.9 * smoothstep(-3, -2, e); } // afterglow eases out over ~4 min
       li *= 1 - rainA * 0.82;
       sun.color.copy(lc);
       sun.intensity = li;
