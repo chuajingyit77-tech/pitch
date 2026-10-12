@@ -351,7 +351,9 @@ export function createDragonflyMesh(shared, max) {
   const mesh = new THREE.InstancedMesh(geo, mat, max);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
-  mesh.renderOrder = 2;
+  // after the pond mist, waterfall and spray (2-5) they hover in front of: drawn earlier, the wings (which write
+  // depth) punched holes into the water behind them; a distinct order also keeps the sort fixed
+  mesh.renderOrder = 5.5;
   return { mesh, col };
 }
 
