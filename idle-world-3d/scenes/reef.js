@@ -132,6 +132,26 @@ export default {
     const VEC = ['L0', 'glow', 'lightCol', 'sky', 'gnd', 'sunCol', 'skyZen', 'skyHor', 'shaftCol'];
     const su = surface.userData.u;
     let todSettled = false;
+    // Light direction (refracted sun or moon): targets step with the clock, the applied direction eases
+    // toward them, so the dusk/dawn swing over the zenith slides shadows, caustics and shafts instead of
+    // jumping (outside twilight a step is a fraction of a degree and the glide is invisible).
+    const dirA = new THREE.Vector3(0, 1, 0), airT = new THREE.Vector3(0, 1, 0), airA = new THREE.Vector3(0, 1, 0);
+    const _sunR = new THREE.Vector3(), _moonR = new THREE.Vector3();
+    let dirSettled = false;
+    function applyDir() {
+      W.uSunW.value.copy(dirA);
+      shafts.u.uAxis.value.copy(dirA).negate();
+      sunL.position.copy(center).addScaledVector(dirA, 45);
+      su.uSunAir.value.copy(airA);
+    }
+    function glideDir(k) {
+      if (dirSettled) return;
+      dirA.lerp(tod.sunW, k).normalize();
+      airA.lerp(airT, k);
+      if (airA.lengthSq() < 1e-8) airA.set(0, 1, 0); else airA.normalize();
+      if (dirA.angleTo(tod.sunW) < 2e-4 && airA.angleTo(airT) < 2e-4) { dirA.copy(tod.sunW); airA.copy(airT); dirSettled = true; }
+      applyDir();
+    }
     function blendTod(k) {
       if (todSettled) return;
       let err = 0;
@@ -190,13 +210,13 @@ export default {
     function rebuildEnv() {
       envLast.L0.copy(tgt.L0); envLast.glow.copy(tgt.glow); envLast.sunW.copy(tod.sunW);
       _keepL0.copy(W.uL0.value); _keepGlow.copy(W.uGlow.value);
-      W.uL0.value.copy(tgt.L0); W.uGlow.value.copy(tgt.glow);
+      W.uL0.value.copy(tgt.L0); W.uGlow.value.copy(tgt.glow); W.uSunW.value.copy(tod.sunW);
       envB.u.uEnvY.value = 4;
       envB.u.uWin.value.setRGB(tgt.L0.x, tgt.L0.y, tgt.L0.z).multiplyScalar(3);
       const r = envB.build();
       scene.environment = r.texture;
       r.old?.dispose();
-      W.uL0.value.copy(_keepL0); W.uGlow.value.copy(_keepGlow);
+      W.uL0.value.copy(_keepL0); W.uGlow.value.copy(_keepGlow); W.uSunW.value.copy(dirA);
     }
     const groundAt = (x, z) => ground.height(x, z);
 
@@ -209,32 +229,32 @@ export default {
       const s = env.sun();
       mixP(pal.night, pal.day, s.day, tmpP);
       mixP(tmpP, pal.gold, Math.min(1, s.golden * 1.1), cur);
-      // Sun and moon hand over at -3 deg. This used to flip light direction, shadows, shafts, glow and
-      // the sun disc in a single frame; now the direct light fades out around the hand-over (it is
-      // twilight, the sun is already down) and the swap happens while nothing depends on it.
+      // Sun and moon hand over around -3 deg. This used to flip the light direction (shadows, caustics,
+      // shafts, glow, sun disc) and step glow, shafts and the disc in a single frame. Now the light
+      // swings from the sun's side over the zenith to the moon's between -5 and -1 deg, and every
+      // sun/moon quantity blends with the same weight; no dark gap, no jump.
       const u = smoothstep(-5, -1, s.elevationDeg);
-      const useSun = u >= 0.5;
-      const fade = (2 * u - 1) * (2 * u - 1);
-      refract(useSun ? s.dir : s.moonDir, tod.sunW);
+      refract(s.dir, _sunR); refract(s.moonDir, _moonR);
+      tod.sunW.copy(_moonR).lerp(_sunR, u).normalize();
       tod.axis.copy(tod.sunW).negate();
-      W.uSunW.value.copy(tod.sunW);
-      sunL.position.copy(center).addScaledVector(tod.sunW, 45);
-      su.uSunAir.value.copy(useSun ? s.dir : s.moonDir);
-      shafts.u.uAxis.value.copy(tod.axis);
+      airT.copy(s.moonDir).lerp(s.dir, u);
+      if (airT.lengthSq() < 1e-8) airT.set(0, 1, 0); else airT.normalize();
       shafts.setLengths(tod.axis, groundAt, jump);
+      dirSettled = false;
+      if (jump) { dirA.copy(tod.sunW); airA.copy(airT); dirSettled = true; applyDir(); }
       tgt.L0.copy(cur.L0);
-      tgt.glow.copy(cur.glow).multiplyScalar(lerp(0.5, 1, u) * fade);
+      tgt.glow.copy(cur.glow).multiplyScalar(lerp(0.5, 1, u));
       tgt.caus = cur.caus;
       tgt.fluor = smoothstep(0.2, 0.9, s.night) * 0.32;
       tgt.lightCol.copy(cur.lightCol);
-      tgt.light = cur.light * fade;
+      tgt.light = cur.light;
       tgt.sky.copy(cur.sky); tgt.gnd.copy(cur.gnd); tgt.hemi = cur.hemi;
-      tgt.sunCol.copy(useSun ? s.sunColor : _c1.set('#c8d8ff'));
-      tgt.sunI = (useSun ? s.sunIntensity * 0.6 : 0.08) * fade;
+      tgt.sunCol.copy(_c1.set('#c8d8ff')).lerp(s.sunColor, u);
+      tgt.sunI = lerp(0.08, s.sunIntensity * 0.6, u);
       tgt.skyZen.copy(s.zenith).multiplyScalar(lerp(0.15, 1.1, s.day));
       tgt.skyHor.copy(s.horizon).multiplyScalar(lerp(0.15, 1.1, s.day));
       tgt.shaftCol.setRGB(cur.shaft.x, cur.shaft.y, cur.shaft.z);
-      tgt.shaftI = lerp(0.35, 1.0, s.day) * lerp(0.6, 1, u) * fade;
+      tgt.shaftI = lerp(0.35, 1.0, s.day) * lerp(0.6, 1, u);
       tgt.bio = smoothstep(0.3, 1, s.night);
       tgt.night = s.night; tgt.day = s.day; tgt.golden = s.golden;
       todSettled = false;
@@ -289,6 +309,7 @@ export default {
         setWaterTime(W, time);
         applyTod(false);
         blendTod(1 - Math.exp(-dt / 1.2));
+        glideDir(1 - Math.exp(-dt / 2.5));
         shafts.tick(dt);
         bg.position.copy(camera.position);
         surface.position.set(camera.position.x, SURF_Y, camera.position.z);

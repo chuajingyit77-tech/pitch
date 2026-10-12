@@ -572,7 +572,9 @@ export default {
     const clumpGeoA = buildClumpOnAtlas(atlas, 'foliage3', (seed % 1000) + 5, 10);
     const clumpGeoB = buildClumpOnAtlas(atlas, 'foliage', (seed % 1000) + 6, 9);
     const clumpMat = new THREE.MeshStandardMaterial({ map: atlas.texture, vertexColors: true, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.7, envMapIntensity: 0.5 });
-    addWind(clumpMat, wind, { height: 2.0, amount: 0.12, stiffness: 1.2, flutter: 0.03 });
+    // canopy flutter kept small: 15-30 m away it is a fraction of a pixel, so it only made the leaf edges
+    // against the bright sky shimmer; the slow sway and gusts carry the motion
+    addWind(clumpMat, wind, { height: 2.0, amount: 0.12, stiffness: 1.2, flutter: 0.012 });
     jungleMaterial(clumpMat, shared, { translucent: 1.0, a2c: true });
     const rc = R('canopy');
     const clumpsA = [], clumpsB = [];
