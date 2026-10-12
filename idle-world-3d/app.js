@@ -119,6 +119,11 @@ try {
   fatal('这台设备的浏览器没有开启 3D 加速（WebGL），请用最新版 Chrome、Edge 或 Safari 打开');
   throw e;
 }
+if (!renderer.capabilities.isWebGL2) {
+  // every world is written for WebGL 2 (iOS / iPadOS 15+, any current desktop browser)
+  fatal('这台设备的系统太旧，打不开 3D 世界：iPad / iPhone 需要升级到 iPadOS / iOS 15 或更新，电脑请用最新版 Chrome、Edge 或 Safari');
+  throw new Error('WebGL 2 is not available');
+}
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
@@ -130,6 +135,16 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const glx = renderer.getContext();
 const GPU = (() => { try { const e = glx.getExtension('WEBGL_debug_renderer_info'); return e ? String(glx.getParameter(e.UNMASKED_RENDERER_WEBGL)) : ''; } catch (err) { return ''; } })();
 const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+// Older iPads and iPhones (iOS / iPadOS before 17, A8–A10 class GPUs) need a lighter tier. iPadOS Safari
+// reports a Mac user agent, so the OS version comes from "CPU OS 15_7", "Version/15.6", or, when neither
+// is present (home-screen web apps), from whether the browser can do import maps (Safari 16.4+).
+const IS_APPLE_TOUCH = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const APPLE_OS = (() => {
+  const m = navigator.userAgent.match(/OS (\d+)_\d+(?:_\d+)? like Mac OS X/) || navigator.userAgent.match(/Version\/(\d+)(?:\.\d+)*(?: Mobile\/\S+)? Safari/);
+  return m ? +m[1] : 0;
+})();
+const IMPORT_MAPS = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'));
+const OLD_APPLE = IS_APPLE_TOUCH && (APPLE_OS ? APPLE_OS < 17 : !IMPORT_MAPS);
 const WEAK_GPU = /Intel|UHD|Iris|HD Graphics|Mali|Adreno|PowerVR|Apple A\d|SwiftShader|llvmpipe|Basic Render|Microsoft|Radeon\(TM\)( Vega \d+)? Graphics|Radeon Vega|Radeon R\d/i.test(GPU);
 const IS_WEBGL2 = renderer.capabilities.isWebGL2;
 const CAN_HALF = IS_WEBGL2 && (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'));
@@ -147,9 +162,12 @@ const QUALITY = {
   high: { pr: 1.5, maxPixels: 2.6e6, samples: 4, shadows: true, q: 1 },
   medium: { pr: 1.25, maxPixels: 1.5e6, samples: 2, shadows: true, q: 0.7 },
   low: { pr: 1.5, maxPixels: 0.8e6, samples: 4, shadows: false, q: 0.45 },
+  // old iPads / iPhones: fewer creatures and plants, a smaller picture, and 30 frames per second at most
+  lite: { pr: 1, maxPixels: 0.5e6, samples: 2, shadows: false, q: 0.3, fps30: true },
 };
 function effectiveQuality() {
   if (save.quality && save.quality !== 'auto' && QUALITY[save.quality]) return save.quality;
+  if (OLD_APPLE) return 'lite';
   if (IS_MOBILE) return 'low';
   return WEAK_GPU ? 'medium' : 'high';
 }
@@ -563,7 +581,7 @@ function makeEnv(meta, def) {
   const members = ensureMembers(def, meta.id);
   return {
     THREE, renderer, pmrem,
-    quality: qName, q: Q.q, shadows: Q.shadows,
+    quality: qName === 'lite' ? 'low' : qName, q: Q.q, shadows: Q.shadows,
     get msaa() { return scenePass ? scenePass.target.samples : 0; }, // MSAA samples of the scene buffer (0 = none)
     seed, rng: makeRng(seed),
     hours, sun: opts => sunState(hours(), opts),
@@ -931,7 +949,7 @@ function openSettings() {
 }
 function updateQualityHint() {
   const pct = Math.round(DYN_STEPS[dyn.i] * 100);
-  $('qualityHint').textContent = `当前：${{ high: '高', medium: '中', low: '低' }[qName]}画质，渲染分辨率 ${pct}%。“自动”会按这台设备的显卡选择画质，并根据流畅度平滑调整分辨率，不会重新加载画面。`;
+  $('qualityHint').textContent = `当前：${{ high: '高', medium: '中', low: '低', lite: '省电' }[qName]}画质，渲染分辨率 ${pct}%。“自动”会按这台设备的显卡选择画质，并根据流畅度平滑调整分辨率，不会重新加载画面。`;
 }
 function closeSettings() { $('settings').classList.remove('open'); $('settings').setAttribute('aria-hidden', 'true'); $('reseedConfirm').hidden = true; }
 $('hourRange').addEventListener('input', e => { save.manualHour = parseFloat(e.target.value); $('hourText').textContent = fmtHour(save.manualHour); dirty = true; });
@@ -968,6 +986,26 @@ function setQuality(name) {
 }
 
 /* ------------------------------------------------------------------ */
+/* New versions                                                        */
+/* ------------------------------------------------------------------ */
+// A screen that stays on for weeks (an iPad on a shelf) should pick up improvements by itself: every
+// 15 minutes look at version.json, and when the build changes, reload quietly while the screensaver runs
+// (the world and its residents are saved first). Hosts that pin every file to one version simply never
+// report a change.
+const build = { id: null, pending: false };
+async function checkForUpdate() {
+  if (TEST) return;
+  try {
+    const r = await fetch(new URL('./version.json', import.meta.url).href + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const id = (await r.json()).build;
+    if (!id) return;
+    if (build.id === null) build.id = id;
+    else if (id !== build.id) build.pending = true;
+  } catch (e) {}
+}
+
+/* ------------------------------------------------------------------ */
 /* Main loop                                                           */
 /* ------------------------------------------------------------------ */
 let last = performance.now(), elapsed = 0, acc = 0, minuteTimer = 0, lastRenderAt = 0;
@@ -984,6 +1022,12 @@ function frame(now) {
     updateStatus();
     updateAmbience();
     if (dirty) persist();
+    if (build.pending && idle && !loading && performance.now() - lastInput > 60e3) {
+      build.pending = false;
+      persist();
+      location.reload();
+      return;
+    }
     if (idle && save.rotate > 0 && current && !loading && performance.now() - sceneStart > save.rotate * 60e3) {
       const i = WORLDS.findIndex(w => w.id === current.meta.id);
       enterWorld(WORLDS[(i + 1) % WORLDS.length].id);
@@ -1000,7 +1044,7 @@ function frame(now) {
   if (idleNow !== idle) { idle = idleNow; document.body.classList.toggle('idle', idle); }
   // power save: 30 fps in screensaver mode; awake, at most ~75 fps (120/144 Hz screens would otherwise
   // run a phone hot rendering twice as many frames as anyone can see)
-  const throttled = idle && save.powerSave && !TEST;
+  const throttled = ((idle && save.powerSave) || Q.fps30) && !TEST;
   acc += rawDt;
   if (throttled ? acc < 1 / 31 : (!TEST && dyn.vsync < 11 && acc < 1 / 75)) return;
   const dt = Math.min(0.05, acc);
@@ -1166,6 +1210,8 @@ buildComposer();
 resize(true);
 tickClock();
 setInterval(tickClock, 10000);
+checkForUpdate();
+setInterval(checkForUpdate, 15 * 60e3);
 window.addEventListener('beforeunload', () => { if (dirty) persist(); });
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) { if (dirty) persist(); return; }

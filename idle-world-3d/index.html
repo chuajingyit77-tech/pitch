@@ -222,6 +222,8 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 
 <div id="veil"><div class="spin"></div><div class="msg" id="veilMsg">正在唤醒世界</div></div>
 
+<!-- import maps for browsers that lack them (Safari before 16.4, e.g. older iPads); does nothing elsewhere -->
+<script async src="./lib/vendor/es-module-shims.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -235,7 +237,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
   setTimeout(function () {
     if (window.__idle) return;
     var m = document.getElementById('veilMsg'), sp = document.querySelector('#veil .spin');
-    if (m) m.textContent = '3D 引擎没有加载成功：请确认能访问 cdn.jsdelivr.net，并用最新版 Chrome、Edge 或 Safari 打开';
+    if (m) m.textContent = '3D 引擎没有加载成功：请确认能访问 cdn.jsdelivr.net。iPad / iPhone 需要 iPadOS / iOS 15 或更新；电脑请用最新版 Chrome、Edge 或 Safari';
     if (sp) sp.hidden = true;
   }, 30000);
 </script>

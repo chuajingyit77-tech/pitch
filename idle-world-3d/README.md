@@ -50,6 +50,32 @@ The picture is kept steady on purpose:
   rebuilds itself.
 - Frames are capped at ~75 fps on 120/144 Hz screens and at 30 fps in screensaver mode.
 
+## An always-on iPad (or any kiosk screen)
+
+`play.html` is the same app as a stand-alone, full-screen page with no login. It works on iPadOS / iOS 15
+and newer, so an iPad Air 2, iPad mini 4 or iPad 5th generation and anything later. It is served
+straight from this public repository:
+
+    https://raw.githack.com/chuajingyit77-tech/pitch/idle-worlds-3d/idle-world-3d/play.html
+
+To set the iPad up:
+1. Open the link in Safari. Tap Share, then "Add to Home Screen". The home-screen icon opens it full
+   screen, without the address bar.
+2. Settings → Display & Brightness → Auto-Lock → Never. Keep the iPad on its charger.
+3. Optional: Settings → Accessibility → Guided Access (triple-click the side or Home button to start)
+   keeps it locked to the world.
+
+Older iPads and iPhones (iOS before 17) get a lighter "lite" tier automatically: fewer creatures and
+plants, a smaller picture, and 30 fps. Every 15 minutes the page checks `version.json`. When a new build
+has been pushed, it reloads by itself during screensaver mode, after saving the world.
+
+If that host is ever unavailable, turn on GitHub Pages for the repository (Settings → Pages → branch
+`idle-worlds-3d`, folder `/`). The page is then at
+`https://chuajingyit77-tech.github.io/pitch/idle-world-3d/play.html`.
+
+`play.html` and `version.json` are generated: after changing anything, run
+`python3 idle-world-3d/tools/build_standalone.py`.
+
 ## Setting it up on several office computers
 
 - Open the same link on every computer. Each browser keeps its own world, seed, residents and
