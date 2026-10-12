@@ -15,7 +15,7 @@ export function peachGeometry({ tipUp = true } = {}) {
   g.deleteAttribute('uv');
   const p = g.getAttribute('position');
   const col = new Float32Array(p.count * 3);
-  const cream = new THREE.Color('#f5e6b8'), peach = new THREE.Color('#f8b07c'), blush = new THREE.Color('#e8445c');
+  const cream = new THREE.Color('#f2dca0'), peach = new THREE.Color('#f59a6e'), blush = new THREE.Color('#de3358');
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
     const up = Math.max(0, y);
@@ -27,7 +27,7 @@ export function peachGeometry({ tipUp = true } = {}) {
     y = y * 1.02 + 0.42 * Math.pow(up, 3.2);
     p.setXYZ(i, x, y, z);
     const t = (y + 1) / 2.4;
-    _c.copy(cream).lerp(peach, smoothstep(0.1, 0.55, t)).lerp(blush, smoothstep(0.5, 0.95, t) * (0.75 + 0.25 * Math.cos(ang)));
+    _c.copy(cream).lerp(peach, smoothstep(0.0, 0.45, t)).lerp(blush, smoothstep(0.38, 0.9, t) * (0.8 + 0.2 * Math.cos(ang)));
     col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -120,9 +120,10 @@ export function createSparkles(max = 800) {
   const mark = i => { lo = Math.min(lo, i); hi = Math.max(hi, i); };
   function emit(x, y, z, vx, vy, vz, life, r, g, b, size, kind = 0) {
     const i = head; head = (head + 1) % max;
-    aStart.array.set([x, y, z, uniforms.uTime.value], i * 4);
-    aVel.array.set([vx, vy, vz, life], i * 4);
-    aCol.array.set([r, g, b, size], i * 4);
+    const S = aStart.array, Vl = aVel.array, C = aCol.array, o = i * 4;
+    S[o] = x; S[o + 1] = y; S[o + 2] = z; S[o + 3] = uniforms.uTime.value;
+    Vl[o] = vx; Vl[o + 1] = vy; Vl[o + 2] = vz; Vl[o + 3] = life;
+    C[o] = r; C[o + 1] = g; C[o + 2] = b; C[o + 3] = size;
     aKind.array[i] = kind;
     mark(i);
   }
@@ -304,21 +305,21 @@ export function createSkyLanterns(count, rng) {
 /* Peaches: fruit on the tree (static) and food (dynamic pool)         */
 /* ------------------------------------------------------------------ */
 export function createPeaches(shared, treeSpots, maxFood = 12) {
-  const glowU = { value: 0.1 };
+  const glowU = { value: 0.1 }, foodGlowU = { value: 0.5 };
   const mat = peachMaterial(shared, glowU);
+  const foodMat = peachMaterial(shared, foodGlowU);
   const hanging = peachGeometry({ tipUp: false });
-  const tree = new THREE.InstancedMesh(hanging, mat, treeSpots.length);
+  const tree = new THREE.InstancedMesh(hanging, mat, Math.max(1, treeSpots.length));
   const treeState = treeSpots.map((p, i) => ({ p, ph: i * 1.3, s: 0.13 + (i % 3) * 0.015 }));
   tree.castShadow = true;
-  const food = new THREE.InstancedMesh(peachGeometry({ tipUp: true }), mat, maxFood);
+  const food = new THREE.InstancedMesh(peachGeometry({ tipUp: true }), foodMat, maxFood);
   food.count = 0;
   food.castShadow = true;
   food.frustumCulled = false;
   tree.frustumCulled = false;
-  const halo = createSparkles(64);   // not used as a burst system; we draw halos via the main sparkle system
-  halo.points.visible = false;
   function update(t, night, foods) {
-    glowU.value = lerp(0.06, 1.1, night);
+    glowU.value = lerp(0.02, 0.9, night);
+    foodGlowU.value = lerp(0.45, 1.6, night) * (0.9 + 0.1 * Math.sin(t * 3.1));
     for (let i = 0; i < treeState.length; i++) {
       const st = treeState[i];
       _q.setFromEuler(_e.set(Math.sin(t * 0.8 + st.ph) * 0.08, 0, Math.cos(t * 0.6 + st.ph) * 0.08));
@@ -338,4 +339,61 @@ export function createPeaches(shared, treeSpots, maxFood = 12) {
     food.instanceMatrix.needsUpdate = true;
   }
   return { tree, food, update, treeState, glowU };
+}
+
+/* ------------------------------------------------------------------ */
+/* Halos: a soft pulsing glow with a four-point flare around each peach */
+/* ------------------------------------------------------------------ */
+const HALO_VERT = /* glsl */`
+uniform float uPix;
+attribute vec4 aHalo;   // size, pulse phase, intensity, unused
+varying float vI; varying float vPh;
+void main(){
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mv;
+  vI = aHalo.z; vPh = aHalo.y;
+  gl_PointSize = clamp(aHalo.x * uPix / max(-mv.z, 0.1), 6.0, 260.0);
+}`;
+const HALO_FRAG = /* glsl */`
+uniform float uTime;
+uniform vec3 uCol;
+varying float vI; varying float vPh;
+void main(){
+  vec2 d = gl_PointCoord * 2.0 - 1.0;
+  float r = length(d);
+  float pulse = 0.85 + 0.15 * sin(uTime * 2.6 + vPh);
+  float c = cos(uTime * 0.3 + vPh), s = sin(uTime * 0.3 + vPh);
+  vec2 e = vec2(c * d.x - s * d.y, s * d.x + c * d.y);
+  float flare = exp(-abs(e.x) * 30.0) * exp(-abs(e.y) * 3.2) + exp(-abs(e.y) * 30.0) * exp(-abs(e.x) * 3.2);
+  float a = (exp(-r * r * 7.0) * 0.55 + exp(-r * r * 40.0) * 0.5 + flare * 0.5) * (1.0 - smoothstep(0.75, 1.0, r)) * vI * pulse;
+  if (a < 0.003) discard;
+  gl_FragColor = vec4(uCol * a, 0.0);
+}`;
+export function createHalos(max = 16) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new THREE.BufferAttribute(new Float32Array(max * 3), 3), hal = new THREE.BufferAttribute(new Float32Array(max * 4), 4);
+  pos.setUsage(THREE.DynamicDrawUsage); hal.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', pos); geo.setAttribute('aHalo', hal);
+  geo.setDrawRange(0, 0);
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
+  const uniforms = { uTime: { value: 0 }, uPix: { value: 600 }, uCol: { value: new THREE.Color(2.2, 1.35, 0.8) } };
+  const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: HALO_VERT, fragmentShader: HALO_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  points.renderOrder = 7;
+  return {
+    points, uniforms,
+    update(t, pix, foods, night) {
+      uniforms.uTime.value = t; uniforms.uPix.value = pix;
+      let n = 0;
+      for (const f of foods) {
+        if (!f.alive || n >= max) continue;
+        pos.array[n * 3] = f.pos.x; pos.array[n * 3 + 1] = f.pos.y + f.scale * 0.2; pos.array[n * 3 + 2] = f.pos.z;
+        hal.array[n * 4] = 2.4 * (0.5 + 0.5 * f.bites / f.maxBites); hal.array[n * 4 + 1] = f.ph; hal.array[n * 4 + 2] = lerp(0.55, 1.1, night) * Math.min(1, f.age * 2); hal.array[n * 4 + 3] = 0;
+        n++;
+      }
+      geo.setDrawRange(0, n);
+      pos.needsUpdate = true; hal.needsUpdate = true;
+    },
+  };
 }

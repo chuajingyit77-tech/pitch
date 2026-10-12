@@ -34,11 +34,13 @@ vec3 bendPlant(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, out
   float sway = sin(uTime * 1.35 + dot(root.xz, vec2(0.23, 0.19)) + rnd * 6.2831);
   float bend = uWindStr * (0.1 + 0.55 * gust + 0.08 * sway) * flex;
   vec2 dir = uWindDir * bend;
+  float squash = 0.0;
   for (int i = 0; i < 4; i++) {
     vec2 dv = root.xz - uPress[i].xz;
     float dd = length(dv) + 1e-3;
-    float k = uPress[i].w * (1.0 - smoothstep(0.1, 1.7, dd));
-    dir += dv / dd * k * 0.95;
+    float k = uPress[i].w * (1.0 - smoothstep(0.2, 2.4, dd));
+    dir += dv / dd * k * 1.1;
+    squash = max(squash, uPress[i].w * (1.0 - smoothstep(0.4, 2.0, dd)));
   }
   float w = hN * hN;
   vec2 off = dir * w * H;
@@ -47,6 +49,7 @@ vec3 bendPlant(vec3 wp, vec3 root, float hN, float H, float rnd, float flex, out
   float y = wp.y - root.y;
   float l2 = dot(off, off);
   float ny = max(y - l2 / max(2.0 * y, 0.05), y * 0.2);
+  ny *= 1.0 - 0.72 * squash;
   wp.xz += off;
   wp.y = root.y + ny;
   return wp;
@@ -94,12 +97,13 @@ export function makeGrassColorUniforms() {
 }
 
 /** Material for susuki leaves (plume=false) or plume stalks (plume=true). */
-export function grassMaterial({ wind, colors, fogU, plume = false, map = null, transl = 0.35, wrap = 0.35 }) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, map, alphaTest: plume ? 0.3 : 0, alphaToCoverage: plume });
+export function grassMaterial({ wind, colors, fogU, plume = false, map = null, transl = 0.35, wrap = 0.35, msaa = true }) {
+  const soft = plume && msaa;
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, map, alphaTest: plume ? (msaa ? 0.3 : 0.42) : 0, alphaToCoverage: plume && msaa });
   const U = { ...wind, ...colors, uTransl: { value: transl }, uWrap: { value: wrap } };
   mat.userData.U = U;
   patchMaterial(mat, {
-    key: plume ? 'mgPlume2' : 'mgGrass2',
+    key: plume ? (soft ? 'mgPlumeS' : 'mgPlumeH') : 'mgGrass2',
     uniforms: U,
     vertexHeader: WIND_GLSL + `
       attribute vec4 aInst; attribute float aSide; ${plume ? 'attribute float aPart;' : ''}
@@ -137,7 +141,7 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
           pc *= 1.0 + vGust * uGustBright * 0.7;
           diffuseColor.rgb = mix(c * 1.15, pc * diffuseColor.rgb, vPart);` : 'diffuseColor.rgb = c;'}
         }`,
-      '#include <alphatest_fragment>': plume ? A2C_SOFT : A2C_ALPHATEST,
+      '#include <alphatest_fragment>': soft ? A2C_SOFT : A2C_ALPHATEST,
       '#include <normal_fragment_begin>': NFB_NOFLIP,
       '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * vH * vH'),
       '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
@@ -316,7 +320,7 @@ function branchPath(rng, start, dir, length, steps, curl, gravity) {
 }
 
 /** Procedural Japanese maple: returns { branches: BufferGeometry, leaves: BufferGeometry, height, radius, canopy }. */
-export function buildMaple(rng, { scale = 1 } = {}) {
+export function buildMaple(rng, { scale = 1, density = 1 } = {}) {
   const wood = { P: [], N: [], UV: [], I: [] };
   const clusters = [];
   const up = new THREE.Vector3(0, 1, 0);
@@ -361,7 +365,7 @@ export function buildMaple(rng, { scale = 1 } = {}) {
   const corners = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
   let maxY = 0, maxR = 0;
   for (const c of clusters) {
-    const nCards = Math.round(rng.range(11, 16) * c.r);
+    const nCards = Math.max(3, Math.round(rng.range(11, 16) * c.r * density));
     for (let i = 0; i < nCards; i++) {
       const cpos = new THREE.Vector3(rng.range(-1, 1), rng.range(-0.5, 0.7), rng.range(-1, 1)).multiplyScalar(c.r).add(c.p);
       const size = rng.range(0.75, 1.1) * scale;
@@ -420,4 +424,57 @@ export function mapleLeafDepthMaterial({ map, wind, height }) {
   const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.5, side: THREE.DoubleSide });
   addWind(m, wind, { height, amount: 0.16, stiffness: 1.7, flutter: 0.035, key: 'mapleLeafW' });
   return m;
+}
+
+/* ------------------------------------------------------------------ */
+/* Distant groves: several procedural trees merged into one leaf mesh  */
+/* and one branch mesh (static, cheap: 2 draw calls per palette).      */
+/* ------------------------------------------------------------------ */
+function mergeList(geos) {
+  let n = 0, ni = 0;
+  for (const g of geos) { n += g.attributes.position.count; ni += g.index.count; }
+  const names = Object.keys(geos[0].attributes);
+  const out = new THREE.BufferGeometry();
+  for (const name of names) {
+    const size = geos[0].attributes[name].itemSize;
+    const arr = new Float32Array(n * size);
+    let o = 0;
+    for (const g of geos) { arr.set(g.attributes[name].array, o); o += g.attributes[name].array.length; }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  const idx = new Uint32Array(ni);
+  let oi = 0, ov = 0;
+  for (const g of geos) { const a = g.index.array; for (let i = 0; i < a.length; i++) idx[oi++] = a[i] + ov; ov += g.attributes.position.count; }
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  geos.forEach(g => g.dispose());
+  return out;
+}
+export function buildGrove({ rng, spots, heightAt, map, barkMat, fogU, density = 0.55 }) {
+  const leaves = [], branches = [];
+  for (const sp of spots) {
+    const t = buildMaple(rng, { scale: sp.s, density });
+    const y = heightAt(sp.x, sp.z);
+    const rot = rng.range(0, TAU);
+    for (const g of [t.leaves, t.branches]) { g.rotateY(rot); g.translate(sp.x, y, sp.z); }
+    leaves.push(t.leaves); branches.push(t.branches);
+  }
+  const lmat = new THREE.MeshLambertMaterial({ map, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.45, alphaToCoverage: true });
+  patchMaterial(lmat, {
+    key: 'groveLeafT',
+    uniforms: { uTransl: { value: 0.5 }, uWrap: { value: 0.5 } },
+    fragmentHeader: 'uniform float uTransl, uWrap;',
+    fragment: {
+      '#include <alphatest_fragment>': A2C_ALPHATEST,
+      '#include <normal_fragment_begin>': NFB_NOFLIP,
+      '#include <lights_lambert_pars_fragment>': translucentLambert('1.0'),
+      '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+    },
+  });
+  addFog(lmat, fogU, 'mfogGrove');
+  const lm = new THREE.Mesh(mergeList(leaves), lmat);
+  const bm = new THREE.Mesh(mergeList(branches), barkMat);
+  lm.frustumCulled = bm.frustumCulled = false;
+  const g = new THREE.Group();
+  g.add(bm, lm);
+  return g;
 }

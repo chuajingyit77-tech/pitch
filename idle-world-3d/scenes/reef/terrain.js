@@ -33,7 +33,7 @@ float detailH(vec3 p){
   float r = sin(ph + 0.65 * sin(ph));
   float amp = 0.012 * (0.5 + 0.5 * snoise(vec3(x * 0.08, 2.0)));
   float h = r * amp;
-  h += (vnoise(x * 8.0) - 0.5) * 0.004 + (vnoise(x * 27.0) - 0.5) * 0.0014;
+  h += (vnoise(x * 8.0) - 0.5) * 0.003;
   return h * fade;
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
@@ -135,29 +135,32 @@ float detailH(vec3 p){
   float d = length(p - cameraPosition);
   float fade = 1.0 - smoothstep(16.0, 36.0, d);
   gA = snoise(p * 1.05);
-  gB = snoise(p * 2.2 + 7.0);
+  gB = snoise(p * 1.5 + 7.0);
   gR = snoise(p * 3.6) * 0.6 + snoise(p * 8.5 + 2.0) * 0.4;
-  vec3 q = p * 26.0;
-  float aa = 1.0 - smoothstep(0.3, 0.7, length(fwidth(q)));
-  float h = gR * 0.022 + (vnoise3(q) - 0.5) * 0.008 * aa;
-  vec2 c = cell2(p.xz * 6.0 + vec2(p.y * 3.3, -p.y * 2.1));
-  h -= smoothstep(0.3, 0.0, c.x) * 0.012;
+  float h = snoise(p * 3.6) * 0.02;
   return h * fade;
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
   float expo = smoothstep(-0.45, 0.25, gWN.y);
-  vec3 base = c * 0.82;
-  float coral = smoothstep(0.1, 0.4, gA) * expo;
-  base = mix(base, vec3(0.46, 0.24, 0.34), coral * 0.7);
-  float idn = snoise(p * 0.38 + 3.0) * 0.5 + 0.5;
-  vec3 enc = reefPal(floor(idn * 10.0)) * (0.85 + 0.3 * (gB * 0.5 + 0.5));
-  float encM = smoothstep(0.18, 0.45, gB) * (1.0 - coral * 0.6) * expo;
-  base = mix(base, enc, encM * 0.8);
-  float sp = smoothstep(0.62, 0.72, snoise(p * 1.6 + 11.0)) * expo;
-  base = mix(base, vec3(0.66, 0.16, 0.06), sp * 0.75);
-  float sp2 = smoothstep(0.66, 0.76, snoise(p * 1.9 - 4.0)) * expo;
-  base = mix(base, vec3(0.6, 0.48, 0.08), sp2 * 0.7);
-  base *= 0.5 + 0.65 * clamp(gR * 0.7 + 0.55 + h * 10.0, 0.0, 1.0);
+  vec3 base = c * (0.78 + 0.25 * gR);
+  // pink coralline crust with ragged edges
+  float m1 = gA + 0.45 * gR;
+  float coral = smoothstep(0.15, 0.6, m1) * expo;
+  base = mix(base, vec3(0.44, 0.22, 0.32) * (0.85 + 0.25 * gR), coral * 0.72);
+  // encrusting colonies: muted, ragged, textured
+  float m2 = gB + 0.5 * gR;
+  float idn = snoise(p * 0.33 + 3.0) * 0.5 + 0.5;
+  vec3 enc = reefPal(floor(idn * 10.0)) * (0.8 + 0.3 * gR);
+  float encM = smoothstep(0.45, 0.85, m2) * (1.0 - coral * 0.6) * expo;
+  base = mix(base, enc, encM * 0.5);
+  // rare sponge patches
+  float sp = smoothstep(0.72, 0.85, snoise(p * 1.3 + 11.0) + 0.3 * gR) * expo;
+  base = mix(base, vec3(0.6, 0.16, 0.06), sp * 0.6);
+  // fine porous texture as anti-aliased colour
+  vec3 q = p * 22.0;
+  float aa = 1.0 - smoothstep(0.25, 0.6, length(fwidth(q)));
+  base *= 1.0 + (vnoise3(q) - 0.5) * 0.35 * aa;
+  base *= 0.55 + 0.6 * clamp(gR * 0.6 + 0.55, 0.0, 1.0);
   return base;
 }
 `;

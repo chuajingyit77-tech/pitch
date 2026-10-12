@@ -72,6 +72,10 @@ export function buildTerrain(L, q, rng) {
     let r = 1, g = 1, b = 1;
     const moss = smoothstep(0.45, 0.7, m);
     r = lerp(r, 0.62, moss); g = lerp(g, 1.2, moss); b = lerp(b, 0.45, moss);
+    // mossy carpet on the damp ground around the pond
+    const dP = L.pondD(x, z);
+    const damp = Math.exp(-Math.pow((dP - 1.35) / 0.35, 2)) * smoothstep(0.3, 0.6, m + 0.2);
+    r = lerp(r, 0.55, damp * 0.85); g = lerp(g, 1.25, damp * 0.85); b = lerp(b, 0.4, damp * 0.85);
     const shore = Math.exp(-Math.pow((h - WATER_Y - 0.05) / 0.18, 2));
     r = lerp(r, 0.55, shore * 0.7); g = lerp(g, 0.5, shore * 0.7); b = lerp(b, 0.42, shore * 0.7);
     if (h < WATER_Y) {

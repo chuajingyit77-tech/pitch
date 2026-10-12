@@ -107,7 +107,7 @@ export class Turtle {
     const skinMat = new THREE.MeshStandardMaterial({ map: skin, roughness: 0.62, metalness: 0, envMapIntensity: 0.5, side: THREE.DoubleSide });
     const plastMat = new THREE.MeshStandardMaterial({ color: '#d9cf9c', roughness: 0.6, envMapIntensity: 0.5 });
     const eyeMat = new THREE.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.15, envMapIntensity: 1.2 });
-    for (const m of [shellMat, skinMat, plastMat, eyeMat]) waterize(m, W, { key: 'turtle' });
+    for (const m of [shellMat, skinMat, plastMat, eyeMat]) waterize(m, W, { key: 'turtle', rim: 1.0 });
     this.materials = [shellMat, skinMat, plastMat, eyeMat];
 
     // carapace (upper half) with top-down uv

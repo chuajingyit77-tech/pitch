@@ -109,6 +109,7 @@ export function jungleMaterial(material, shared, opts = {}) {
   if (opts.specks) defines.JG_SPECKS = '';
   if (opts.glowLight !== false) defines.JG_GLOWLIGHT = '';
   if (opts.glowLeaf) defines.JG_GLOWLEAF = '';
+  if (opts.glowTint) defines.JG_GLOWTINT = '';
   const uniforms = {
     ...shared,
     uTranslucency: { value: translucent },
@@ -174,11 +175,16 @@ export function jungleMaterial(material, shared, opts = {}) {
           totalEmissiveRadiance += uGlowColor * uNight * (vein * 2.6 + 0.06) * pulse2;
         }
         #endif
+        #ifdef JG_GLOWTINT
+          totalEmissiveRadiance += diffuseColor.rgb * uNight * 0.9;
+        #endif
         #ifdef JG_SPECKS
         {
-          float sp = texture2D(uCookieTex, vWorldP.xz * 1.9 + vWorldP.y * 0.7).a;
-          float spk = smoothstep(0.78, 0.86, sp);
-          totalEmissiveRadiance += uGlowColor * spk * uNight * 1.6 * (0.7 + 0.3 * sin(uTime * 0.8 + sp * 40.0));
+          // glowing lichen: clusters of luminous dots, denser on top surfaces
+          float sp = texture2D(uCookieTex, vWorldP.xz * 1.3 + vWorldP.y * 0.5).a;
+          float cl = texture2D(uCookieTex, vWorldP.xz * 0.11 - vWorldP.y * 0.07).b;
+          float spk = smoothstep(0.72, 0.84, sp) * smoothstep(0.5, 0.7, cl);
+          totalEmissiveRadiance += uGlowColor * spk * uNight * 2.6 * (0.7 + 0.3 * sin(uTime * 0.8 + sp * 40.0));
         }
         #endif
       `,

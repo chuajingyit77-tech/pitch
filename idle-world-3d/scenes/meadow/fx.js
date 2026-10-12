@@ -145,15 +145,6 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   const SP = cpuPoints(220);
   scene.add(SP.pts);
   const streamers = [];
-  const TRAIL = 6;
-  const trailGeo = new THREE.BufferGeometry();
-  const trailPos = new Float32Array(60 * TRAIL * 2 * 3), trailCol = new Float32Array(60 * TRAIL * 2 * 3);
-  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3).setUsage(THREE.DynamicDrawUsage));
-  trailGeo.setAttribute('color', new THREE.BufferAttribute(trailCol, 3).setUsage(THREE.DynamicDrawUsage));
-  const trails = new THREE.LineSegments(trailGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  trails.frustumCulled = false;
-  trails.renderOrder = 6;
-  scene.add(trails);
   const srng = rng.fork('stream');
   const sFwd = new THREE.Vector3(), sRight = new THREE.Vector3();
   /** Stream of fluff + leaves from around the camera to `to`. */
@@ -165,10 +156,10 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       const s = {
         p0: new THREE.Vector3(), p1: new THREE.Vector3(), p2: new THREE.Vector3(), pos: new THREE.Vector3(), to: to.clone(),
         t: -srng.range(0, 1.1), dur: srng.range(1.5, 2.4), orbit: srng.range(0.25, 0.7), phase: srng.range(0, TAU), leaf: null,
-        hist: [], kind: srng.chance(0.25) ? 'leaf' : 'fluff',
+        kind: srng.chance(0.25) ? 'leaf' : 'fluff',
       };
       const side = srng.range(-1, 1);
-      s.p0.copy(camera.position).addScaledVector(fwd, srng.range(1.5, 4.5)).addScaledVector(right, side * srng.range(2, 6));
+      s.p0.copy(camera.position).addScaledVector(fwd, srng.range(3.5, 7.5)).addScaledVector(right, side * srng.range(2, 6));
       s.p0.y = Math.max(heightAt(s.p0.x, s.p0.z) + 1.2, camera.position.y - srng.range(0.4, 2.2));
       s.p1.lerpVectors(s.p0, to, 0.5).addScaledVector(right, side * srng.range(0.5, 3)).add(tmp.set(0, srng.range(0.8, 2.4), 0));
       s.p2.copy(to).add(tmp.set(srng.range(-0.3, 0.3), 0.35, srng.range(-0.3, 0.3)));
@@ -185,7 +176,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   fx.puff = (p, n = 14, sparkle = false) => {
     for (let i = 0; i < n; i++) {
       const sp = sparkle && i % 3 === 0;
-      puffs.push({ pos: p.clone().add(tmp.set(srng.range(-0.05, 0.05), 0.05, srng.range(-0.05, 0.05))), vel: new THREE.Vector3(srng.range(-0.8, 0.8), srng.range(0.6, 1.8), srng.range(-0.8, 0.8)), life: 0, max: srng.range(0.5, 1.0), col: (sp ? crumbB : crumbA).clone().multiplyScalar(sp ? 3 : 1.2), size: sp ? 9 : srng.range(4, 7) });
+      puffs.push({ pos: p.clone().add(tmp.set(srng.range(-0.05, 0.05), 0.05, srng.range(-0.05, 0.05))), vel: new THREE.Vector3(srng.range(-0.8, 0.8), srng.range(0.6, 1.8), srng.range(-0.8, 0.8)), life: 0, max: srng.range(0.5, 1.0), col: (sp ? crumbB : crumbA).clone().multiplyScalar(sp ? 3 : 1.2), size: sp ? 70 : srng.range(28, 45) });
     }
     while (puffs.length > 150) puffs.shift();
   };
@@ -220,6 +211,37 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   const drng = rng.fork('dragonflies');
   const dflies = [];
   for (let i = 0; i < DF; i++) dflies.push({ pos: new THREE.Vector3(drng.range(-10, 10), 2, drng.range(-4, 14)), goal: new THREE.Vector3(), vel: new THREE.Vector3(), timer: drng.range(0, 2), heading: drng.range(0, TAU), hover: true });
+
+  /* ---------------- songbird flock ---------------- */
+  const NB = Math.round(18 * Math.max(q, 0.6));
+  const birdGeo = new THREE.BufferGeometry();
+  {
+    const P = [
+      0, 0, 0.1, -0.02, 0.004, -0.01, 0.02, 0.004, -0.01,
+      -0.02, 0.004, -0.01, 0, 0, -0.09, 0.02, 0.004, -0.01,
+      -0.014, 0, 0.03, -0.15, 0, -0.005, -0.014, 0, -0.03,
+      0.014, 0, 0.03, 0.014, 0, -0.03, 0.15, 0, -0.005,
+    ];
+    const W = [0, 0, 0, 0, 0, 0, 0.1, 1, 0.1, 0.1, 0.1, 1];
+    birdGeo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    birdGeo.setAttribute('aWing', new THREE.Float32BufferAttribute(W, 1));
+    birdGeo.computeVertexNormals();
+  }
+  const birdU = { uTime: { value: 0 } };
+  const birdMat = new THREE.MeshLambertMaterial({ color: '#2a2420', side: THREE.DoubleSide });
+  patchMaterial(birdMat, {
+    key: 'songbird', uniforms: birdU, vertexHeader: 'attribute float aWing; uniform float uTime;',
+    vertex: { '#include <begin_vertex>': '$&\n float fl = sin(uTime * 17.0 + float(gl_InstanceID) * 2.31); float glide = step(0.0, sin(uTime * 0.9 + float(gl_InstanceID) * 0.7)); transformed.y += aWing * mix(fl * 0.1, 0.012, glide * 0.0 + 0.0) * 1.0;' },
+  });
+  addFog(birdMat, fogU, 'mfogBird');
+  const birds = new THREE.InstancedMesh(birdGeo, birdMat, NB);
+  birds.frustumCulled = false;
+  scene.add(birds);
+  const brng = rng.fork('birds');
+  const flock = [];
+  for (let i = 0; i < NB; i++) flock.push({ off: new THREE.Vector3(brng.range(-4, 4), brng.range(-1.2, 1.2), brng.range(-4, 4)), ph: brng.range(0, TAU), pos: new THREE.Vector3(), prev: new THREE.Vector3(), heading: 0 });
+  const fc = new THREE.Vector3(brng.range(-15, 15), 0, brng.range(-45, -30));
+  const leader = new THREE.Vector3(), leaderPrev = new THREE.Vector3();
 
   /* ---------------- glow sprites (food marker, kitsunebi, lanterns) ---------------- */
   fx.glow = (color, size, intensity = 1) => {
@@ -273,7 +295,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     leafMesh.instanceMatrix.needsUpdate = true;
 
     // streamers
-    let np = 0, nt = 0;
+    let np = 0;
     for (let i = streamers.length - 1; i >= 0; i--) {
       const s = streamers[i];
       s.t += dt / s.dur;
@@ -293,25 +315,13 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
         a = 1 - smoothstep(0.6, 1.6, o);
         if (o > 1.6) { streamers.splice(i, 1); if (s.leaf) s.leaf.active = false; continue; }
       }
-      s.hist.unshift(s.pos.x, s.pos.y, s.pos.z);
-      if (s.hist.length > TRAIL * 3) s.hist.length = TRAIL * 3;
       if (s.leaf) s.leaf.pos.copy(s.pos);
       else if (np < 200) {
         SP.pos[np * 3] = s.pos.x; SP.pos[np * 3 + 1] = s.pos.y; SP.pos[np * 3 + 2] = s.pos.z;
         const b = (1.6 + golden) * a;
         SP.col[np * 3] = light.r * b; SP.col[np * 3 + 1] = light.g * b * 0.97; SP.col[np * 3 + 2] = light.b * b * 0.9;
-        SP.sz[np] = 10;
+        SP.sz[np] = 38;
         np++;
-      }
-      // trail
-      const hl = s.hist.length / 3;
-      for (let k = 0; k < hl - 1 && nt < 60 * TRAIL; k++) {
-        const f = (1 - k / TRAIL) * a * 0.55;
-        const o6 = nt * 6;
-        for (let c = 0; c < 6; c++) trailPos[o6 + c] = s.hist[k * 3 + c];
-        trailCol[o6] = light.r * f; trailCol[o6 + 1] = light.g * f; trailCol[o6 + 2] = light.b * f * 0.9;
-        trailCol[o6 + 3] = light.r * f * 0.5; trailCol[o6 + 4] = light.g * f * 0.5; trailCol[o6 + 5] = light.b * f * 0.45;
-        nt++;
       }
     }
     // crumbs
@@ -332,8 +342,6 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     SP.geo.setDrawRange(0, np);
     SP.geo.attributes.position.needsUpdate = SP.geo.attributes.color.needsUpdate = SP.geo.attributes.aSize.needsUpdate = true;
     SP.uniforms.uPR.value = pr;
-    trailGeo.setDrawRange(0, nt * 2);
-    trailGeo.attributes.position.needsUpdate = trailGeo.attributes.color.needsUpdate = true;
 
     // dragonflies: hover, dart, hover; daytime only
     const dfVis = day * (1 - night);
@@ -374,6 +382,28 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       }
       dfBody.instanceMatrix.needsUpdate = dfWing.instanceMatrix.needsUpdate = true;
     }
+  };
+  fx.updateBirds = (dt, t, day) => {
+    birds.visible = day > 0.35;
+    if (!birds.visible) return;
+    birdU.uTime.value = t;
+    leaderPrev.copy(leader);
+    leader.set(fc.x + Math.sin(t * 0.07) * 38 + Math.sin(t * 0.19) * 8, 9 + Math.sin(t * 0.11) * 3.5, fc.z + Math.sin(t * 0.05 + 1.3) * 16);
+    leader.y += heightAt(leader.x, leader.z);
+    for (let i = 0; i < flock.length; i++) {
+      const b = flock[i];
+      b.prev.copy(b.pos);
+      b.pos.copy(leader).add(b.off);
+      b.pos.x += Math.sin(t * 0.6 + b.ph) * 1.6; b.pos.y += Math.sin(t * 0.9 + b.ph * 2) * 0.6; b.pos.z += Math.cos(t * 0.5 + b.ph) * 1.6;
+      tmp.subVectors(b.pos, b.prev);
+      if (tmp.lengthSq() > 1e-6) b.heading = Math.atan2(tmp.x, tmp.z);
+      e.set(-tmp.y * 2, b.heading, Math.sin(t + b.ph) * 0.3);
+      tmpQ.setFromEuler(e);
+      sc.setScalar(1);
+      mtx.compose(b.pos, tmpQ, sc);
+      birds.setMatrixAt(i, mtx);
+    }
+    birds.instanceMatrix.needsUpdate = true;
   };
   fx.dispose = () => {};
   void quality; void up; void wind;

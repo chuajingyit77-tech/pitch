@@ -101,7 +101,7 @@ function staghornGeo(rng, base, tip, maxD = 4) {
 }
 
 function brainGeo(seed) {
-  const g = strip(new THREE.SphereGeometry(1, 72, 32, 0, TAU, 0, Math.PI * 0.62));
+  const g = strip(new THREE.SphereGeometry(1, 56, 22, 0, TAU, 0, Math.PI * 0.62));
   const n = createNoise(seed);
   const p = g.getAttribute('position'), v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
@@ -218,9 +218,9 @@ function fanTexture(seed) {
 }
 
 function anemoneTentacleGeo(len = 0.3) {
-  const g = strip(new THREE.CylinderGeometry(0.014, 0.026, len, 6, 6, true));
+  const g = strip(new THREE.CylinderGeometry(0.014, 0.026, len, 5, 4, true));
   g.translate(0, len / 2, 0);
-  const tipG = strip(new THREE.SphereGeometry(0.02, 6, 4));
+  const tipG = strip(new THREE.SphereGeometry(0.02, 5, 3));
   tipG.translate(0, len, 0);
   const merged = mergeGeometries([g, tipG]);
   g.dispose(); tipG.dispose();
@@ -356,41 +356,40 @@ float detailH(vec3 p){
   float n = snoise(q) + 0.22 * snoise(q * 2.1 + 5.0);
   float k = n * 2.3;
   float w = fwidth(k);
-  float g = abs(fract(k) - 0.5) * 2.0;
-  float ridge = 1.0 - smoothstep(0.35, 0.85, g);
-  ridge = mix(ridge, 0.6, smoothstep(0.12, 0.45, w));
+  float ridge = 0.5 + 0.5 * cos(k * 6.2831853);
+  ridge = mix(ridge, 0.5, smoothstep(0.1, 0.35, w));
   float d = length(vUwPos - cameraPosition);
-  return (ridge * 0.022 - 0.011) * (1.0 - smoothstep(12.0, 30.0, d));
+  return (ridge * 0.014 - 0.007) * (1.0 - smoothstep(12.0, 30.0, d));
 }
 vec3 detailCol(vec3 p, float h, vec3 c){
-  float r = smoothstep(-0.008, 0.01, h);
+  float r = smoothstep(-0.006, 0.006, h);
   vec3 groove = c * vec3(0.5, 0.58, 0.42);
   vec3 ridge = c * 1.1 + vec3(0.02, 0.03, 0.01);
   return mix(groove, ridge, r);
 }
 `;
 const POLYP_GLSL = /* glsl */`
-float detailH(vec3 p){
-  vec2 c = cell2(p.xz * 26.0 + p.y * 19.0);
-  float d = length(vUwPos - cameraPosition);
-  return (smoothstep(0.0, 0.45, c.x) * 0.004 - 0.002) * (1.0 - smoothstep(6.0, 18.0, d));
+// Fine polyp texture as anti-aliased colour only (derivative bumps of high-frequency patterns
+// shade in 2x2 blocks); a gentle low-frequency bump keeps the surface lumpy.
+float detailH(vec3 p){ return snoise(p * 6.0) * 0.006; }
+vec3 detailCol(vec3 p, float h, vec3 c){
+  vec2 q = p.xz * 26.0 + p.y * 19.0;
+  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
+  vec2 cc = cell2(q);
+  float dots = smoothstep(0.42, 0.12, cc.x);
+  return c * (0.9 + (dots - 0.45) * 0.35 * aa) * (0.92 + h * 12.0);
 }
-vec3 detailCol(vec3 p, float h, vec3 c){ return c * (0.88 + h * 50.0); }
 `;
 const TABLE_GLSL = /* glsl */`
-float detailH(vec3 p){
-  float a = atan(p.z, p.x);
-  float st = sin(a * 70.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5;
-  vec2 c = cell2(p.xz * 22.0);
-  float aa = 1.0 - smoothstep(0.3, 0.7, length(fwidth(p.xz * 22.0)));
-  float d = length(vUwPos - cameraPosition);
-  return (st * 0.003 + smoothstep(0.05, 0.4, c.x) * 0.006 * aa) * (1.0 - smoothstep(8.0, 24.0, d));
-}
+float detailH(vec3 p){ return snoise(p * 4.0) * 0.006; }
 vec3 detailCol(vec3 p, float h, vec3 c){
-  float r = length(p.xz);
-  vec3 col = c * (0.7 + h * 60.0);
-  col *= 0.75 + 0.35 * snoise(p * 2.5) * 0.5 + 0.2;
-  return col;
+  float a = atan(p.z, p.x);
+  vec2 q = p.xz * 22.0;
+  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
+  float st = sin(a * 70.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5;
+  float cells = smoothstep(0.05, 0.4, cell2(q).x);
+  vec3 col = c * (0.78 + (st * 0.12 + cells * 0.2) * aa + h * 20.0);
+  return col * (0.8 + 0.3 * (snoise(p * 2.5) * 0.5 + 0.5));
 }
 `;
 const STAR_GLSL = /* glsl */`
@@ -401,11 +400,13 @@ float detailH(vec3 p){
 vec3 detailCol(vec3 p, float h, vec3 c){ return mix(c, c * 1.35 + 0.05, h * 15.0); }
 `;
 const SPONGE_GLSL = /* glsl */`
-float detailH(vec3 p){
-  vec2 c = cell2(vec2(atan(p.z, p.x) * 6.0, p.y * 30.0));
-  return -smoothstep(0.25, 0.0, c.x) * 0.004 + (vnoise3(p * 40.0) - 0.5) * 0.002;
+float detailH(vec3 p){ return snoise(p * 5.0) * 0.006; }
+vec3 detailCol(vec3 p, float h, vec3 c){
+  vec2 q = vec2(atan(p.z, p.x) * 6.0, p.y * 30.0);
+  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
+  float pores = smoothstep(0.25, 0.0, cell2(q).x);
+  return c * (1.0 - pores * 0.45 * aa) * (0.9 + h * 15.0);
 }
-vec3 detailCol(vec3 p, float h, vec3 c){ return c * (1.0 + h * 60.0); }
 `;
 
 /* ------------------------------------------------------------------ */
@@ -449,11 +450,14 @@ function clamMantleGeo() {
   return g;
 }
 const CLAM_GLSL = /* glsl */`
-float detailH(vec3 p){ vec2 c = cell2(p.xz * vec2(16.0, 22.0)); return smoothstep(0.3, 0.0, c.x) * 0.006; }
+float detailH(vec3 p){ return 0.0; }
 vec3 detailCol(vec3 p, float h, vec3 c){
   float w = sin(p.x * 18.0 + snoise(p * 5.0) * 3.0) * 0.5 + 0.5;
+  vec2 q = p.xz * vec2(16.0, 22.0);
+  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
+  float spots = smoothstep(0.3, 0.05, cell2(q).x) * aa;
   vec3 col = c * (0.7 + 0.5 * w);
-  col = mix(col, vec3(0.75, 0.95, 1.0), h * 90.0);
+  col = mix(col, vec3(0.75, 0.95, 1.0), spots * 0.55);
   col = mix(col, c * 0.25, smoothstep(0.82, 0.97, length(p.xz * vec2(1.0, 1.7))) * 0.6);
   return col;
 }
@@ -667,7 +671,7 @@ export function buildReef(ctx) {
   const clamShellMat = stdMat(W, { vertexColors: true, roughness: 0.7 }, { key: 'clamshell' });
   const clamMantleMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, metalness: 0, iridescence: 0.9, iridescenceIOR: 1.5, iridescenceThicknessRange: [250, 650], clearcoat: 0.5, clearcoatRoughness: 0.25, envMapIntensity: 1.0, emissive: '#0a2a3a', emissiveIntensity: 0.6 });
   waterize(clamMantleMat, W, { key: 'clam' });
-  addDetail(clamMantleMat, W, { glsl: CLAM_GLSL, space: 'object', bump: 0.6, key: 'clam' });
+  addDetail(clamMantleMat, W, { glsl: CLAM_GLSL, space: 'object', bump: 0, key: 'clam' });
   addFluor(clamMantleMat, W, '#3ad8ff', 1.2, 'clam');
   const clams = [];
   const clamCols = [C('#2a7bff'), C('#14c8d8'), C('#3ad07a'), C('#7a5aff'), C('#1aa0ff'), C('#c0d830')];
@@ -716,7 +720,7 @@ export function buildReef(ctx) {
   const brainMat = stdMat(W, { vertexColors: true, roughness: 0.8 }, { key: 'brain' });
   addDetail(brainMat, W, { glsl: BRAIN_GLSL, space: 'object', bump: 0.9, key: 'brain' });
   addFluor(brainMat, W, '#3dff8a', 0.55, 'brain');
-  const brainCols = [C('#b9a36a'), C('#8fa06a'), C('#c08f72'), C('#a8b08a'), C('#d0b080'), C('#9a8ab0')];
+  const brainCols = [C('#a8905a'), C('#7e8a52'), C('#a8785a'), C('#8f9a6a'), C('#c0a070'), C('#b0a060'), C('#8a7a9a')];
   const brains = [];
   for (let i = N(26); i > 0; i--) {
     const s = rng.chance(0.75) ? take(reefSpots, s2 => nrm(s2).y > 0.6, 0.5) : take(sandSpots, () => true, 0.5);
@@ -763,7 +767,7 @@ export function buildReef(ctx) {
 
   /* ---- encrusting mound corals (Porites lumps) fill the gaps with colour ---- */
   const moundG = (() => {
-    const g = strip(new THREE.SphereGeometry(1, 24, 12, 0, TAU, 0, Math.PI * 0.55));
+    const g = strip(new THREE.SphereGeometry(1, 18, 9, 0, TAU, 0, Math.PI * 0.55));
     const nn = createNoise(env.seed ^ 404), p = g.getAttribute('position'), v = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i);
@@ -777,7 +781,7 @@ export function buildReef(ctx) {
   const moundMat = stdMat(W, { vertexColors: true, roughness: 0.7 }, { key: 'mound' });
   addDetail(moundMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'mound' });
   addFluor(moundMat, W, '#36ffd0', 0.35, 'mound');
-  const moundCols = [C('#b58cd8'), C('#d9b04a'), C('#8ccf9a'), C('#e8909c'), C('#c9d46a'), C('#e09a5a'), C('#ff8a6a'), C('#c8a060'), C('#a0b850')];
+  const moundCols = [C('#c8a060'), C('#b89a50'), C('#9a8a5a'), C('#a8b060'), C('#c09080'), C('#9a7aa8'), C('#7a9ab0'), C('#d0b070'), C('#e0906a'), C('#b88cc8')];
   const mounds = [];
   for (let i = N(190); i > 0; i--) {
     const s = rng.chance(0.88) ? take(reefSpots, () => true, 0.2) : take(sandSpots, () => true, 0.25);
@@ -837,14 +841,14 @@ export function buildReef(ctx) {
   group.add(instanced(mushroomGeo(), mushMat, mushes, { shadow: false }));
 
   /* ---- anemones ---- */
-  const tentLen = 0.3;
+  const tentLen = 0.34;
   const tentG = anemoneTentacleGeo(tentLen);
-  paint(tentG, (x, y) => { const t = clamp(y / tentLen, 0, 1); return [_c.copy(C('#d8c79a')).lerp(C('#ff7fb8'), smoothstep(0.55, 1, t)).clone(), smoothstep(0.5, 1, t)]; });
+  paint(tentG, (x, y) => { const t = clamp(y / tentLen, 0, 1); return [_c.copy(C('#c8b45a')).lerp(C('#ff4fa8'), smoothstep(0.6, 1, t)).clone(), smoothstep(0.5, 1, t)]; });
   const tentMat = stdMat(W, { vertexColors: true, roughness: 0.45, envMapIntensity: 0.6 }, { key: 'tent' });
   addSway(tentMat, W, { height: tentLen, amount: 0.07, stiff: 1.5, flutter: 0.045, key: 'tent' });
   addFluor(tentMat, W, '#7dff3a', 1.4, 'tent');
   const tents = [], baseList = [];
-  const tentCols = [C('#ffffff'), C('#ffe0a0'), C('#c8f0a0'), C('#ffc0e0')];
+  const tentCols = [C('#ffffff'), C('#d8ffb0'), C('#ffe8a8'), C('#ffd0f0')];
   anemones.forEach((a, ai) => {
     const nT = Math.round((ai === 0 ? 260 : 170) * q);
     const tc = tentCols[ai % tentCols.length];
@@ -891,6 +895,37 @@ export function buildReef(ctx) {
     }
   }
   group.add(instanced(bladeG, grassMat, blades, { shadow: false }));
+
+  /* ---- garden eels poking out of the sand apron ---- */
+  const eelG = (() => {
+    const g = strip(new THREE.CylinderGeometry(0.014, 0.017, 1, 6, 10, false));
+    g.translate(0, 0.5, 0);
+    const p = g.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i);
+      // question-mark curve leaning into the current, head slightly thicker
+      const k = 1 + smoothstep(0.82, 0.95, y) * 0.35 - smoothstep(0.97, 1.0, y) * 0.5;
+      p.setXYZ(i, p.getX(i) * k + Math.sin(y * 2.6) * 0.07 * y, y, p.getZ(i) * k);
+    }
+    g.computeVertexNormals();
+    paint(g, (x, y, z, i) => [_c.setRGB(0.85, 0.84, 0.78).multiplyScalar(((i * 7) % 11) === 0 ? 0.35 : 1).clone(), 0]);
+    return g;
+  })();
+  const eelMat = stdMat(W, { vertexColors: true, roughness: 0.5, envMapIntensity: 0.6 }, { key: 'eel' });
+  addSway(eelMat, W, { height: 1, amount: 0.08, stiff: 1.3, flutter: 0.06, key: 'eel' });
+  const eels = [];
+  const eelYaw = Math.atan2(-curDir.y, curDir.x);
+  for (let c = q > 0.6 ? 2 : 1; c > 0; c--) {
+    const a = rng.range(0, TAU), r = rng.range(13.5, 17);
+    const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+    for (let i = N(26); i > 0; i--) {
+      const x = cx + rng.gauss() * 1.4, z = cz + rng.gauss() * 1.4;
+      if (hm.at(x, z) > ground.height(x, z) + 0.05) continue;
+      const h = rng.range(0.25, 0.45);
+      eels.push({ pos: new THREE.Vector3(x, ground.height(x, z) - 0.03, z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), eelYaw + rng.range(-0.4, 0.4), rng.range(-0.06, 0.06))).clone(), scale: new THREE.Vector3(1, h, 1) });
+    }
+  }
+  group.add(instanced(eelG, eelMat, eels, { shadow: false }));
 
   /* ---- a few ribbon-kelp clumps far out on the slope ---- */
   const kelpTex = kelpTexture(env.seed ^ 5);

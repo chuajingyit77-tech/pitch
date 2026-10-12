@@ -44,7 +44,8 @@ export function ambienceFor(h) {
 
 const VIEW_TARGET = new THREE.Vector3(1.4, 2.4, -3.6);
 const VIEW_PITCH = 0.14;
-const SUN_AZ = Math.PI * 0.78;
+const SUN_AZ = Math.PI * 0.35;
+const LATITUDE = 25;
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m4 = new THREE.Matrix4(), _s = new THREE.Vector3(), _c = new THREE.Color(), _c2 = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -229,22 +230,22 @@ export default {
     const lianaTint = (t, n) => { const m = clamp(n.y, 0, 1) * 0.6; return [lerp(0.55, 0.4, m), lerp(0.48, 0.6, m), lerp(0.36, 0.25, m)]; };
     for (let i = 0; i < Math.min(9, allHangs.length); i++) {
       const a = allHangs[rl.int(0, allHangs.length - 1)];
-      if (rl.chance(0.55)) {
+      if (rl.chance(0.35)) {
         const curve = dropCurve(a, L.groundH(a.x, a.z), rl);
-        const g = taperTube(curve, t => lerp(0.07, 0.045, t), { tubular: 28, radial: 6, tintFn: lianaTint, uvScale: [1, 0.5] });
+        const g = taperTube(curve, t => lerp(0.09, 0.06, t), { tubular: 28, radial: 6, tintFn: lianaTint, uvScale: [1, 0.5] });
         const top = a.y, len = a.y - L.groundH(a.x, a.z);
         vineParts.push(withHang(g, (k, p) => clamp((top - p.getY(k)) / len, 0, 1) * smoothstep(0, 0.25, (p.getY(k) - L.groundH(a.x, a.z)) / len)));
       } else {
         const b = allHangs[rl.int(0, allHangs.length - 1)];
         if (a.distanceTo(b) < 3 || a.distanceTo(b) > 14) continue;
         const curve = lianaCurve(a, b, rl.range(1.5, 3.5));
-        const g = taperTube(curve, t => 0.06, { tubular: 24, radial: 6, tintFn: lianaTint });
+        const g = taperTube(curve, t => 0.075, { tubular: 24, radial: 6, tintFn: lianaTint });
         vineParts.push(withHang(g, (k, p) => { const tt = Math.floor(k / 7) / 24; return Math.sin(Math.PI * tt) * 0.6; }));
       }
     }
     // aerial roots: thin straight strands hanging from limbs
     const rootTops = [];
-    for (let i = 0; i < Math.round(5 * Math.max(q, 0.5)); i++) {
+    for (let i = 0; i < Math.round(3 * Math.max(q, 0.5)); i++) {
       const a = innerHangs[rl.int(0, innerHangs.length - 1)];
       const end = Math.max(L.groundH(a.x, a.z) + rl.range(0.3, 3.5), WATER_Y + 0.4);
       if (a.y - end < 2) continue;
@@ -377,7 +378,7 @@ export default {
     instance(monGeo, foliageMat(WIND_MID), monList);
     // banana
     const banGeo = P.banana(atlas, R('ban'), { leaves: 8 });
-    const banList = scatter(Math.round(7 * Math.max(q, 0.7)), { region: [-18, 18, -8, 8], s: [0.95, 1.25], test: (x, z) => Math.abs(x) > 6.5 && camRing(x, z) > 2.5 });
+    const banList = scatter(Math.round(7 * Math.max(q, 0.7)), { region: [-18, 18, -8, 8], s: [0.95, 1.25], test: (x, z) => Math.abs(x) > 6.5 && camRing(x, z) > 2.5 && (camDist(x, z) > 10 || Math.abs(camAng(x, z)) > 0.7) });
     instance(banGeo, foliageMat(WIND_TALL), banList);
     // elephant ears along the shore and in the foreground
     const eeGeo = P.elephantEar(atlas, R('ee'), { leaves: 6 });
@@ -388,7 +389,7 @@ export default {
     instance(eeGeo, foliageMat(WIND_MID), eeList);
     // tree ferns at the back corners
     const tfGeo = P.treeFern(atlas, R('tf'), { height: 3.2 });
-    const tfList = scatter(Math.round(7 * Math.max(q, 0.7)), { region: [-16, 16, -9, 5], s: [0.9, 1.35], test: (x, z) => (Math.abs(x) > 5 || z < -7) && camRing(x, z) > 3 });
+    const tfList = scatter(Math.round(7 * Math.max(q, 0.7)), { region: [-16, 16, -9, 5], s: [0.9, 1.35], test: (x, z) => (Math.abs(x) > 5 || z < -7) && camRing(x, z) > 3 && (camDist(x, z) > 11 || Math.abs(camAng(x, z)) > 0.75) });
     instance(tfGeo, foliageMat(WIND_TALL), tfList);
     // heliconia colour pops
     const helGeo = P.heliconia(atlas, R('hel'), { stems: 4 });
@@ -475,25 +476,40 @@ export default {
     for (const lg of logs) for (let k = 0; k < 4; k++) {
       const along = rmu.range(-0.4, 0.4) * lg.len;
       const side = rmu.sign();
-      mushList.push({ x: lg.x + Math.cos(lg.rot) * along + Math.sin(lg.rot) * side * lg.r0 * 0.7, y: lg.y + lg.r0 * 0.25, z: lg.z - Math.sin(lg.rot) * along + Math.cos(lg.rot) * side * lg.r0 * 0.7, s: rmu.range(1.2, 2.2), rot: rmu.next() * TAU, tiltZ: side * 0.5 });
+      mushList.push({ x: lg.x + Math.cos(lg.rot) * along + Math.sin(lg.rot) * side * lg.r0 * 0.7, y: lg.y + lg.r0 * 0.25, z: lg.z - Math.sin(lg.rot) * along + Math.cos(lg.rot) * side * lg.r0 * 0.7, s: rmu.range(2.4, 3.6), rot: rmu.next() * TAU, tiltZ: side * 0.5 });
     }
     for (const t of trees.slice(0, 3)) for (let k = 0; k < 3; k++) {
       const a = rmu.next() * TAU, r = t.def.opt.r0 * rmu.range(1.25, 1.9);
       const x = t.def.at[0] + Math.cos(a) * r, z = t.def.at[1] + Math.sin(a) * r;
-      mushList.push({ x, y: L.groundH(x, z), z, s: rmu.range(1.4, 2.4), rot: rmu.next() * TAU });
+      mushList.push({ x, y: L.groundH(x, z), z, s: rmu.range(2.6, 4.0), rot: rmu.next() * TAU });
     }
     for (let k = 0; k < 6; k++) {
       const b = boulderSpots[rmu.int(0, boulderSpots.length - 1)];
       const a = rmu.next() * TAU;
       const x = b.pos.x + Math.cos(a) * b.r * 1.6, z = b.pos.z + Math.sin(a) * b.r * 1.6;
       if (L.inPond(x, z, -0.05)) continue;
-      mushList.push({ x, y: L.groundH(x, z), z, s: rmu.range(1.2, 2), rot: rmu.next() * TAU });
+      mushList.push({ x, y: L.groundH(x, z), z, s: rmu.range(2.2, 3.4), rot: rmu.next() * TAU });
     }
-    instance(mushGeo, mushMat, mushList, { shadow: false, mainOnly: true });
+    instance(mushGeo, mushMat, mushList, { shadow: false });
+    // glow pods around the pond and in the foreground
+    const podGeo = P.glowPods(R('pods'), { stems: 6 });
+    const podList = [];
+    for (let i = 0; i < Math.round(26 * Math.max(q, 0.6)); i++) {
+      let x, z, guard = 0;
+      do {
+        if (i % 3 === 0) { x = camPos0.x + rmu.range(-6, 6); z = rmu.range(POND.cz + POND.rzFront, camPos0.z - 2.5); }
+        else { const a = rmu.next() * TAU; x = POND.cx + Math.cos(a) * POND.rx * rmu.range(1.08, 1.35); z = POND.cz + Math.sin(a) * (Math.sin(a) < 0 ? POND.rzBack : POND.rzFront) * rmu.range(1.08, 1.35); }
+      } while ((blocked(x, z, 0.1) || L.inPond(x, z, -0.1)) && guard++ < 20);
+      if (guard >= 20) continue;
+      podList.push({ x, y: L.groundH(x, z), z, s: rmu.range(0.9, 1.6), rot: rmu.next() * TAU });
+    }
+    instance(podGeo, mushMat, podList, { shadow: false });
     // glow light sources for night (strongest clusters)
-    const glowSources = mushList.map(m => new THREE.Vector4(m.x, m.y + 0.25, m.z, 0.35 * m.s));
-    glowFernList.forEach(f => glowSources.push(new THREE.Vector4(f.x, f.y + 0.4, f.z, 0.3 * f.s)));
-    rp.shuffle(glowSources);
+    const glowSources = mushList.map(m => new THREE.Vector4(m.x, m.y + 0.3, m.z, 0.2 * m.s));
+    glowFernList.forEach(f => glowSources.push(new THREE.Vector4(f.x, f.y + 0.4, f.z, 0.4 * f.s)));
+    podList.forEach(f => glowSources.push(new THREE.Vector4(f.x, f.y + 0.6, f.z, 0.5 * f.s)));
+    // the strongest lights go to sources the camera sees best (near, in front)
+    glowSources.sort((a, b) => (camDist(a.x, a.z) - Math.abs(camAng(a.x, a.z)) * 4) - (camDist(b.x, b.z) - Math.abs(camAng(b.x, b.z)) * 4));
     for (let i = 0; i < GLOW_N; i++) if (glowSources[i]) shared.uGlowPts.value[i].copy(glowSources[i]);
 
     // lily pads and lotus
@@ -529,7 +545,7 @@ export default {
       if (i < 3) lotusLists[i % 2].push({ x, y: WATER_Y, z, s: rli.range(1.0, 1.3), rot: rli.next() * TAU });
       else lotusLeafList.push({ x, y: WATER_Y, z, s: rli.range(0.9, 1.4), rot: rli.next() * TAU });
     }
-    lotusGeos.forEach((g, i) => instance(g, foliageMat(WIND_LOW), lotusLists[i], { shadow: false }));
+    lotusGeos.forEach((g, i) => instance(g, foliageMat(WIND_LOW, { glowTint: true }), lotusLists[i], { shadow: false }));
     instance(lotusLeafGeo, foliageMat(WIND_LOW), lotusLeafList, { shadow: false });
 
     /* ---------------- canopy ---------------- */
@@ -622,33 +638,17 @@ export default {
     let envRT = null, envKey = '';
 
     /* ---------------- atmosphere fx ---------------- */
-    // god-ray anchors where the canopy cookie is open (on the canopy plane)
+    // god-ray ground spots: the shader shows each one only while the canopy above it is open
     const rayAnchors = [];
     {
-      const C = cookie, N = C.size;
-      const sample = (x, z) => {
-        const u = ((x * shared.uCookieScale.value) % 1 + 1) % 1, v = ((z * shared.uCookieScale.value) % 1 + 1) % 1;
-        const i = Math.floor(u * N), j = Math.floor(v * N);
-        const a = C.R[j * N + i];
-        const u2 = ((x * shared.uCookieScale.value * 2.6) % 1 + 1) % 1, v2 = ((z * shared.uCookieScale.value * 2.6) % 1 + 1) % 1;
-        const b = C.G[Math.floor(v2 * N) * N + Math.floor(u2 * N)];
-        return a * 0.72 + b * 0.28;
-      };
-      const cands = [];
-      for (let i = 0; i < 1400; i++) {
-        const x = rng.range(-22, 22), z = rng.range(-16, 14);
-        const o = sample(x, z);
-        if (o > 0.6) cands.push({ x, z, o });
+      const rr3 = R('rays0');
+      for (let i = 0; i < Math.round(38 * Math.max(q, 0.6)); i++) {
+        let x, z, guard = 0;
+        do { x = rr3.range(-13, 15); z = rr3.range(-9, 7); } while ((rayAnchors.some(r => Math.hypot(r.x - x, r.z - z) < 2.0) || camDist(x, z) < 6) && guard++ < 30);
+        const y = Math.max(L.groundH(x, z), WATER_Y) + 0.2;
+        const broad = L.pondD(x, z) < 1.1 && rr3.chance(0.5);
+        rayAnchors.push(Object.assign(new THREE.Vector4(x, y, z, broad ? rr3.range(1.4, 2.4) : rr3.range(0.6, 1.5)), { len: rr3.range(24, 32), k: broad ? rr3.range(0.4, 0.6) : rr3.range(0.55, 1.0) }));
       }
-      cands.sort((a, b) => b.o - a.o);
-      const Y = shared.uCanopyY.value;
-      for (const c of cands) {
-        if (rayAnchors.length >= Math.round(16 * Math.max(q, 0.6))) break;
-        if (rayAnchors.some(r => Math.hypot(r.x - c.x, r.z - c.z) < 3.2)) continue;
-        rayAnchors.push(Object.assign(new THREE.Vector4(c.x, Y, c.z, rng.range(0.9, 2.2)), { len: rng.range(18, 26), k: rng.range(0.5, 1) }));
-      }
-      // broad shafts through the clearing gap
-      for (let i = 0; i < 5; i++) rayAnchors.push(Object.assign(new THREE.Vector4(POND.cx + rng.range(-5, 5), Y + 1, POND.cz - 2 + rng.range(-4, 3), rng.range(2.5, 4.5)), { len: rng.range(20, 26), k: rng.range(0.3, 0.55) }));
     }
     const godRays = ONLY_MAIN(buildGodRays(shared, rayAnchors, R('rays')));
     scene.add(godRays);
@@ -677,8 +677,7 @@ export default {
       { x: POND.cx, y: WATER_Y + 0.5, z: POND.cz, w: 16, d: 12 },
       { x: POND.cx - 2, y: 1.4, z: POND.cz - 3, w: 26, d: 10 },
       { x: 0, y: 3.2, z: -9, w: 40, d: 12 },
-      { x: -8, y: 0.9, z: 3, w: 18, d: 12 },
-      { x: 9, y: 1.0, z: 2, w: 16, d: 12 },
+      { x: 0, y: 6.5, z: -14, w: 50, d: 14 },
     ]));
     scene.add(mistSheets);
 
@@ -796,7 +795,7 @@ export default {
           if (!f) this.food = null;
           if (f) {
             const d = Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z);
-            if (d < 0.5 && Math.abs(f.pos.y - this.pos.y) < 0.6) { this.state = 'eat'; this.flicks = 0; this.flickT = 0.3; this.yaw = Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z); }
+            if (d < 0.55 && f.pos.y - this.pos.y < 1.0 && f.pos.y - this.pos.y > -0.6) { this.state = 'eat'; this.flicks = 0; this.flickT = 0.3; this.yaw = Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z); }
             else if (this.timer <= 0) this.stepToward(f.pos);
           } else if (this.timer <= 0) {
             const food = findFoodFor(this);
@@ -929,6 +928,7 @@ export default {
       },
       foodTarget(b, out) {
         const f = b.food;
+        if (f.heldBy) { b.food = null; b.state = 'fly'; b.timer = 0; out.copy(b.pos).add(_v.set(0, 1, 0)); return; }
         const k = (butterflies.indexOf(b) * 2.4) % TAU;
         out.copy(f.pos).add(_v.set(Math.cos(k) * f.r * 0.5 * f.fade, f.r * 1.6 * (0.5 + 0.5 * f.bites / f.maxBites), Math.sin(k) * f.r * 0.5));
       },
@@ -1049,7 +1049,7 @@ export default {
     };
     function applyTime(dt, force) {
       const h = env.hours();
-      const s = env.sun({ latitude: 18, azimuthOffset: SUN_AZ });
+      const s = env.sun({ latitude: LATITUDE, azimuthOffset: SUN_AZ });
       const rainA = rainAmount(h);
       const wetT = wetAmount(h);
       state.wet = force ? wetT : damp(state.wet, wetT, 0.5, dt);
@@ -1081,9 +1081,9 @@ export default {
       const fog = shared.uFogColor.value;
       fog.copy(pal.fogDay).lerp(pal.fogGold, golden * (morning ? 0.4 : 0.85)).lerp(pal.fogDawn, dawnMist * 0.8).lerp(pal.fogDusk, dusk).lerp(pal.fogNight, night).lerp(pal.fogRain, rainA * (1 - night * 0.7));
       fog.multiplyScalar(lerp(1, 0.75, rainA * (1 - night)));
-      shared.uFogSunColor.value.copy(lc).multiplyScalar(Math.min(li, 3) * (0.3 + golden * 0.25)).add(_c.copy(fog).multiplyScalar(0.8));
-      shared.uFogDensity.value = 0.012 + dawnMist * 0.05 + rainA * 0.028 + night * 0.01 + dusk * 0.008;
-      shared.uFogFalloff.value = lerp(0.09, 0.16, dawnMist);
+      shared.uFogSunColor.value.copy(lc).multiplyScalar(Math.min(li, 3) * (0.3 + golden * 0.55)).add(_c.copy(fog).multiplyScalar(0.8));
+      shared.uFogDensity.value = 0.011 + dawnMist * 0.018 + rainA * 0.026 + night * 0.01 + dusk * 0.008 - golden * (morning ? 0 : 0.003);
+      shared.uFogFalloff.value = lerp(0.09, 0.22, dawnMist);
       shared.uCookieMin.value = lerp(lerp(0.17, 0.3, night), 0.75, rainA);
       shared.uWaterScatter.value.set('#1b5a49').multiplyScalar(lerp(0.5 + day * 0.7, 0.12, night)).lerp(_c.set('#3a5a50'), rainA * 0.3);
       shared.uNight.value = smoothstep(-2, -10, e);
@@ -1108,7 +1108,7 @@ export default {
       splash.material.uniforms.uAmb.value.copy(amb);
       // fx
       const ru = godRays.material.uniforms;
-      ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.22 : (0.16 + golden * 0.16) * Math.min(li, 4));
+      ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.26 : (0.075 + golden * 0.12 + dawnMist * 0.06) * Math.min(li, 4));
       ru.uRayAmt.value = (1 - rainA * 0.85) * (useMoon ? smoothstep(-4, -12, e) : smoothstep(0, 8, e));
       godRays.visible = ru.uRayAmt.value > 0.01;
       motes.material.uniforms.uAmt.value = (0.35 + day * 0.65) * (1 - rainA) * (1 - night * 0.7);
@@ -1121,7 +1121,7 @@ export default {
       spores.visible = spores.material.uniforms.uAmt.value > 0.01;
       motes.visible = motes.material.uniforms.uAmt.value > 0.01;
       rain.material.uniforms.uAmb.value.copy(amb);
-      mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.85 + rainA * 0.5 + night * 0.3 + dusk * 0.25 + 0.08, 0, 0.95);
+      mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.5 + night * 0.3 + dusk * 0.25 + 0.03, 0, 0.95);
       mistSheets.material.uniforms.uAmb.value.copy(amb);
       // environment map (re-filtered when the light changes noticeably)
       const key = Math.round(h * 4) + ':' + Math.round(rainA * 4);
@@ -1143,8 +1143,8 @@ export default {
       b.radius = lerp(0.65, 0.85, night);
       b.threshold = lerp(0.85, 0.42, night);
       post.exposure = lerp(1.06, 1.18, night) * lerp(1, 1.06, rainA) * lerp(1, 1.05, dawnMist);
-      post.saturation = lerp(lerp(1.1, 1.15, night), 0.88, rainA);
-      post.contrast = lerp(1.06, 1.1, night) - rainA * 0.04;
+      post.saturation = lerp(lerp(1.14, 1.15, night), 0.88, rainA);
+      post.contrast = lerp(1.1, 1.1, night) - rainA * 0.05;
       post.lift = [lerp(0.0, 0.0, night), lerp(0.008, 0.02, night), lerp(0.012, 0.045, night)];
       const warm = golden * (morning ? 0.4 : 1);
       post.gain = [lerp(1 + warm * 0.06, 0.86, night), lerp(1, 0.97, night), lerp(1 - warm * 0.08, 1.1, night)];

@@ -3,7 +3,7 @@
 // (the living reef), reef/life.js (fish, turtles, feeding), reef/pelagic.js (manta, jellies).
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU } from '../lib/util.js';
-import { createWaterUniforms, createBackground, createSurface, createShafts, createSnow, createBubbles, createEnvBuilder } from './reef/uw.js';
+import { createWaterUniforms, createBackground, createSurface, createShafts, createSnow, createBubbles, createEnvBuilder, DETAIL } from './reef/uw.js';
 import { createGround, buildTerrain, buildRocks, HeightMap } from './reef/terrain.js';
 import { buildReef } from './reef/corals.js';
 import { createLife } from './reef/life.js';
@@ -35,6 +35,7 @@ export default {
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 400);
     const W = createWaterUniforms(SURF_Y, REF_Y);
     const disposeList = [];
+    DETAIL.on = env.quality !== 'low';
 
     /* ---------------- ground, rocks, reef ---------------- */
     const ground = createGround(env.seed ^ 0x2f1, SURF_Y);
@@ -109,7 +110,7 @@ export default {
     };
     const pal = {
       day: { L0: lin(0.022, 0.21, 0.4), glow: lin(0.9, 1.0, 0.95), light: 5.6, lightCol: C('#f4fbff'), hemi: 0.78, sky: C('#b8dcdc'), gnd: C('#5c6658'), shaft: lin(0.55, 0.85, 0.95), caus: 1.0 },
-      gold: { L0: lin(0.06, 0.14, 0.2), glow: lin(2.4, 1.0, 0.42), light: 3.0, lightCol: C('#ffc890'), hemi: 0.75, sky: C('#b0b8b0'), gnd: C('#4a4840'), shaft: lin(1.25, 0.72, 0.36), caus: 0.8 },
+      gold: { L0: lin(0.04, 0.135, 0.27), glow: lin(2.6, 1.05, 0.4), light: 3.4, lightCol: C('#ffc890'), hemi: 0.78, sky: C('#a8b8c8'), gnd: C('#4a4840'), shaft: lin(1.35, 0.78, 0.38), caus: 0.85 },
       night: { L0: lin(0.004, 0.02, 0.065), glow: lin(0.3, 0.45, 0.9), light: 0.75, lightCol: C('#9db8ff'), hemi: 0.45, sky: C('#4a6aa8'), gnd: C('#10203a'), shaft: lin(0.22, 0.36, 0.65), caus: 0.35 },
     };
     const mkP = () => ({ L0: lin(0, 0, 0), glow: lin(0, 0, 0), light: 0, lightCol: C('#fff'), hemi: 0, sky: C('#fff'), gnd: C('#fff'), shaft: lin(0, 0, 0), caus: 0 });
@@ -137,7 +138,7 @@ export default {
       W.uL0.value.copy(cur.L0);
       W.uGlow.value.copy(cur.glow).multiplyScalar(useSun ? 1 : 0.5);
       W.uCaustic.value = cur.caus;
-      W.uFluor.value = smoothstep(0.2, 0.9, s.night) * 0.5;
+      W.uFluor.value = smoothstep(0.2, 0.9, s.night) * 0.32;
       sunL.color.copy(cur.lightCol);
       sunL.intensity = cur.light;
       sunL.position.copy(center).addScaledVector(tod.sunW, 45);
@@ -218,9 +219,9 @@ export default {
         life.update(dt, time);
         manta.update(dt, time);
         eagle.update(dt, time, floorAt);
-        jellies.update(dt, time, tod.night, (x, z) => hm.at(x, z));
-        post.bloom.strength = lerp(0.3, 0.8, tod.night);
-        post.bloom.threshold = lerp(0.8, 0.38, tod.night);
+        jellies.update(dt, time, tod.night, floorAt);
+        post.bloom.strength = lerp(0.3, 0.62, tod.night);
+        post.bloom.threshold = lerp(0.8, 0.48, tod.night);
         post.exposure = lerp(1.0, 1.3, tod.night);
       },
       feed(raycaster) {
@@ -258,6 +259,7 @@ export default {
         if (life.butter[0]) { const c = tag(i++); c.member = null; c.label = '蝴蝶鱼'; c.pos = life.butter[0].pos; c.radius = 0.5; }
         { const c = tag(i++); c.member = null; c.label = '清洁站 · 裂唇鱼'; c.pos = life.station.wall; c.radius = 0.6; }
         { const c = tag(i++); c.member = null; c.label = '鲹鱼群'; c.pos = life.jackC; c.radius = 4.0; }
+        { const c = tag(i++); c.member = null; c.label = '梅鲷鱼群'; c.pos = life.fus.c; c.radius = 2.5; }
         return tagCache.slice(0, i);
       },
       dispose() {

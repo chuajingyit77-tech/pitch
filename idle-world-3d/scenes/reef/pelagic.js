@@ -1,6 +1,6 @@
 // 深蓝 · 珊瑚礁 — open-water visitors: a manta ray gliding overhead and glowing moon jellies at night.
 import * as THREE from 'three';
-import { clamp, lerp, smoothstep, TAU, quatFromForward, patchMaterial } from '../../lib/util.js';
+import { clamp, lerp, smoothstep, TAU, quatFromForward, patchMaterial, angleDelta } from '../../lib/util.js';
 import { waterize, addDetail, UW_VERT, UW_FRAG, NOISE_GLSL } from './uw.js';
 
 /* ------------------------------------------------------------------ */
@@ -123,7 +123,7 @@ export class Manta {
             transformed.x -= pow(az, 2.0) * 0.05 * (1.0 + sin(ph)); }`,
       },
     });
-    waterize(mat, W, { key: 'manta' });
+    waterize(mat, W, { key: 'manta', rim: 1.0 });
     if (eagle) addDetail(mat, W, { space: 'object', bump: 0, key: 'eaglespots', glsl: EAGLE_GLSL });
     this.mesh = new THREE.Mesh(mantaGeometry(eagle), mat);
     this.mesh.castShadow = true;
@@ -136,7 +136,7 @@ export class Manta {
     this.dir = new THREE.Vector3(1, 0, 0);
     this.fwd = new THREE.Vector3(1, 0, 0);
     this.quat = new THREE.Quaternion();
-    this.t = 0; this.dur = 60; this.wait = 5; this.active = false;
+    this.t = 0; this.dur = 60; this.wait = 2; this.active = false;
     this.flap = 0; this.roll = 0;
     this.start = new THREE.Vector3(); this.end = new THREE.Vector3(); this.side = new THREE.Vector3();
   }
@@ -150,7 +150,8 @@ export class Manta {
     this.end.copy(this.center).addScaledVector(this.dir, 36).addScaledVector(this.side, -off * 0.5);
     this.wig = this.rng.range(0, TAU);
     this.dur = 72 / this.rng.range(1.05, 1.3);
-    this.t = 0; this.active = true;
+    // the first visit starts part-way in so a new viewer meets the manta within half a minute
+    this.t = this.first === false ? 0 : this.dur * 0.22; this.first = false; this.active = true;
     this.mesh.visible = true;
   }
   update(dt, time, floorAt) {
@@ -201,7 +202,7 @@ export class Manta {
       this.fwd.divideScalar(sp);
       const prev = Math.atan2(this.dir.z, this.dir.x);
       this.dir.lerp(this.fwd, 1 - Math.exp(-2 * dt)).normalize();
-      const yawRate = (Math.atan2(this.dir.z, this.dir.x) - prev) / Math.max(dt, 1e-3);
+      const yawRate = angleDelta(prev, Math.atan2(this.dir.z, this.dir.x)) / Math.max(dt, 1e-3);
       this.roll = lerp(this.roll, clamp(-yawRate * 1.2, -0.4, 0.4), 1 - Math.exp(-dt));
     }
     this.pos.copy(_tmpV);
@@ -265,7 +266,7 @@ export class Jellies {
           // four horseshoe gonads
           float gon = smoothstep(0.05, 0.0, abs(r - 0.12 - 0.02 * cos(ang * 4.0))) * smoothstep(0.2, 0.6, abs(sin(ang * 2.0)));
           float rim = smoothstep(0.3, 0.36, r);
-          vec3 col = base * (fr * 0.9 + 0.035) + vec3(1.0, 0.55, 0.85) * gon * 0.55 + base * rim * (0.6 + vPulse * 0.9);
+          vec3 col = base * (fr * 0.7 + 0.03) + vec3(1.0, 0.55, 0.85) * gon * 0.45 + base * rim * (0.32 + vPulse * 0.5);
           col *= uNight * (0.6 + 0.4 * vPulse);
           gl_FragColor = vec4(uwAtten(col, vWp), 1.0);
         }`,

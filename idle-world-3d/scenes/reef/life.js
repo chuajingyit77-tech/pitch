@@ -156,6 +156,27 @@ if (!PAINTERS.reefAnthias) {
     caudal: { type: 'truncate', L: 0.14, S: 0.1 }, dorsal: { d0: 0.3, d1: 0.86, h: 0.045, profile: [0, 1, 1, 1, 0.6], sweep: 0.2 }, anal: { d0: 0.55, d1: 0.86, h: 0.04, profile: [0, 1, 1, 0.5], sweep: 0.2 } };
 }
 const countershadeL = (c, q, amt) => mix3(c, [1, 1, 1], (1 - smoothstep(0.0, 0.45, q)) * amt);
+if (!PAINTERS.reefFusilier) {
+  // Yellow-back fusilier: blue body, pale belly, yellow stripe and tail.
+  PAINTERS.reefFusilier = {
+    setup: () => ({}),
+    body(s, v, C) {
+      const q = C.q;
+      let col = mix3(hex('#a8dcff'), hex('#2a64d0'), smoothstep(0.3, 0.75, q));
+      const yb = smoothstep(0.05, 0.0, Math.abs(q - (0.74 - s * 0.1))) * smoothstep(0.25, 0.45, s);
+      col = mix3(col, hex('#ffd632'), yb);
+      col = mix3(col, hex('#ffd632'), smoothstep(0.84, 0.93, s) * smoothstep(0.35, 0.55, q));
+      return col;
+    },
+    fin(region, a) {
+      if (region === REGION.caudal) return [...hex('#ffd632'), 0.92];
+      return [...hex('#a8d0ff'), lerp(0.6, 0.25, a)];
+    },
+    eye: { iris: '#c8d8f0', pupil: '#050505' },
+    material: () => ({ metalness: 0.25, roughness: 0.28, clearcoat: 0.6, iridescence: 0.6, normalScale: 0.2 }),
+    scaleDark: () => 0.03,
+  };
+}
 
 const SPEC = {
   clownfish: { shape: 'clownfish', painter: 'clownfish', size: 0.38, cruise: 0.45, sprint: 1.35, agility: 3.4, notice: 4 },
@@ -177,7 +198,7 @@ class Food {
     this.max = max;
     const g = new THREE.IcosahedronGeometry(1, 0);
     g.scale(1, 0.38, 0.8);
-    const mat = new THREE.MeshStandardMaterial({ color: '#d9822e', roughness: 0.55, emissive: '#5a2a08', emissiveIntensity: 0.6, envMapIntensity: 0.6, flatShading: true });
+    const mat = new THREE.MeshStandardMaterial({ color: '#e8902e', roughness: 0.5, emissive: '#c0541a', emissiveIntensity: 0.9, envMapIntensity: 0.6, flatShading: true });
     waterize(mat, W, { key: 'food' });
     this.mesh = new THREE.InstancedMesh(g, mat, max);
     this.mesh.count = 0;
@@ -193,11 +214,30 @@ class Food {
     for (let i = 0; i < NC; i++) this.crumbs.push({ life: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3() });
     const cg = new THREE.BufferGeometry();
     cg.setAttribute('position', new THREE.BufferAttribute(this.crumbPos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.crumbMat = new THREE.PointsMaterial({ color: '#e8a050', size: 0.035, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false });
+    this.crumbMat = new THREE.PointsMaterial({ color: '#ffb060', size: 0.05, sizeAttenuation: true, transparent: true, opacity: 0.95, depthWrite: false });
     waterize(this.crumbMat, W, { caustics: false, key: 'crumb' });
     this.crumbPts = new THREE.Points(cg, this.crumbMat);
     this.crumbPts.frustumCulled = false;
     this.ci = 0;
+    // a little puff of bubbles where a handful of food lands in the water
+    const NP = 48;
+    this.puffPos = new Float32Array(NP * 3);
+    this.puffs = [];
+    for (let i = 0; i < NP; i++) this.puffs.push({ life: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3() });
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(this.puffPos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.puffMat = new THREE.PointsMaterial({ color: '#dff6ff', size: 0.045, sizeAttenuation: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending });
+    waterize(this.puffMat, W, { caustics: false, tint: false, fog: 'atten', key: 'puff' });
+    this.puffPts = new THREE.Points(pg, this.puffMat);
+    this.puffPts.frustumCulled = false;
+    this.pi = 0;
+  }
+  puff(center) {
+    for (let k = 0; k < 12; k++) {
+      const b = this.puffs[this.pi]; this.pi = (this.pi + 1) % this.puffs.length;
+      b.life = 1; b.pos.set(center.x + (Math.random() - 0.5) * 0.5, center.y + (Math.random() - 0.5) * 0.3, center.z + (Math.random() - 0.5) * 0.5);
+      b.vel.set((Math.random() - 0.5) * 0.2, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.2);
+    }
   }
   spawnCloud(center, n, rng, floorAt, surfY) {
     let made = 0;
@@ -209,7 +249,7 @@ class Food {
       it.vel.set(rng.range(-0.15, 0.15), rng.range(-0.25, 0.05), rng.range(-0.15, 0.15));
       it.rot.set(rng.range(0, TAU), rng.range(0, TAU), rng.range(0, TAU));
       it.spin.set(rng.range(-2, 2), rng.range(-2, 2), rng.range(-2, 2));
-      it.size = rng.range(0.038, 0.058);
+      it.size = rng.range(0.055, 0.08);
       it.ph = rng.range(0, TAU);
       if (++made >= n) break;
     }
@@ -271,6 +311,19 @@ class Food {
     }
     this.crumbPts.visible = anyC;
     if (anyC) this.crumbPts.geometry.getAttribute('position').needsUpdate = true;
+    const pp = this.puffPos;
+    let anyP = false;
+    for (let i = 0; i < this.puffs.length; i++) {
+      const b = this.puffs[i];
+      if (b.life > 0) {
+        b.life -= dt * 0.55; anyP = true;
+        b.vel.x += Math.sin(time * 9 + i) * dt * 0.3;
+        b.pos.addScaledVector(b.vel, dt);
+        pp[i * 3] = b.pos.x; pp[i * 3 + 1] = b.pos.y; pp[i * 3 + 2] = b.pos.z;
+      } else pp[i * 3 + 1] = -999;
+    }
+    this.puffPts.visible = anyP;
+    if (anyP) this.puffPts.geometry.getAttribute('position').needsUpdate = true;
   }
 }
 
@@ -291,7 +344,7 @@ export async function createLife(ctx) {
     const geo = buildFishGeometry(sp.shape, { detail: 1 });
     const painted = paintFish(sp.painter, { seed: 7 + kind.length, shape: sp.shape, size: [1024, 512] });
     const mat = createFishMaterial(painted, { envMapIntensity: 1.1 });
-    waterize(mat, W, { key: 'fish' });
+    waterize(mat, W, { key: 'fish', rim: 1.4 });
     const inst = new FishInstances(geo, mat, 16, { castShadow: env.shadows });
     group.add(inst.mesh);
     species[kind] = inst;
@@ -308,7 +361,8 @@ export async function createLife(ctx) {
     if (!sp) return;
     const r = makeRng(m.seed || 1);
     const size = sp.size * (m.size || 1);
-    const home = m.kind === 'clownfish' ? anemones[residents.filter(x => x.kind === 'clownfish').length % 2 === 0 || anemones.length < 2 ? 0 : 1] : null;
+    // clownfish live in pairs: the first two share the main anemone, later pairs move next door
+    const home = m.kind === 'clownfish' && anemones.length ? anemones[Math.floor(residents.filter(x => x.kind === 'clownfish').length / 2) % anemones.length] : null;
     const b = home ? null : bommieList[Math.floor(r.next() * bommieList.length)];
     const start = home ? home.pos.clone().add(new THREE.Vector3(r.range(-0.4, 0.4), 0.45, r.range(-0.4, 0.4)))
       : new THREE.Vector3(b.x + r.range(-3, 3), 0, b.z + r.range(-3, 3));
@@ -332,12 +386,12 @@ export async function createLife(ctx) {
   for (const m of env.members) addResident(m);
 
   /* ---- chromis school ---- */
-  const nSchool = Math.round(clamp(85 * q, 40, 100));
-  const nChromHover = Math.round(3 * q) * 18;
-  const chromGeo = buildFishGeometry('chromis', { detail: 0.5 });
+  const nSchool = Math.round(clamp(100 * q, 45, 110));
+  const nChromHover = 5 * 18; // capacity for the hovering groups over the staghorn
+  const chromGeo = buildFishGeometry('chromis', { detail: 0.32 });
   const chromPaint = paintFish('chromis', { seed: 3, size: [512, 256] });
   const chromMat = createFishMaterial(chromPaint, { envMapIntensity: 1.2 });
-  waterize(chromMat, W, { key: 'fish' });
+  waterize(chromMat, W, { key: 'fish', rim: 1.4 });
   const chromInst = new FishInstances(chromGeo, chromMat, nSchool + nChromHover, { castShadow: false });
   group.add(chromInst.mesh);
   disposables.push(chromGeo, chromPaint.map);
@@ -354,10 +408,10 @@ export async function createLife(ctx) {
 
   /* ---- silverside bait ball (further out) ---- */
   const nSilver = Math.round(clamp(110 * q, 50, 130));
-  const silGeo = buildFishGeometry(SHAPES.reefSilver, { detail: 0.4 });
+  const silGeo = buildFishGeometry(SHAPES.reefSilver, { detail: 0.28 });
   const silPaint = paintFish('reefSilver', { seed: 5, shape: 'reefSilver', size: [512, 256] });
   const silMat = createFishMaterial(silPaint, { envMapIntensity: 1.6 });
-  waterize(silMat, W, { key: 'fish' });
+  waterize(silMat, W, { key: 'fish', rim: 1.4 });
   const silInst = new FishInstances(silGeo, silMat, nSilver, { castShadow: false });
   group.add(silInst.mesh);
   disposables.push(silGeo, silPaint.map);
@@ -378,7 +432,7 @@ export async function createLife(ctx) {
     const g = buildFishGeometry(shape, { detail });
     const pt = paintFish(painter, { seed, shape, size: [512, 256] });
     const m = createFishMaterial(pt, { envMapIntensity: 1.2 });
-    waterize(m, W, { key: 'fish' });
+    waterize(m, W, { key: 'fish', rim: 1.4 });
     const inst = new FishInstances(g, m, n, { castShadow: false });
     group.add(inst.mesh);
     disposables.push(g, pt.map);
@@ -407,15 +461,15 @@ export async function createLife(ctx) {
     const list = i % 3 === 2 ? anthP : anthO;
     list.push(...mkGroup(c.clone().add(new THREE.Vector3(0, 0.1, 0)), nAnth, 0.17, 0.23, 1.25, 'anthias'));
   });
-  const anthOInst = anthO.length ? mkSpecies('reefAnthias', 'reefAnthias', anthO.length, 0.5, 11) : null;
-  const anthPInst = anthP.length ? mkSpecies('reefAnthiasPurple', 'reefAnthias', anthP.length, 0.5, 12) : null;
+  const anthOInst = anthO.length ? mkSpecies('reefAnthias', 'reefAnthias', anthO.length, 0.32, 11) : null;
+  const anthPInst = anthP.length ? mkSpecies('reefAnthiasPurple', 'reefAnthias', anthP.length, 0.32, 12) : null;
   const chromHover = [];
   thickets.slice(3, 3 + Math.round(3 * q)).forEach(c => chromHover.push(...mkGroup(c.clone(), 18, 0.18, 0.24, 0.8, 'chromis')));
   if (thickets.length < 4) coralHeads.slice(1, 3).forEach(c => chromHover.push(...mkGroup(c.clone().add(new THREE.Vector3(1.5, -0.6, 0)), 18, 0.18, 0.24, 0.8, 'chromis')));
 
   /* ---- butterflyfish pairs grazing the reef ---- */
   const butter = [];
-  const bfInst = mkSpecies('reefButterfly', 'reefButterfly', 6, 0.8, 13);
+  const bfInst = mkSpecies('reefButterfly', 'reefButterfly', 6, 0.7, 13);
   const bfRng = rng.fork('butterfly');
   for (let pI = 0; pI < (q > 0.6 ? 3 : 2); pI++) {
     const b = bommies[(pI + 1) % bommies.length];
@@ -439,13 +493,26 @@ export async function createLife(ctx) {
     const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
     return { wall, out, hover: wall.clone().addScaledVector(out, 0.9), client: null, t: 0 };
   })();
-  const cleanerInst = mkSpecies('reefCleaner', 'reefCleaner', 5, 0.6, 14);
+  const cleanerInst = mkSpecies('reefCleaner', 'reefCleaner', 5, 0.45, 14);
   const cleaners = [];
   const clRng = rng.fork('cleaner');
   for (let i = 0; i < (q > 0.6 ? 5 : 3); i++) {
     const sw = new Swimmer({ pos: station.wall.clone().addScaledVector(station.out, 0.25).add(new THREE.Vector3(clRng.range(-0.3, 0.3), clRng.range(-0.2, 0.2), clRng.range(-0.3, 0.3))), size: clRng.range(0.13, 0.17), speed: 0.2, rng: clRng, agility: 5, maxPitch: 0.7 });
     sw.ph = clRng.range(0, TAU); sw.k = clRng.range(-0.4, 0.4);
     cleaners.push(sw);
+  }
+
+  /* ---- fusiliers streaming around the reef in mid-water ---- */
+  const nFus = Math.round(clamp(120 * q, 50, 130));
+  const fusInst = mkSpecies('reefFusilier', 'reefSilver', nFus, 0.28, 15);
+  const fRng = rng.fork('fusilier');
+  const fus = { ang: fRng.range(0, TAU), R: 16, fish: [], c: new THREE.Vector3(), dir: new THREE.Vector3() };
+  for (let i = 0; i < nFus; i++) {
+    const sw = new Swimmer({ pos: new THREE.Vector3(Math.cos(fus.ang) * 16, 6, Math.sin(fus.ang) * 16), size: fRng.range(0.24, 0.32), speed: 1.2, rng: fRng, agility: 2.6, maxPitch: 0.3 });
+    sw.off = new THREE.Vector3(fRng.gauss() * 2.8, fRng.gauss() * 0.7, fRng.gauss() * 1.2);
+    sw.jit = fRng.range(0, 100);
+    sw.pos.add(sw.off);
+    fus.fish.push(sw);
   }
 
   /* ---- distant school of jacks: silhouettes in the blue ---- */
@@ -480,7 +547,7 @@ export async function createLife(ctx) {
       const mat = src.material.clone();
       mat.envMapIntensity = 0.9;
       applySwim(mat, { waveK: 6.0 });
-      waterize(mat, W, { key: 'barra' });
+      waterize(mat, W, { key: 'barra', rim: 1.2 });
       barraInst = new FishInstances(g, mat, 2, { castShadow: env.shadows });
       group.add(barraInst.mesh);
       disposables.push(g);
@@ -499,7 +566,7 @@ export async function createLife(ctx) {
 
   /* ---- food ---- */
   const food = new Food(W, env, 72);
-  group.add(food.mesh, food.crumbPts);
+  group.add(food.mesh, food.crumbPts, food.puffPts);
 
   /* ---- helpers ---- */
   const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
@@ -732,7 +799,7 @@ export async function createLife(ctx) {
     const ax = center.x + Math.cos(t * 0.045) * 6.5 + Math.sin(t * 0.11) * 2;
     const az = center.z + Math.sin(t * 0.037) * 6 + Math.cos(t * 0.09) * 2;
     _v3.set(ax, 0, az);
-    _v3.y = floorAt(ax, az) + 2.2 + Math.sin(t * 0.07) * 0.8;
+    _v3.y = floorAt(ax, az) + 2.8 + Math.sin(t * 0.07) * 1.0;
     if (fn) { _v2.set(fx / fn, fy / fn, fz / fn); if (_v2.distanceTo(schoolC) < 12) _v3.lerp(_v2, 0.7); }
     anchor.lerp(_v3, 1 - Math.exp(-0.4 * dt));
     schoolC.set(0, 0, 0);
@@ -909,6 +976,24 @@ export async function createLife(ctx) {
     cleanerInst.begin(); for (const s of cleaners) cleanerInst.push(s); cleanerInst.end(t);
   }
 
+  function updateFusiliers(dt, t) {
+    fus.ang += dt * 0.072;
+    const R = fus.R + Math.sin(t * 0.05) * 2.5;
+    fus.c.set(center.x + Math.cos(fus.ang) * R, 0, center.z + Math.sin(fus.ang) * R);
+    fus.c.y = Math.max(floorAt(fus.c.x, fus.c.z), center.y) + 5.2 + Math.sin(t * 0.09) * 1.2;
+    fus.dir.set(-Math.sin(fus.ang), 0, Math.cos(fus.ang));
+    const sx = -fus.dir.z, sz = fus.dir.x;
+    for (const s of fus.fish) {
+      // a long ribbon: offsets in the travel frame (along, up, side)
+      _v1.copy(fus.c).addScaledVector(fus.dir, s.off.x).add(_v2.set(sx * s.off.z, s.off.y, sz * s.off.z));
+      _v1.x += Math.sin(t * 0.5 + s.jit) * 0.3; _v1.y += Math.sin(t * 0.4 + s.jit * 2) * 0.2;
+      _d.subVectors(_v1, s.pos).multiplyScalar(0.8).addScaledVector(fus.dir, 1.2);
+      const sp = _d.length(); if (sp > 1.8) _d.multiplyScalar(1.8 / sp);
+      s.steer(_d, dt).integrate(dt);
+    }
+    fusInst.begin(); for (const s of fus.fish) fusInst.push(s); fusInst.end(t);
+  }
+
   function updateJacks(dt, t) {
     const c = jackC, n = jacks.length;
     for (let i = 0; i < n; i++) {
@@ -971,7 +1056,7 @@ export async function createLife(ctx) {
   }
 
   return {
-    group, food, residents, turtles, school, schoolC, barra, silver, silCenter, hoverGroups, butter, station, jackC,
+    group, food, residents, turtles, school, schoolC, barra, silver, silCenter, hoverGroups, butter, station, jackC, fus,
     addMember(m) { addResident(m); },
     update(dt, t) {
       time = t;
@@ -985,8 +1070,9 @@ export async function createLife(ctx) {
       updateButterfly(dt, t);
       updateCleaners(dt, t);
       updateJacks(dt, t);
+      updateFusiliers(dt, t);
     },
-    spawnFood(center, n) { return food.spawnCloud(center, n, rng, floorAt, surfY); },
+    spawnFood(center, n) { const made = food.spawnCloud(center, n, rng, floorAt, surfY); if (made) food.puff(center); return made; },
     dispose() {
       for (const d of disposables) d.dispose?.();
       for (const tu of turtles) tu.t.dispose();

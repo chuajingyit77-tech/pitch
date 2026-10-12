@@ -6,8 +6,8 @@ import { clamp, lerp, smoothstep, patchMaterial } from '../../lib/util.js';
 /* Palette keyed by sun elevation (deg). sRGB hex, converted to linear */
 /* ------------------------------------------------------------------ */
 const NIGHT = { zen: '#050b22', hor: '#17254c', glow: '#1e2c56', mistC: '#1a2648', sun: '#8aa0d8', sunI: 0, hemiS: '#2a3866', hemiG: '#0b0d16', hemiI: 0.42, haze: 0.0016, mist: 0.006, cl: '#3a4668', cd: '#0e1428', halo: '#16203e', exp: 1.32 };
-const DAY_HI = { zen: '#2a62b4', hor: '#b0c8de', glow: '#f2e8d6', mistC: '#dfe6ea', sun: '#fff6ea', sunI: 3.1, hemiS: '#a9c3e6', hemiG: '#857150', hemiI: 0.82, haze: 0.0010, mist: 0.0, cl: '#ffffff', cd: '#a3afc4', halo: '#fff4e0', exp: 0.8 };
-const DAY_MID = { zen: '#2e68ba', hor: '#bccfdf', glow: '#f7e4c4', mistC: '#e2e4e2', sun: '#fff0dc', sunI: 3.0, hemiS: '#a6bcdc', hemiG: '#826e4c', hemiI: 0.8, haze: 0.0012, mist: 0.0, cl: '#fffaf0', cd: '#a0a9bc', halo: '#ffeccc', exp: 0.82 };
+const DAY_HI = { zen: '#2a62b4', hor: '#b0c8de', glow: '#f2e8d6', mistC: '#dfe6ea', sun: '#fff6ea', sunI: 3.1, hemiS: '#a9c3e6', hemiG: '#857150', hemiI: 0.82, haze: 0.0015, mist: 0.0, cl: '#ffffff', cd: '#a3afc4', halo: '#fff4e0', exp: 0.8 };
+const DAY_MID = { zen: '#2e68ba', hor: '#bccfdf', glow: '#f7e4c4', mistC: '#e2e4e2', sun: '#fff0dc', sunI: 3.0, hemiS: '#a6bcdc', hemiG: '#826e4c', hemiI: 0.8, haze: 0.0016, mist: 0.0, cl: '#fffaf0', cd: '#a0a9bc', halo: '#ffeccc', exp: 0.82 };
 
 const EVENING = [
   [-90, NIGHT], [-25, NIGHT],
@@ -24,8 +24,8 @@ const MORNING = [
   [-10, { zen: '#0e1a44', hor: '#2c3866', glow: '#3c3e6c', mistC: '#303a64', sun: '#8aa0d8', sunI: 0, hemiS: '#2e3c68', hemiG: '#121420', hemiI: 0.42, haze: 0.0018, mist: 0.012, cl: '#46507a', cd: '#182034', halo: '#2a3060', exp: 1.28 }],
   [-5, { zen: '#1c2c60', hor: '#8a7ca2', glow: '#c48c96', mistC: '#8a86a8', sun: '#9a8ab0', sunI: 0, hemiS: '#5a5a8a', hemiG: '#282430', hemiI: 0.46, haze: 0.0020, mist: 0.022, cl: '#b88ca4', cd: '#3c3c5c', halo: '#c08080', exp: 1.12 }],
   [-1, { zen: '#33508c', hor: '#e6a8a2', glow: '#ffb094', mistC: '#d8b4b8', sun: '#ff9c74', sunI: 0.6, hemiS: '#8a80aa', hemiG: '#4a3a3c', hemiI: 0.52, haze: 0.0026, mist: 0.030, cl: '#ffb4a2', cd: '#6c6284', halo: '#ffa070', exp: 1.02 }],
-  [3, { zen: '#4a70b0', hor: '#f2c4b2', glow: '#ffcfa6', mistC: '#f0d8d0', sun: '#ffb68c', sunI: 1.8, hemiS: '#a8a2c2', hemiG: '#6a5a4a', hemiI: 0.62, haze: 0.0028, mist: 0.032, cl: '#ffd8c4', cd: '#8c8ca4', halo: '#ffc090', exp: 0.95 }],
-  [8, { zen: '#5a84c6', hor: '#eed8ca', glow: '#ffe0c2', mistC: '#f2e6e0', sun: '#ffcfa6', sunI: 2.3, hemiS: '#b0b6ce', hemiG: '#7a6a50', hemiI: 0.7, haze: 0.0024, mist: 0.022, cl: '#fff2e4', cd: '#a2a4b8', halo: '#ffd8b0', exp: 0.9 }],
+  [3, { zen: '#5276b8', hor: '#f4bcb0', glow: '#ffcfa6', mistC: '#f0d6d2', sun: '#ffb68c', sunI: 1.8, hemiS: '#a8a2c2', hemiG: '#6a5a4a', hemiI: 0.62, haze: 0.0028, mist: 0.032, cl: '#ffc8bc', cd: '#9a8cac', halo: '#ffc090', exp: 0.95 }],
+  [8, { zen: '#5c8acc', hor: '#f0d2c8', glow: '#ffe0c2', mistC: '#f2e4e0', sun: '#ffcfa6', sunI: 2.3, hemiS: '#b0b6ce', hemiG: '#7a6a50', hemiI: 0.7, haze: 0.0024, mist: 0.022, cl: '#ffe6dc', cd: '#a8a0b8', halo: '#ffd8b0', exp: 0.9 }],
   [16, { zen: '#4a80c8', hor: '#d6dee4', glow: '#fbe8d2', mistC: '#e6eaea', sun: '#ffe6c8', sunI: 2.7, hemiS: '#a8bed8', hemiG: '#807050', hemiI: 0.75, haze: 0.0016, mist: 0.006, cl: '#fffaf2', cd: '#a4aec0', halo: '#ffecd0', exp: 0.86 }],
   [30, DAY_MID], [90, DAY_HI],
 ];
@@ -65,12 +65,24 @@ export function makeFogUniforms() {
     uFogMist: { value: 0 },
     uFogMistFall: { value: 0.32 },
     uFogBase: { value: -1.0 },
+    uCloudShadow: { value: 0 },
+    uCloudShadowOff: { value: new THREE.Vector2() },
   };
 }
 
 export const FOG_GLSL = /* glsl */`
 uniform vec3 uFogColor, uFogSunColor, uFogMistColor, uFogSunDir;
-uniform float uFogHaze, uFogHazeFall, uFogMist, uFogMistFall, uFogBase;
+uniform float uFogHaze, uFogHazeFall, uFogMist, uFogMistFall, uFogBase, uCloudShadow;
+uniform vec2 uCloudShadowOff;
+float csHash(vec2 p){ p = mod(p, 128.0); return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float csNoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
+  return mix(mix(csHash(i), csHash(i+vec2(1.0,0.0)), u.x), mix(csHash(i+vec2(0.0,1.0)), csHash(i+vec2(1.0,1.0)), u.x), u.y); }
+float cloudShade(vec2 xz){
+  if (uCloudShadow < 0.001) return 1.0;
+  vec2 p = xz * 0.0055 + uCloudShadowOff;
+  float n = csNoise(p) * 0.65 + csNoise(p * 2.0 + 17.0) * 0.35;
+  return 1.0 - uCloudShadow * smoothstep(0.5, 0.72, n);
+}
 float fogLayer(vec3 ro, vec3 rd, float dist, float dens, float fall){
   float fy = rd.y * fall;
   float h0 = exp(-fall * (ro.y - uFogBase));
@@ -98,7 +110,10 @@ export function addFog(material, U, key = 'mfog') {
     vertexHeader: 'varying vec3 vFogWorld;',
     fragmentHeader: 'varying vec3 vFogWorld;\n' + FOG_GLSL,
     vertex: { '#include <fog_vertex>': 'vFogWorld = cameraPosition + (mvPosition.xyz * mat3(viewMatrix));' },
-    fragment: { '#include <fog_fragment>': 'gl_FragColor.rgb = applyMeadowFog(gl_FragColor.rgb, vFogWorld);' },
+    fragment: {
+      '#include <lights_fragment_end>': '$&\n { float csh = cloudShade(vFogWorld.xz); reflectedLight.directDiffuse *= csh; reflectedLight.directSpecular *= csh; }',
+      '#include <fog_fragment>': 'gl_FragColor.rgb = applyMeadowFog(gl_FragColor.rgb, vFogWorld);',
+    },
   });
 }
 
@@ -157,7 +172,7 @@ export function createSkyMaterial(fogU) {
         vec3 col = mix(hz, uZenith, g);
         float sd = dot(d, uSunDir);
         float s = max(sd, 0.0);
-        col += uSunHalo * (pow(s, 4.0) * 0.16 + pow(s, 28.0) * 0.35 + pow(s, 400.0) * 1.4);
+        col += uSunHalo * (pow(s, 4.0) * 0.14 + pow(s, 26.0) * 0.3 + pow(s, 600.0) * 0.55);
         float cden = 0.0;
         if (y > 0.0) {
           vec2 cp = d.xz / (y + 0.085) * 0.75;
@@ -200,7 +215,7 @@ export function createSkyMaterial(fogU) {
           float mh = max(md, 0.0);
           col += vec3(0.5, 0.62, 0.95) * (pow(mh, 900.0) * 0.6 + pow(mh, 60.0) * 0.08 + pow(mh, 8.0) * 0.03) * uMoonAmt;
         }
-        float disk = smoothstep(0.99985, 0.99992, sd);
+        float disk = smoothstep(0.99986, 0.99991, sd);
         col += uSunDisk * disk * (1.0 - cden * 0.92);
         gl_FragColor = vec4(col, 1.0);
       }
@@ -214,10 +229,10 @@ export function createSkyMaterial(fogU) {
 export function buildMountains({ noise, rng, fogU, sunsetAz }) {
   const group = new THREE.Group();
   const layers = [
-    { R: 330, hmin: 3, hmax: 30, base: '#28332b', alt: '#5a3420', a0: -1.95, a1: 1.95, seg: 900 },
-    { R: 520, hmin: 10, hmax: 68, base: '#2f3d3c', alt: '#4a3a30', a0: -2.0, a1: 2.0, seg: 700 },
-    { R: 800, hmin: 26, hmax: 135, base: '#394a54', alt: '#394a54', a0: -2.05, a1: 2.05, seg: 480 },
-    { R: 1250, hmin: 60, hmax: 250, base: '#45566a', alt: '#45566a', a0: -2.1, a1: 2.1, seg: 320 },
+    { R: 330, hmin: 3, hmax: 22, base: '#28332b', alt: '#5a3420', a0: -1.95, a1: 1.95, seg: 900 },
+    { R: 520, hmin: 8, hmax: 44, base: '#2f3d3c', alt: '#4a3a30', a0: -2.0, a1: 2.0, seg: 700 },
+    { R: 800, hmin: 18, hmax: 80, base: '#394a54', alt: '#394a54', a0: -2.05, a1: 2.05, seg: 480 },
+    { R: 1250, hmin: 40, hmax: 150, base: '#45566a', alt: '#45566a', a0: -2.1, a1: 2.1, seg: 320 },
   ];
   const ridgeAt = [];
   layers.forEach((L, li) => {
@@ -228,9 +243,11 @@ export function buildMountains({ noise, rng, fogU, sunsetAz }) {
     const ridge = [];
     for (let j = 0; j <= L.seg; j++) {
       const a = L.a0 + (L.a1 - L.a0) * j / L.seg;
-      let n = noise.fbm2(a * (1.5 + li * 0.45) + ph, li * 7.3, 5) * 0.5 + 0.5;
-      n = n * 0.78 + noise.ridged2(a * (4.0 + li) + ph * 0.7, li * 3.1, 4) * 0.22;
-      let h = lerp(L.hmin, L.hmax, smoothstep(0.18, 0.92, n));
+      // rolling, rounded ranges: broad swells + softened mid-scale hills (no sharp alpine peaks)
+      let n = noise.fbm2(a * (1.1 + li * 0.35) + ph, li * 7.3, 3) * 0.5 + 0.5;
+      const hill = noise.fbm2(a * (5.0 + li * 1.5) + ph * 0.3, li * 2.1 + 9, 3) * 0.5 + 0.5;
+      n = n * 0.7 + Math.pow(hill, 1.4) * 0.3;
+      let h = lerp(L.hmin, L.hmax, smoothstep(0.15, 0.95, n));
       // forested ridge: fine fuzzy bumps along the silhouette
       h += (noise.noise2(a * 140 + li * 13, 0.5) * 0.65 + noise.noise2(a * 330 + li * 7, 2.5) * 0.35) * L.R * 0.004 * [1, 0.65, 0.35, 0.18][li];
       // low saddle where the sun sets, taller shoulders around it

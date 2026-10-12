@@ -25,13 +25,14 @@ function soriBox(L, H, D, { sori = 0.12, pow = 2.4, topFlare = 1.0, endSlant = 0
 
 export function makeStoneMaterial(maps, fogU, tint = '#a39d90') {
   const m = new THREE.MeshStandardMaterial({ color: tint, map: maps.map, normalMap: maps.normalMap, roughness: 0.92, metalness: 0, envMapIntensity: 0.35 });
+  m.normalScale.set(1.4, 1.4);
   // moss / lichen on upward faces
   patchMaterial(m, {
     key: 'stoneMoss',
     vertexHeader: 'varying vec3 vWN;',
     fragmentHeader: 'varying vec3 vWN;',
     vertex: { '#include <beginnormal_vertex>': '$&\n vWN = normalize(mat3(modelMatrix) * objectNormal);' },
-    fragment: { '#include <map_fragment>': '$&\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.24, 0.26, 0.1), smoothstep(0.75, 0.98, vWN.y) * 0.4);' },
+    fragment: { '#include <map_fragment>': '$&\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.3, 0.16), smoothstep(0.8, 0.99, vWN.y) * 0.3);' },
   });
   return addFog(m, fogU, 'mfogStone');
 }
@@ -172,12 +173,12 @@ export function buildRocks({ rng, noise, list, heightAt, stoneMat }) {
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
       const d = 1 + noise.fbm3(x * 1.3 + ph, y * 1.3, z * 1.3, 4) * 0.35 + Math.abs(noise.noise3(x * 3 + ph, y * 3, z * 3)) * 0.08;
-      p.setXYZ(i, x * d, Math.max(y * d, -0.6), z * d);
+      p.setXYZ(i, x * d, Math.max(y * d, -0.35), z * d);
     }
     geo.computeVertexNormals();
     geo.scale(r.s * rng.range(0.9, 1.25), r.s * rng.range(0.6, 0.95), r.s * rng.range(0.8, 1.1));
     geo.rotateY(rng.range(0, TAU));
-    geo.translate(r.x, heightAt(r.x, r.z) - r.s * 0.12, r.z);
+    geo.translate(r.x, heightAt(r.x, r.z) + r.s * 0.12, r.z);
     // planar-ish uv for the tiling stone texture
     const uv = [];
     for (let i = 0; i < p.count; i++) uv.push(p.getX(i) * 0.5 + p.getY(i) * 0.3, p.getZ(i) * 0.5 + p.getY(i) * 0.2);

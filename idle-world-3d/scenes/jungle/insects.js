@@ -180,7 +180,7 @@ export function createButterflyMesh(shared, max, tex) {
         float ndv = abs(dot(N, V));
         vec3 iri = mix(vec3(0.05, 0.45, 1.0), vec3(0.25, 0.95, 1.0), pow(1.0 - ndv, 2.0));
         float flash = pow(max(dot(N, H), 0.0), 12.0) * cookie;
-        col += iri * morpho * (0.25 + uAmb * 0.6 + uLightCol * (flash * 2.0 + 0.25 * cookie));
+        col += iri * morpho * (uAmb * 0.7 + uLightCol * cookie * (flash * 1.6 + 0.18));
         gl_FragColor = vec4(jgFog(col, vWorldP), 1.0);
       }`,
     side: THREE.DoubleSide,

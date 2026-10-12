@@ -36,7 +36,7 @@ export function findFoxBones(root) {
 }
 
 // Seated pose parameters (radians; positive = nose-up / limb swings backward around the lateral axis).
-export const SIT = { hip: 0.72, drop: 27, thigh: -0.95, shin: 2.0, hock: -1.2, toe: 0.2, arm: 0.62, fore: 0.05, hand: 0.15, neck: -0.28, head: -0.22, tail1: 0.55, tail2: 0.35, tail3: 0.25 };
+export const SIT = { hip: 0.72, drop: 27, thigh: -0.95, shin: 2.0, hock: -1.2, toe: 0.2, arm: 0.58, fore: 0.05, hand: 0.15, neck: -0.45, head: -0.05, tail1: 0.55, tail2: 0.35, tail3: 0.25 };
 
 /**
  * Apply pose layers. w = { eat, rest, sit } in 0..1, t = time (s). Returns the vertical drop (model units)

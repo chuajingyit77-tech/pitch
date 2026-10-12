@@ -139,13 +139,19 @@ void main(){
   sh = mix(sh, 1.0, 0.18);
   sh *= casterShadow(vW, L);
   float hn = clamp(vHn * 0.85 + dd.r * 0.15 * detailW + (sw - 0.5) * 0.3, 0.0, 1.0);
-  float rimT = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
-  vec3 col = cloudShade(N, V, L, hn, sh, 1.0, rimT);
-  // soften silhouettes: grazing edges are optically thin, fade them toward the mean cloud tone
-  float edge = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5);
-  float fwdE = pow(max(dot(-V, L), 0.0), 4.0);
-  vec3 meanC = uAmbient * 0.85 + uLightCol * 0.42;
-  col = mix(col, meanC, edge * 0.35 * (1.0 - fwdE));
+  // Thick-cloud shading: brightness comes mostly from depth in the deck and sun visibility,
+  // the surface normal only nudges it (a cloud is not a hard surface).
+  float depth = smoothstep(0.08, 0.9, hn);
+  float ndl = dot(N, L);
+  float soft = clamp((ndl + 0.55) / 1.55, 0.0, 1.0);
+  float lit = sh * mix(0.58, 1.0, soft) * mix(0.55, 1.0, depth);
+  vec3 shadowC = uAmbient * mix(0.5, 1.0, depth) + uBounce * 0.1;
+  vec3 litC = uAmbient * 0.7 + uLightCol * 1.05;
+  vec3 col = mix(shadowC, litC, lit);
+  float VL = dot(-V, L);
+  // forward scattering glow toward the sun and thin bright rims on the tops
+  float rimT = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+  col += uLightCol * (pow(max(VL, 0.0), 10.0) * 0.45 * depth + rimT * pow(max(VL, 0.0), 4.0) * 1.2 * depth) * sh;
   col += glowLights(vW, N) * (0.6 + 0.4 * hn);
   // haze: the sea dissolves into the horizon
   col = mix(col, hazeColor(-V), fogAmountAt(vW));
@@ -209,10 +215,10 @@ export function createCloudSea(env, shared, tex) {
   const uniforms = Object.assign({}, shared, {
     tBillow: { value: tex.billow.tex },
     tDetail: { value: tex.detail.tex },
-    uL1: { value: new THREE.Vector4(1 / 340, env.rng.next(), env.rng.next(), 22) },
-    uL2: { value: new THREE.Vector4(1 / 118, env.rng.next(), env.rng.next(), 5) },
-    uL0: { value: new THREE.Vector4(1 / 1900, env.rng.next(), env.rng.next(), 14) },
-    uLD: { value: new THREE.Vector4(1 / 46, env.rng.next(), env.rng.next(), 0.55) },
+    uL1: { value: new THREE.Vector4(1 / 380, env.rng.next(), env.rng.next(), 30) },
+    uL2: { value: new THREE.Vector4(1 / 131, env.rng.next(), env.rng.next(), 3.2) },
+    uL0: { value: new THREE.Vector4(1 / 2100, env.rng.next(), env.rng.next(), 16) },
+    uLD: { value: new THREE.Vector4(1 / 52, env.rng.next(), env.rng.next(), 0.25) },
     uRot2: { value: new THREE.Vector2(Math.cos(rot), Math.sin(rot)) },
     uTexSize: { value: tex.billow.size },
     uG1: { value: tex.billow.G },

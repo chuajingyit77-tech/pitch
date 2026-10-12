@@ -57,12 +57,12 @@ export function buildSky(shared) {
 }
 
 /* ------------------------------------------------------------------ */
-/* God rays: camera-facing strips along the light direction             */
+/* God rays: camera-facing strips from lit ground spots back toward the light */
 /* ------------------------------------------------------------------ */
 export function buildGodRays(shared, anchors, rng) {
   const n = anchors.length;
   const base = new THREE.PlaneGeometry(1, 1, 1, 12);
-  base.translate(0, -0.5, 0); // y in [-1, 0]: 0 at the anchor, -1 at the far end
+  base.translate(0, -0.5, 0); // y in [-1, 0]: along = -y, 0 at the ground spot, 1 at the sky end
   const geo = new THREE.InstancedBufferGeometry();
   geo.index = base.index;
   geo.setAttribute('position', base.attributes.position);
@@ -78,19 +78,21 @@ export function buildGodRays(shared, anchors, rng) {
   const mat = new THREE.ShaderMaterial({
     uniforms: { ...shared, uRayCol: { value: new THREE.Color() }, uRayAmt: { value: 1 } },
     vertexShader: /* glsl */`
-      uniform vec3 uLightDirW; uniform float uTime;
+      ${JG_GLSL}
       attribute vec4 aAnchor; attribute vec4 aPrm;
-      varying vec2 vUv; varying vec3 vWorldP; varying float vSeed; varying float vK; varying float vAlong;
+      varying vec2 vUv; varying float vSeed; varying float vK; varying float vAlong;
       void main(){
-        vec3 L = normalize(vec3(uLightDirW.x, max(uLightDirW.y, 0.3), uLightDirW.z));
-        vec3 D = -L;
-        float along = -position.y; // 0 at anchor .. 1 at far end
-        vec3 c = aAnchor.xyz + D * along * aPrm.y;
+        vec3 L = normalize(vec3(uLightDirW.x, max(uLightDirW.y, 0.22), uLightDirW.z));
+        float along = -position.y;
+        vec3 c = aAnchor.xyz + L * along * aPrm.y;
         vec3 toCam = normalize(cameraPosition - c);
-        vec3 side = normalize(cross(D, toCam));
-        float w = aAnchor.w * (0.7 + along * 0.6) * (1.0 + 0.08 * sin(uTime * 0.3 + aPrm.x * 20.0));
+        vec3 side = normalize(cross(L, toCam));
+        float w = aAnchor.w * (0.75 + along * 0.5) * (1.0 + 0.1 * sin(uTime * 0.25 + aPrm.x * 20.0));
         vec3 p = c + side * position.x * w;
-        vWorldP = p; vUv = uv; vSeed = aPrm.x; vK = aPrm.z * aPrm.w; vAlong = along;
+        // only where the canopy lets the light through to this spot
+        float ck = (jgCookie(aAnchor.xyz) - uCookieMin) / max(1.0 - uCookieMin, 1e-3);
+        float open = smoothstep(0.45, 0.9, ck);
+        vWorldP = p; vUv = uv; vSeed = aPrm.x; vK = aPrm.z * aPrm.w * open; vAlong = along;
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: /* glsl */`
@@ -99,14 +101,16 @@ export function buildGodRays(shared, anchors, rng) {
       uniform vec3 uRayCol; uniform float uRayAmt;
       varying vec2 vUv; varying float vSeed; varying float vK; varying float vAlong;
       void main(){
+        if (vK < 0.002) discard;
         float x = vUv.x * 2.0 - 1.0;
-        float across = pow(max(1.0 - x * x, 0.0), 1.6);
-        float ends = smoothstep(0.0, 0.18, vAlong) * (1.0 - smoothstep(0.55, 1.0, vAlong));
-        float streak = 0.55 + 0.45 * vnoise(vec2(x * 3.0 + vSeed * 50.0, vAlong * 2.0 - uTime * 0.05));
-        streak *= 0.7 + 0.3 * vnoise(vec2(x * 9.0 + uTime * 0.07, vSeed * 11.0));
+        float edgeN = vnoise(vec2(vAlong * 3.0 + vSeed * 30.0, uTime * 0.05)) * 0.35;
+        float across = pow(max(1.0 - x * x * (1.0 + edgeN), 0.0), 2.6);
+        float ends = smoothstep(0.02, 0.3, vAlong) * (1.0 - smoothstep(0.35, 0.95, vAlong));
+        float streak = 0.6 + 0.4 * vnoise(vec2(x * 2.5 + vSeed * 50.0, vAlong * 1.5 - uTime * 0.04));
+        streak *= 0.75 + 0.25 * vnoise(vec2(x * 7.0 + uTime * 0.06, vSeed * 11.0));
         vec3 V = normalize(vWorldP - cameraPosition);
-        float fwd = mix(0.45, 1.0, pow(max(dot(V, -uLightDirW), 0.0), 2.0));
-        float camFade = smoothstep(2.0, 7.0, length(vWorldP - cameraPosition));
+        float fwd = mix(0.35, 1.0, pow(max(dot(V, -uLightDirW), 0.0), 2.0));
+        float camFade = smoothstep(3.0, 9.0, length(vWorldP - cameraPosition));
         float a = across * ends * streak * fwd * camFade * vK * uRayAmt;
         gl_FragColor = vec4(uRayCol * a, 1.0);
       }`,
@@ -294,7 +298,7 @@ export function buildMistSheets(shared, rng, sheets) {
         float a = smoothstep(0.35, 0.85, n) * edge * uAmt;
         vec3 V = normalize(vWorldP - cameraPosition);
         float soft = smoothstep(1.0, 6.0, length(vWorldP - cameraPosition));
-        a *= soft;
+        a *= soft * smoothstep(0.04, 0.3, abs(V.y));
         if (a < 0.003) discard;
         float cookie = jgCookie(vWorldP);
         float fwd = pow(max(dot(V, uLightDirW), 0.0), 3.0);

@@ -413,6 +413,32 @@ export function vineCurtain(A, rng, { strands = 5, len = 4 } = {}) {
   return finish(parts);
 }
 
+/** Glow pods: thin arching stems carrying luminous bulbs (pale buds by day, cyan lanterns by night). */
+export function glowPods(rng, { stems = 5 } = {}) {
+  const parts = [];
+  for (let i = 0; i < stems; i++) {
+    const a = rng.next() * TAU, h = rng.range(0.35, 0.9), lean = rng.range(0.05, 0.3);
+    const top = new THREE.Vector3(Math.cos(a) * lean, h, Math.sin(a) * lean);
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(Math.cos(a) * lean * 0.3, h * 0.6, Math.sin(a) * lean * 0.3), top]);
+    const st = taperTube(curve, t => lerp(0.011, 0.006, t), { tubular: 6, radial: 4, tint: [0.25, 0.4, 0.22] }).toNonIndexed();
+    st.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(st.attributes.position.count).fill(0.08), 1));
+    st.deleteAttribute('uv');
+    parts.push(st);
+    const r = rng.range(0.03, 0.055);
+    const b = new THREE.SphereGeometry(r, 8, 6);
+    b.scale(1, 1.25, 1);
+    b.translate(top.x, top.y + r * 0.9, top.z);
+    const nb = b.toNonIndexed();
+    nb.deleteAttribute('uv');
+    nb.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(nb.attributes.position.count).fill(1), 1));
+    nb.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nb.attributes.position.count * 3).map((_, k) => [0.85, 0.95, 0.88][k % 3]), 3));
+    parts.push(nb);
+  }
+  const m = mergeGeometries(parts);
+  parts.forEach(p => p.dispose());
+  return m;
+}
+
 /** Bioluminescent mushroom cluster: caps + stems, with an aGlow attribute (1 on caps' gills). */
 export function mushroomCluster(rng, { count = 5 } = {}) {
   const parts = [];

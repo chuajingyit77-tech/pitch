@@ -603,13 +603,14 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
       if (dusk > 0.2 && flock.cooldown <= 0) {
         flock.active = true; flock.t = 0;
         const a = frng.range(0, TAU);
-        const off = frng.range(-14, 14);
+        const off = frng.range(-10, 10);
         flock.dir.set(Math.cos(a), 0, Math.sin(a));
-        flock.origin.set(-Math.cos(a) * 42 - Math.sin(a) * off, frng.range(14, 22), -Math.sin(a) * 42 + Math.cos(a) * off);
+        flock.origin.set(-Math.cos(a) * 34 - Math.sin(a) * off, frng.range(7, 11), -Math.sin(a) * 34 + Math.cos(a) * off);
         for (const b of flock.birds) b.root.visible = true;
       }
       return;
     }
+    if (dusk < 0.02) { flock.active = false; flock.cooldown = 2; for (const b of flock.birds) b.root.visible = false; return; }
     flock.t += dt;
     const speed = 7.5;
     const dist = flock.t * speed;
@@ -622,7 +623,7 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
       b.root.position.y += Math.sin(t * 0.9 + i) * 0.25;
       b.root.rotation.set(0, yaw, Math.sin(t * 0.7 + i) * 0.06);
     }
-    if (dist > 100) {
+    if (dist > 80) {
       flock.active = false; flock.cooldown = frng.range(25, 55);
       for (const b of flock.birds) b.root.visible = false;
     }

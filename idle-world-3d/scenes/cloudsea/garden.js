@@ -55,7 +55,7 @@ export function rockMaterial(shared, tex, { bump = 0.8, scale = 0.1, moss = 0.5,
 
 /** Velvet lawn: soft colour patches, a fuzzy sheen at grazing angles, gentle undulation. */
 function lawnMaterial(shared, tex) {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, metalness: 0, envMapIntensity: 1.6 });
   return patchStd(m, shared, {
     key: 'lawn',
     uniforms: { tNoise: { value: tex.noise }, tDetail: { value: tex.detail.tex } },
@@ -65,7 +65,7 @@ function lawnMaterial(shared, tex) {
         vec4 nz = texture2D(tNoise, vWPos.xz * 0.045);
         vec4 nz2 = texture2D(tNoise, vWPos.xz * 0.21);
         float patchv = nz.r * 0.6 + nz2.g * 0.4;
-        vec3 lawnA = vec3(0.17, 0.33, 0.12), lawnB = vec3(0.33, 0.50, 0.17), lawnC = vec3(0.55, 0.60, 0.24);
+        vec3 lawnA = vec3(0.2, 0.36, 0.14), lawnB = vec3(0.36, 0.5, 0.2), lawnC = vec3(0.58, 0.6, 0.28);
         vec3 lawn = mix(lawnA, lawnB, smoothstep(0.25, 0.8, patchv));
         lawn = mix(lawn, lawnC, smoothstep(0.62, 0.92, nz2.b) * 0.35);
         float isLawn = smoothstep(0.25, 0.6, vColor.g - vColor.r * 0.6);
@@ -451,6 +451,14 @@ export function createGarden(env, shared, tex, wind) {
   }
   balustrade(B, rimPts, { h: 0.78, every: 1.1 });
 
+  // red lanterns hanging from the lower boughs of the peach tree
+  {
+    const ps = tree.perches.slice().sort((p1, p2) => p1.y - p2.y);
+    const picked = [];
+    for (const pp of ps) { if (picked.length >= 5) break; if (picked.every(o => o.distanceTo(pp) > 2.2) && pp.y > treePos.y + 2.4) picked.push(pp); }
+    for (const pp of picked) B.lantern(pp.x, pp.y - 0.15, pp.z, 0.75);
+  }
+
   /* ---- tower islet, joined by an arched bridge ---- */
   const islA = makeIslet(rng, { radius: 6.8, depth: 14, nT: Math.round(lerp(22, 36, q)), nA: Math.round(lerp(40, 72, q)), lobes: 2 });
   const aDir = rng.range(2.35, 2.75);
@@ -576,43 +584,50 @@ export function createGarden(env, shared, tex, wind) {
   }
   const freeMain = (x, z) => !reserved.some(r => Math.hypot(r.x - x, r.z - z) < r.r);
   // tufts: rounded moss cushions
-  let tuftGeo = new THREE.IcosahedronGeometry(1, 2);
-  tuftGeo.deleteAttribute('uv'); tuftGeo.deleteAttribute('normal');
-  tuftGeo = mergeVertices(tuftGeo);
+  let tuftGeo;
   {
+    const lumps = [];
+    for (const [x, z, r] of [[0, 0, 1], [0.7, 0.25, 0.72], [-0.55, 0.45, 0.68], [0.1, -0.7, 0.62], [-0.45, -0.4, 0.55]]) {
+      let g = new THREE.IcosahedronGeometry(r, 2);
+      g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
+      const p = g.getAttribute('position');
+      for (let i = 0; i < p.count; i++) {
+        _p.fromBufferAttribute(p, i);
+        const k = 1 + 0.12 * noise.noise3(_p.x * 3 + x, _p.y * 3, _p.z * 3 + z);
+        p.setXYZ(i, _p.x * k + x, Math.max(_p.y, -0.2 * r) * 0.78 * k + 0.16 * r, _p.z * k + z);
+      }
+      lumps.push(g);
+    }
+    tuftGeo = mergeGeometries(lumps);
     const p = tuftGeo.getAttribute('position'), col = new Float32Array(p.count * 3);
-    const base = new THREE.Color('#2f5220'), tip = new THREE.Color('#6f9238');
+    const base = new THREE.Color('#2c4c1e'), tip = new THREE.Color('#7a9a3e');
     for (let i = 0; i < p.count; i++) {
-      _p.fromBufferAttribute(p, i);
-      const lobes = 1 + 0.18 * noise.noise3(_p.x * 2.1, _p.y * 2.1, _p.z * 2.1) + 0.1 * Math.sin(_p.x * 6) * Math.sin(_p.z * 6);
-      const y = Math.max(_p.y, -0.15);
-      p.setXYZ(i, _p.x * lobes, (y + 0.15) * 0.5 * lobes, _p.z * lobes);
-      _c.copy(base).lerp(tip, smoothstep(-0.1, 0.9, _p.y));
+      _c.copy(base).lerp(tip, smoothstep(0.0, 0.95, p.getY(i)));
       col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
     }
     tuftGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     tuftGeo.computeVertexNormals();
   }
-  const tuftMat = softMaterial(shared, { vertexColors: true, roughness: 0.95 }, { key: 'tuft', trans: 0.5, wrap: 0.5 });
+  const tuftMat = softMaterial(shared, { vertexColors: true, roughness: 0.95 }, { key: 'tuft', trans: 0.35, wrap: 0.4 });
   addWind(tuftMat, wind, { height: 0.6, amount: 0.03, stiffness: 1.5, key: 'tuftwind' });
   // tufts gather around the feet of things (stones, roots, rails) and in a few soft drifts
   const nearThings = (x, z) => {
     if (!freeMain(x, z)) return false;
     let best = 1e9;
     for (const r of reserved) best = Math.min(best, Math.hypot(r.x - x, r.z - z) - r.r);
-    const drift = noise.noise2(x * 0.12 + 7, z * 0.12) > 0.35;
-    return best < 1.4 || drift;
+    const rim = Math.hypot(x, z) > main.rimR(Math.atan2(z, x)) * 0.86;
+    return best < 0.9 || rim || noise.noise2(x * 0.2 + 7, z * 0.2) > 0.55;
   };
   const tuftPts = [
-    ...scatter(main, 0, 0, 0, Math.round(110 * q + 40), 0, nearThings),
+    ...scatter(main, 0, 0, 0, Math.round(140 * q + 50), 0, nearThings),
     ...scatter(islA, A.x, A.y, A.z, Math.round(30 * q + 10), 0, (x, z) => Math.hypot(x, z) > 3.6),
     ...scatter(islB, Bp.x, Bp.y, Bp.z, Math.round(20 * q + 8), 0, (x, z) => Math.abs(x) > 1.0 || Math.abs(z) > 3.8),
   ];
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, tuftPts.length);
   tuftPts.forEach((p, i) => {
-    const s = rng.range(0.22, 0.55) * (rng.chance(0.15) ? 1.4 : 1);
+    const s = rng.range(0.13, 0.3) * (rng.chance(0.12) ? 1.5 : 1);
     _q.setFromEuler(_e.set(0, rng.range(0, TAU), 0));
-    _m.compose(_p.set(p.x, p.y - 0.06, p.z), _q, _s.set(s * rng.range(1.0, 1.6), s * 0.8, s * rng.range(1.0, 1.5)));
+    _m.compose(_p.set(p.x, p.y - 0.05, p.z), _q, _s.set(s * rng.range(0.9, 1.3), s * rng.range(0.9, 1.25), s * rng.range(0.9, 1.3)));
     tufts.setMatrixAt(i, _m);
     _c.setHSL(rng.range(0.16, 0.3), rng.range(0.25, 0.45), rng.range(0.78, 0.95));
     tufts.setColorAt(i, _c);
@@ -767,7 +782,7 @@ export function createGarden(env, shared, tex, wind) {
   const nPeaks = q >= 0.7 ? 14 : 9;
   for (let i = 0; i < nPeaks; i++) {
     const a = farA0 + (i / nPeaks) * TAU + farRng.range(-0.18, 0.18);
-    const d = farRng.range(420, 1800);
+    const d = farRng.range(650, 2100);
     const H = farRng.range(110, 330) * (d / 900 + 0.45) * 0.75;
     const R = H * farRng.range(0.16, 0.26);
     const pts = [];

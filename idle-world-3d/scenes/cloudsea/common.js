@@ -267,9 +267,10 @@ export function makeBillowTexture(seed, size = 512) {
   const perlin = makePerlin(seed ^ 0x51ed);
   const H = new Float32Array(size * size);
   const layers = [
-    { n: 5, w: 0.55, rMin: 0.75, rMax: 1.25 },
-    { n: 11, w: 0.30, rMin: 0.7, rMax: 1.2 },
-    { n: 23, w: 0.13, rMin: 0.65, rMax: 1.15 },
+    { n: 5, w: 0.52, rMin: 0.8, rMax: 1.3, k: 0.28 },
+    { n: 11, w: 0.28, rMin: 0.75, rMax: 1.25, k: 0.25 },
+    { n: 23, w: 0.14, rMin: 0.7, rMax: 1.2, k: 0.22 },
+    { n: 47, w: 0.06, rMin: 0.7, rMax: 1.2, k: 0.2 },
   ];
   for (const L of layers) {
     const N = L.n;
@@ -283,12 +284,17 @@ export function makeBillowTexture(seed, size = 512) {
       let h = 0;
       for (const L of layers) {
         const N = L.n, fx = u * N, fy = v * N, cx = Math.floor(fx), cy = Math.floor(fy);
+        // smooth union of round domes: rounded valleys instead of sharp creases
         let best = 0;
         for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
           const ix = ((cx + i) % N + N) % N, iy = ((cy + j) % N + N) % N, k = iy * N + ix;
           const dx = cx + i + L.px[k] - fx, dy = cy + j + L.py[k] - fy;
           const d2 = (dx * dx + dy * dy) / (L.r[k] * L.r[k]);
-          if (d2 < 1) { const dome = Math.pow(1 - d2, 0.62) * L.s[k]; if (dome > best) best = dome; }
+          if (d2 < 1.6) {
+            const dome = Math.sqrt(Math.max(0, 1 - d2 / 1.6)) * L.s[k];
+            const hh = Math.max(L.k - Math.abs(best - dome), 0) / L.k;
+            best = Math.max(best, dome) + hh * hh * L.k * 0.25;
+          }
         }
         h += best * L.w;
       }

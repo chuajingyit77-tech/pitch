@@ -138,17 +138,19 @@ const WPOS_FROM_MV = 'vUwPos = transpose(mat3(viewMatrix)) * (mvPosition.xyz - v
  * Underwater look for a built-in material: depth-tinted light, caustics on the sun light and the
  * in-scatter fog. fog: 'full' | 'atten' (additive things) | 'none'.
  */
-export function waterize(mat, W, { caustics = true, fog = 'full', tint = true, key = '' } = {}) {
+export function waterize(mat, W, { caustics = true, fog = 'full', tint = true, rim = 0, key = '' } = {}) {
   const frag = {};
   if (caustics) frag['#include <lights_fragment_begin>'] = LIGHTS_CAUSTIC;
-  if (tint) frag['#include <opaque_fragment>'] = 'outgoingLight *= uwTint(vUwPos.y);\n$&';
+  // rim: light scattered around silhouettes, so creatures read against the bright water
+  const rimCode = rim > 0 ? 'outgoingLight += uwLc(vUwPos.y) * uRim * pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.0);\n' : '';
+  if (tint || rim > 0) frag['#include <opaque_fragment>'] = (tint ? 'outgoingLight *= uwTint(vUwPos.y);\n' : '') + rimCode + '$&';
   frag['#include <fog_fragment>'] = fog === 'full' ? 'gl_FragColor.rgb = uwFog(gl_FragColor.rgb, vUwPos);'
     : fog === 'atten' ? 'gl_FragColor.rgb = uwAtten(gl_FragColor.rgb, vUwPos);' : '';
   return patchMaterial(mat, {
-    key: `uw${caustics ? 1 : 0}${fog}${tint ? 1 : 0}${key}`,
-    uniforms: W,
+    key: `uw${caustics ? 1 : 0}${fog}${tint ? 1 : 0}${rim > 0 ? 'r' : ''}${key}`,
+    uniforms: rim > 0 ? { ...W, uRim: { value: rim } } : W,
     vertexHeader: UW_VERT,
-    fragmentHeader: UW_FRAG + (caustics ? NOISE_GLSL + CAUSTIC_GLSL : ''),
+    fragmentHeader: UW_FRAG + (rim > 0 ? 'uniform float uRim;\n' : '') + (caustics ? NOISE_GLSL + CAUSTIC_GLSL : ''),
     vertex: { '#include <fog_vertex>': '$&\n' + WPOS_FROM_MV },
     fragment: frag,
   });
@@ -184,7 +186,10 @@ vec3 reefPerturb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDir){
  *   vec3 detailCol(vec3 p, float h, vec3 c)     albedo modulation
  * space: 'world' (static things) or 'object' (instanced / moving things; per-instance offset).
  */
+/** Procedural detail is the heaviest per-pixel cost; the low quality tier turns it off. */
+export const DETAIL = { on: true };
 export function addDetail(mat, W, { glsl, space = 'world', bump = 1, key = 'd', uniforms = {} }) {
+  if (!DETAIL.on) return mat;
   const vtx = space === 'object'
     ? { '#include <begin_vertex>': '$&\nvDetP = transformed;\n#ifdef USE_INSTANCING\nvDetP += instanceMatrix[3].xyz * 0.618;\n#endif' }
     : { '#include <fog_vertex>': '$&\nvDetP = transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);' };

@@ -6,14 +6,16 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains } from './meadow/sky.js';
-import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, WIND_GLSL } from './meadow/flora.js';
+import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL } from './meadow/flora.js';
 import { buildTorii, buildHokora, buildLantern, buildRocks, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
 import * as TX from './meadow/tex.js';
 import { createFx } from './meadow/fx.js';
+import { applyFoxPose, findFoxBones } from './meadow/foxpose.js';
 
 const FOX_SCALE = 0.0078;     // ≈1.2 m nose to tail
 const WALK_REF = 115;         // stride speed of the Walk clip in model units / s
 const RUN_REF = 240;
+const CLIPS = ['Survey', 'Walk', 'Run'];
 
 export default {
   id: 'meadow',
@@ -45,7 +47,7 @@ export default {
       h += 1.7 * Math.exp(-r2 / (2 * 9.5 * 9.5));
       h -= 0.8 * smoothstep(4, 24, z);
       const d = Math.hypot(x, z);
-      h += smoothstep(70, 300, d) * (noise.fbm2(x * 0.0045 + 11, z * 0.0045 - 7, 3) * 12 + 3);
+      h += smoothstep(70, 300, d) * (noise.fbm2(x * 0.0045 + 11, z * 0.0045 - 7, 3) * 7 + 1.5);
       return h;
     }
     const H0 = rawHeight(0, 0);
@@ -72,7 +74,6 @@ export default {
       return Math.sqrt(best);
     }
     const pathPoint = (t, out = new THREE.Vector3()) => { const p = pathCurve.getPointAt(clamp(t, 0, 1)); return out.set(p.x, heightAt(p.x, p.z), p.z); };
-    const tPathTorii = 0.9 / pathCurve.getLength();
 
     const TARGET = new THREE.Vector3(1.7, 1.45, 0.2);
     const LANTERNS = [new THREE.Vector3(-1.8, 0, 2.6), new THREE.Vector3(1.8, 0, 2.6)];
@@ -108,6 +109,7 @@ export default {
     ];
 
     function grassFactor(x, z) {
+      if (x * x + z * z > 3600) return 1;
       const pd = pathDist(x, z);
       let f = smoothstep(0.55, 2.6, pd);
       const dT = Math.hypot(x, z - 0.2);
@@ -224,7 +226,7 @@ export default {
     const colors = makeGrassColorUniforms();
     const plumeTex = own(TX.plumeTexture(env.seed & 0xffff));
     const grassMat = grassMaterial({ wind: windU, colors, fogU, plume: false, transl: 0.32 });
-    const plumeMat = grassMaterial({ wind: windU, colors, fogU, plume: true, map: plumeTex, transl: 0.45, wrap: 0.6 });
+    const plumeMat = grassMaterial({ wind: windU, colors, fogU, plume: true, map: plumeTex, transl: 0.45, wrap: 0.6, msaa: env.quality !== 'low' });
     {
       const camSamples = [];
       for (const d of [11, 16, 23]) for (let k = 0; k <= 8; k++) { const yaw = -0.9 + 1.8 * k / 8; camSamples.push([TARGET.x + d * Math.sin(yaw), TARGET.z + d * Math.cos(yaw)]); }
@@ -337,6 +339,32 @@ export default {
     function patchBranchesWind(mat, w, height) {
       addWind(mat, w, { height, amount: 0.16, stiffness: 1.7, flutter: 0, key: 'mapleBranchW' });
     }
+    // distant groves (red / gold / evergreen) for depth, merged per palette
+    {
+      const frng = rng.fork('farTrees');
+      const groups = { red: [], gold: [], green: [] };
+      const nClusters = Math.round(10 * Math.max(q, 0.5));
+      for (let c = 0; c < nClusters; c++) {
+        const a = frng.range(-1.2, 1.2), d = frng.range(48, 190);
+        const cx = Math.sin(a) * d, cz = -Math.cos(a) * d + 8;
+        if (Math.abs(Math.atan2(cx - TARGET.x, -(cz - TARGET.z)) - sDir18) < 0.08 && d > 60) continue; // keep the sunset gap clear
+        const kind = frng.chance(0.45) ? 'green' : frng.chance(0.6) ? 'red' : 'gold';
+        const nT = frng.int(3, 7);
+        const dir = frng.range(0, TAU);
+        for (let i = 0; i < nT; i++) {
+          const off = (i - nT / 2) * frng.range(3.5, 5.5);
+          const x = cx + Math.cos(dir) * off + frng.range(-2.5, 2.5), z = cz + Math.sin(dir) * off + frng.range(-2.5, 2.5);
+          const k = i === 0 ? kind : (frng.chance(0.7) ? kind : frng.pick(['red', 'gold', 'green']));
+          groups[k].push({ x, z, s: frng.range(1.0, 1.6) * (d > 120 ? 1.25 : 1) });
+        }
+      }
+      const groveBark = addFog(new THREE.MeshLambertMaterial({ color: '#3a3028' }), fogU, 'mfogGroveBark');
+      for (const [k, spots] of Object.entries(groups)) {
+        if (!spots.length) continue;
+        const tex = k === 'red' ? mapleTex : own(TX.mapleAtlasTexture((env.seed % 977) + k.length, k));
+        scene.add(buildGrove({ rng: frng, spots, heightAt, map: tex, barkMat: groveBark, fogU, density: 0.5 }));
+      }
+    }
     // fallen maple leaves on the ground beneath the trees
     const leafTex = own(TX.leafTexture());
     {
@@ -387,13 +415,14 @@ export default {
     const whiteU = { uGlow: { value: 0 } };
     const whiteMat = baseFoxMat.clone();
     whiteMat.flatShading = false;
-    whiteMat.envMapIntensity = 0.7;
+    whiteMat.envMapIntensity = 0.45;
+    whiteMat.roughness = 0.75;
     patchMaterial(whiteMat, {
       key: 'whiteFox', uniforms: whiteU, fragmentHeader: 'uniform float uGlow;',
       fragment: {
         '#include <map_fragment>': `$&
           float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-          diffuseColor.rgb = vec3(0.97, 0.94, 0.88) * (0.26 + 0.78 * smoothstep(0.02, 0.6, lum));`,
+          diffuseColor.rgb = vec3(1.0, 0.95, 0.86) * (0.16 + 0.86 * smoothstep(0.06, 0.62, lum));`,
         '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance += vec3(0.62, 0.78, 1.0) * uGlow * (0.35 + 0.65 * diffuseColor.r);',
       },
     });
@@ -413,8 +442,9 @@ export default {
         ped.position.set(px2, py + 0.16, pz2);
         ped.castShadow = ped.receiveShadow = true;
         scene.add(ped);
-        st.scale.setScalar(0.0042);
-        st.position.set(px2, py + 0.47, pz2 - 0.05);
+        st.scale.setScalar(0.0048);
+        const sdrop = applyFoxPose(findFoxBones(st), st, { sit: 1 }, 0);
+        st.position.set(px2, py + 0.47 - sdrop * 0.0048, pz2 - 0.12);
         st.rotation.y = -s * 0.35;
         scene.add(st);
         const neck = st.getObjectByName('b_Neck_04');
@@ -445,13 +475,15 @@ export default {
         this.mixer = new THREE.AnimationMixer(this.root);
         this.act = {};
         this.w = { Survey: 1, Walk: 0, Run: 0 };
+        this.tgtW = { Survey: 1, Walk: 0, Run: 0 };
+        this.restNight = false;
         for (const n of ['Survey', 'Walk', 'Run']) {
           const a = this.mixer.clipAction(clip(n));
           a.play(); a.setEffectiveWeight(this.w[n]); a.time = this.rng.range(0, a.getClip().duration);
           this.act[n] = a;
         }
-        this.bones = {};
-        this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; });
+        this.bones = findFoxBones(this.root);
+        this.poseW = { eat: 0, rest: 0, sit: 0 };
         this.pos = new THREE.Vector3();
         this.goal = new THREE.Vector3();
         this.heading = this.rng.range(0, TAU);
@@ -460,7 +492,7 @@ export default {
         this.state = 'idle';
         this.timer = this.rng.range(0.5, 3);
         this.food = null;
-        this.eatT = 0; this.bites = 0; this.eatW = 0; this.lookW = 0; this.restW = 0;
+        this.eatT = 0; this.bites = 0;
         this.labelPos = new THREE.Vector3();
         this.applyScale();
         if (spawnAtEdge) {
@@ -469,14 +501,14 @@ export default {
           this.state = 'walk';
           this.pickGoal(true);
         } else {
-          const t = this.rng.range(0.02, 0.5);
+          const t = this.rng.range(0.02, 0.28);
           pathPoint(t, this.pos);
           this.pos.x += this.rng.range(-0.6, 0.6);
         }
         this.pos.y = heightAt(this.pos.x, this.pos.z);
         this.wisps = [];
         if (this.white) {
-          for (let i = 0; i < 3; i++) { const s = fx.glow('#9fdcff', 0.34, 2.2); s.visible = false; scene.add(s); this.wisps.push(s); }
+          for (let i = 0; i < 3; i++) { const s = fx.glow('#9fdcff', 0.22, 1.3); s.visible = false; scene.add(s); this.wisps.push(s); }
         }
       }
       applyScale() {
@@ -495,14 +527,14 @@ export default {
           this.goal.set(SHRINE.x + Math.sin(a) * r.range(1.4, 2.4), 0, SHRINE.z + 1.6 + Math.cos(a) * r.range(0.6, 1.8));
           this.wantRest = true;
         } else if (this.hungry() && r.chance(0.7)) {
-          pathPoint(r.range(0.12, 0.45), this.goal);
+          pathPoint(r.range(0.14, 0.3), this.goal);
           this.goal.x += r.range(-0.8, 0.8);
           this.wantRest = false;
         } else {
           const k = r.next();
-          if (k < 0.5) { pathPoint(r.range(0.0, 0.7), this.goal); this.goal.x += r.range(-0.7, 0.7); }
+          if (k < 0.5) { pathPoint(r.range(0.0, 0.3), this.goal); this.goal.x += r.range(-0.7, 0.7); }
           else if (k < 0.78) { const a = r.range(0, TAU), d = r.range(1.6, 4.2); this.goal.set(Math.sin(a) * d, 0, 0.6 + Math.cos(a) * d); }
-          else { this.goal.set(r.range(-9, 10), 0, r.range(-6, 11)); }
+          else { this.goal.set(r.range(-9, 10), 0, r.range(-7, 8.5)); }
           this.wantRest = false;
         }
         this.goal.y = heightAt(this.goal.x, this.goal.z);
@@ -516,17 +548,20 @@ export default {
         let targetSpeed = 0, steer = false, lookAt = null;
         switch (this.state) {
           case 'idle':
-            if (this.timer <= 0) { this.pickGoal(); this.setState('walk', 30); }
+            if (this.timer <= 0) {
+              if (!this.hungry() && r.chance(0.22)) { this.restNight = false; this.setState('rest', r.range(8, 20)); }
+              else { this.pickGoal(); this.setState('walk', 30); }
+            }
             break;
           case 'rest':
-            if (this.timer <= 0 || world.night < 0.4) { this.pickGoal(); this.setState('walk', 30); }
+            if (this.timer <= 0 || (this.restNight && world.night < 0.4)) { this.pickGoal(); this.setState('walk', 30); }
             break;
           case 'walk': {
             steer = true;
             targetSpeed = this.walkSpeed * (this.hungry() ? 1.15 : 1);
             const d = Math.hypot(this.goal.x - this.pos.x, this.goal.z - this.pos.z);
             if (d < 0.35 || this.timer <= 0) {
-              if (this.wantRest) this.setState('rest', r.range(25, 70));
+              if (this.wantRest) { this.restNight = true; this.setState('rest', r.range(25, 70)); }
               else this.setState('idle', r.range(2.5, 7) * (this.hungry() ? 1.6 : 1));
             }
             break;
@@ -603,25 +638,22 @@ export default {
         const sp = this.speed;
         const wRun = smoothstep(this.walkSpeed * 1.25, this.runSpeed * 0.75, sp);
         const wMove = smoothstep(0.03, this.walkSpeed * 0.45, sp);
-        const tgt = { Survey: 1 - wMove, Walk: wMove * (1 - wRun), Run: wMove * wRun };
-        for (const n of ['Survey', 'Walk', 'Run']) {
-          this.w[n] = damp(this.w[n], tgt[n], 7, dt);
+        const tg = this.tgtW;
+        tg.Survey = 1 - wMove; tg.Walk = wMove * (1 - wRun); tg.Run = wMove * wRun;
+        for (const n of CLIPS) {
+          this.w[n] = damp(this.w[n], tg[n], 7, dt);
           this.act[n].setEffectiveWeight(this.w[n]);
         }
         this.act.Walk.timeScale = clamp(sp / Math.max(this.walkSpeed, 1e-3), 0.5, 2.2);
         this.act.Run.timeScale = clamp(sp / Math.max(RUN_REF * this.s, 1e-3), 0.6, 2.2);
-        this.act.Survey.timeScale = this.state === 'eat' ? 0.25 : this.state === 'rest' ? 0.35 : 1;
+        this.act.Survey.timeScale = this.state === 'eat' ? 0.25 : this.state === 'rest' ? 0.45 : 1;
         this.mixer.update(dt);
-        // procedural head: dip to eat, lower when resting
-        this.eatW = damp(this.eatW, this.state === 'eat' ? 1 : 0, 6, dt);
-        this.restW = damp(this.restW, this.state === 'rest' ? 1 : 0, 1.5, dt);
-        const neck = this.bones.b_Neck_04, head = this.bones.b_Head_05;
-        if (neck && (this.eatW > 0.001 || this.restW > 0.001)) {
-          const bob = this.eatW * (0.95 + 0.22 * Math.sin(t * 10.0)) + this.restW * 0.35;
-          tmpQ.setFromAxisAngle(zAxis, -bob * 0.75);
-          neck.quaternion.multiply(tmpQ);
-          if (head) { tmpQ.setFromAxisAngle(zAxis, -bob * 0.45); head.quaternion.multiply(tmpQ); }
-        }
+        const pw = this.poseW;
+        pw.eat = damp(pw.eat, this.state === 'eat' ? 1 : 0, 6, dt);
+        pw.sit = damp(pw.sit, this.state === 'rest' && this.speed < 0.05 ? 1 : 0, 2.2, dt);
+        pw.rest = 0;
+        const drop = applyFoxPose(this.bones, this.root, pw, t);
+        this.root.position.y = -drop * this.s;
         // label + wisps
         this.labelPos.set(this.pos.x, this.pos.y + 0.55 * this.s / FOX_SCALE, this.pos.z);
         if (this.white) {
@@ -632,11 +664,12 @@ export default {
             s.visible = vis;
             const ang = t * 0.7 + i * TAU / 3;
             s.position.set(this.pos.x + Math.cos(ang) * 0.75, this.pos.y + 0.75 + Math.sin(t * 1.3 + i * 2) * 0.15, this.pos.z + Math.sin(ang) * 0.75);
-            s.material.opacity = a * (0.75 + 0.25 * Math.sin(t * 5 + i * 3));
+            s.material.opacity = a * (0.5 + 0.3 * Math.sin(t * 5.3 + i * 3) + 0.2 * Math.sin(t * 13.1 + i));
+            s.scale.setScalar(0.18 + 0.06 * Math.sin(t * 4.1 + i * 2));
           });
         }
       }
-      mouthDist() { return 0.52 * this.s / FOX_SCALE; }
+      mouthDist() { return 0.43 * this.s / FOX_SCALE; }
       dispose() {
         this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.root);
         scene.remove(this.obj);
@@ -650,6 +683,11 @@ export default {
     const fx = createFx({ env, scene, rng: rng.fork('fx'), heightAt, fogU, wind, leafTex, discTex, trees, quality: env.quality });
     // lantern glow sprites
     const lanternGlows = LANTERNS.map(l => { const s = fx.glow('#ffb468', 1.1, 1.0); s.position.set(l.x, l.y + 1.18, l.z); scene.add(s); return s; });
+    // crepuscular rays: a big additive sprite along the sun direction, occluded by everything nearer
+    const raysMat = new THREE.SpriteMaterial({ map: own(TX.sunRaysTexture(env.seed & 255)), color: '#ffffff', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    const rays = new THREE.Sprite(raysMat);
+    rays.renderOrder = 4;
+    scene.add(rays);
     const shrineGlow = fx.glow('#ffa050', 0.9, 1.0);
     shrineGlow.position.set(SHRINE.x, SHRINE.y + 0.95, SHRINE.z + 0.4);
     scene.add(shrineGlow);
@@ -662,24 +700,28 @@ export default {
     /* ================================================================ */
     const storkG = await env.loadGLTF('models/Stork.glb');
     const cranes = [];
+    let craneMat = null;
     {
       let smat = null;
       storkG.scene.traverse(o => { if (o.isMesh) smat = o.material; });
       const cmat = addFog(smat.clone(), fogU, 'mfogCrane');
       cmat.color = new THREE.Color('#ffffff');
+      cmat.emissive = new THREE.Color('#ffffff');
+      cmat.emissiveIntensity = 0.0;
+      craneMat = cmat;
       own(cmat);
       const crng = rng.fork('cranes');
       const nC = 3 + (q > 0.6 ? 1 : 0);
-      const center = new THREE.Vector3(crng.range(-25, 5), crng.range(22, 30), crng.range(-95, -70));
+      const center = new THREE.Vector3(crng.range(-12, 8), crng.range(11, 14), crng.range(-62, -52));
       for (let i = 0; i < nC; i++) {
         const o = storkG.scene.clone();
         o.traverse(m => { if (m.isMesh) { m.material = cmat; m.castShadow = false; m.frustumCulled = false; } });
-        o.scale.setScalar(0.011);
+        o.scale.setScalar(0.0135);
         scene.add(o);
         const mixer = new THREE.AnimationMixer(o);
         const a = mixer.clipAction(storkG.animations[0]);
         a.play(); a.time = crng.range(0, 1.2); a.timeScale = crng.range(0.75, 0.9);
-        cranes.push({ o, mixer, act: a, off: new THREE.Vector3(-i * 3.2 * (i % 2 ? 1 : -1) * 0.5, crng.range(-1.5, 1.5), i * 3.5), phase: crng.range(0, 0.15), center, rx: crng.range(48, 70), rz: crng.range(22, 34), glide: crng.range(0, 6), prev: new THREE.Vector3() });
+        cranes.push({ o, mixer, act: a, off: new THREE.Vector3(-i * 3.2 * (i % 2 ? 1 : -1) * 0.5, crng.range(-1.5, 1.5), i * 3.5), phase: crng.range(0, 0.15), center, rx: crng.range(34, 44), rz: crng.range(14, 20), glide: crng.range(0, 6), prev: new THREE.Vector3() });
       }
     }
 
@@ -702,7 +744,9 @@ export default {
         this.claimed = null;
         this.scale = 1;
         this.age = 0;
-        this.glow = fx.glow('#ffd49a', 0.9, 0.9);
+        this.glow = fx.glow('#ffd49a', 0.75, 0.75);
+        this.glow.material.depthTest = false;
+        this.glow.renderOrder = 9;
         this.glow.position.copy(pos).y += 0.25;
         scene.add(this.mesh, this.glow);
       }
@@ -728,12 +772,14 @@ export default {
         }
         const s = damp(this.mesh.scale.x, this.scale, 10, dt);
         this.mesh.scale.setScalar(Math.max(s, 0.001));
-        this.glow.material.opacity = (0.55 + 0.25 * Math.sin(t * 3)) * (this.landed ? 1 : 0.5);
+        const eaten = this.claimed && this.claimed.state === 'eat' ? 0.35 : 1;
+        this.glow.material.opacity = (0.32 + 0.14 * Math.sin(t * 3)) * (this.landed ? 1 : 0.5) * eaten;
         this.glow.position.set(this.pos.x, this.pos.y + 0.22 + Math.sin(t * 2) * 0.03, this.pos.z);
         if (this.age > 90 && !this.claimed) this.kill();
       }
     }
     const guide = { w: 0, t: 99, dir: new THREE.Vector2(), pos: new THREE.Vector3() };
+    let lastChime = -99;
     function rayGround(ray, out) {
       let t0 = 0, t = 0.5;
       const p = tmpV2;
@@ -756,6 +802,7 @@ export default {
       const f = new Food(p);
       foods.push(f);
       env.sfx('drop');
+      if (lastT - lastChime > 2.5) { lastChime = lastT; setTimeout(() => env.sfx('chime'), 180); }
       // Guiding Wind: the field turns toward the offering, a stream of leaves and fluff follows
       guide.t = 0;
       guide.pos.copy(p);
@@ -785,7 +832,7 @@ export default {
     /* Per-frame state                                                   */
     /* ================================================================ */
     const pal = {};
-    const WHITE = new THREE.Color(1, 1, 1);
+    const WHITE = new THREE.Color(1, 1, 1), MOONRAY = new THREE.Color('#8fa8e0'), MOONLIGHT = new THREE.Color('#9db4ff');
     const lightCol = new THREE.Color();
     const sunDirV = new THREE.Vector3(), lightDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
     const windDir = new THREE.Vector2().copy(baseWind);
@@ -814,9 +861,11 @@ export default {
     }
     const prVec = new THREE.Vector2();
 
+    let sunCache = null, sunCacheH = -1;
     function updateTimeOfDay(dt, t) {
       const hours = env.hours();
-      const s = env.sun(sunOpts);
+      if (!sunCache || Math.abs(hours - sunCacheH) > 1 / 3600) { sunCache = env.sun(sunOpts); sunCacheH = hours; }
+      const s = sunCache;
       const el = s.elevationDeg;
       const morning = hours < 12;
       samplePalette(el, morning, pal);
@@ -839,7 +888,7 @@ export default {
         sunLight.intensity = pal.sunI * lerp(0.35, 1, sunVis);
       } else {
         lightDir.copy(moonDir);
-        lightCol.set('#9db4ff');
+        lightCol.copy(MOONLIGHT);
         sunLight.intensity = 0.55 * smoothstep(-5, -12, el);
       }
       lightDir.normalize();
@@ -854,11 +903,14 @@ export default {
       fogU.uFogSunDir.value.copy(el > -8 ? sunDirV : moonDir);
       fogU.uFogHaze.value = pal.haze;
       fogU.uFogMist.value = pal.mist;
+      fogU.uCloudShadow.value = 0.5 * smoothstep(4, 20, el) * (0.7 + 0.3 * Math.sin(t * 0.017));
+      fogU.uCloudShadowOff.value.x = (fogU.uCloudShadowOff.value.x - baseWind.x * dt * 0.022) % 128;
+      fogU.uCloudShadowOff.value.y = (fogU.uCloudShadowOff.value.y - baseWind.y * dt * 0.022) % 128;
       const su = skyMat.uniforms;
       su.uZenith.value.copy(pal.zen);
       su.uSunDir.value.copy(sunDirV);
       su.uSunHalo.value.copy(pal.halo).multiplyScalar(smoothstep(-10, 0, el) * (0.55 + 0.45 * sunVis));
-      su.uSunDisk.value.copy(pal.halo).lerp(WHITE, smoothstep(5, 30, el) * 0.6).multiplyScalar(60 * smoothstep(-1.0, 0.6, el) * sunVis);
+      su.uSunDisk.value.copy(pal.halo).lerp(WHITE, 0.25 + 0.5 * smoothstep(5, 30, el)).multiplyScalar(32 * smoothstep(-1.0, 0.6, el) * sunVis);
       su.uMoonDir.value.copy(moonDir);
       su.uMoonAmt.value = smoothstep(-5, -13, el);
       su.uStars.value = smoothstep(-7, -16, el);
@@ -867,7 +919,19 @@ export default {
       su.uTime.value = t;
       su.uCloudOff.value.x += dt * 0.004 * baseWind.x;
       su.uCloudOff.value.y += dt * 0.004 * baseWind.y;
-      su.uCloudCover.value = 0.57 + 0.06 * Math.sin(t * 0.01 + env.seed % 10);
+      su.uCloudCover.value = 0.57 + 0.06 * Math.sin(t * 0.01 + env.seed % 10) + (morning ? 0.04 * smoothstep(-6, 10, el) * (1 - smoothstep(10, 25, el)) : 0);
+      // god rays toward the low sun (or the moon, faintly)
+      {
+        const lowSun = smoothstep(-2.5, 1.5, el) * (1 - smoothstep(14, 32, el)) * (0.35 + 0.65 * sunVis);
+        const moonRays = smoothstep(-8, -16, el) * 0.18;
+        const a = Math.max(lowSun * (morning ? 0.65 : 1.0), moonRays);
+        rays.visible = a > 0.01;
+        const dirR = lowSun >= moonRays ? sunDirV : moonDir;
+        rays.position.copy(camera.position).addScaledVector(dirR, 140);
+        rays.scale.setScalar(260);
+        raysMat.rotation = t * 0.004;
+        raysMat.color.copy(lowSun >= moonRays ? pal.halo : MOONRAY).multiplyScalar(a * 0.55);
+      }
       // lanterns / shrine glow
       const lampOn = smoothstep(-1, -7, el);
       lanternLights.forEach(l => { l.intensity = 9 * lampOn * (0.92 + 0.08 * Math.sin(t * 9.0 + l.position.x)); });
@@ -880,7 +944,7 @@ export default {
       plumeMat.userData.U.uTransl.value = lerp(0.5, 0.2, night);
       // post
       post.exposure = pal.exp;
-      post.bloom.strength = 0.32 + 0.3 * s.golden + 0.25 * night;
+      post.bloom.strength = 0.32 + 0.2 * s.golden + 0.25 * night;
       post.bloom.threshold = lerp(1.0, 0.65, night);
       post.bloom.radius = 0.72;
       post.saturation = lerp(1.06, 0.92, night) + 0.06 * s.golden;
@@ -934,6 +998,7 @@ export default {
 
     function updateCranes(dt, t) {
       const vis = world.day > 0.15;
+      if (craneMat) craneMat.emissiveIntensity = 0.22 * world.day * (1 - world.golden);
       for (const c of cranes) {
         c.o.visible = vis;
         if (!vis) continue;
@@ -963,6 +1028,17 @@ export default {
         if (foods.some(f => !f.claimed && !f.dead)) assignFoxes();
         for (const f of foxes) f.update(dt, t);
         updateCranes(dt, t);
+        fx.updateBirds(dt, t, world.day * (1 - world.night));
+        // frame the action: drift the look-at point toward live offerings, then settle back
+        {
+          let fx_ = 0, fz_ = 0, n = 0;
+          for (const f of foods) if (!f.dead) { fx_ += f.pos.x; fz_ += f.pos.z; n++; }
+          const k = n ? 0.32 : 0;
+          const tx = n ? TARGET.x + clamp((fx_ / n - TARGET.x) * k, -4, 4) : TARGET.x;
+          const tz = n ? TARGET.z + clamp((fz_ / n - TARGET.z) * k, -4, 3) : TARGET.z;
+          view.target.x = damp(view.target.x, tx, 1.2, dt);
+          view.target.z = damp(view.target.z, tz, 1.2, dt);
+        }
         sky.position.copy(camera.position);
         env.renderer.getDrawingBufferSize(prVec);
         fx.update(dt, t, {
@@ -981,7 +1057,7 @@ export default {
       feedRandom(n) {
         let k = 0;
         for (let i = 0; i < n; i++) {
-          const t = frngGlobal.range(0.06, 0.42);
+          const t = frngGlobal.range(0.05, 0.3);
           const p = pathPoint(t, new THREE.Vector3());
           p.x += frngGlobal.range(-1.8, 1.8); p.z += frngGlobal.range(-1.2, 1.2);
           p.y = heightAt(p.x, p.z);
@@ -996,6 +1072,7 @@ export default {
       creatures() {
         return foxes.map(f => ({ member: f.member, pos: f.labelPos, radius: 0.55 }));
       },
+      debug: { foxes, foods, world, heightAt, pathPoint, spawnFood: p => spawnFood(p) },
       dispose() {
         foxes.forEach(f => f.dispose());
         cranes.forEach(c => { c.mixer.stopAllAction(); c.mixer.uncacheRoot(c.o); });

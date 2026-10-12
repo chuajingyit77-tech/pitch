@@ -88,8 +88,11 @@ export function drawMapleLeaf(g, size, fill, vein, lobes = 7) {
 }
 
 /** 2x2 atlas of maple sprigs (leaf cards for the canopy). */
-export function mapleAtlasTexture(seed = 11) {
+const GOLD_COLS = ['#d8a020', '#e0b030', '#c88a18', '#e8c040', '#b87818', '#d89a28'];
+const GREEN_COLS = ['#2e4a22', '#3a5a2a', '#28401e', '#4a6a30', '#34502a', '#22381a'];
+export function mapleAtlasTexture(seed = 11, palette = 'red') {
   const rng = makeRng(seed);
+  const COLS = palette === 'gold' ? GOLD_COLS : palette === 'green' ? GREEN_COLS : MAPLE_COLS;
   return canvasTexture(512, 512, (g, W) => {
     g.clearRect(0, 0, W, W);
     for (let cell = 0; cell < 4; cell++) {
@@ -116,7 +119,7 @@ export function mapleAtlasTexture(seed = 11) {
         const x = clamp(p[0] + rng.range(-40, 40), 42, 214), y = clamp(p[1] + rng.range(-34, 30), 42, 214);
         const size = rng.range(44, 72);
         const back = i < n * 0.4;
-        let col = new THREE.Color(rng.pick(MAPLE_COLS));
+        let col = new THREE.Color(rng.pick(COLS));
         if (back) col.multiplyScalar(0.62);
         else col.offsetHSL(rng.range(-0.012, 0.02), rng.range(-0.05, 0.05), rng.range(-0.03, 0.06));
         g.strokeStyle = '#5a1a12'; g.lineWidth = 1.2;
@@ -330,4 +333,32 @@ export function lacquerTexture(seed = 17) {
       g.beginPath(); g.ellipse(rng.range(0, w), rng.range(h * 0.6, h), rng.range(4, 14), rng.range(6, 20), 0, 0, 6.283); g.fill();
     }
   }, { repeat: true });
+}
+
+/** Radial light-shaft texture (crepuscular rays) for an additive sun sprite. */
+export function sunRaysTexture(seed = 3) {
+  const rng = makeRng(seed);
+  return canvasTexture(512, 512, (g, w, h) => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'lighter';
+    const cx = w / 2, cy = h / 2;
+    for (let i = 0; i < 70; i++) {
+      const a = rng.range(0, Math.PI * 2);
+      const spread = rng.range(0.006, 0.035);
+      const len = rng.range(0.55, 1.0) * w * 0.5;
+      const grd = g.createRadialGradient(cx, cy, 0, cx, cy, len);
+      const al = rng.range(0.05, 0.22);
+      grd.addColorStop(0, `rgba(255,255,255,${al})`);
+      grd.addColorStop(0.35, `rgba(255,255,255,${al * 0.6})`);
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.moveTo(cx, cy);
+      g.arc(cx, cy, len, a - spread, a + spread);
+      g.closePath(); g.fill();
+    }
+    const core = g.createRadialGradient(cx, cy, 0, cx, cy, w * 0.5);
+    core.addColorStop(0, 'rgba(255,255,255,0.35)'); core.addColorStop(0.25, 'rgba(255,255,255,0.08)'); core.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = core; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'source-over';
+  });
 }

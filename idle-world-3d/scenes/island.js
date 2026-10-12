@@ -81,6 +81,9 @@ export default {
     const SUN_SHIFT = 0.32;
     const sunYaw = viewYaw + 0.38;
     const SUN_AZ = Math.atan2(Math.cos(sunYaw), Math.sin(sunYaw));
+    // The moon hangs low over the sea in front of the opening view so its path glitters behind the island.
+    const moonYaw = viewYaw - 0.3;
+    const moonFlat = new THREE.Vector2(-Math.sin(moonYaw), -Math.cos(moonYaw));
 
     /* ---------------- time of day ---------------- */
     const post = {
@@ -103,7 +106,14 @@ export default {
       if (!force && Math.abs(h - tod.hours) < 0.0015) return;
       tod.hours = h;
       const s = sunState(h - SUN_SHIFT, { azimuthOffset: SUN_AZ });
-      sunDir.copy(s.dir); moonDir.copy(s.moonDir);
+      sunDir.copy(s.dir);
+      {
+        const nightPhase = ((h + 24 - 18.5) % 24) / 11; // 0 at dusk → 1 at dawn
+        const el = THREE.MathUtils.degToRad(12 + 16 * Math.sin(clamp(nightPhase, 0, 1) * Math.PI));
+        const sway = (clamp(nightPhase, 0, 1) - 0.5) * 0.9;
+        const cx = moonFlat.x * Math.cos(sway) - moonFlat.y * Math.sin(sway), cz = moonFlat.x * Math.sin(sway) + moonFlat.y * Math.cos(sway);
+        moonDir.set(cx * Math.cos(el), Math.sin(el), cz * Math.cos(el)).normalize();
+      }
       tod.elev = s.elevationDeg; tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       const day = s.day, night = s.night, golden = s.golden;
       tod.dusk = smoothstep(-6, 1, s.elevationDeg) * (1 - smoothstep(9, 16, s.elevationDeg));
@@ -122,10 +132,10 @@ export default {
       su.uSkyGain.value = lerp(0.46, 0.6, golden);
       su.uLowTint.value.setRGB(1, 1, 1).lerp(C.tmp.setRGB(1.25, 0.95, 1.05), golden * 0.6);
       su.uArtZen.value.copy(s.zenith).lerp(C.tmp.set('#1f6fd6'), 0.45 * day * (1 - golden));
-      su.uArtHor.value.copy(s.horizon).lerp(C.tmp.set('#86c4ee'), 0.55 * day * (1 - golden));
+      su.uArtHor.value.copy(s.horizon).lerp(C.tmp.set('#6cb8ec'), 0.75 * day * (1 - golden));
       su.uArtSun.value.copy(C.sunCol).multiplyScalar(1.1);
       const twi = smoothstep(2, -4, s.elevationDeg);
-      su.uArtMix.value = lerp(lerp(0.68, 0.5, golden), 0.88, twi);
+      su.uArtMix.value = lerp(lerp(0.84, 0.5, golden), 0.88, twi);
       su.uArtGain.value = lerp(1.18, 1.35, Math.max(golden, twi)) * (1 - night * 0.5);
       su.uSkySat.value = 1.25;
 
@@ -151,7 +161,7 @@ export default {
       wu.uMoonDir.value.copy(moonDir);
       wu.uMoonCol.value.copy(C.moon).multiplyScalar(night * 0.7);
       wu.uSSS.value.setRGB(0.0, 0.55, 0.42).multiplyScalar(sunI * 0.11 + 0.02 * day).lerp(C.tmp.setRGB(0.25, 0.32, 0.15).multiplyScalar(sunI * 0.12), golden * 0.5);
-      wu.uFoamCol.value.copy(C.sunCol).multiplyScalar(sunI * 0.26).add(C.tmp.copy(s.skyAmbient).multiplyScalar(s.ambientIntensity * 0.5));
+      wu.uFoamCol.value.copy(C.sunCol).lerp(C.tmp.setRGB(1, 1, 1), 0.45).multiplyScalar(sunI * 0.26 * (1 - golden * 0.45)).add(C.tmp.copy(s.skyAmbient).multiplyScalar(s.ambientIntensity * 0.5));
       wu.uGlow.value.setRGB(0.04, 0.5, 1.6).multiplyScalar(1.6 * smoothstep(0.35, 0.95, night));
       wu.uNight.value = night;
       C.horizon.copy(su.uArtHor.value).lerp(C.tmp.copy(su.uArtZen.value), 0.15).multiplyScalar(lerp(1.05, 0.85, golden) * (1 - night * 0.7));
@@ -162,10 +172,10 @@ export default {
       const cu = sky.clouds.uniforms;
       cu.uSunDir.value.copy(sunVis > 0.02 ? sunDir : moonDir);
       cu.uLit.value.copy(C.sunCol).multiplyScalar(sunI * 0.42 + 0.05).add(C.tmp.copy(s.skyAmbient).multiplyScalar(0.35 * s.ambientIntensity));
-      if (sunVis <= 0.02) cu.uLit.value.copy(C.moon).multiplyScalar(0.1 + 0.12 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.5));
+      if (sunVis <= 0.02) cu.uLit.value.copy(C.moon).multiplyScalar(0.16 + 0.2 * night).add(C.tmp.copy(s.horizon).multiplyScalar(0.6));
       cu.uShade.value.copy(s.skyAmbient).multiplyScalar(0.55 * s.ambientIntensity).lerp(C.tmp.copy(s.horizon).multiplyScalar(0.55), 0.35);
       if (golden > 0) cu.uShade.value.lerp(C.tmp.setRGB(0.42, 0.26, 0.36), golden * 0.5);
-      cu.uShade.value.multiplyScalar(1 - night * 0.35);
+      cu.uShade.value.multiplyScalar(1 - night * 0.2).add(C.tmp.copy(C.moon).multiplyScalar(0.035 * night));
       cu.uRim.value.copy(C.sunCol).multiplyScalar(sunI * 0.45 + 0.02);
       cu.uHaze.value.copy(C.horizon);
       cu.uOpacity.value = lerp(1, 0.6, night);

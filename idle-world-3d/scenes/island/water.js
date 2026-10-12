@@ -157,7 +157,7 @@ void main() {
   // rougher, blurrier reflections over the open swell; crisp over the calm lagoon
   float rough = smoothstep(1.0, 6.0, depth);
   vec2 ruv = vMirror.xy / vMirror.w + N.xz * mix(0.03, 0.075, rough) / (1.0 + dist * 0.006);
-  vec3 refl = mix(uSkyFallback, texture2D(tMirror, ruv, mix(0.5, 4.0, rough)).rgb, uMirrorOn);
+  vec3 refl = mix(uSkyFallback, textureLod(tMirror, ruv, mix(1.1, 3.6, rough)).rgb, uMirrorOn);
 
   // sun + moon speculars and a glittering path made of discrete sparkles
   vec3 R = reflect(-V, N);
@@ -165,7 +165,7 @@ void main() {
   float spk = sparkle(p * 3.1, t, 0.085) + sparkle(p * 5.7 + 17.0, t * 1.3, 0.07) * 0.8;
   vec3 spec = uSunCol * (pow(sd, 1200.0) * 9.0 + pow(sd, 160.0) * 0.45 + pow(sd, 48.0) * spk * 14.0 * farK);
   float md = max(dot(R, uMoonDir), 0.0);
-  spec += uMoonCol * (pow(md, 700.0) * 7.0 + pow(md, 30.0) * spk * 9.0 * farK);
+  spec += uMoonCol * (pow(md, 2600.0) * 2.2 + pow(md, 160.0) * 0.12 + pow(md, 30.0) * spk * 8.0 * farK);
 
   // subsurface glow through the swell crests (Sea of Thieves turquoise)
   float crest = clamp(vCrest * 1.15, 0.0, 1.0);
@@ -180,12 +180,20 @@ void main() {
   float ph = swashPhase(p, uu, t);
   float lines = pow(0.5 + 0.5 * sin(ph + 1.35), 9.0) * (1.0 - smoothstep(0.6, 6.5, u)) * step(-0.3, u);
   lines *= smoothstep(0.32, 0.62, fn);
-  float lace = smoothstep(0.58, 0.8, vnoise(p * 2.4 + vec2(t * 0.07, -t * 0.05))) * (1.0 - smoothstep(0.0, 3.2, u)) * 0.45 * smoothstep(0.3, 0.6, fn);
+  float lace = smoothstep(0.6, 0.82, vnoise(p * 2.4 + vec2(t * 0.07, -t * 0.05))) * (1.0 - smoothstep(0.0, 2.6, u)) * 0.32 * smoothstep(0.3, 0.6, fn);
   float ob = fld.b * smoothstep(0.3, 0.7, fn * 0.8 + 0.3 * sin(t * 1.6 + p.x * 1.7 + p.y * 1.3));
-  float reefPulse = 0.5 + 0.5 * sin(t * 0.75 + p.x * 0.13 - p.y * 0.09);
-  float reefBreak = smoothstep(0.45, 0.7, vnoise(p * 0.35 + vec2(t * 0.05, 0.0)));
-  float reef = fld.a * smoothstep(0.5, 0.85, fn * 0.7 + reefPulse * 0.45) * reefBreak * 0.6;
-  float caps = smoothstep(0.62, 1.0, vCrest + (fn - 0.5) * 0.7) * smoothstep(5.0, 9.0, depth) * 0.55;
+  // reef surf: streaks running along the reef edge, rolling shoreward in sets
+  float ang = atan(p.y, p.x);
+  float rr = length(p);
+  vec2 rp = vec2(ang * 18.0, rr * 1.4 + t * 0.35);
+  float streak = vnoise(rp * vec2(1.0, 1.6)) * 0.65 + vnoise(rp * vec2(2.3, 3.1) + 7.0) * 0.35;
+  float reefSet = smoothstep(0.35, 0.9, 0.5 + 0.5 * sin(t * 0.6 + ang * 3.0 + vnoise(p * 0.05) * 6.0));
+  float reef = fld.a * smoothstep(0.5, 0.8, streak) * (0.35 + 0.65 * reefSet) * 0.65;
+  // whitecaps: sparse lacy streaks riding the swell crests (stretched along the wind)
+  vec2 wp2 = vec2(p.x * 0.8 + p.y * 0.35, p.y * 1.6 - p.x * 0.5);
+  float lacyN = vnoise(wp2 * 2.2 + vec2(t * 0.4, 0.0)) * 0.55 + vnoise(wp2 * 6.5 - vec2(0.0, t * 0.5)) * 0.45;
+  float lacy = smoothstep(0.52, 0.78, lacyN);
+  float caps = smoothstep(0.7, 1.0, vCrest + (fn - 0.5) * 0.45) * lacy * smoothstep(5.0, 9.0, depth) * 0.6;
   float foam = clamp(foamEdge + lines + lace + ob * 0.85 + reef + caps, 0.0, 1.0) * 0.92;
 
   // bioluminescent plankton: the shore foam and the shallows glow blue at night

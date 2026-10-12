@@ -7,6 +7,10 @@ import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, ma
 import { createSky, createEnvironment } from './cloudsea/sky.js';
 import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './cloudsea/clouds.js';
 import { createGarden } from './cloudsea/garden.js';
+import { createCreatures } from './cloudsea/creatures.js';
+import { createSparkles, createPetals, createMotes, createSkyLanterns, createPeaches, createHalos } from './cloudsea/fx.js';
+
+const NAME_POOL = ['寿星', '团团', '云朵', '桃桃', '阿福', '仙仙', '青青', '鹤鹤', '如意', '吉祥', '平安', '小满', '星星', '月饼', '糯米', '汤圆'];
 
 export default {
   id: 'cloudsea',
@@ -76,10 +80,10 @@ export default {
     const nearItems = [];
     // 祥云: puffs strung along ruyi-style double spirals; each swirl turns to face the camera
     const swirls = [];
-    const nSwirls = q >= 0.7 ? 7 : 4;
+    const nSwirls = q >= 0.7 ? 5 : 3;
     for (let i = 0; i < nSwirls; i++) {
-      const a = crng.range(0, TAU), d = i < 3 ? crng.range(34, 55) : crng.range(70, 140);
-      const sw = { a, d, y: crng.range(-6, 18) + (i < 3 ? 0 : 6), speed: crng.range(0.006, 0.012) * crng.sign(), size: i < 3 ? crng.range(1.6, 2.4) : crng.range(3, 5.5), pts: [], dir: crng.sign() };
+      const a = crng.range(0, TAU), d = i < 2 ? crng.range(45, 70) : crng.range(90, 170);
+      const sw = { a, d, y: crng.range(-4, 16) + (i < 2 ? 0 : 10), speed: crng.range(0.005, 0.01) * crng.sign(), size: i < 2 ? crng.range(2.6, 3.4) : crng.range(4.5, 7), pts: [], dir: crng.sign() };
       const S = sw.size;
       const curl = (cx, cy, R0, turns, sign, k0) => {
         const n = Math.round(26 * turns);
@@ -93,7 +97,7 @@ export default {
       curl(sw.dir * 2.3, -0.35, 1.05, 1.1, -sw.dir, 0);
       // trailing tail
       for (let k = 0; k < 16; k++) { const t = k / 15; sw.pts.push({ u: -sw.dir * (1.2 + t * 4.4), v: -1.25 + Math.sin(t * 3.2) * 0.35, w: 0, r: (0.85 - t * 0.55) * S * 0.7 }); }
-      for (const p of sw.pts) { p.it = { x: 0, y: 0, z: 0, r: p.r, seed: crng.next(), shade: clamp(0.6 + p.v * 0.12, 0.25, 1), alpha: 0.8, cx: 0, cy: 0, cz: 0, cr: 4 * S }; nearItems.push(p.it); }
+      for (const p of sw.pts) { p.it = { x: 0, y: 0, z: 0, r: p.r * 1.15, seed: crng.next(), shade: 0.85, alpha: 0.62, cx: 0, cy: 0, cz: 0, cr: 4 * S }; nearItems.push(p.it); }
       swirls.push(sw);
     }
     // collars where the islets dip toward the sea, and mist where the falls meet the clouds
@@ -114,7 +118,102 @@ export default {
     nearPuffs.mesh.renderOrder = 3;
     scene.add(nearPuffs.mesh);
 
-    /* ---- lights ---- */
+    /* ---- effects ---- */
+    const fx = { sparkles: createSparkles(q >= 0.7 ? 900 : 500) };
+    scene.add(fx.sparkles.points);
+    const petals = createPetals(shared, garden.tree.clusters.map(c => c.c), Math.round(220 * q + 80), new THREE.Vector2(0.8, 0.4));
+    scene.add(petals.points);
+    const tp = garden.tree.top;
+    const motes = createMotes(shared, [{ x: 0, y: 0.3, z: 0, r: 12, h: 7 }, { x: tp.x, y: tp.y - 1, z: tp.z, r: 6, h: 6 }, { x: garden.A.x, y: garden.A.y, z: garden.A.z, r: 7, h: 6 }], Math.round(170 * q + 60));
+    scene.add(motes.points);
+    const skyLanterns = createSkyLanterns(Math.round(26 * q + 10), rng.fork('skylanterns'));
+    scene.add(skyLanterns.mesh);
+    const peaches = createPeaches(shared, garden.peachSpots, 14);
+    scene.add(peaches.tree, peaches.food);
+    const halos = createHalos(16);
+    scene.add(halos.points);
+
+    /* ---- residents ---- */
+    // older saves may only hold kinds this world no longer has: give them fresh residents
+    if (!env.members.length) {
+      const mr = rng.fork('members');
+      for (const kind of this.starter) env.members.push({ id: Math.floor(mr.next() * 2 ** 31).toString(36), kind, name: mr.pick(NAME_POOL), size: mr.range(0.9, 1.1), eaten: 0, lastAte: Date.now() - mr.range(0.2, 3) * 3600e3, born: Date.now(), seed: mr.int(1, 2 ** 30) });
+      env.markDirty();
+    }
+    const islets = [
+      { x: 0, z: 0, R: garden.main.radius + 1.5, top: 0.6, bottom: -garden.main.depth },
+      { x: garden.A.x, z: garden.A.z, R: garden.islA.radius + 1.5, top: garden.A.y + 0.6, bottom: garden.A.y - garden.islA.depth },
+      { x: garden.Bp.x, z: garden.Bp.z, R: garden.islB.radius + 1.5, top: garden.Bp.y + 0.6, bottom: garden.Bp.y - garden.islB.depth },
+    ];
+    const spheres = [
+      { c: garden.tree.top.clone().add(new THREE.Vector3(0, 1.8, 0)), r: 5.6 },
+      { c: garden.pavPos.clone().add(new THREE.Vector3(0, 4.2, 0)), r: 4.3 },
+      { c: garden.A.clone().add(new THREE.Vector3(0, 5, 0)), r: 6.0 },
+      { c: garden.Bp.clone().add(new THREE.Vector3(0, 3.5, 0)), r: 4.5 },
+    ];
+    const tmpA = new THREE.Vector3();
+    const world = {
+      mainGround: garden.mainGround, groundAt: garden.groundAt,
+      treeTop: garden.tree.top.clone().add(new THREE.Vector3(0, 1.2, 0)),
+      perches: garden.perches.length ? garden.perches : [garden.tree.top.clone()],
+      taijiSpot(i) {
+        const tj = garden.taiji, tr = garden.treePos;
+        const yaw = Math.atan2(tj.x - tr.x, tj.z - tr.z);
+        if (i === 0) return { p: new THREE.Vector3(tj.x, garden.taijiFloor, tj.z), yaw };
+        const a = yaw + (i % 2 ? 1 : -1) * (1.2 + Math.floor((i - 1) / 2) * 0.8);
+        const p = new THREE.Vector3(tj.x + Math.sin(a) * 3.6, 0, tj.z + Math.cos(a) * 3.6);
+        p.y = garden.mainGround(p.x, p.z) ?? garden.taijiFloor;
+        return { p, yaw };
+      },
+      hungrySpot(home, cam) {
+        const d = tmpA.set(cam.position.x - home.p.x, 0, cam.position.z - home.p.z).normalize();
+        const p = home.p.clone().addScaledVector(d, 3.5);
+        const g = garden.mainGround(p.x, p.z);
+        if (g === null) return home;
+        p.y = g;
+        return { p, yaw: Math.atan2(d.x, d.z) };
+      },
+      landingSpot(r, cam) {
+        const spots = garden.landSpots;
+        if (!spots.length) return null;
+        if (cam) { let best = null, bd = 1e9; for (const s of spots) { const d = s.distanceTo(cam.position); if (d < bd) { bd = d; best = s; } } return best.clone(); }
+        return spots[r.int(0, spots.length - 1)].clone();
+      },
+      avoid(pos, vel, out, k = 1) {
+        const px = pos.x + vel.x * 1.2, py = pos.y + vel.y * 1.2, pz = pos.z + vel.z * 1.2;
+        for (const il of islets) {
+          const dx = px - il.x, dz = pz - il.z, d = Math.hypot(dx, dz);
+          if (d < il.R + 2 && py < il.top + 1.5 && py > il.bottom - 2) {
+            const push = (il.R + 2 - d) / (il.R + 2);
+            out.x += dx / Math.max(d, 0.1) * push * 2 * k; out.z += dz / Math.max(d, 0.1) * push * 2 * k;
+            out.y += (py > il.top - 3 ? 1.5 : -0.5) * push * k;
+          }
+        }
+        for (const sp of spheres) {
+          const dx = px - sp.c.x, dy = py - sp.c.y, dz = pz - sp.c.z, d = Math.hypot(dx, dy, dz), R = sp.r + 1.5;
+          if (d < R) { const push = (R - d) / R * 2.5 * k / Math.max(d, 0.1); out.x += dx * push; out.y += dy * push; out.z += dz * push; }
+        }
+        if (py < CLOUD_TOP + 10) out.y += (CLOUD_TOP + 10 - py) * 0.15 * k;
+      },
+    };
+    const creatures = createCreatures(env, shared, world, fx);
+    scene.add(creatures.group);
+    const foods = creatures.sys.foods;
+    const _ray = new THREE.Vector3();
+    function spawnPeach(p, { ground = null, float = false, onMain = false, drop = 2.6 } = {}) {
+      if (foods.filter(f => f.alive).length >= 12) return null;
+      const f = {
+        pos: p.clone(), vel: new THREE.Vector3(), alive: true, bites: 6, maxBites: 6, scale: 0.27, tilt: rng.range(-0.15, 0.15), spin: rng.range(0, TAU),
+        state: float ? 'float' : 'fall', ground, onMain, baseY: p.y, ph: rng.range(0, TAU), age: 0, held: null, claimT: null, noticeT: 0,
+      };
+      if (!float) f.pos.y += drop;
+      foods.push(f);
+      fx.sparkles.burst(f.pos, new THREE.Color(2.4, 1.7, 1.0), 26, 1.6, 0.3, 1.2);
+      env.sfx('pop');
+      creatures.notice(f);
+      return f;
+    }
+
     const keyLight = new THREE.DirectionalLight(0xffffff, 3);
     keyLight.castShadow = env.shadows;
     if (env.shadows) {
@@ -182,6 +281,37 @@ export default {
       nearPuffs.update(camera);
       garden.update(dt, t, tod);
 
+      // residents & food
+      creatures.update(dt, t, camera, tod);
+      for (let i = foods.length - 1; i >= 0; i--) {
+        const f = foods[i];
+        if (!f.alive) { foods.splice(i, 1); continue; }
+        f.age += dt;
+        if (f.state === 'fall') {
+          f.vel.y -= 7.5 * dt; f.pos.addScaledVector(f.vel, dt); f.spin += dt * 1.5;
+          if (f.ground !== null && f.pos.y <= f.ground + f.scale) {
+            f.pos.y = f.ground + f.scale;
+            if (Math.abs(f.vel.y) > 1.4) { f.vel.y *= -0.3; env.sfx('thud'); }
+            else { f.vel.set(0, 0, 0); f.state = 'rest'; }
+          } else if (f.ground === null && f.age > 1.2) { f.state = 'float'; f.baseY = f.pos.y; }
+        } else if (f.state === 'float') {
+          f.pos.y = f.baseY + Math.sin(t * 1.3 + f.ph) * 0.22; f.spin += dt * 0.6;
+        }
+        if (f.state !== 'held' && Math.random() < dt * 5) {
+          const a = Math.random() * TAU;
+          fx.sparkles.emit(f.pos.x + Math.cos(a) * 0.3, f.pos.y + 0.1, f.pos.z + Math.sin(a) * 0.3, 0, 0.35, 0, 1.6, 2.2, 1.5, 0.7, 0.16, 0);
+        }
+        // forgotten peaches slowly fade into light
+        if (f.age > 150) { f.bites = 0; f.alive = false; fx.sparkles.burst(f.pos, new THREE.Color(2, 1.5, 1), 20, 1.2, 0.25, 1.2); }
+      }
+      peaches.update(t, tod.night, foods);
+      const pix = env.renderer.domElement.height * 0.5 * camera.projectionMatrix.elements[5];
+      halos.update(t, pix, foods, tod.night);
+      fx.sparkles.update(t, pix);
+      petals.uniforms.uPix.value = pix; motes.uniforms.uPix.value = pix;
+      skyLanterns.uniforms.uTime.value = t;
+      skyLanterns.uniforms.uShow.value = clamp(smoothstep(0.2, 0.7, tod.night) + tod.golden * 0.35, 0, 1);
+
       // key light follows the sun / moon
       keyLight.position.copy(tod.lightDir).multiplyScalar(80);
       keyLight.target.position.set(0, 0, 0);
@@ -189,7 +319,7 @@ export default {
       keyLight.intensity = tod.lightI * Math.PI;
       hemi.color.copy(shared.uAmbient.value).multiplyScalar(1.2);
       hemi.groundColor.copy(shared.uBounce.value).multiplyScalar(1.2);
-      hemi.intensity = Math.PI * 0.35;
+      hemi.intensity = Math.PI * lerp(0.9, 0.6, tod.day);
       const fl = 0.9 + 0.1 * Math.sin(t * 7.7) * Math.sin(t * 3.1);
       warmLight.intensity = lerp(0.6, 16, tod.night) * fl;
       terraceLight.intensity = lerp(0.3, 9, tod.night) * fl;
@@ -206,9 +336,40 @@ export default {
     return {
       scene, camera, view, post,
       update,
-      feed(raycaster) { return null; },
-      creatures: () => [],
-      addMember() {},
+      feed(raycaster) {
+        const hits = raycaster.intersectObjects(garden.pickables, false);
+        if (hits.length && hits[0].distance < 400) {
+          const p = hits[0].point;
+          const g = garden.groundAt(p.x, p.z);
+          const onLawn = g !== null && Math.abs(g - p.y) < 1.2;
+          const f = spawnPeach(p, { ground: onLawn ? g : p.y, onMain: onLawn && garden.mainGround(p.x, p.z) !== null });
+          return f ? p.clone() : null;
+        }
+        const o = raycaster.ray.origin, d = raycaster.ray.direction;
+        let p;
+        if (d.y < -0.03) {
+          const tt = (CLOUD_TOP + 4 - o.y) / d.y;
+          if (tt < 110) { p = _ray.copy(o).addScaledVector(d, tt); p.y = sea.heightAt(p.x, p.z) + 1.2; }
+        }
+        if (!p) p = _ray.copy(o).addScaledVector(d, 25);
+        const f = spawnPeach(p, { float: true });
+        return f ? p.clone() : null;
+      },
+      feedRandom(n) {
+        let k = 0;
+        const c = garden.taiji.clone().lerp(garden.treePos, 0.4);
+        for (let i = 0; i < n * 4 && k < n; i++) {
+          const a = rng.range(0, TAU), r = rng.range(1.5, 6.5);
+          const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r;
+          const g = garden.mainGround(x, z);
+          if (g === null || garden.reserved.some(o => Math.hypot(o.x - x, o.z - z) < o.r * 0.8)) continue;
+          if (spawnPeach(new THREE.Vector3(x, g, z), { ground: g, onMain: true, drop: rng.range(2.5, 4.5) })) k++;
+        }
+        return k;
+      },
+      creatures: () => creatures.list(),
+      _debug: { creatures, garden, foods, spawnPeach },
+      addMember(m) { creatures.addMember(m); },
       dispose() {
         envMap.dispose();
         for (const k of ['billow', 'detail']) tex[k].tex.dispose();
