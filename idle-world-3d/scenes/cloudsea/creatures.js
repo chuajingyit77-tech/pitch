@@ -255,6 +255,7 @@ class Tortoise {
   wantsFood(f) { return this.state === 'taichi' && f.onMain && f.state !== 'float' && this.pos.distanceTo(f.pos) < 13; }
   update(dt, t) {
     const sys = this.sys, B = this.B, R = this.rest;
+    if (this.member) { const s = 1.42 * (this.member.size || 1); if (s !== this.scale) { this.scale = s; this.mesh.scale.setScalar(s); } }
     this.glow = Math.max(0, this.glow - dt * 0.12);
     this.uniforms.uGlowAmt.value = this.glow * 0.8;
     this.uniforms.uShellGlow.value = lerp(0.03, 0.5, sys.tod.night) + this.glow * 0.6;
@@ -502,6 +503,7 @@ class Crane {
   }
   update(dt, t) {
     const sys = this.sys, B = this.B;
+    if (this.member) { const s = 1.25 * (this.member.size || 1); if (s !== this.scale) { this.scale = s; this.mesh.scale.setScalar(s); } }
     this.glow = Math.max(0, this.glow - dt * 0.15);
     this.uniforms.uGlowAmt.value = this.glow * 0.6;
     this.timer += dt;
@@ -899,6 +901,8 @@ export function createCreatures(env, shared, world, fx) {
       sys.tortoises.push(tt); group.add(tt.mesh);
     } else if (m.kind === 'crane') {
       const c = new Crane(sys, m, cRig, cGeo, rng.fork(m.id));
+      c.orbit.a = 2.9 + sys.cranes.length * 2.1; c.pos.set(Math.cos(c.orbit.a) * c.orbit.r, c.orbit.h, Math.sin(c.orbit.a) * c.orbit.r);
+      c.vel.set(-Math.sin(c.orbit.a), 0, Math.cos(c.orbit.a)).multiplyScalar(6 * Math.sign(c.orbit.w));
       sys.cranes.push(c); group.add(c.mesh);
       // start some cranes on the ground for a calmer first impression
       if (sys.cranes.length % 3 === 0) {

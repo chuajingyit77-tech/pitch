@@ -97,7 +97,7 @@ export default {
       curl(sw.dir * 2.3, -0.35, 1.05, 1.1, -sw.dir, 0);
       // trailing tail
       for (let k = 0; k < 16; k++) { const t = k / 15; sw.pts.push({ u: -sw.dir * (1.2 + t * 4.4), v: -1.25 + Math.sin(t * 3.2) * 0.35, w: 0, r: (0.85 - t * 0.55) * S * 0.7 }); }
-      for (const p of sw.pts) { p.it = { x: 0, y: 0, z: 0, r: p.r * 1.15, seed: crng.next(), shade: 0.85, alpha: 0.62, cx: 0, cy: 0, cz: 0, cr: 4 * S }; nearItems.push(p.it); }
+      for (const p of sw.pts) { p.it = { x: 0, y: 0, z: 0, r: p.r * 1.15, seed: crng.next(), shade: 1.0, alpha: 0.5, cx: 0, cy: 0, cz: 0, cr: 4 * S }; nearItems.push(p.it); }
       swirls.push(sw);
     }
     // collars where the islets dip toward the sea, and mist where the falls meet the clouds
@@ -326,7 +326,7 @@ export default {
 
       // grade with the time of day
       const n = tod.night, g = tod.golden;
-      post.bloom.threshold = lerp(lerp(2.6, 1.5, g), 0.9, n);
+      post.bloom.threshold = lerp(lerp(2.6, 2.0, g), 0.9, n);
       post.bloom.strength = lerp(lerp(0.55, 0.8, g), 0.95, n);
       post.exposure = lerp(lerp(0.86, 0.97, g), 1.35, n);
       post.saturation = lerp(1.06, 1.12, g);

@@ -589,7 +589,7 @@ export function createGarden(env, shared, tex, wind) {
   {
     const lumps = [];
     for (const [x, z, r] of [[0, 0, 1], [0.7, 0.25, 0.72], [-0.55, 0.45, 0.68], [0.1, -0.7, 0.62], [-0.45, -0.4, 0.55]]) {
-      let g = new THREE.IcosahedronGeometry(r, 2);
+      let g = new THREE.IcosahedronGeometry(r, q >= 0.9 ? 2 : 1);
       g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
       const p = g.getAttribute('position');
       for (let i = 0; i < p.count; i++) {

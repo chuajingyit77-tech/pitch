@@ -11,7 +11,7 @@ import { patchStd } from './common.js';
 /* ------------------------------------------------------------------ */
 export const COL = {
   red: '#a8281f', redDark: '#6e1a16', teal: '#2b6e72', blue: '#24476e', green: '#3d7d55',
-  gold: '#d6a640', jade: '#ece6d8', jadeShade: '#d8d0c0', tileGreen: '#2f7a64', tileGold: '#d39a2a',
+  gold: '#d6a640', jade: '#e2dccf', jadeShade: '#d0c8b8', tileGreen: '#2f7a64', tileGold: '#d39a2a',
   rafter: '#3a4f52', wood: '#8a3a28', paper: '#f2d8a8',
 };
 
