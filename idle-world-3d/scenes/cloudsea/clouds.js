@@ -255,10 +255,11 @@ export function createCloudSea(env, shared, tex) {
   return {
     mesh, uniforms, heightAt, casters, glowPos, glowCol,
     update(dt) {
-      L1.y += v1.x * dt; L1.z += v1.y * dt;
-      L2.y += v2.x * dt; L2.z += v2.y * dt;
-      L0.y += 0.00004 * dt;
-      uniforms.uLD.value.y += 0.004 * dt;
+      // the offsets only feed tiling textures (period 1): wrapping keeps them precise in float32 forever
+      L1.y = (L1.y + v1.x * dt) % 1; L1.z = (L1.z + v1.y * dt) % 1;
+      L2.y = (L2.y + v2.x * dt) % 1; L2.z = (L2.z + v2.y * dt) % 1;
+      L0.y = (L0.y + 0.00004 * dt) % 1;
+      uniforms.uLD.value.y = (uniforms.uLD.value.y + 0.004 * dt) % 1;
     },
   };
 }
@@ -324,8 +325,11 @@ void main(){
 }`;
 
 /**
- * A set of puffs in one instanced draw. items: [{x,y,z,r, seed, shade, alpha, cx,cy,cz,cr}].
+ * A set of puffs in one instanced draw. items: [{x,y,z,r, seed, shade, alpha, cx,cy,cz,cr, grp?, ord?}].
  * dynamic: re-sort (and allow moving) every frame.
+ * Items that share a `grp` ({x,y,z}, e.g. a camera-facing swirl) are sorted as one unit by the group's
+ * distance and keep a fixed order inside it (`ord`, back to front). Sorting overlapping puffs of one swirl
+ * by their own distances made them swap places as the camera bobbed, and every swap popped.
  */
 export function createPuffs(shared, tex, items, { dynamic = false, fogMul = 1, glow } = {}) {
   const n = items.length;
@@ -350,7 +354,8 @@ export function createPuffs(shared, tex, items, { dynamic = false, fogMul = 1, g
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   const order = items.map((_, i) => i);
-  const dist = new Float32Array(n);
+  const dist = new Float32Array(n), ord = new Float32Array(n);
+  items.forEach((it, i) => { ord[i] = it.ord ?? 0; });
   function write() {
     const P = aPuff.array, P2 = aPuff2.array, C = aCluster.array;
     for (let k = 0; k < n; k++) {
@@ -362,12 +367,12 @@ export function createPuffs(shared, tex, items, { dynamic = false, fogMul = 1, g
     aPuff.needsUpdate = aPuff2.needsUpdate = aCluster.needsUpdate = true;
   }
   function sortFrom(p) {
-    for (let i = 0; i < n; i++) { const it = items[i]; const dx = it.x - p.x, dy = it.y - p.y, dz = it.z - p.z; dist[i] = dx * dx + dy * dy + dz * dz; }
-    // insertion sort: the order barely changes between frames
+    for (let i = 0; i < n; i++) { const it = items[i], c = it.grp || it; const dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z; dist[i] = dx * dx + dy * dy + dz * dz; }
+    // insertion sort (far to near; fixed order inside a group): the order barely changes between frames
     for (let i = 1; i < n; i++) {
-      const v = order[i], dv = dist[v];
+      const v = order[i], dv = dist[v], ov = ord[v];
       let j = i - 1;
-      while (j >= 0 && dist[order[j]] < dv) { order[j + 1] = order[j]; j--; }
+      while (j >= 0 && (dist[order[j]] < dv || (dist[order[j]] === dv && ord[order[j]] > ov))) { order[j + 1] = order[j]; j--; }
       order[j + 1] = v;
     }
   }
@@ -430,13 +435,14 @@ void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; g
 const MIST_FRAG = /* glsl */`
 ${SHARED_GLSL}
 uniform sampler2D tNoise;
-uniform float uSpeed, uOpacity;
+uniform float uSpeed, uOpacity, uMistT;
 varying vec2 vUv; varying vec3 vW;
 void main(){
   float u = vUv.x, v = vUv.y;   // u across, v along the fall (0 lip .. 1 bottom)
-  float s1 = texture2D(tNoise, vec2(u * 1.3, v * 2.2 - uTime * uSpeed)).r;
-  float s2 = texture2D(tNoise, vec2(u * 3.1 + 0.3, v * 5.0 - uTime * uSpeed * 1.6)).g;
-  float s3 = texture2D(tNoise, vec2(u * 7.0, v * 9.0 - uTime * uSpeed * 2.3)).b;
+  // uMistT wraps every 31.25 s: 31.25 * 0.32 * {1, 1.6, 2.3} are whole texture repeats, so the wrap is seamless
+  float s1 = texture2D(tNoise, vec2(u * 1.3, v * 2.2 - uMistT * uSpeed)).r;
+  float s2 = texture2D(tNoise, vec2(u * 3.1 + 0.3, v * 5.0 - uMistT * uSpeed * 1.6)).g;
+  float s3 = texture2D(tNoise, vec2(u * 7.0, v * 9.0 - uMistT * uSpeed * 2.3)).b;
   float streak = clamp(s1 * 0.55 + s2 * 0.45 + s3 * 0.3 - 0.35, 0.0, 1.0);
   float across = smoothstep(0.0, 0.3, u) * smoothstep(1.0, 0.7, u);
   float along = smoothstep(0.0, 0.05, v) * (1.0 - smoothstep(0.55, 1.0, v));

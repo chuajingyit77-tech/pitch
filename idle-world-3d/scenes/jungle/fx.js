@@ -12,7 +12,7 @@ export function buildSky(shared) {
     uniforms: {
       uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uSunCol: { value: new THREE.Color() }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uNight: shared.uNight, uTime: shared.uTime,
-      uOvercast: { value: 0 }, uFogColor: shared.uFogColor, uDay: { value: 1 },
+      uOvercast: { value: 0 }, uFogColor: shared.uFogColor, uDay: { value: 1 }, uStarPh: { value: 0 },
     },
     vertexShader: /* glsl */`
       varying vec3 vDir;
@@ -20,7 +20,7 @@ export function buildSky(shared) {
     fragmentShader: /* glsl */`
       ${GLSL.noise}
       uniform vec3 uZenith, uHorizon, uSunDir, uSunCol, uMoonDir, uFogColor;
-      uniform float uNight, uTime, uOvercast, uDay;
+      uniform float uNight, uTime, uOvercast, uDay, uStarPh;
       varying vec3 vDir;
       void main(){
         vec3 d = normalize(vDir);
@@ -39,8 +39,14 @@ export function buildSky(shared) {
         // night: stars and moon
         if (uNight > 0.01) {
           vec3 sp = d * 300.0;
-          float st = smoothstep(0.985, 1.0, hash12(floor(sp.xz + sp.y * 7.1))) * smoothstep(0.1, 0.4, h);
-          st *= 0.6 + 0.4 * sin(uTime * 2.0 + hash12(floor(sp.xy)) * 30.0);
+          // a soft round star inside its cell (the whole cell used to light up as a square of ~1 px that hopped
+          // between pixels as the camera drifted), faded out where cells shrink below ~2 px
+          vec2 sc = sp.xz + sp.y * 7.1;
+          vec2 cell = floor(sc);
+          float fw = max(fwidth(sc.x), fwidth(sc.y));
+          float st = smoothstep(0.985, 1.0, hash12(cell)) * smoothstep(0.1, 0.4, h);
+          st *= (1.0 - smoothstep(0.12, 0.42, length(fract(sc) - 0.5))) * (1.0 - smoothstep(0.45, 0.9, fw)) * 1.6;
+          st *= 0.6 + 0.4 * sin(uStarPh + hash12(cell + 17.0) * 30.0);
           col += vec3(0.8, 0.9, 1.0) * st * uNight * (1.0 - c) * (1.0 - uOvercast) * 1.4;
           float md = max(dot(d, uMoonDir), 0.0);
           col += vec3(0.75, 0.85, 1.0) * (pow(md, 1600.0) * 14.0 + pow(md, 40.0) * 0.25) * uNight * (1.0 - uOvercast * 0.7);
@@ -49,6 +55,7 @@ export function buildSky(shared) {
       }`,
     side: THREE.BackSide,
     depthWrite: false,
+    extensions: { derivatives: true },
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = -10;
@@ -86,7 +93,9 @@ export function buildGodRays(shared, anchors, rng) {
         float along = -position.y;
         vec3 c = aAnchor.xyz + L * along * aPrm.y;
         vec3 toCam = normalize(cameraPosition - c);
-        vec3 side = normalize(cross(L, toCam));
+        vec3 sideV = cross(L, toCam);
+        float sl = length(sideV);
+        vec3 side = sl > 1e-5 ? sideV / sl : vec3(1.0, 0.0, 0.0); // never normalize(0): NaN on real GPUs
         float w = aAnchor.w * (0.75 + along * 0.5) * (1.0 + 0.1 * sin(uTime * 0.25 + aPrm.x * 20.0));
         vec3 p = c + side * position.x * w;
         // only where the canopy lets the light through to this spot
@@ -167,7 +176,13 @@ function pointsMaterial(shared, sprite, kind) {
           vWorldP = p;
         #endif
         vec4 mv = viewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp(uScale * aPrm.z / -mv.z, 1.0, 26.0);
+        // Points smaller than a pixel used to be drawn as one full-strength pixel that snapped from pixel to
+        // pixel as they drifted (bloom turned that into blinking). Draw them at least 2.5 px wide and soft,
+        // with the same total light as before (0.226 = coverage of the soft sprite).
+        float ps = uScale * aPrm.z / max(-mv.z, 0.01);
+        float psd = clamp(ps, 2.5, 26.0);
+        vA *= min(1.0, max(1.0, 0.226 * ps * ps) / (0.226 * psd * psd));
+        gl_PointSize = psd;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`

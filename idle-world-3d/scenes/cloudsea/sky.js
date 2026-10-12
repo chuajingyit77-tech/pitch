@@ -41,9 +41,11 @@ void main(){
   // Belt of Venus (pink band) above the earth shadow on the anti-solar side at twilight
   vec2 a = normalize(d.xz + 1e-5), s = normalize(uSunDir.xz + 1e-5);
   float anti = pow(clamp(-dot(a, s) * 0.5 + 0.5, 0.0, 1.0), 2.0);
-  float belt = exp(-pow((y - 0.085) / 0.055, 2.0)) * anti * uGolden;
+  // (squares written out: pow() of a negative base is undefined and returns NaN on several mobile GPUs)
+  float yb = (y - 0.085) / 0.055, ys = y / 0.03;
+  float belt = exp(-yb * yb) * anti * uGolden;
   col += vec3(0.95, 0.52, 0.66) * belt * 0.22 * (1.0 - uNight);
-  col = mix(col, col * vec3(0.78, 0.8, 1.0), exp(-pow(y / 0.03, 2.0)) * anti * uGolden * 0.5);
+  col = mix(col, col * vec3(0.78, 0.8, 1.0), exp(-ys * ys) * anti * uGolden * 0.5);
 
   // sun glow: wide warm halo + tight corona, brighter toward the horizon
   float horizonBoost = 1.0 + 1.5 * exp(-h * 9.0);
@@ -52,7 +54,7 @@ void main(){
   vec3 sT = normalize(cross(uSunDir, vec3(0.0, 1.0, 0.0)) + vec3(1e-4, 0.0, 0.0));
   vec3 sB = cross(sT, uSunDir);
   vec3 rel = d - uSunDir * mu;
-  float ang = atan(dot(rel, sB), dot(rel, sT));
+  float ang = atan(dot(rel, sB), dot(rel, sT) + 1e-7);   // atan(0, 0) is undefined at the sun's centre
   float r1 = texture2D(tNoise, vec2(ang / 6.2831853 * 2.0, uTime * 0.0021)).r;
   float r2 = texture2D(tNoise, vec2(ang / 6.2831853 * 4.0, 0.37 - uTime * 0.0013)).g;
   float rays = smoothstep(0.4, 0.75, r1 * 0.7 + r2 * 0.4);
@@ -217,22 +219,38 @@ export function createAurora(shared, tex, rng) {
 /* ------------------------------------------------------------------ */
 /* Image based lighting from the sky                                   */
 /* ------------------------------------------------------------------ */
+// Sky values the environment map is built from: rebuild when any of them has moved by more than ~2.5%
+// (or the sun by ~1°), so image-based light follows the sky in small steps instead of a 3-minute jump.
+const ENV_COLORS = ['uZenith', 'uMidSky', 'uHazeA', 'uHazeB', 'uGlow', 'uLightCol', 'uAmbient', 'uBounce'];
 export function createEnvironment(env, shared, skyMaterial) {
   const envScene = new THREE.Scene();
   const m = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMaterial);
   envScene.add(m);
-  let rt = null, lastH = -99, lastT = -99;
+  let rt = null, lastT = -99;
+  const sig = new Float32Array(ENV_COLORS.length * 3 + 5), last = new Float32Array(sig.length).fill(-1);
+  function change() {
+    let k = 0;
+    for (const n of ENV_COLORS) { const c = shared[n].value; sig[k++] = c.r; sig[k++] = c.g; sig[k++] = c.b; }
+    const nc = k;
+    const sd = shared.uSunDir.value; sig[k++] = sd.x; sig[k++] = sd.y; sig[k++] = sd.z;
+    sig[k++] = shared.uGolden.value; sig[k++] = shared.uSunUp.value;
+    let d = 0;
+    for (let i = 0; i < nc; i++) d = Math.max(d, Math.abs(sig[i] - last[i]) / (Math.abs(last[i]) + 0.03));
+    for (let i = nc; i < nc + 3; i++) d = Math.max(d, Math.abs(sig[i] - last[i]) * 1.4);
+    for (let i = nc + 3; i < sig.length; i++) d = Math.max(d, Math.abs(sig[i] - last[i]));
+    return d;
+  }
   return {
     get texture() { return rt ? rt.texture : null; },
-    update(hours, elapsed, force) {
-      if (!force && Math.abs(hours - lastH) < 0.04) return false;
-      if (!force && elapsed - lastT < 0.6) return false;
-      lastH = hours; lastT = elapsed;
+    update(elapsed, force) {
+      if (!force && elapsed - lastT < 0.5) return false;
+      if (change() < 0.025 && !force) return false;
+      last.set(sig); lastT = elapsed;
       shared.uEnvPass.value = 1;
       const old = rt;
       rt = env.pmrem.fromScene(envScene, 0.02, 0.1, 100);
       shared.uEnvPass.value = 0;
-      if (old) old.dispose();
+      if (old) old.dispose();   // swapped in the same frame: there is never a frame without an env map
       return true;
     },
     dispose() { if (rt) rt.dispose(); m.geometry.dispose(); },

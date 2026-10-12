@@ -34,6 +34,7 @@ const DAWN = [
   DUSK[7], DUSK[8],
 ];
 const COLOR_KEYS = ['zen', 'mid', 'hzA', 'hzB', 'glow', 'light', 'amb', 'bounce'];
+const SCALAR_KEYS = ['li', 'ai', 'bi', 'sky', 'fog'];
 function prepKeys(keys) {
   return keys.map(k => {
     const o = { ...k };
@@ -138,7 +139,7 @@ export function createTimeOfDay(env, shared) {
     sampleKeys(DAWN_K, e, dawn);
     const m = st.morning;
     for (const c of COLOR_KEYS) pal[c].copy(dusk[c]).lerp(dawn[c], m);
-    for (const k of ['li', 'ai', 'bi', 'sky', 'fog']) pal[k] = lerp(dusk[k], dawn[k], m);
+    for (const k of SCALAR_KEYS) pal[k] = lerp(dusk[k], dawn[k], m);
     st.night = 1 - smoothstep(-12, -3, e);
     st.day = smoothstep(-3, 8, e);
     st.golden = smoothstep(-5, 1, e) * (1 - smoothstep(8, 22, e));
