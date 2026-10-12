@@ -924,10 +924,11 @@ export class Swimmer {
 }
 
 /** Classic boids forces for a school (neighbors: array of Swimmers). Writes into `out`. */
+const _al = new THREE.Vector3();
 export function schoolForce(self, neighbors, { radius = 1.2, sepRadius = 0.45, sep = 1.6, ali = 0.6, coh = 0.4 } = {}, out = new THREE.Vector3()) {
   out.set(0, 0, 0);
   const c = _tmp.set(0, 0, 0);
-  const al = new THREE.Vector3();
+  const al = _al.set(0, 0, 0);
   let n = 0;
   for (const o of neighbors) {
     if (o === self) continue;
