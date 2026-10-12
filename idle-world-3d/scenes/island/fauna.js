@@ -1171,12 +1171,7 @@ export async function createFauna(env, ctx) {
     }
     return null;
   }
-  const _tag = [], _tagPool = [];
-  const tagOf = (member, pos, radius) => {
-    const o = _tagPool[_tag.length] || (_tagPool[_tag.length] = { member: null, pos: null, radius: 0 });
-    o.member = member; o.pos = pos; o.radius = radius;
-    _tag.push(o);
-  };
+  const _tag = [];
   return {
     group, crabs, birds, turtles, dolphins, fish, addMember, ambientDolphin,
     update(dt, t, info) {
@@ -1188,10 +1183,10 @@ export async function createFauna(env, ctx) {
     },
     creatures() {
       _tag.length = 0;
-      for (const c of crabs.list) tagOf(c.member, c.pos, c.radius + 0.2);
-      for (const g of birds.gulls) if (g.member) tagOf(g.member, g.pos, 1.0);
-      for (const tr of turtles.list) tagOf(tr.member, tr.pos, tr.radius + 0.2);
-      for (const d of dolphins.list) if (d.member) tagOf(d.member, d.pos, d.radius + 0.2);
+      for (const c of crabs.list) _tag.push({ member: c.member, pos: c.pos, radius: c.radius + 0.2 });
+      for (const g of birds.gulls) if (g.member) _tag.push({ member: g.member, pos: g.pos, radius: 1.0 });
+      for (const tr of turtles.list) _tag.push({ member: tr.member, pos: tr.pos, radius: tr.radius + 0.2 });
+      for (const d of dolphins.list) if (d.member) _tag.push({ member: d.member, pos: d.pos, radius: d.radius + 0.2 });
       return _tag;
     },
     dispose() { crabs.dispose(); birds.dispose(); turtles.dispose(); dolphins.dispose(); fish.dispose(); },
