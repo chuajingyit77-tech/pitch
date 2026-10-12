@@ -98,7 +98,19 @@ const fullness = m => clamp(1 - (Date.now() - (m.lastAte || 0)) / (4 * 3600e3), 
 /* Renderer + post                                                     */
 /* ------------------------------------------------------------------ */
 const canvas = $('gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+function fatal(msg) {
+  $('veilMsg').textContent = msg;
+  $('veil').classList.remove('clear');
+  const sp = document.querySelector('#veil .spin');
+  if (sp) sp.hidden = true;
+}
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, preserveDrawingBuffer: false });
+} catch (e) {
+  fatal('这台设备的浏览器没有开启 3D 加速（WebGL），请用最新版 Chrome、Edge 或 Safari 打开');
+  throw e;
+}
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
@@ -106,19 +118,46 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const pmrem = new THREE.PMREMGenerator(renderer);
 
+// What this device can do
+const glx = renderer.getContext();
+const GPU = (() => { try { const e = glx.getExtension('WEBGL_debug_renderer_info'); return e ? String(glx.getParameter(e.UNMASKED_RENDERER_WEBGL)) : ''; } catch (err) { return ''; } })();
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const WEAK_GPU = /Intel|UHD|Iris|HD Graphics|Mali|Adreno|PowerVR|Apple A\d|SwiftShader|llvmpipe|Basic Render|Microsoft/i.test(GPU);
+const CAN_HALF = renderer.capabilities.isWebGL2 && (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'));
+const MAX_SAMPLES = renderer.capabilities.isWebGL2 ? (renderer.capabilities.maxSamples || 0) : 0;
+
+// Scene detail tiers. Resolution then adapts continuously (see `dyn`) — quality changes never reload a world.
 const QUALITY = {
-  high: { pr: 2, maxPixels: 3.8e6, samples: 4, shadows: true, q: 1 },
-  medium: { pr: 1.25, maxPixels: 2.2e6, samples: 2, shadows: true, q: 0.7 },
-  low: { pr: 0.85, maxPixels: 1.2e6, samples: 0, shadows: false, q: 0.45 },
+  high: { pr: 1.5, maxPixels: 2.6e6, samples: 4, shadows: true, q: 1 },
+  medium: { pr: 1.25, maxPixels: 1.6e6, samples: 2, shadows: true, q: 0.7 },
+  low: { pr: 1, maxPixels: 0.9e6, samples: 0, shadows: false, q: 0.45 },
 };
 function effectiveQuality() {
-  if (save.quality !== 'auto') return save.quality;
-  if (save.autoQuality) return save.autoQuality;
-  const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-  return mobile ? 'medium' : 'high';
+  if (save.quality && save.quality !== 'auto' && QUALITY[save.quality]) return save.quality;
+  if (IS_MOBILE) return 'low';
+  return WEAK_GPU ? 'medium' : 'high';
 }
 let qName = effectiveQuality();
 let Q = QUALITY[qName];
+
+// Removes NaN/Inf from the HDR frame and soft-limits extreme highlights. A single NaN pixel (or a
+// one-pixel specular sparkle worth 1000×) would otherwise be smeared by bloom into flashing blocks.
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null }, uKnee: { value: 12.0 } },
+  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse; uniform float uKnee; varying vec2 vUv;
+    bool bad(float x){ return isnan(x) || isinf(x) || (!(x < 1e20) && !(x >= 1e20)); }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 v = c.rgb;
+      if (bad(v.r) || bad(v.g) || bad(v.b)) v = vec3(0.0);
+      v = clamp(v, vec3(0.0), vec3(65000.0));
+      float m = max(max(v.r, v.g), v.b);
+      if (m > uKnee) v *= (uKnee + (m - uKnee) / (1.0 + (m - uKnee) / uKnee)) / m;
+      gl_FragColor = vec4(v, 1.0);
+    }`,
+};
 
 const FinalShader = {
   uniforms: {
@@ -153,33 +192,62 @@ const FinalShader = {
       col = col * uGain + uLift * (1.0 - col);
       float vig = smoothstep(0.95, 0.2, length(dc * vec2(uRes.x / uRes.y, 1.0) * 0.82));
       col *= mix(1.0, vig, uVignette);
-      float n = fract(sin(dot(uv * uRes + fract(uTime) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
+      float n = fract(sin(dot(floor(uv * uRes) + fract(uTime * 0.37) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
       col += (n - 0.5) * uGrain;
       gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
     }`,
 };
 
-let composer, renderPass, bloomPass, outputPass, finalPass;
+let composer, renderPass, sanitizePass, bloomPass, outputPass, finalPass;
 function buildComposer() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: Q.samples });
+  const samples = Math.min(Q.samples, MAX_SAMPLES);
+  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: CAN_HALF ? THREE.HalfFloatType : THREE.UnsignedByteType, samples });
   composer?.dispose?.();
   composer = new EffectComposer(renderer, rt);
   renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
+  sanitizePass = new ShaderPass(SanitizeShader);
   bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.3, 0.6, 0.85);
   outputPass = new OutputPass();
   finalPass = new ShaderPass(FinalShader);
   composer.addPass(renderPass);
+  composer.addPass(sanitizePass);
   composer.addPass(bloomPass);
   composer.addPass(outputPass);
   composer.addPass(finalPass);
   if (current) { renderPass.scene = current.inst.scene; renderPass.camera = current.inst.camera; }
 }
 
-function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
+/* Dynamic resolution: steps the pixel ratio down when frames are slow and back up when there is
+   headroom. Changes take effect between frames, so the picture never blanks or reloads. */
+const dyn = { scale: 1, ema: 0, slow: 0, fast: 0, settleUntil: 0 };
+try { const v = parseFloat(localStorage.getItem('qijing-res-' + qName)); if (v >= 0.5 && v <= 1) dyn.scale = v; } catch (e) {}
+function dynSample(frameMs, now, throttled) {
+  if (TEST || now < dyn.settleUntil || frameMs > 250) return;
+  dyn.ema = dyn.ema ? dyn.ema * 0.92 + frameMs * 0.08 : frameMs;
+  const budget = throttled ? 40 : 23; // ~43 fps when awake, ~25 fps while the screensaver runs at 30
+  const roomy = throttled ? 34.5 : 17.4;
+  dyn.slow = dyn.ema > budget ? dyn.slow + frameMs : 0;
+  dyn.fast = dyn.ema < roomy ? dyn.fast + frameMs : 0;
+  let next = dyn.scale;
+  if (dyn.slow > 1200 && dyn.scale > 0.5) next = Math.max(0.5, dyn.scale * 0.85);
+  else if (dyn.fast > 5000 && dyn.scale < 1) next = Math.min(1, dyn.scale * 1.1);
+  if (next !== dyn.scale) {
+    dyn.scale = next; dyn.slow = dyn.fast = 0; dyn.ema = 0; dyn.settleUntil = now + 1500;
+    needsResize = true;
+    try { localStorage.setItem('qijing-res-' + qName, String(next.toFixed(3))); } catch (e) {}
+  }
+}
+
+let needsResize = true, lastSize = '';
+function resize(force = false) {
+  const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
   let pr = Math.min(window.devicePixelRatio || 1, Q.pr);
   if (w * h * pr * pr > Q.maxPixels) pr = Math.sqrt(Q.maxPixels / (w * h));
+  pr = Math.max(0.35, pr * dyn.scale);
+  const key = `${w}x${h}@${pr.toFixed(3)}`;
+  if (!force && key === lastSize) return;
+  lastSize = key;
   renderer.setPixelRatio(pr);
   renderer.setSize(w, h, false);
   composer?.setPixelRatio(pr);
@@ -196,15 +264,17 @@ function resize() {
 
 function applyPost(p = {}) {
   const b = p.bloom || {};
-  bloomPass.strength = b.strength ?? 0.3;
-  bloomPass.radius = b.radius ?? 0.6;
-  bloomPass.threshold = b.threshold ?? 0.85;
-  bloomPass.enabled = (b.strength ?? 0.3) > 0.001;
-  renderer.toneMappingExposure = p.exposure ?? 1;
-  renderer.toneMapping = p.toneMapping === 'agx' ? THREE.AgXToneMapping : p.toneMapping === 'linear' ? THREE.LinearToneMapping : THREE.ACESFilmicToneMapping;
+  // gentle caps: the worlds tune their own looks, the shell keeps bloom from ever strobing
+  bloomPass.strength = clamp(b.strength ?? 0.3, 0, 0.7);
+  bloomPass.radius = clamp(b.radius ?? 0.6, 0, 0.9);
+  bloomPass.threshold = Math.max(0.45, b.threshold ?? 0.85);
+  bloomPass.enabled = bloomPass.strength > 0.001;
+  renderer.toneMappingExposure = clamp(p.exposure ?? 1, 0.2, 3);
+  const tm = p.toneMapping === 'agx' ? THREE.AgXToneMapping : p.toneMapping === 'linear' ? THREE.LinearToneMapping : THREE.ACESFilmicToneMapping;
+  if (renderer.toneMapping !== tm) renderer.toneMapping = tm;
   const u = finalPass.uniforms;
   u.uVignette.value = p.vignette ?? 0.35;
-  u.uGrain.value = p.grain ?? 0.025;
+  u.uGrain.value = Math.min(p.grain ?? 0.025, 0.03);
   u.uSat.value = p.saturation ?? 1.04;
   u.uContrast.value = p.contrast ?? 1.02;
   const lift = p.lift || [0, 0, 0], gain = p.gain || [1, 1, 1];
@@ -216,6 +286,23 @@ function applyPost(p = {}) {
   u.uTiltCenter.value = tilt.center ?? 0.5;
   u.uTiltWidth.value = tilt.width ?? 0.18;
 }
+
+// Lost GPU context (driver reset, memory pressure on phones): show a calm message and rebuild.
+let contextLost = false;
+canvas.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  contextLost = true;
+  $('veilMsg').textContent = '画面正在恢复…';
+  $('veil').classList.remove('clear');
+}, false);
+canvas.addEventListener('webglcontextrestored', () => {
+  contextLost = false;
+  buildComposer();
+  resize(true);
+  const id = current ? current.meta.id : save.scene;
+  if (current) current.meta = { ...current.meta, id: '__reload' };
+  enterWorld(id);
+}, false);
 
 /* ------------------------------------------------------------------ */
 /* Assets                                                              */
@@ -307,10 +394,12 @@ let current = null; // { meta, def, inst, env }
 let loading = false;
 let sceneStart = 0;
 const audio = new Ambience();
+// Whole minutes only: the sun then moves in tiny steps once a minute instead of sliding every frame,
+// which would make shadow edges shimmer.
 const hours = () => {
   if (save.timeMode === 'manual') return save.manualHour;
   const d = new Date();
-  return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+  return d.getHours() + d.getMinutes() / 60;
 };
 
 function makeEnv(meta, def) {
@@ -371,7 +460,7 @@ async function enterWorld(id, { first = false } = {}) {
     for (let i = 0; i < 3; i++) { inst.update(1 / 60, i / 60); composer.render(1 / 60); }
     save.scene = meta.id; dirty = true;
     sceneStart = performance.now();
-    perf.reset();
+    dyn.settleUntil = sceneStart + 3000; dyn.slow = dyn.fast = 0; dyn.ema = 0; lastRenderAt = 0;
     updateDock(); updateStatus(); updateAmbience();
     $('feedLabel').textContent = '撒一把' + (def.food || '食物');
     $('veil').classList.add('clear');
@@ -615,7 +704,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('noui');
   else if (e.key === 'Escape') closeSettings();
 });
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => { needsResize = true; });
 window.addEventListener('hashchange', () => { const id = hashWorld(); if (WORLDS.some(w => w.id === id)) enterWorld(id); });
 
 $('btnFeed').addEventListener('click', feedHandful);
@@ -666,11 +755,15 @@ function openSettings() {
   $('manualTime').hidden = save.timeMode !== 'manual';
   $('hourRange').value = save.manualHour;
   $('hourText').textContent = fmtHour(save.manualHour);
-  seg('segQuality', save.quality, v => { save.quality = v; save.autoQuality = null; dirty = true; setQuality(effectiveQuality(), true); });
-  $('qualityHint').textContent = `当前：${{ high: '高', medium: '中', low: '低' }[qName]}画质。画面卡顿时选低一档，安静的办公电脑也能流畅待机。`;
+  seg('segQuality', save.quality, v => { save.quality = v; dirty = true; setQuality(effectiveQuality()); updateQualityHint(); });
+  updateQualityHint();
   seg('segRotate', save.rotate, v => { save.rotate = +v; dirty = true; });
   seg('segPower', save.powerSave ? 1 : 0, v => { save.powerSave = v === '1'; dirty = true; });
   seg('segClock', save.showClock ? 1 : 0, v => { save.showClock = v === '1'; dirty = true; document.body.classList.toggle('hide-clock', !save.showClock); });
+}
+function updateQualityHint() {
+  const pct = Math.round(dyn.scale * 100);
+  $('qualityHint').textContent = `当前：${{ high: '高', medium: '中', low: '低' }[qName]}画质，渲染分辨率 ${pct}%。“自动”会按这台设备的显卡选择画质，并根据流畅度平滑调整分辨率，不会重新加载画面。`;
 }
 function closeSettings() { $('settings').classList.remove('open'); $('settings').setAttribute('aria-hidden', 'true'); $('reseedConfirm').hidden = true; }
 $('hourRange').addEventListener('input', e => { save.manualHour = parseFloat(e.target.value); $('hourText').textContent = fmtHour(save.manualHour); dirty = true; });
@@ -690,12 +783,15 @@ $('reseedYes').addEventListener('click', () => {
   toast('这台电脑的世界已经重新生成');
 });
 
-function setQuality(name, rebuild) {
-  if (name === qName && !rebuild) return;
+// Only an explicit choice in Settings changes the detail tier (instance counts are built per world,
+// so the world is rebuilt once). Automatic adaptation is resolution-only and never reloads.
+function setQuality(name) {
+  if (name === qName) return;
   qName = name; Q = QUALITY[name];
+  try { const v = parseFloat(localStorage.getItem('qijing-res-' + qName)); dyn.scale = v >= 0.5 && v <= 1 ? v : 1; } catch (e) { dyn.scale = 1; }
   renderer.shadowMap.enabled = Q.shadows;
   buildComposer();
-  resize();
+  resize(true);
   if (current) {
     const id = current.meta.id;
     current.meta = { ...current.meta, id: '__reload' };
@@ -704,32 +800,9 @@ function setQuality(name, rebuild) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Performance watchdog                                                */
-/* ------------------------------------------------------------------ */
-const perf = {
-  frames: 0, time: 0, done: false,
-  reset() { this.frames = 0; this.time = 0; this.done = false; },
-  sample(dt) {
-    if (this.done || save.quality !== 'auto' || TEST) return;
-    if (performance.now() - sceneStart < 2500) return;
-    this.frames++; this.time += dt;
-    if (this.time < 4) return;
-    this.done = true;
-    const fps = this.frames / this.time;
-    const order = ['high', 'medium', 'low'];
-    const i = order.indexOf(qName);
-    if (fps < 38 && i < 2) {
-      save.autoQuality = order[i + 1]; dirty = true;
-      toast(`画面有点吃力，已自动切换到${{ medium: '中', low: '低' }[order[i + 1]]}画质`);
-      setQuality(order[i + 1], true);
-    }
-  },
-};
-
-/* ------------------------------------------------------------------ */
 /* Main loop                                                           */
 /* ------------------------------------------------------------------ */
-let last = performance.now(), elapsed = 0, acc = 0, minuteTimer = 0;
+let last = performance.now(), elapsed = 0, acc = 0, minuteTimer = 0, lastRenderAt = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const rawDt = Math.min(0.1, (now - last) / 1000);
@@ -738,9 +811,12 @@ function frame(now) {
   const idleNow = !(TEST && TEST.noIdle) && performance.now() - lastInput > 8000 && !$('settings').classList.contains('open') && document.activeElement?.tagName !== 'INPUT';
   if (idleNow !== idle) { idle = idleNow; document.body.classList.toggle('idle', idle); }
   // power save: 30 fps in screensaver mode
-  if (idle && save.powerSave && !TEST) { acc += rawDt; if (acc < 1 / 31) return; }
-  const dt = Math.min(0.05, idle && save.powerSave && !TEST ? acc : rawDt);
+  const throttled = idle && save.powerSave && !TEST;
+  if (throttled) { acc += rawDt; if (acc < 1 / 31) return; }
+  const dt = Math.min(0.05, throttled ? acc : rawDt);
   acc = 0;
+  if (contextLost) return;
+  if (needsResize) { needsResize = false; resize(); }
   elapsed += dt;
   if (current && !loading) {
     try { current.inst.update(dt, elapsed); } catch (e) { console.error(e); window.__idle.error = String(e.stack || e); }
@@ -748,9 +824,10 @@ function frame(now) {
     if (current.inst.post) applyPost(current.inst.post);
     finalPass.uniforms.uTime.value = elapsed;
     composer.render(dt);
-    perf.sample(rawDt);
+    if (lastRenderAt) dynSample(now - lastRenderAt, now, throttled);
+    lastRenderAt = now;
     updateTag();
-  }
+  } else lastRenderAt = 0;
   minuteTimer += rawDt;
   if (minuteTimer > 15) {
     minuteTimer = 0;
@@ -778,6 +855,64 @@ window.__idle = {
     for (let s = 0; s < seconds; s += step) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); }
   },
   setView(v) { Object.assign(rig, v); if (v.yaw !== undefined) rig.yawT = v.yaw; if (v.pitch !== undefined) rig.pitchT = v.pitch; if (v.dist !== undefined) rig.distT = v.dist; },
+  /**
+   * Test-only stability probe: NaN/Inf and extreme values in the HDR scene buffer, plus temporal
+   * flicker (pixels that swing up then down between consecutive 60 fps frames) on the final image.
+   */
+  diagnose({ frames = 8, dt = 1 / 60, w = 320, h = 180 } = {}) {
+    if (!current) return null;
+    const inst = current.inst;
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.FloatType });
+    const prevTarget = renderer.getRenderTarget();
+    renderer.setRenderTarget(rt);
+    renderer.render(inst.scene, inst.camera);
+    const fb = new Float32Array(w * h * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, w, h, fb);
+    renderer.setRenderTarget(prevTarget);
+    rt.dispose();
+    let nan = 0, inf = 0, maxL = 0, over32 = 0;
+    for (let i = 0; i < w * h; i++) {
+      const r = fb[i * 4], g = fb[i * 4 + 1], b = fb[i * 4 + 2];
+      if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) { nan++; continue; }
+      if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) { inf++; continue; }
+      const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      if (L > maxL) maxL = L;
+      if (L > 32) over32++;
+    }
+    const gl = renderer.getContext();
+    const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+    const px = new Uint8Array(W * H * 4);
+    const lums = [];
+    const means = [];
+    for (let f = 0; f < frames; f++) {
+      elapsed += dt;
+      inst.update(dt, elapsed);
+      updateRig(dt, elapsed);
+      if (inst.post) applyPost(inst.post);
+      finalPass.uniforms.uTime.value = 0; // grain off for the comparison
+      const g0 = finalPass.uniforms.uGrain.value; finalPass.uniforms.uGrain.value = 0;
+      composer.render(dt);
+      finalPass.uniforms.uGrain.value = g0;
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const L = new Float32Array(W * H);
+      let sum = 0;
+      for (let i = 0; i < W * H; i++) { const v = (0.2126 * px[i * 4] + 0.7152 * px[i * 4 + 1] + 0.0722 * px[i * 4 + 2]) / 255; L[i] = v; sum += v; }
+      lums.push(L); means.push(sum / (W * H));
+    }
+    let osc = 0, total = 0, meanDelta = 0;
+    for (let f = 2; f < lums.length; f++) {
+      const a = lums[f - 2], b = lums[f - 1], c = lums[f];
+      for (let i = 0; i < a.length; i++) {
+        const d1 = b[i] - a[i], d2 = c[i] - b[i];
+        if (d1 * d2 < 0 && Math.min(Math.abs(d1), Math.abs(d2)) > 0.12) osc++;
+        meanDelta += Math.abs(d2);
+        total++;
+      }
+    }
+    let globalJump = 0;
+    for (let f = 1; f < means.length; f++) globalJump = Math.max(globalJump, Math.abs(means[f] - means[f - 1]));
+    return { nan, inf, maxL: +maxL.toFixed(1), over32, flickerPermille: +(1000 * osc / Math.max(1, total)).toFixed(3), meanDelta: +(meanDelta / Math.max(1, total)).toFixed(4), globalJump: +globalJump.toFixed(4), size: [W, H] };
+  },
   get current() { return current; },
   get rig() { return rig; },
   renderer,
@@ -789,7 +924,7 @@ document.body.classList.toggle('hide-clock', !save.showClock);
 if (TEST && TEST.noUI) document.body.classList.add('noui');
 renderer.shadowMap.enabled = Q.shadows;
 buildComposer();
-resize();
+resize(true);
 tickClock();
 setInterval(tickClock, 10000);
 window.addEventListener('beforeunload', () => { if (dirty) persist(); });

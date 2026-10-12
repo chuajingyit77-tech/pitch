@@ -8,7 +8,7 @@
    leaving the world and the clock as a screensaver. Deliberately single dark theme: it sits on a 3D scene. */
 :root{
   --ink:#f5f2ea; --ink-2:rgba(245,242,234,.72); --ink-3:rgba(245,242,234,.48);
-  --glass:rgba(12,14,18,.38); --glass-2:rgba(12,14,18,.62); --line:rgba(255,255,255,.14);
+  --glass:rgba(14,16,20,.62); --glass-2:rgba(14,16,20,.9); --line:rgba(255,255,255,.14);
   --gold:#e6c17a; --gold-ink:#22190a; --bg:#05070a;
   --serif:"Noto Serif SC","Songti SC","STSong",serif;
   --sans:"Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
@@ -21,7 +21,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidd
 #gl.dragging{cursor:grabbing}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.glass{background:var(--glass);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);border:1px solid var(--line)}
+/* no backdrop-filter: blurring a live WebGL canvas makes some GPUs/browsers (Safari, older Chrome) flicker */
+.glass{background:var(--glass);border:1px solid var(--line)}
 .hud{transition:opacity 1.2s ease,transform 1.2s ease}
 body.idle .hud{opacity:0;pointer-events:none}
 body.idle #gl{cursor:none}
@@ -102,7 +103,7 @@ body.hide-clock .clock{display:none}
 @keyframes heart{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1;transform:translate(-50%,-60%) scale(1.1)}100%{opacity:0;transform:translate(-50%,-260%) scale(.9)}}
 
 /* settings drawer */
-#settings{position:fixed;top:0;right:0;bottom:0;width:min(380px,100%);padding:calc(env(safe-area-inset-top,0px) + 22px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);background:var(--glass-2);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);border-left:1px solid var(--line);transform:translateX(102%);transition:transform .45s cubic-bezier(.2,.8,.2,1);overflow-y:auto;display:flex;flex-direction:column;gap:22px}
+#settings{position:fixed;top:0;right:0;bottom:0;width:min(380px,100%);padding:calc(env(safe-area-inset-top,0px) + 22px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);background:var(--glass-2);border-left:1px solid var(--line);transform:translateX(102%);transition:transform .45s cubic-bezier(.2,.8,.2,1);overflow-y:auto;display:flex;flex-direction:column;gap:22px}
 #settings.open{transform:none}
 #settings h2{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:.2em;margin:0}
 #settings .row{display:flex;flex-direction:column;gap:8px}
