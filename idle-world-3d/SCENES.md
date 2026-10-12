@@ -21,7 +21,6 @@ scenes/<id>.js      one world per file (yours)
 scenes/<id>/...     optional helper modules for your world
 assets/models       Fox.glb, Parrot.glb, Flamingo.glb, Stork.glb, Barramundi.glb
 assets/textures     waternormals.jpg, Water_1_M_Normal.jpg, Water_2_M_Normal.jpg
-assets/hdr          venice_sunset_1k.hdr
 ```
 
 Only edit your own `scenes/<id>.js` (and `scenes/<id>/`, `assets/<id>/` if you need them). If the
@@ -133,7 +132,6 @@ Audio ambience layer names for `ambience`: `underwater ocean wind rain stream wa
   Native wingspan ≈ 150 units, so scale ≈ 0.01. They fly toward +Z.
 - `models/Barramundi.glb` — photoreal CC0 fish, ≈ 0.64 long along Z, belly at y=0, head toward +Z after its node rotation.
 - `textures/waternormals.jpg` (for `three/addons/objects/Water.js`), `Water_1_M_Normal.jpg`, `Water_2_M_Normal.jpg` (for Water2 / custom water).
-- `hdr/venice_sunset_1k.hdr` — sunset HDRI (Poly Haven, CC0).
 - Anything else should be procedural (canvas textures, noise, shaders) or downloaded by you from a
   CC0 / MIT source into `assets/<id>/`. Keep each world's extra assets under ~3 MB and record the license.
 

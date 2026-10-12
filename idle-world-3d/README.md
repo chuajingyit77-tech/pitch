@@ -69,5 +69,5 @@ npx http-server idle-world-3d -p 8080
   glTF conversion by AsoboStudio and scurest (CC BY 4.0).
 - Parrot, Flamingo, Stork: mirada / ro.me, from the three.js examples.
 - Barramundi Fish: Microsoft (CC0).
-- Water normal maps and the sunset HDRI: three.js examples (HDRI by Poly Haven, CC0).
+- Water normal maps: three.js examples.
 - three.js (MIT). Everything else — fish, plants, terrain, sky, sound — is procedural.
