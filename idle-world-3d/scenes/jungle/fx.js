@@ -257,9 +257,10 @@ export function buildRain(shared, q, rng, center) {
         vec3 p = c + side * position.x * wd - D * position.y * len;
         vWorldP = p; vUv = uv;
         // each streak fades in as the shower builds (they used to pop on one by one), fades at both ends of its
-        // fall, and vanishes right in front of the lens (a drop passing the camera flashed a pale bar on screen)
+        // fall, and fades out within a few metres of the lens: a drop passing the camera flashed a pale bar across
+        // the screen, and the nearest streaks sweep ~15 px per frame (pure flicker; real rain that close is a blur)
         float th = aPrm.x * 0.9;
-        vA = smoothstep(th, th + 0.1, uRain) * smoothstep(0.0, 0.08, y) * (1.0 - smoothstep(0.92, 1.0, y)) * smoothstep(0.8, 2.5, dc) * (0.012 / wd);
+        vA = smoothstep(th, th + 0.1, uRain) * smoothstep(0.0, 0.08, y) * (1.0 - smoothstep(0.92, 1.0, y)) * smoothstep(1.5, 5.0, dc) * (0.012 / wd);
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,
     fragmentShader: /* glsl */`

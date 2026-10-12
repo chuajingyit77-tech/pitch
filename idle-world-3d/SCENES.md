@@ -49,6 +49,7 @@ export default {
 |---|---|
 | `THREE, renderer, pmrem` | three namespace, the WebGLRenderer, a shared PMREMGenerator |
 | `quality, q, shadows` | `'high'|'medium'|'low'`, a scale factor (1 / 0.7 / 0.45) for counts and resolutions, and whether shadows are on |
+| `msaa` | MSAA sample count of the scene buffer (0 = none, e.g. WebGL1 or no half-float MSAA); use it to pick alpha-to-coverage vs. a cut-out |
 | `seed, rng` | per-computer, per-world seed and a seeded rng (`rng.range(a,b)`, `rng.int`, `rng.pick`, `rng.chance`, `rng.gauss`, `rng.fork(salt)`). **All layout must come from this rng** so each computer gets a unique but stable world. |
 | `hours()` | current local time of day (0–24), real clock or the user's manual setting. Read it every frame. |
 | `sun(opts)` | `sunState(hours)` from util: `{ dir, moonDir, elevationDeg, day, night, golden, zenith, horizon, sunColor, sunIntensity, skyAmbient, groundAmbient, ambientIntensity }` |
@@ -99,6 +100,8 @@ so a world cannot make the screen jump. `grain` is accepted but ignored: there i
 `renderer.shadowMap` is PCFSoft and enabled when `env.shadows`.
 
 Stability rules the shell enforces or expects:
+- `env.hours()` moves in whole minutes, glided over about 2 s at each minute (no per-frame sliding, no jumps).
+  Manual changes cut immediately. The camera's breathing bob only runs in screensaver mode.
 - Point and spot lights have a 25 cm minimum distance in the attenuation term.
 - Opaque alpha-tested materials (leaves, petals, grass cards) automatically get sharpened alpha-to-coverage
   when MSAA is available.

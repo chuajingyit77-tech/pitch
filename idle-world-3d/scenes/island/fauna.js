@@ -603,7 +603,11 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
   // last few seconds, so they never pop into or out of view (they used to appear 34 m from the island,
   // well inside the picture, and vanish mid-air the minute dusk ended).
   const FLOCK_R = 72, FLOCK_LEN = FLOCK_R * 2 + 10, FLOCK_SCALE = 0.012;
-  function updateFlock(dt, t, dusk) {
+  function updateFlock(dt, t, dusk, timeJump) {
+    if (flock.active && timeJump && dusk < 0.02) { // the clock was set by hand: the whole light changed at once anyway
+      flock.active = false; flock.cooldown = 2;
+      for (const b of flock.birds) b.root.visible = false;
+    }
     if (!flock.active) {
       flock.cooldown -= dt;
       if (dusk > 0.2 && flock.cooldown <= 0) {
@@ -639,9 +643,9 @@ function createBirds(env, ctx, storkGltf, flamingoGltf) {
 
   return {
     group, gulls, addGull, flock,
-    update(dt, t, { dusk }) {
+    update(dt, t, { dusk, timeJump = false }) {
       for (const g of gulls) updateGull(g, dt, t);
-      updateFlock(dt, t, dusk);
+      updateFlock(dt, t, dusk, timeJump);
     },
     remove(member) {
       const i = gulls.findIndex(g => g.member === member);

@@ -40,8 +40,10 @@ The picture is kept steady on purpose:
 - Before bloom, every frame is cleaned of NaN/Inf pixels and of extreme one-pixel highlights.
 - Point lights have a small physical radius, so a lamp never burns a hot spot into a nearby surface.
 - Exposure, bloom and grading ease toward each world's settings instead of jumping.
-- The sun moves in one-minute steps instead of every frame, so shadow edges do not shimmer. The key
-  light fades out and back in at dusk and dawn rather than snapping from sun to moon.
+- The sun moves in one-minute steps, each glided over about two seconds. Shadow edges neither shimmer every
+  frame nor jump. The key light fades out and back in at dusk and dawn rather than snapping from sun to moon.
+- While someone is looking, the camera holds perfectly still; the gentle drift and bob only run in
+  screensaver mode.
 - There is no animated film grain, only a static dither.
 - There is no backdrop blur over the 3D view, and no tap-highlight flash on phones.
 - A lost GPU context (driver reset, phone memory pressure) shows a calm "restoring" message and

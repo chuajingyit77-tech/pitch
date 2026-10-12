@@ -294,10 +294,11 @@ export default {
       const hClock = env.hours();
       let dh = hClock - hEased;
       if (dh > 12) dh -= 24; else if (dh < -12) dh += 24;
-      if (Math.abs(dh) > 0.25 || Math.abs(dh) < 2e-5) hEased = hClock;
+      const timeJump = Math.abs(dh) > 0.25;
+      if (timeJump || Math.abs(dh) < 2e-5) hEased = hClock;
       else hEased = (hEased + dh * (1 - Math.exp(-dt / 0.4)) + 24) % 24;
       todTimer -= dt;
-      if (todTimer <= 0 || hEased !== tod.hours || hClock !== tod.keyHours) { todTimer = 0.25; applyTime(false, hEased, hClock); }
+      if (todTimer <= 0 || hEased !== tod.hours || hClock !== tod.keyHours || timeJump) { todTimer = 0.25; applyTime(false, hEased, hClock); }
       sky.clouds.update(dt);
       // lantern + windows
       const fl = 0.89 + 0.045 * Math.sin(t * 7.3) * Math.sin(t * 4.1 + 1.3) + 0.055 * Math.sin(t * 2.3);
@@ -310,7 +311,7 @@ export default {
       b.rotation.z = Math.sin(t * 1.1) * 0.035;
       b.rotation.x = Math.sin(t * 0.9 + 1) * 0.03;
       b.rotation.y = bb.yaw + Math.sin(t * 0.21) * 0.06;
-      fauna.update(dt, t, { dusk: tod.dusk, night: tod.night });
+      fauna.update(dt, t, { dusk: tod.dusk, night: tod.night, timeJump });
       fx.update(dt, t, { night: smoothstep(0.4, 0.95, tod.night) });
     }
 

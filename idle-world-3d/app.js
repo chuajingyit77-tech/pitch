@@ -482,7 +482,7 @@ const loadHDR = path => cached('h:' + path, () => rgbeLoader.loadAsync(asset(pat
 /* ------------------------------------------------------------------ */
 /* Camera rig                                                          */
 /* ------------------------------------------------------------------ */
-const rig = { target: new THREE.Vector3(), yaw: 0, pitch: 0.3, dist: 10, yawT: 0, pitchT: 0.3, distT: 10, view: null, idlePhase: 0, wasIdle: false };
+const rig = { target: new THREE.Vector3(), yaw: 0, pitch: 0.3, dist: 10, yawT: 0, pitchT: 0.3, distT: 10, view: null, idlePhase: 0, wasIdle: false, bobW: 0 };
 function vec3(v, fallback = [0, 0, 0]) { if (!v) v = fallback; return v.isVector3 ? v : new THREE.Vector3(v[0], v[1], v[2]); }
 function configureRig(view) {
   rig.view = view || {};
@@ -517,7 +517,10 @@ function updateRig(dt, t) {
   rig.dist = damp(rig.dist, rig.distT, 3, dt);
   const tgt = vec3(v.target);
   rig.target.lerp(tgt, 1 - Math.exp(-2 * dt));
-  const bob = Math.sin(t * 0.21) * 0.012 * rig.dist;
+  // a slow breathing bob only while the screensaver runs: with someone looking, the camera stays put
+  // (even sub-pixel motion makes thin grass and fins crawl)
+  rig.bobW = damp(rig.bobW || 0, idle ? 1 : 0, 0.6, dt);
+  const bob = Math.sin(t * 0.21) * 0.012 * rig.dist * rig.bobW;
   const cp = Math.cos(rig.pitch);
   cam.position.set(
     rig.target.x + rig.dist * cp * Math.sin(rig.yaw),
@@ -534,13 +537,26 @@ let current = null; // { meta, def, inst, env }
 let loading = false;
 let sceneStart = 0;
 const audio = new Ambience();
-// Whole minutes only: the sun then moves in tiny steps once a minute instead of sliding every frame,
-// which would make shadow edges shimmer.
-const hours = () => {
+// The clock the worlds see: real time in whole minutes, glided over ~2 s each time the minute ticks
+// over. The sun then neither slides every frame (shadow edges would shimmer) nor jumps once a minute
+// (long golden-hour shadows would hop by a metre).
+const clock = { shown: null };
+function targetHours() {
   if (save.timeMode === 'manual') return save.manualHour;
   const d = new Date();
   return d.getHours() + d.getMinutes() / 60;
-};
+}
+function tickHours(dt) {
+  const target = targetHours();
+  if (clock.shown === null) { clock.shown = target; return; }
+  let diff = target - clock.shown;
+  if (diff > 12) diff -= 24; else if (diff < -12) diff += 24; // across midnight
+  // a manual change, a woken laptop or a hidden tab: cut straight to the new time
+  if (Math.abs(diff) > 5 / 60 || Math.abs(diff) < 1e-6) { clock.shown = target; return; }
+  clock.shown += diff * (1 - Math.exp(-dt * 1.6));
+  if (clock.shown >= 24) clock.shown -= 24; else if (clock.shown < 0) clock.shown += 24;
+}
+const hours = () => clock.shown ?? targetHours();
 
 function makeEnv(meta, def) {
   const seed = hashString(save.seed + ':' + meta.id);
@@ -548,6 +564,7 @@ function makeEnv(meta, def) {
   return {
     THREE, renderer, pmrem,
     quality: qName, q: Q.q, shadows: Q.shadows,
+    get msaa() { return scenePass ? scenePass.target.samples : 0; }, // MSAA samples of the scene buffer (0 = none)
     seed, rng: makeRng(seed),
     hours, sun: opts => sunState(hours(), opts),
     members,
@@ -992,6 +1009,7 @@ function frame(now) {
   if (needsResize) { needsResize = false; resize(); }
   if (current && !loading) {
     elapsed += dt;
+    tickHours(dt);
     try { current.inst.update(dt, elapsed); } catch (e) { console.error(e); window.__idle.error = String(e.stack || e); }
     updateRig(dt, elapsed);
     applyPost(current.inst.post || {}, dt);
@@ -1008,7 +1026,7 @@ function frame(now) {
 window.__idle = {
   ready: null, sceneId: null, error: null,
   enterWorld, feedAt, feedHandful, addResident,
-  setHours: h => { save.timeMode = 'manual'; save.manualHour = h; },
+  setHours: h => { save.timeMode = 'manual'; save.manualHour = h; clock.shown = h; },
   /** Advance the simulation without rendering (test harness). */
   simulate(seconds, step = 1 / 30) {
     if (!current) return;
