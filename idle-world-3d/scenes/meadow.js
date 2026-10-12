@@ -4,8 +4,8 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
-import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains } from './meadow/sky.js';
+import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture, sunState } from '../lib/util.js';
+import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
 import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL } from './meadow/flora.js';
 import { buildTorii, buildHokora, buildLantern, buildRocks, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
 import * as TX from './meadow/tex.js';
@@ -866,10 +866,23 @@ export default {
     }
     const prVec = new THREE.Vector2();
 
+    // env.hours() moves in whole-minute steps. Easing it over ~2 s turns every step into a short glide, so sun
+    // and moon light, shadows, sky, fog, exposure and bloom never change in a single frame (around sunset one
+    // minute is 5-10 % of the sunlight). Big jumps (manual time change, waking from sleep) still cut at once.
+    let hS = null;
+    function easedHours(dt) {
+      const h = env.hours();
+      if (hS === null) { hS = h; return hS; }
+      let d = h - hS;
+      if (d > 12) d -= 24; else if (d < -12) d += 24;
+      if (Math.abs(d) > 0.25) hS = h;
+      else hS = (((hS + d * (1 - Math.exp(-1.6 * dt))) % 24) + 24) % 24;
+      return hS;
+    }
     let sunCache = null, sunCacheH = -1;
     function updateTimeOfDay(dt, t) {
-      const hours = env.hours();
-      if (!sunCache || Math.abs(hours - sunCacheH) > 1 / 3600) { sunCache = env.sun(sunOpts); sunCacheH = hours; }
+      const hours = easedHours(dt);
+      if (!sunCache || Math.abs(hours - sunCacheH) > 1 / 36000) { sunCache = sunState(hours, sunOpts); sunCacheH = hours; }
       const s = sunCache;
       const el = s.elevationDeg;
       const morning = hours < 12;
@@ -901,9 +914,10 @@ export default {
       sunLight.position.copy(TARGET).addScaledVector(lightDir, 90);
       sunLight.target.position.copy(TARGET);
       hemi.color.copy(pal.hemiS); hemi.groundColor.copy(pal.hemiG); hemi.intensity = pal.hemiI;
-      // fog + sky
+      // fog + sky. The forward-scatter glow follows the sun, then the moon: it fades out around the hand-over
+      // (el = -8) so the glow never jumps across the sky in one frame.
       fogU.uFogColor.value.copy(pal.hor);
-      fogU.uFogSunColor.value.copy(pal.glow);
+      fogU.uFogSunColor.value.copy(pal.hor).lerp(pal.glow, smoothstep(0, 2.5, Math.abs(el + 8)));
       fogU.uFogMistColor.value.copy(pal.mistC);
       fogU.uFogSunDir.value.copy(el > -8 ? sunDirV : moonDir);
       fogU.uFogHaze.value = pal.haze;
@@ -921,7 +935,8 @@ export default {
       su.uStars.value = smoothstep(-7, -16, el);
       su.uCloudLit.value.copy(pal.cl);
       su.uCloudDark.value.copy(pal.cd);
-      su.uTime.value = t;
+      su.uTime.value = t % SKY_PERIOD;
+      su.uCloudWarp.value = t * 0.003;
       su.uCloudOff.value.x += dt * 0.004 * baseWind.x;
       su.uCloudOff.value.y += dt * 0.004 * baseWind.y;
       su.uCloudCover.value = 0.57 + 0.06 * Math.sin(t * 0.01 + env.seed % 10) + (morning ? 0.04 * smoothstep(-6, 10, el) * (1 - smoothstep(10, 25, el)) : 0);
