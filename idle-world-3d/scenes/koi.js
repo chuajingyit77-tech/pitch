@@ -425,7 +425,7 @@ class KoiPond {
   /* ---------- sky + env ---------- */
   buildSky() {
     const mat = new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, fog: false,
+      side: THREE.BackSide, depthWrite: false, fog: false, extensions: { derivatives: true },
       uniforms: {
         uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uGround: { value: new THREE.Color('#1d2216') },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color() }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uNight: { value: 0 },
@@ -442,8 +442,12 @@ class KoiPond {
           if (h > 0.0 && uNight > 0.01) {
             vec3 sp = d * 260.0; vec3 id = floor(sp);
             float r = fract(sin(dot(id, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
-            float st = step(0.9972, r) * smoothstep(0.45, 0.0, length(fract(sp) - 0.5));
-            col += vec3(st) * uNight * 2.0 * smoothstep(0.0, 0.3, h);
+            // anti-aliased star discs: never thinner than ~1.5 px (dimmed instead of shrunk), so the night
+            // sky does not twinkle on and off as the camera drifts
+            float px = max(length(fwidth(sp)), 1e-4);
+            float rad = max(0.16, px * 0.75);
+            float st = step(0.9972, r) * (1.0 - smoothstep(rad * 0.4, rad, length(fract(sp) - 0.5))) * min(1.0, 0.0256 / (rad * rad));
+            col += vec3(st) * uNight * 1.6 * smoothstep(0.0, 0.3, h);
           }
           float md = dot(d, uMoonDir);
           col += vec3(0.92, 0.95, 1.0) * (smoothstep(0.99955, 0.99972, md) * 4.0 + pow(max(md, 0.0), 80.0) * 0.12) * uNight;
@@ -547,6 +551,10 @@ class KoiPond {
               float en = exp(-x * x * 10.0) * exp(-age * 0.85) * r.w * smoothstep(0.0, 0.12, age);
               nW.xz += (dv / d) * cos(x * 24.0) * en * 0.55;
             }
+            // specular anti-aliasing: where the normal changes quickly across a pixel (distance, ripple
+            // rings) widen the highlight instead of letting the sun break into single-pixel sparkles
+            vec3 nWx = dFdx(nW), nWy = dFdy(nW);
+            roughnessFactor = sqrt(roughnessFactor * roughnessFactor + min((dot(nWx, nWx) + dot(nWy, nWy)) * 1.5, 0.2));
             normal = normalize((viewMatrix * vec4(normalize(nW), 0.0)).xyz);
           }`,
       },
@@ -840,7 +848,7 @@ class KoiPond {
       g.rotation.y += f.spin * dt;
       g.rotation.x = Math.sin(time * 0.9 + f.ph) * 0.03;
       g.scale.setScalar(Math.max(0.001, vis));
-      f.mat.emissiveIntensity = vis * (1.6 + Math.sin(time * 11 + f.ph * 7) * 0.1 + Math.sin(time * 23 + f.ph) * 0.06);
+      f.mat.emissiveIntensity = vis * (1.6 + Math.sin(time * 0.9 + f.ph * 7) * 0.05 + Math.sin(time * 0.37 + f.ph) * 0.04);
       c.add(P); count++;
     }
     if (count) {
@@ -1332,7 +1340,7 @@ class KoiPond {
     const dm = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       uniforms: { uMap: { value: sprite }, uScale: { value: 1 }, uColor: { value: new THREE.Color('#dff3ff') } },
-      vertexShader: 'attribute float aAlpha; varying float vA; uniform float uScale; void main(){ vA = aAlpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = uScale * 0.06 * 600.0 / -mv.z; gl_Position = projectionMatrix * mv; }',
+      vertexShader: 'attribute float aAlpha; varying float vA; uniform float uScale; void main(){ vA = aAlpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); float ps = uScale * 0.06 * 600.0 / max(-mv.z, 0.05); vA *= clamp(ps * ps / 2.25, 0.0, 1.0); gl_PointSize = max(ps, 1.5); gl_Position = projectionMatrix * mv; }',
       fragmentShader: 'uniform sampler2D uMap; uniform vec3 uColor; varying float vA; void main(){ float a = texture2D(uMap, gl_PointCoord).a * vA; if (a < 0.01) discard; gl_FragColor = vec4(uColor * a, a); }',
     });
     this.dropPoints = new THREE.Points(dg, dm);
@@ -1356,8 +1364,8 @@ class KoiPond {
     fg.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
     this.flyMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { uMap: { value: sprite }, uT: { value: 0 }, uNight: { value: 0 } },
-      vertexShader: 'attribute float aPhase; varying float vA; uniform float uT, uNight; void main(){ vA = uNight * pow(max(sin(uT * 1.6 + aPhase * 3.0), 0.0), 3.0); vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = 0.11 * 600.0 / -mv.z; gl_Position = projectionMatrix * mv; }',
+      uniforms: { uMap: { value: sprite }, uT: { value: 0 }, uNight: { value: 0 }, uScale: dm.uniforms.uScale },
+      vertexShader: 'attribute float aPhase; varying float vA; uniform float uT, uNight, uScale; void main(){ vA = uNight * pow(max(sin(uT * 1.6 + aPhase * 3.0), 0.0), 3.0); vec4 mv = modelViewMatrix * vec4(position, 1.0); float ps = uScale * 0.11 * 600.0 / max(-mv.z, 0.05); vA *= clamp(ps * ps / 2.25, 0.0, 1.0); gl_PointSize = max(ps, 1.5); gl_Position = projectionMatrix * mv; }',
       fragmentShader: 'uniform sampler2D uMap; varying float vA; void main(){ float a = texture2D(uMap, gl_PointCoord).a * vA; if (a < 0.01) discard; gl_FragColor = vec4(vec3(0.85, 1.0, 0.45) * a * 3.0, a); }',
     });
     this.flyPoints = new THREE.Points(fg, this.flyMat);
@@ -1459,14 +1467,16 @@ class KoiPond {
     const S = this.env.sun({ azimuthOffset: 0.7 });
     const night = S.night, day = S.day;
     this.sunState = S;
-    // sun or moon drives the key light
-    const useMoon = S.elevationDeg < -2;
+    // sun or moon drives the key light: the sun fades out after sunset, the light swaps direction while
+    // it is dark, then the moon fades in (no sudden jump of shadows or brightness at dusk)
+    const e = S.elevationDeg;
+    const useMoon = e < -3;
     const dir = useMoon ? S.moonDir : S.dir;
     const center = new THREE.Vector3(0, 0, 0);
     this.sun.position.copy(center).addScaledVector(dir, 40);
     this.sun.target.position.copy(center);
     this.sun.color.copy(useMoon ? new THREE.Color('#a9bfff') : S.sunColor);
-    this.sun.intensity = useMoon ? 0.95 : S.sunIntensity * 1.15 + S.golden * 0.6;
+    this.sun.intensity = useMoon ? 0.95 * smoothstep(-3, -8, e) : (S.sunIntensity * 1.15 + S.golden * 0.6) * smoothstep(-3, 0.5, e);
     this.hemi.color.copy(S.skyAmbient).lerp(new THREE.Color('#3a5288'), night * 0.6);
     this.hemi.groundColor.copy(S.groundAmbient).lerp(new THREE.Color('#3a4a22'), 0.4);
     this.hemi.intensity = Math.max(0.45, S.ambientIntensity) * 0.95 + night * 0.75;
@@ -1486,7 +1496,8 @@ class KoiPond {
     this.lanternLight.intensity = glow * 14;
     this.flyMat.uniforms.uNight.value = glow;
     // env map from the sky, refreshed when the light changes
-    const key = Math.round(S.hours * 6);
+    const changing = S.golden > 0.02 || (night > 0.02 && night < 0.98) || (day > 0.02 && day < 0.98);
+    const key = changing ? 'f' + Math.round(S.hours * 30) : 's' + Math.round(S.hours * 6);
     if (force || key !== this.envKey) {
       this.envKey = key;
       const rt = this.env.pmrem.fromScene(this.skyScene, 0.02);
@@ -1512,8 +1523,11 @@ class KoiPond {
     this.waterU.uWTime.value = time;
     this.blossomU.uBTime.value = time;
     this.flyMat.uniforms.uT.value = time;
+    // sprites were sized for a 720-pixel-tall buffer; keep them the same on-screen size at any resolution
+    this.flyMat.uniforms.uScale.value = this.env.renderer.getDrawingBufferSize(this._dbs || (this._dbs = new THREE.Vector2())).y / 720;
     this.wind.update(dt);
-    this.streamAlpha.offset.y -= dt * 2.2;
+    // wrapped so the offset keeps full float precision on a screen left running all day
+    this.streamAlpha.offset.y = (this.streamAlpha.offset.y - dt * 2.2) % 1;
     this.todTimer = (this.todTimer || 0) - dt;
     if (this.todTimer <= 0) { this.todTimer = 0.5; this.updateTimeOfDay(); }
 

@@ -27,7 +27,26 @@ screensaver, and anyone walking past can feed the residents.
 - Keys `1`–`6` switch worlds, `F` fullscreen screensaver, `M` sound, `H` hide the HUD.
 - After 8 seconds without input the HUD fades and the camera drifts: screensaver mode
   (30 fps power saving by default). Settings can rotate through the worlds every 10/30/60 minutes.
-- Quality is automatic: it drops a level if the first seconds run below ~38 fps.
+- Quality is automatic and never reloads the picture. The detail tier comes from the device (phones
+  `low`, integrated GPUs `medium`, others `high`). Rendering resolution then adapts smoothly to how
+  fast this computer actually draws, judged against the screen's own refresh rate. Each world
+  remembers its level.
+
+## Stability (no flashing)
+
+The picture is kept steady on purpose:
+- No reload or black fade ever happens except when you switch worlds yourself.
+- Anti-aliasing (MSAA) is on every tier, including phones, and cut-out leaves and grass get smoothed edges.
+- Before bloom, every frame is cleaned of NaN/Inf pixels and of extreme one-pixel highlights.
+- Point lights have a small physical radius, so a lamp never burns a hot spot into a nearby surface.
+- Exposure, bloom and grading ease toward each world's settings instead of jumping.
+- The sun moves in one-minute steps instead of every frame, so shadow edges do not shimmer. The key
+  light fades out and back in at dusk and dawn rather than snapping from sun to moon.
+- There is no animated film grain, only a static dither.
+- There is no backdrop blur over the 3D view, and no tap-highlight flash on phones.
+- A lost GPU context (driver reset, phone memory pressure) shows a calm "restoring" message and
+  rebuilds itself.
+- Frames are capped at ~75 fps on 120/144 Hz screens and at 30 fps in screensaver mode.
 
 ## Setting it up on several office computers
 
@@ -54,7 +73,8 @@ npx http-server idle-world-3d -p 8080
 
 ## Structure
 
-- `app.js` — renderer, post-processing (bloom, ACES/AgX, grading, vignette, grain, tilt-shift),
+- `app.js` — renderer, post-processing (MSAA scene pass with HDR sanitize, bloom, ACES/AgX, grading,
+  vignette, dither, tilt-shift), dynamic resolution,
   camera rig, feeding input, residents, save data, idle mode, ambience, HUD.
 - `lib/util.js` — seeded randomness, simplex noise, canvas textures, GLSL snippets, wind sway,
   solar time-of-day model.

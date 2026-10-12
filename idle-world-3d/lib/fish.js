@@ -917,8 +917,10 @@ export class Swimmer {
       this.yawRate = lerp(this.yawRate, rate, 1 - Math.exp(-8 * dt));
     }
     const rel = speed / Math.max(this.size, 0.05);
-    this.phase += dt * this.beat * (3.0 + rel * 5.5 + this.boost * 4 + Math.abs(this.yawRate) * 1.5);
-    this.flutter += dt * 0.5;
+    // both are only used as sin() phases, so wrap them: the GPU gets them as float32, and a fish that
+    // swims all day would otherwise end up with a jittery tail
+    this.phase = (this.phase + dt * this.beat * (3.0 + rel * 5.5 + this.boost * 4 + Math.abs(this.yawRate) * 1.5)) % TAU;
+    this.flutter = (this.flutter + dt * 0.5) % TAU;
     this.amp = lerp(this.amp, clamp(0.035 + rel * 0.035 + this.boost * 0.03, 0.03, 0.12), 1 - Math.exp(-3 * dt));
     this.turn = lerp(this.turn, clamp(-this.yawRate * 0.06, -0.22, 0.22), 1 - Math.exp(-6 * dt));
     this.roll = lerp(this.roll, clamp(-this.yawRate * 0.12, -0.45, 0.45), 1 - Math.exp(-4 * dt));

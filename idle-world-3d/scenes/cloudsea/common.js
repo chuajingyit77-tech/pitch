@@ -1,7 +1,7 @@
 // 云海 · shared state: time-of-day palette, uniforms shared by every material, sky-matched fog,
 // material patching and procedural textures (billow height field, detail, cirrus, noise).
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, invLerp, makeRng, patchMaterial, sunState } from '../../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, invLerp, makeRng, patchMaterial } from '../../lib/util.js';
 
 export const CLOUD_TOP = -26;          // nominal height of the cloud-sea tops (billows rise ~10 m above)
 
@@ -43,6 +43,7 @@ function prepKeys(keys) {
 }
 const DUSK_K = prepKeys(DUSK), DAWN_K = prepKeys(DAWN);
 const _ca = new THREE.Color(), _cb = new THREE.Color();
+const _ls = new THREE.Vector3(), _lm = new THREE.Vector3();
 function sampleKeys(keys, e, out) {
   let i = 0;
   while (i < keys.length - 2 && e > keys[i + 1].e) i++;
@@ -81,7 +82,24 @@ export function createShared() {
     uSunUp: { value: 1 },
     uEnvPass: { value: 0 },
     uGlowBoost: { value: 1 },
+    // mist-fall scroll clock, wrapped every 31.25 s (a whole number of texture repeats for every layer at
+    // uSpeed 0.32), so the streaks never get steppy in float32 after hours of running
+    uMistT: { value: 0 },
   };
+}
+
+// The shell's clock moves in whole-minute steps. The palette, light and sun ease over ~2 s toward each new
+// minute instead of jumping (a minute at sunset changes the light by ~6%, and long shadows by metres).
+const TOD_EASE = 0.6;   // seconds (time constant)
+const LAT = THREE.MathUtils.degToRad(25);
+/** Same sun path as lib/util.js sunState() (25°N, equinox), without per-call allocations. Returns elevation (deg). */
+function sunDirAt(hours, out) {
+  const H = THREE.MathUtils.degToRad((hours - 12) * 15);
+  const el = Math.asin(clamp(Math.cos(LAT) * Math.cos(H), -1, 1));
+  const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(LAT));
+  const ce = Math.cos(el);
+  out.set(-Math.sin(az) * ce, Math.sin(el), Math.cos(az) * ce).normalize();
+  return THREE.MathUtils.radToDeg(el);
 }
 
 /**
@@ -91,19 +109,24 @@ export function createShared() {
 export function createTimeOfDay(env, shared) {
   const dusk = makePal(), dawn = makePal(), pal = makePal();
   const st = {
-    hours: -1, sun: null, elev: 0, night: 0, day: 1, golden: 0, sunW: 1, moonW: 0, morning: 0,
+    hours: -1, elev: 0, night: 0, day: 1, golden: 0, sunW: 1, moonW: 0, morning: 0,
     pal, sunDir: new THREE.Vector3(0, 1, 0), moonDir: new THREE.Vector3(0, 1, 0), lightDir: new THREE.Vector3(0, 1, 0),
     lightCol: new THREE.Color(), lightI: 1,
   };
-  st.update = force => {
-    const h = env.hours();
-    if (!force && Math.abs(h - st.hours) < 0.0015) return st;
+  let hS = null;   // eased clock (hours) that is actually shown
+  st.update = (force, dt = 0) => {
+    const hT = env.hours();
+    if (force || hS === null) hS = hT;
+    else {
+      const d = (((hT - hS) % 24) + 36) % 24 - 12;   // shortest signed difference on the 24 h dial
+      if (Math.abs(d) > 0.25 || Math.abs(d) < 1e-5) hS = hT;   // deliberate jumps (settings, tests) snap
+      else hS = (hS + d * (1 - Math.exp(-dt / TOD_EASE)) + 24) % 24;
+    }
+    if (!force && Math.abs(hS - st.hours) < 1e-7) return st;
+    const h = hS;
     st.hours = h;
     // The sun runs ~15 min late so that 18:00 is golden hour rather than a half-sunk sun.
-    const s = sunState(h - 0.25);
-    st.sun = s;
-    st.elev = s.elevationDeg;
-    st.sunDir.copy(s.dir);
+    st.elev = sunDirAt(h - 0.25, st.sunDir);
     // A waxing moon hanging low in the west-southwest through the evening: it sits in the
     // default view of the garden and drifts slowly across the sky during the night.
     const nightT = ((h - 18 + 24) % 24) / 12;               // 0 at 18:00 .. 1 at 06:00
@@ -121,9 +144,13 @@ export function createTimeOfDay(env, shared) {
     st.golden = smoothstep(-5, 1, e) * (1 - smoothstep(8, 22, e));
     st.sunW = smoothstep(-4, 0.5, e);
     st.moonW = 1 - smoothstep(-9, -4, e);
-    // Key light: sun by day, moon by night; the switch happens while both are dim.
-    if (st.sunW >= st.moonW) { st.lightDir.copy(st.sunDir); st.lightI = pal.li * st.sunW; }
-    else { st.lightDir.copy(st.moonDir); st.lightI = pal.li * st.moonW; }
+    // Key light: sun by day, moon by night. The intensity passes through zero at e = -4° (both weights are
+    // 0 there); the direction turns smoothly from the sun to the moon while the light is dim (-2.5°..-5.5°)
+    // instead of flipping, so the cloud self-shadowing, rims and the shadow map never jump at the hand-over.
+    st.lightI = pal.li * (e > -4 ? st.sunW : st.moonW);
+    _ls.copy(st.sunDir); if (_ls.y < 0.035) { _ls.y = 0.035; _ls.normalize(); }
+    _lm.copy(st.moonDir); if (_lm.y < 0.035) { _lm.y = 0.035; _lm.normalize(); }
+    st.lightDir.copy(_ls).lerp(_lm, smoothstep(-2.5, -5.5, e)).normalize();
     if (st.lightDir.y < 0.035) { st.lightDir.y = 0.035; st.lightDir.normalize(); }
     st.lightCol.copy(pal.light).multiplyScalar(st.lightI);
 

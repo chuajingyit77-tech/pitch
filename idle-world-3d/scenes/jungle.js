@@ -2,7 +2,7 @@
 // Art direction borrows from Ori and the Blind Forest (glowing blue-teal nights, bioluminescence)
 // and Horizon Zero Dawn (lush, sunlit, hazy greenery).
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, damp, makeRng, createWind, addWind, patchMaterial, disposeObject } from '../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, damp, makeRng, createWind, addWind, patchMaterial, disposeObject, sunState } from '../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, FishInstances, Swimmer } from '../lib/fish.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createShared, jungleMaterial, GLOW_N } from './jungle/shading.js';
@@ -651,7 +651,15 @@ export default {
       side: THREE.BackSide,
     });
     envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), envMat));
-    let envRT = null, envKey = '';
+    // The sky gradient is rendered into a small cube and prefiltered by a generator of our own, always into
+    // the same target: a rebuild costs well under a millisecond, allocates nothing and can never leave a
+    // frame without an environment, so it can follow the light in small steps (it used to jump once every
+    // quarter hour and on every quarter of a rain shower, brightening or dimming the whole picture at once).
+    const envCube = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType });
+    const envCam = new THREE.CubeCamera(0.1, 100, envCube);
+    const envGen = new THREE.PMREMGenerator(renderer);
+    let envRT = null, envAt = -1e9;
+    const envSig = new Float32Array(15).fill(-1), envSigNow = new Float32Array(15);
 
     /* ---------------- atmosphere fx ---------------- */
     // god-ray ground spots: the shader shows each one only while the canopy above it is open
@@ -1077,9 +1085,25 @@ export default {
       scatter: new THREE.Color('#1b5a49'), scatterRain: new THREE.Color('#3a5a50'), murkRain: new THREE.Color('#20403a'),
       envGreen: new THREE.Color('#3d6a3a'), envLow: new THREE.Color('#1d2414'), envLowNight: new THREE.Color('#05090b'),
     };
+    // The shell's clock moves in whole-minute steps. Everything that only changes colour or brightness (light,
+    // fog, ambient, sky, rain, bloom, the canopy dapples and god rays) glides toward it over a few seconds
+    // instead of jumping once a minute; only the shadow-casting light keeps the stepped sun, so the shadow
+    // map is re-rendered from a new angle once a minute and never crawls.
+    const sunOpts = { latitude: LATITUDE, azimuthOffset: SUN_AZ };
+    const tod = { h: null, sH: null, s: null, rawH: null, rawDir: new THREE.Vector3() };
+    function smoothHour(hRaw, dt, force) {
+      if (force || tod.h === null) return (tod.h = hRaw);
+      let dh = hRaw - tod.h;
+      if (dh > 12) dh -= 24; else if (dh < -12) dh += 24;
+      if (Math.abs(dh) > 0.25 || Math.abs(dh) < 1e-6) tod.h = hRaw; // a real jump (manual hour, waking up): snap
+      else tod.h = (tod.h + dh * (1 - Math.exp(-dt / 3)) + 24) % 24;
+      return tod.h;
+    }
     function applyTime(dt, force) {
-      const h = env.hours();
-      const s = env.sun({ latitude: LATITUDE, azimuthOffset: SUN_AZ });
+      const hRaw = env.hours();
+      const h = smoothHour(hRaw, dt, force);
+      if (h !== tod.sH) { tod.sH = h; tod.s = sunState(h, sunOpts); } // cached: no per-frame allocation once settled
+      const s = tod.s;
       const rainA = rainAmount(h);
       rainNow = rainA;
       const wetT = wetAmount(h);
@@ -1090,19 +1114,25 @@ export default {
       const dusk = smoothstep(4, -2, e) * (1 - night);
       const morning = h < 12;
       const dawnMist = morning ? smoothstep(-6, 2, e) * (1 - smoothstep(10, 26, e)) : 0;
-      // light: sun by day, moon by night
+      // light: sun by day, moon by night. The swap happens at -3° where both are dark: the sun used to still
+      // be at ~0.7 there, so at 18:14 (and 5:47) the key light snapped off and flipped direction in one frame.
       const useMoon = e < -3;
       const L0 = useMoon ? s.moonDir : s.dir;
       shared.uLightDirW.value.copy(L0);
       let li;
       const lc = lightCol;
       if (useMoon) { lc.copy(pal.moon); li = 0.55 * smoothstep(-3, -10, e); }
-      else { lc.copy(s.sunColor); li = s.sunIntensity * 1.9; }
+      else { lc.copy(s.sunColor); li = s.sunIntensity * 1.9 * smoothstep(-3, -1, e); }
       li *= 1 - rainA * 0.82;
       sun.color.copy(lc);
       sun.intensity = li;
       shared.uLightCol.value.copy(lc).multiplyScalar(li);
-      sun.position.copy(sun.target.position).addScaledVector(L0, 70);
+      if (hRaw !== tod.rawH) {
+        tod.rawH = hRaw;
+        const sr = sunState(hRaw, sunOpts);
+        tod.rawDir.copy(sr.elevationDeg < -3 ? sr.moonDir : sr.dir);
+      }
+      sun.position.copy(sun.target.position).addScaledVector(tod.rawDir, 70);
       // ambient
       hemi.color.copy(pal.hemiSkyDay).lerp(s.skyAmbient, 0.35).lerp(pal.hemiSkyNight, night).lerp(pal.rainAmb, rainA * 0.5);
       hemi.groundColor.copy(pal.hemiGround).lerp(pal.hemiGroundNight, night);
@@ -1157,31 +1187,37 @@ export default {
       rain.material.uniforms.uAmb.value.copy(amb);
       mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.18 + night * 0.3 + dusk * 0.25 + 0.03, 0, 0.95);
       mistSheets.material.uniforms.uAmb.value.copy(amb);
-      // environment map (re-filtered when the light changes noticeably)
-      const key = Math.round(h * 4) + ':' + Math.round(rainA * 4);
-      if (key !== envKey) {
-        envKey = key;
+      // environment map: re-filtered in place whenever its colours have drifted by more than ~1%
+      {
         const eu = envMat.uniforms;
         eu.uTop.value.copy(su.uZenith.value).lerp(fog, 0.3).multiplyScalar(lerp(1.0, 0.5, night));
         eu.uMid.value.copy(fog).lerp(pal.envGreen, 0.55 * (1 - night)).multiplyScalar(0.8);
         eu.uLow.value.copy(pal.envLow).lerp(pal.envLowNight, night);
         eu.uSunDir.value.copy(L0); eu.uSunCol.value.copy(lc).multiplyScalar(li * 0.12);
-        const old = envRT;
-        envRT = env.pmrem.fromScene(envScene, 0.02, 0.1, 100);
-        scene.environment = envRT.texture;
-        if (old) old.dispose();
+        const sig = envSigNow;
+        eu.uTop.value.toArray(sig, 0); eu.uMid.value.toArray(sig, 3); eu.uLow.value.toArray(sig, 6); eu.uSunCol.value.toArray(sig, 9); eu.uSunDir.value.toArray(sig, 12);
+        let drift = 0;
+        for (let i = 0; i < 12; i++) drift = Math.max(drift, Math.abs(sig[i] - envSig[i]) / (0.03 + Math.max(sig[i], envSig[i])));
+        for (let i = 12; i < 15; i++) drift = Math.max(drift, Math.abs(sig[i] - envSig[i]) * (sig[9] + sig[10] + sig[11] > 0.01 ? 1 : 0));
+        if (!envRT || force || (drift > 0.01 && simT - envAt > 0.4)) {
+          envAt = simT;
+          envSig.set(sig);
+          envCam.update(renderer, envScene);
+          envRT = envGen.fromCubemap(envCube.texture, envRT);
+          if (scene.environment !== envRT.texture) scene.environment = envRT.texture;
+        }
       }
-      // post
+      // post (the shell caps bloom at 0.7 / 0.45: ask for values inside the caps so the night ramp has no kink)
       const b = post.bloom;
-      b.strength = lerp(0.32 + golden * 0.12, 0.82, night) * (1 - rainA * 0.25);
+      b.strength = lerp(0.32 + golden * 0.12, 0.7, night) * (1 - rainA * 0.25);
       b.radius = lerp(0.65, 0.85, night);
-      b.threshold = lerp(0.85, 0.42, night);
+      b.threshold = lerp(0.85, 0.45, night);
       post.exposure = lerp(1.06, 1.18, night) * lerp(1, 1.06, rainA) * lerp(1, 1.05, dawnMist);
       post.saturation = lerp(lerp(1.14, 1.15, night), 0.88, rainA);
       post.contrast = lerp(1.1, 1.1, night) - rainA * 0.05;
-      post.lift = [lerp(0.0, 0.0, night), lerp(0.008, 0.02, night), lerp(0.012, 0.045, night)];
+      post.lift[0] = 0; post.lift[1] = lerp(0.008, 0.02, night); post.lift[2] = lerp(0.012, 0.045, night);
       const warm = golden * (morning ? 0.4 : 1);
-      post.gain = [lerp(1 + warm * 0.06, 0.86, night), lerp(1, 0.97, night), lerp(1 - warm * 0.08, 1.1, night)];
+      post.gain[0] = lerp(1 + warm * 0.06, 0.86, night); post.gain[1] = lerp(1, 0.97, night); post.gain[2] = lerp(1 - warm * 0.08, 1.1, night);
     }
 
     /* ---------------- update ---------------- */
@@ -1318,6 +1354,8 @@ export default {
         sun.dispose();
         pond.dispose();
         envRT?.dispose();
+        envCube.dispose();
+        envGen.dispose();
         envScene.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
         owned.forEach(t => t.dispose?.());
         wN1.dispose(); wN2.dispose();

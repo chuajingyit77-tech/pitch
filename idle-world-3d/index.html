@@ -15,9 +15,12 @@
   --latin:"Cormorant Garamond","Times New Roman",serif;
   color-scheme:dark;
 }
-html,body{height:100%}
-body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
-#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+/* no tap-highlight flash, text selection or long-press callout when people tap the world on a phone */
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input{-webkit-user-select:text;user-select:text}
+button{touch-action:manipulation}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
 #gl.dragging{cursor:grabbing}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
@@ -226,3 +229,13 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 } }
 </script>
 <script type="module" src="./app.js"></script>
+<script>
+  // If the 3D engine never starts (old browser without import maps, or a network that blocks the CDN),
+  // say so instead of showing an endless loading screen.
+  setTimeout(function () {
+    if (window.__idle) return;
+    var m = document.getElementById('veilMsg'), sp = document.querySelector('#veil .spin');
+    if (m) m.textContent = '3D 引擎没有加载成功：请确认能访问 cdn.jsdelivr.net，并用最新版 Chrome、Edge 或 Safari 打开';
+    if (sp) sp.hidden = true;
+  }, 30000);
+</script>

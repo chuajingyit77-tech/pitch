@@ -78,7 +78,7 @@ export default {
   post: {                              // read every frame, so you may animate it with time of day
     bloom: { strength, radius, threshold },
     exposure, toneMapping: 'aces'|'agx',
-    vignette, grain, saturation, contrast, lift: [r,g,b], gain: [r,g,b], ca,
+    vignette, saturation, contrast, lift: [r,g,b], gain: [r,g,b], ca,   // (grain is ignored)
     tilt: { amount, center, width },   // tilt-shift blur, 0..1 amount, screen-space (disabled on low)
   },
   update(dt, t),                       // dt capped at 0.05 s
@@ -91,9 +91,23 @@ export default {
 }
 ```
 
-The shell renders `RenderPass → UnrealBloom → OutputPass (tone mapping) → grading/vignette/grain/tilt-shift`,
-with an MSAA half-float target. Use HDR light values freely; bloom threshold is in linear HDR.
+The shell renders the scene into its own MSAA half-float target, then runs a sanitize step: NaN/Inf
+become 0 and values above 12 get a soft knee. After that come `UnrealBloom → OutputPass (tone mapping) →
+grading/vignette/tilt-shift`. Use HDR light values freely; bloom threshold is in linear HDR. The
+shell caps bloom (strength ≤ 0.7, threshold ≥ 0.45) and eases every `post` value over about 0.6 s,
+so a world cannot make the screen jump. `grain` is accepted but ignored: there is only a static dither.
 `renderer.shadowMap` is PCFSoft and enabled when `env.shadows`.
+
+Stability rules the shell enforces or expects:
+- Point and spot lights have a 25 cm minimum distance in the attenuation term.
+- Opaque alpha-tested materials (leaves, petals, grass cards) automatically get sharpened alpha-to-coverage
+  when MSAA is available.
+- Never move the shadow camera every frame, never snap the key light between sun and moon (fade it),
+  never toggle the number of lights at runtime.
+- Give dynamic InstancedMesh/Points `frustumCulled = false` (their bounds go stale).
+- Size point sprites from the drawing-buffer height, not in fixed pixels, and fade them out below about
+  1.5 px instead of shrinking them.
+- Keep flicker effects slow: anything brighter or faster than a gentle breathing glow reads as flashing.
 
 ## Libraries you can import
 
