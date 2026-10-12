@@ -111,6 +111,18 @@ Stability rules the shell enforces or expects:
 - Size point sprites from the drawing-buffer height, not in fixed pixels, and fade them out below about
   1.5 px instead of shrinking them.
 - Keep flicker effects slow: anything brighter or faster than a gentle breathing glow reads as flashing.
+- Shaders must also compile as GLSL ES 1.0, because Safari 14 (iOS 14) is WebGL 1 only:
+  - use `transposeMat3()` from three's common chunk, not `transpose()`, and write your own inverse;
+  - use `texture2D` (three maps it on WebGL 2), not `texture()`;
+  - for `textureLod`, add the `#if __VERSION__ < 300` macro used in `scenes/cloudsea/clouds.js` and set
+    `extensions.shaderTextureLOD`;
+  - use a per-instance attribute instead of `gl_InstanceID`;
+  - avoid `switch`, `while`, integer `%`, bit operations and `isnan()`/`isinf()`, unless they are behind
+    `#if __VERSION__ >= 300`.
+
+  The shell turns on the derivatives extension for every material and swaps in a WebGL 1 skinning chunk. To
+  check, open `play.html` in Chromium with `--disable-webgl2` and an iOS 14 Safari user agent: the scratchpad
+  tool `ios14.cjs` does this and lists every shader error per world.
 
 ## Libraries you can import
 

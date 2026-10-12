@@ -52,9 +52,11 @@ The picture is kept steady on purpose:
 
 ## An always-on iPad (or any kiosk screen)
 
-`play.html` is the same app as a stand-alone, full-screen page with no login. It works on iPadOS / iOS 15
-and newer, so an iPad Air 2, iPad mini 4 or iPad 5th generation and anything later. It is served
-straight from this public repository:
+`play.html` is the same app as a stand-alone, full-screen page with no login. It works in Safari 14 and
+newer, which means iOS / iPadOS 14.x and later; it has been tested on an emulated iPad Air 3 running
+iOS 14.8. Safari 14 has no import maps (a vendored es-module-shims supplies them) and only WebGL 1 (the
+app then renders through a WebGL 1 path; see SCENES.md). It is served straight from this public
+repository:
 
     https://raw.githack.com/chuajingyit77-tech/pitch/idle-worlds-3d/idle-world-3d/play.html
 
