@@ -219,8 +219,9 @@ export function createAurora(shared, tex, rng) {
 /* ------------------------------------------------------------------ */
 /* Image based lighting from the sky                                   */
 /* ------------------------------------------------------------------ */
-// Sky values the environment map is built from: rebuild when any of them has moved by more than ~2.5%
-// (or the sun by ~1°), so image-based light follows the sky in small steps instead of a 3-minute jump.
+// Sky values the environment map is built from: rebuild when any of them has moved by more than ~4%
+// (or the sun by ~1.6°), at most every 0.8 s, so image-based light follows the sky in small steps (the old
+// rebuild every 0.04 h made a ~3-minute jump of up to ~15% in the ambient/reflected light at dusk).
 const ENV_COLORS = ['uZenith', 'uMidSky', 'uHazeA', 'uHazeB', 'uGlow', 'uLightCol', 'uAmbient', 'uBounce'];
 export function createEnvironment(env, shared, skyMaterial) {
   const envScene = new THREE.Scene();
@@ -243,8 +244,8 @@ export function createEnvironment(env, shared, skyMaterial) {
   return {
     get texture() { return rt ? rt.texture : null; },
     update(elapsed, force) {
-      if (!force && elapsed - lastT < 0.5) return false;
-      if (change() < 0.025 && !force) return false;
+      if (!force && elapsed - lastT < 0.8) return false;
+      if (change() < 0.04 && !force) return false;
       last.set(sig); lastT = elapsed;
       shared.uEnvPass.value = 1;
       const old = rt;
