@@ -216,9 +216,11 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   const wingU = { uTime: { value: 0 } };
   const wingMat = new THREE.MeshBasicMaterial({ color: '#e6eef6', transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
   patchMaterial(wingMat, {
-    key: 'dfWing', uniforms: wingU, vertexHeader: 'attribute float aWing; uniform float uTime;',
-    vertex: { '#include <begin_vertex>': '$&\n float wa = sin(uTime * 55.0 + float(gl_InstanceID) * 1.7) * 0.6 * aWing; float wx = transformed.x; transformed.x = wx * cos(wa); transformed.y = abs(wx) * sin(wa) * aWing;' },
+    key: 'dfWing', uniforms: wingU, vertexHeader: 'attribute float aWing; attribute float aIdx; uniform float uTime;',
+    vertex: { '#include <begin_vertex>': '$&\n float wa = sin(uTime * 55.0 + aIdx * 1.7) * 0.6 * aWing; float wx = transformed.x; transformed.x = wx * cos(wa); transformed.y = abs(wx) * sin(wa) * aWing;' },
   });
+  // per-instance index (WebGL 1 has no gl_InstanceID)
+  wingGeo.setAttribute('aIdx', new THREE.InstancedBufferAttribute(Float32Array.from({ length: DF }, (_, i) => i), 1));
   const dfWing = new THREE.InstancedMesh(wingGeo, wingMat, DF);
   dfBody.frustumCulled = dfWing.frustumCulled = false;
   scene.add(dfBody, dfWing);
@@ -244,10 +246,11 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   const birdU = { uTime: { value: 0 } };
   const birdMat = new THREE.MeshLambertMaterial({ color: '#2a2420', side: THREE.DoubleSide });
   patchMaterial(birdMat, {
-    key: 'songbird', uniforms: birdU, vertexHeader: 'attribute float aWing; uniform float uTime;',
-    vertex: { '#include <begin_vertex>': '$&\n float fl = sin(uTime * 17.0 + float(gl_InstanceID) * 2.31); float glide = step(0.0, sin(uTime * 0.9 + float(gl_InstanceID) * 0.7)); transformed.y += aWing * mix(fl * 0.1, 0.012, glide * 0.0 + 0.0) * 1.0;' },
+    key: 'songbird', uniforms: birdU, vertexHeader: 'attribute float aWing; attribute float aIdx; uniform float uTime;',
+    vertex: { '#include <begin_vertex>': '$&\n float fl = sin(uTime * 17.0 + aIdx * 2.31); float glide = step(0.0, sin(uTime * 0.9 + aIdx * 0.7)); transformed.y += aWing * mix(fl * 0.1, 0.012, glide * 0.0 + 0.0) * 1.0;' },
   });
   addFog(birdMat, fogU, 'mfogBird');
+  birdGeo.setAttribute('aIdx', new THREE.InstancedBufferAttribute(Float32Array.from({ length: NB }, (_, i) => i), 1));
   const birds = new THREE.InstancedMesh(birdGeo, birdMat, NB);
   birds.frustumCulled = false;
   scene.add(birds);

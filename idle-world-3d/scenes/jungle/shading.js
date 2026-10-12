@@ -147,7 +147,7 @@ export function jungleMaterial(material, shared, opts = {}) {
     `,
     vertex: {
       '#include <fog_vertex>': `$&
-        vWorldP = transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);
+        vWorldP = transposeMat3(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);
         #ifdef JG_GLOWATTR
           vGlow = aGlow;
         #endif

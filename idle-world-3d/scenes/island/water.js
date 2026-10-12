@@ -227,7 +227,14 @@ void main() {
   // rougher, blurrier reflections over the open swell; crisp over the calm lagoon
   float rough = smoothstep(1.0, 6.0, depth);
   vec2 ruv = vMirror.xy / vMirror.w + N.xz * mix(0.03, 0.075, rough) / (1.0 + dist * 0.006);
-  vec3 refl = mix(uSkyFallback, textureLod(tMirror, ruv, mix(1.1, 3.6, rough)).rgb, uMirrorOn);
+  #if __VERSION__ >= 300
+    vec3 mirror = textureLod(tMirror, ruv, mix(1.1, 3.6, rough)).rgb;
+  #elif defined(GL_EXT_shader_texture_lod)
+    vec3 mirror = texture2DLodEXT(tMirror, ruv, mix(1.1, 3.6, rough)).rgb; // WebGL 1 (Safari 14)
+  #else
+    vec3 mirror = texture2D(tMirror, ruv, mix(1.1, 3.6, rough)).rgb;
+  #endif
+  vec3 refl = mix(uSkyFallback, mirror, uMirrorOn);
 
   // sun + moon speculars and a glittering path made of discrete sparkles (each part is skipped while its
   // light is off or far from the reflection, which keeps the per-pixel cost down)
@@ -330,7 +337,7 @@ export function createWater(env, camera, { normalTex }) {
     uniforms,
     vertexShader: VERT,
     fragmentShader: FRAG,
-    extensions: { derivatives: true }, // pixel-footprint filtering (built in on WebGL2)
+    extensions: { derivatives: true, shaderTextureLOD: true }, // pixel-footprint filtering, blurred mirror (built in on WebGL2)
     transparent: true,
     depthWrite: true,
     blending: THREE.CustomBlending,

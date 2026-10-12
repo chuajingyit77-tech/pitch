@@ -112,17 +112,28 @@ function fatal(msg) {
   const sp = document.querySelector('#veil .spin');
   if (sp) sp.hidden = true;
 }
+// Which browser generation is this? Older iPads and iPhones (iOS / iPadOS before 17, A8–A12 era) get a
+// lighter tier, and Safari 14 (iOS 14) runs on WebGL 1: its WebGL 2 is an unfinished experimental switch.
+// iPadOS Safari reports a Mac user agent, so the OS version comes from "CPU OS 14_8", "Version/14.1", or,
+// when neither is present (home-screen web apps), from whether the browser can do import maps (16.4+).
+const UA = navigator.userAgent;
+const IS_APPLE_TOUCH = /iPad|iPhone|iPod/.test(UA) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(UA));
+const APPLE_OS = (() => {
+  const m = UA.match(/OS (\d+)_\d+(?:_\d+)? like Mac OS X/) || UA.match(/Version\/(\d+)(?:\.\d+)*(?: Mobile\/\S+)? Safari/);
+  return m ? +m[1] : 0;
+})();
+const IMPORT_MAPS = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'));
+const OLD_APPLE = IS_APPLE_TOUCH && (APPLE_OS ? APPLE_OS < 17 : !IMPORT_MAPS);
+const SAFARI_14 = /Safari/.test(UA) && !/Chrome|Chromium|Edg|Firefox/.test(UA) && APPLE_OS > 0 && APPLE_OS < 15;
+
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, preserveDrawingBuffer: false });
+  const attrs = { antialias: false, powerPreference: 'high-performance', stencil: false, preserveDrawingBuffer: false };
+  const context = SAFARI_14 ? canvas.getContext('webgl', attrs) || undefined : undefined;
+  renderer = new THREE.WebGLRenderer({ canvas, context, ...attrs });
 } catch (e) {
   fatal('这台设备的浏览器没有开启 3D 加速（WebGL），请用最新版 Chrome、Edge 或 Safari 打开');
   throw e;
-}
-if (!renderer.capabilities.isWebGL2) {
-  // every world is written for WebGL 2 (iOS / iPadOS 15+, any current desktop browser)
-  fatal('这台设备的系统太旧，打不开 3D 世界：iPad / iPhone 需要升级到 iPadOS / iOS 15 或更新，电脑请用最新版 Chrome、Edge 或 Safari');
-  throw new Error('WebGL 2 is not available');
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -135,19 +146,11 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const glx = renderer.getContext();
 const GPU = (() => { try { const e = glx.getExtension('WEBGL_debug_renderer_info'); return e ? String(glx.getParameter(e.UNMASKED_RENDERER_WEBGL)) : ''; } catch (err) { return ''; } })();
 const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
-// Older iPads and iPhones (iOS / iPadOS before 17, A8–A10 class GPUs) need a lighter tier. iPadOS Safari
-// reports a Mac user agent, so the OS version comes from "CPU OS 15_7", "Version/15.6", or, when neither
-// is present (home-screen web apps), from whether the browser can do import maps (Safari 16.4+).
-const IS_APPLE_TOUCH = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
-const APPLE_OS = (() => {
-  const m = navigator.userAgent.match(/OS (\d+)_\d+(?:_\d+)? like Mac OS X/) || navigator.userAgent.match(/Version\/(\d+)(?:\.\d+)*(?: Mobile\/\S+)? Safari/);
-  return m ? +m[1] : 0;
-})();
-const IMPORT_MAPS = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'));
-const OLD_APPLE = IS_APPLE_TOUCH && (APPLE_OS ? APPLE_OS < 17 : !IMPORT_MAPS);
 const WEAK_GPU = /Intel|UHD|Iris|HD Graphics|Mali|Adreno|PowerVR|Apple A\d|SwiftShader|llvmpipe|Basic Render|Microsoft|Radeon\(TM\)( Vega \d+)? Graphics|Radeon Vega|Radeon R\d/i.test(GPU);
 const IS_WEBGL2 = renderer.capabilities.isWebGL2;
-const CAN_HALF = IS_WEBGL2 && (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'));
+const CAN_HALF = IS_WEBGL2
+  ? (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'))
+  : (renderer.extensions.has('OES_texture_half_float') && renderer.extensions.has('OES_texture_half_float_linear') && renderer.extensions.has('EXT_color_buffer_half_float'));
 const HDR_TYPE = CAN_HALF ? THREE.HalfFloatType : THREE.UnsignedByteType;
 // MSAA sample counts this GPU really supports for the scene buffer's format (half-float MSAA is not universal)
 function formatSamples(fmt) {
@@ -440,6 +443,56 @@ function smoothCutouts(root) {
   });
 }
 
+/* WebGL 1 (Safari 14 / iOS 14): GLSL ES 1.0 only has screen-space derivatives (fwidth, dFdx — used by
+   the anti-aliasing tricks in every world) behind an extension, which three.js turns on per material. */
+function webgl1Materials(root) {
+  if (IS_WEBGL2 || !root) return;
+  root.traverse(o => {
+    if (!o.material) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m) continue;
+      if (!m.userData.gl1 && !(m.extensions && m.extensions.derivatives)) {
+        m.userData.gl1 = true;
+        m.extensions = Object.assign({}, m.extensions || {}, { derivatives: true });
+        m.needsUpdate = true;
+      }
+      if (o.isSkinnedMesh && o.skeleton && !m.userData.gl1skin) webgl1Skinning(m, o.skeleton);
+    }
+  });
+}
+// three.js r160 reads bones with texelFetch/textureSize (WebGL 2 only). For WebGL 1, read the same bone
+// texture (4 RGBA texels per matrix, size × size) with texture2D at texel centres.
+function webgl1Skinning(m, skeleton) {
+  if (!skeleton.boneTexture) skeleton.computeBoneTexture();
+  const size = skeleton.boneTexture.image.width;
+  m.userData.gl1skin = size;
+  const prevCompile = m.onBeforeCompile;
+  const prevKey = m.customProgramCacheKey === THREE.Material.prototype.customProgramCacheKey
+    ? () => prevCompile.toString() : m.customProgramCacheKey.bind(m);
+  m.onBeforeCompile = function (sh, r) {
+    prevCompile.call(this, sh, r);
+    sh.vertexShader = sh.vertexShader.replace('#include <skinning_pars_vertex>', `
+      #ifdef USE_SKINNING
+        uniform mat4 bindMatrix;
+        uniform mat4 bindMatrixInverse;
+        uniform highp sampler2D boneTexture;
+        mat4 getBoneMatrix( const in float i ) {
+          float size = ${size.toFixed(1)};
+          float j = i * 4.0;
+          float x = mod( j, size );
+          float v = ( floor( j / size ) + 0.5 ) / size;
+          vec4 v1 = texture2D( boneTexture, vec2( ( x + 0.5 ) / size, v ) );
+          vec4 v2 = texture2D( boneTexture, vec2( ( x + 1.5 ) / size, v ) );
+          vec4 v3 = texture2D( boneTexture, vec2( ( x + 2.5 ) / size, v ) );
+          vec4 v4 = texture2D( boneTexture, vec2( ( x + 3.5 ) / size, v ) );
+          return mat4( v1, v2, v3, v4 );
+        }
+      #endif`);
+  };
+  m.customProgramCacheKey = () => prevKey() + '|gl1skin' + size;
+  m.needsUpdate = true;
+}
+
 // Lost GPU context (driver reset, GPU switch, memory pressure on phones): show a calm message, rebuild
 // once the browser hands the context back.
 let contextLost = false;
@@ -617,6 +670,7 @@ async function enterWorld(id, { first = false } = {}) {
     const env = makeEnv(meta, def);
     const inst = await def.create(env);
     current = { meta, def, inst, env };
+    webgl1Materials(inst.scene);
     smoothCutouts(inst.scene);
     scenePass.scene = inst.scene;
     scenePass.camera = inst.camera;
@@ -1016,6 +1070,7 @@ function frame(now) {
   dynTick(rawMs);
   const rawDt = Math.min(0.1, Math.max(0, rawMs) / 1000);
   minuteTimer += rawDt;
+  if (!IS_WEBGL2 && current && !loading && (minuteTimer % 3) < rawDt) webgl1Materials(current.inst.scene);
   if (minuteTimer > 15) {
     minuteTimer = 0;
     tickClock();

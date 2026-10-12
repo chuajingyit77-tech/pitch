@@ -191,7 +191,7 @@ const SPEC_CLAMP = /* glsl */`
 #endif
 `;
 
-const WPOS_FROM_MV = 'vUwPos = transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);';
+const WPOS_FROM_MV = 'vUwPos = transposeMat3(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);';
 
 /**
  * Underwater look for a built-in material: depth-tinted light, caustics on the sun light and the
@@ -260,7 +260,7 @@ export function addDetail(mat, W, { glsl, space = 'world', bump = 1, key = 'd', 
   if (!DETAIL.on) return mat;
   const vtx = space === 'object'
     ? { '#include <begin_vertex>': '$&\nvDetP = transformed;\n#ifdef USE_INSTANCING\nvDetP += instanceMatrix[3].xyz * 0.618;\n#endif' }
-    : { '#include <fog_vertex>': '$&\nvDetP = transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);' };
+    : { '#include <fog_vertex>': '$&\nvDetP = transposeMat3(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);' };
   return patchMaterial(mat, {
     key: 'det' + key + space,
     uniforms: { ...W, uBump: { value: bump }, ...uniforms },

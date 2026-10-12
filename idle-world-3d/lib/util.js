@@ -385,6 +385,13 @@ export function addWind(material, wind, { height = 1, amount = 0.2, stiffness = 
       uniform float uWindTime, uWindStrength, uWindGust, uWindHeight, uWindAmount, uWindStiff, uWindFlutter;
       uniform vec2 uWindDir, uWindScroll;
       float windHash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
+      // inverse() is GLSL ES 3.0 only; this works in WebGL 1 too (Safari 14)
+      mat3 windInverse3(mat3 m){
+        vec3 a = m[0], b = m[1], c = m[2];
+        vec3 r0 = cross(b, c), r1 = cross(c, a), r2 = cross(a, b);
+        float det = dot(a, r0);
+        return mat3(r0.x, r1.x, r2.x, r0.y, r1.y, r2.y, r0.z, r1.z, r2.z) / (abs(det) > 1e-12 ? det : 1.0);
+      }
       float windNoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
         return mix(mix(windHash(i), windHash(i+vec2(1,0)), u.x), mix(windHash(i+vec2(0,1)), windHash(i+vec2(1,1)), u.x), u.y); }
     `,
@@ -406,7 +413,7 @@ export function addWind(material, wind, { height = 1, amount = 0.2, stiffness = 
         vec3 disp = vec3(uWindDir.x, 0.0, uWindDir.y) * push;
         disp.y -= push * push * 0.35; // keep the plant's length roughly constant
         disp += vec3(sin(uWindTime * 9.0 + wo.x * 5.0 + transformed.y * 7.0), 0.0, cos(uWindTime * 8.0 + wo.z * 5.0)) * uWindFlutter * bendW * uWindStrength;
-        mvPosition.xyz += (inverse(mat3(modelMatrix)) * disp);
+        mvPosition.xyz += windInverse3(mat3(modelMatrix)) * disp;
         mvPosition = modelViewMatrix * mvPosition;
         gl_Position = projectionMatrix * mvPosition;
       `,

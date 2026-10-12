@@ -57,6 +57,10 @@ vec3 cloudShade(vec3 N, vec3 V, vec3 L, float hn, float sh, float exposure, floa
 /* Cloud sea                                                           */
 /* ------------------------------------------------------------------ */
 const SEA_VERT = /* glsl */`
+// textureLod is GLSL ES 3.0; WebGL 1 vertex shaders have texture2DLod (Safari 14)
+#if __VERSION__ < 300
+#define textureLod texture2DLod
+#endif
 ${SHARED_GLSL}
 uniform sampler2D tBillow;
 uniform vec4 uL1, uL2, uL0;   // scale, offset.xy, amplitude
@@ -86,6 +90,14 @@ void main(){
 }`;
 
 const SEA_FRAG = /* glsl */`
+// textureLod is GLSL ES 3.0; WebGL 1 fragment shaders need EXT_shader_texture_lod (else a bias stands in)
+#if __VERSION__ < 300
+  #ifdef GL_EXT_shader_texture_lod
+    #define textureLod texture2DLodEXT
+  #else
+    #define textureLod(s, uv, l) texture2D(s, uv, l)
+  #endif
+#endif
 ${SHARED_GLSL}
 ${CLOUD_LIGHT_GLSL}
 uniform sampler2D tBillow, tDetail;
@@ -229,7 +241,7 @@ export function createCloudSea(env, shared, tex) {
     uGlowPos: { value: glowPos },
     uGlowCol: { value: glowCol },
   });
-  const material = new THREE.ShaderMaterial({ uniforms, vertexShader: SEA_VERT, fragmentShader: SEA_FRAG });
+  const material = new THREE.ShaderMaterial({ uniforms, vertexShader: SEA_VERT, fragmentShader: SEA_FRAG, extensions: { derivatives: true, shaderTextureLOD: true } });
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = -5;
