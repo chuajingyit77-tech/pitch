@@ -480,7 +480,11 @@ export function createShafts(W, rng, { count = 32, radius = 26, center = new THR
    * ease toward their targets in tick() so a shaft that starts to miss a rock grows instead of popping.
    */
   const lenT = new Float32Array(count).fill(-1), lenC = new Float32Array(count).fill(-1);
+  const lenAxis = new THREE.Vector3(0, 0, 0);
   const setLengths = (axis, groundAt, snap = false) => {
+    // the clock glides, so this is asked several times a minute: skip turns under ~0.2 degrees
+    if (!snap && lenAxis.dot(axis) > 0.999994) return;
+    lenAxis.copy(axis);
     const c = g.getAttribute('aC');
     const sy = W.uSurfY.value;
     for (let i = 0; i < count; i++) {

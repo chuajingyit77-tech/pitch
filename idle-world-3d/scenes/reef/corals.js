@@ -41,8 +41,8 @@ function instanced(geo, mat, list, { shadow = true, receive = true, pad = 0 } = 
   if (pad && im.boundingSphere && im.boundingSphere.radius > 0) im.boundingSphere.radius += pad;
   return im;
 }
-/** Does the shell's scene pass have MSAA? Mirrors app.js (every quality tier asks for samples; the
- *  device may not support them for the HDR format, in which case the shell falls back to FXAA). */
+/** Fallback when the shell does not report env.msaa: does the scene buffer get MSAA? Mirrors app.js
+ *  (every tier asks for samples; a device that cannot multisample the HDR format gets FXAA instead). */
 function sceneMSAA(renderer) {
   try {
     if (!renderer || !renderer.capabilities.isWebGL2 || !(renderer.capabilities.maxSamples > 0)) return false;
@@ -63,7 +63,7 @@ function sceneMSAA(renderer) {
  */
 function stableCutout(mat, tex, env) {
   const img = tex.image || { width: 256, height: 256 };
-  const msaa = sceneMSAA(env.renderer);
+  const msaa = typeof env.msaa === 'number' ? env.msaa > 0 : sceneMSAA(env.renderer);
   if (msaa) mat.alphaToCoverage = true;
   return patchMaterial(mat, {
     key: 'cutoutlod' + (msaa ? 'a2c' : ''),

@@ -269,7 +269,8 @@ export function buildRain(shared, q, rng, center) {
       varying vec2 vUv; varying float vA;
       void main(){
         float x = abs(vUv.x * 2.0 - 1.0);
-        float a = (1.0 - x) * smoothstep(0.0, 0.4, vUv.y) * vA * 0.32;
+        // soft at both ends like a motion-blurred drop (a hard tail made each pixel jump up and down in two frames)
+        float a = (1.0 - x) * smoothstep(0.0, 0.4, vUv.y) * (1.0 - smoothstep(0.7, 1.0, vUv.y)) * vA * 0.32;
         if (a < 0.003) discard;
         vec3 col = uAmb * 2.2 + uLightCol * 0.2;
         col = jgFog(col, vWorldP);

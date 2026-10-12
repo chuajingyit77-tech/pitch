@@ -150,7 +150,9 @@ export function makeIslet(rng, { radius = 10, depth = 18, nT = 44, nA = 88, lobe
       } else {
         const s = (t - tRim) / (1 - tRim);
         const depthHere = depth * (0.7 + 0.42 * lob) * (0.9 + 0.2 * noise.noise2(ca * 2, sa * 2));
-        const prof = Math.pow(1 - s, 0.8 + 0.6 * lob) * (1 + 0.1 * Math.sin(s * Math.PI));
+        // (floored: a last ring collapsed onto the axis made the bottom fold into fins whose normals cancel,
+        // and normalize(0) gave NaN pixels that blinked at the islet tips)
+        const prof = Math.max(Math.pow(1 - s, 0.8 + 0.6 * lob) * (1 + 0.1 * Math.sin(s * Math.PI)), 0.006);
         r = (R + lip * 0.3) * prof * (1 - 0.2 * (1 - lob) * s);
         y = topY(ca * R, sa * R) - lip - s * depthHere;
         const n3 = noise.fbm3(ca * 2.2, y * 0.15, sa * 2.2, 4);
@@ -175,7 +177,10 @@ export function makeIslet(rng, { radius = 10, depth = 18, nT = 44, nA = 88, lobe
       for (let j = 0; j < nA; j++) { const j1 = (j + 1) % nA; idx.push(a0 + j, a0 + j1, a1 + j, a0 + j1, a1 + j1, a1 + j); }
     }
     if (withTip) {
-      const tip = pos.length / 3; pos.push(0, -depth * 1.02, 0); col.push(rockC.r, rockC.g, rockC.b);
+      // the tip sits just below the deepest point of the last ring (lobes reach ~1.23 x depth), not inside it
+      let low = Infinity;
+      for (const v of grid[i1]) low = Math.min(low, v.y);
+      const tip = pos.length / 3; pos.push(0, Math.min(-depth * 1.02, low - Math.max(0.3, depth * 0.03)), 0); col.push(rockC.r, rockC.g, rockC.b);
       const last = base + (i1 - i0) * nA;
       for (let j = 0; j < nA; j++) idx.push(last + j, last + (j + 1) % nA, tip);
     }

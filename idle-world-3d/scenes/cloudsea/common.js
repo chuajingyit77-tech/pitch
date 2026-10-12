@@ -237,12 +237,18 @@ export function patchStd(material, shared, opts = {}) {
   `;
   vertex['#include <fog_vertex>'] = (vertex['#include <fog_vertex>'] || '$&') + fogV;
   const fragment = Object.assign({}, opts.fragment || {});
-  // Cap highlights at 10 (hue kept). Lit surfaces here peak around 3 and lantern glow around 3.5, but
-  // grazing-angle sun glints on the glazed roofs, gilding and lantern caps (Fresnel -> 1 and the GGX
-  // visibility term blowing up at silhouettes) reached the old cap of 24 in one-pixel sparkles that bloom.
+  // Safety net, then a highlight cap of 10 (hue kept). A NaN/Inf pixel (e.g. from a degenerate vertex
+  // normal) is replaced by the cloud-fog colour instead of reaching bloom; the old per-channel min(rgb, 24)
+  // let NaN through on GPUs where min(NaN, x) is NaN and turned Inf into a blinking 24x spike. Lit surfaces
+  // here peak around 3 and lantern glow around 3.5; only grazing glints on glazed roofs and gilding exceeded 10.
   fragment['#include <fog_fragment>'] = (fragment['#include <fog_fragment>'] || '') + `
- { float csM = max(max(gl_FragColor.r, gl_FragColor.g), gl_FragColor.b);
-   gl_FragColor.rgb *= min(1.0, 10.0 / max(csM, 1e-4)); }
+ { float csS = gl_FragColor.r + gl_FragColor.g + gl_FragColor.b;
+   bool csBad = !(csS < 1e20 && csS > -1e20);
+   #if __VERSION__ >= 300
+     csBad = csBad || isnan(csS) || isinf(csS);
+   #endif
+   float csM = max(max(gl_FragColor.r, gl_FragColor.g), gl_FragColor.b);
+   gl_FragColor.rgb = csBad ? uCloudFog : gl_FragColor.rgb * min(1.0, 10.0 / max(csM, 1e-4)); }
  gl_FragColor.rgb = applyFog(gl_FragColor.rgb, vWPos);`;
   return patchMaterial(material, {
     key: 'cs-' + (opts.key || 'std'),
