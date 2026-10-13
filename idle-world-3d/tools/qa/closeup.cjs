@@ -3,7 +3,8 @@
 // WebGL 1, low tier), with the full post-processing chain, to judge how creatures look up close.
 // NODE_PATH=$(npm root -g) node closeup.cjs <outdir> <world> [--hours 15] [--n 3] [--dist 2.4] [--name <object name>]
 //   Without --name it frames the first instances of the fish meshes (geometry with the aSwim attribute),
-//   biggest fish first. The camera sits beside and above each fish (or object) and looks at it.
+//   biggest fish first; --name frames that object, or the first instances of a named InstancedMesh.
+//   The camera sits beside and above each fish (or object) and looks at it.
 //   --dist is in body lengths. --gl2 1 renders as a WebGL 2 browser instead (A/B). Writes <outdir>/<world>_<k>.png.
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -60,7 +61,8 @@ const srv = http.createServer((req, res) => {
       const I = window.__idle, inst = I.current.inst, THREE = I.current.env.THREE, scene = inst.scene;
       scene.updateMatrixWorld(true);
       const subjects = [];
-      if (name) scene.traverse(o => { if (o.name === name) subjects.push({ o, i: -1 }); });
+      // a named InstancedMesh is framed instance by instance (its own matrix is usually the origin)
+      if (name) scene.traverse(o => { if (o.name === name) { if (o.isInstancedMesh) for (let i = 0; i < o.count; i++) subjects.push({ o, i }); else subjects.push({ o, i: -1 }); } });
       else {
         // hero fish are single meshes (koi), schools are instanced (reef, jungle)
         const meshes = [];
