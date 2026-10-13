@@ -17,6 +17,14 @@ The owner writes in Chinese — reply in Chinese. They have said these once and 
   - nothing flat or toy-like.
 - Creatures must move naturally: no sliding, snapping, lockstep, or motion that changes with frame rate.
 - No flicker or flashing of any kind.
+- **Art reference: Monster Hunter's environments.** That means its underwater worlds, its land worlds (e.g. the
+  Ancient Forest) and its airy sky and highland areas, such as the Coral Highlands. Aim for:
+  - grand landmarks and a strong sense of depth and scale;
+  - dense ecology, with many small creatures, each with its own behaviour;
+  - dramatic, layered light: light shafts, mist, bioluminescence at night;
+  - occasional gentle giants passing by.
+
+  All of this must stay within the iPad's 60 fps budget.
 
 ## Before every push
 - Check every world in the Safari 14 / WebGL 1 iPad emulation:
