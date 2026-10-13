@@ -148,7 +148,7 @@ const WING_LE = [[0.045, 0.112], [0.2, 0.119], [0.40, 0.126], [0.47, 0.118], [0.
 const WING_TE = [[0.045, -0.19], [0.2, -0.214], [0.40, -0.218], [0.45, -0.165], [0.52, -0.085], [0.575, -0.03], [0.6, 0.0]];
 const X_ELBOW = SHOULDER[0].x + L_HUM, X_WRIST = X_ELBOW + L_FORE, X_TIP = 0.6;
 // nine primaries per wing, fanned from the hand: [root along the hand 0..1, angle from straight back (rad), length]
-const PRIMARIES = [[0.0, 0.3, 0.215], [0.12, 0.46, 0.235], [0.25, 0.62, 0.255], [0.37, 0.78, 0.27], [0.5, 0.93, 0.285], [0.62, 1.07, 0.29], [0.74, 1.2, 0.285], [0.86, 1.33, 0.27], [1.0, 1.46, 0.245]];
+const PRIMARIES = [[0.0, 0.36, 0.215], [0.12, 0.48, 0.235], [0.25, 0.6, 0.252], [0.37, 0.72, 0.268], [0.5, 0.84, 0.28], [0.62, 0.97, 0.287], [0.74, 1.1, 0.284], [0.86, 1.23, 0.27], [1.0, 1.36, 0.245]];
 
 /* ------------------------------------------------------------------ */
 /* Geometry assembly                                                    */
@@ -464,7 +464,7 @@ function buildHeronGeometry(q) {
     // five emarginated so the wingtip shows open "fingers"
     PRIMARIES.forEach(([fr, ang, len], k) => {
       const root = V(s * lerp(X_WRIST - 0.015, X_WRIST + L_HAND + 0.03, fr), ySh - 0.0015 - 0.0012 * k, lerp(-0.105, 0.05, fr));
-      const wid = lerp(0.054, 0.04, k / 8), emarg = smoothstep(3.5, 8, k);
+      const wid = lerp(0.07, 0.05, k / 8), emarg = smoothstep(4.5, 8, k);
       const fnu = R2(10), fnv = 8;
       const Pf = (i, j, out) => {
         const t = i / fnu, w = j / fnv, top = w <= 0.5, b = top ? w * 2 : 2 - w * 2; // across: 0 .. 1 .. 0
@@ -608,10 +608,11 @@ const PAINT = {
         c = mix3(C.grey, C.slate, hand * 0.55);
         // white leading edge at the wrist
         c = mix3(c, C.white, (1 - smoothstep(0.03, 0.09, ch)) * smoothstep(0.25, 0.32, x) * (1 - smoothstep(0.5, 0.56, x)) * 0.85);
-        const f = featherRows(ch / covEnd, a, 7, 70, 0.9);
-        const edge = smoothstep(0.75, 0.98, f.f);
-        c = mul3(c, 1 - 0.1 * edge + 0.05 * n);
-        ht = 0.5 + 0.35 * Math.pow(f.f, 1.5) - 0.2 * edge;
+        // covert rows: soft overlapping feathers, each a shade of its own (no regular stripes)
+        const f = featherRows(ch / covEnd, a, 6, 58, 1.6);
+        const edge = smoothstep(0.8, 0.99, f.f);
+        c = mul3(c, 1 - 0.055 * edge + 0.06 * n + 0.05 * (hash1(f.id) - 0.5));
+        ht = 0.5 + 0.22 * Math.pow(f.f, 1.5) - 0.12 * edge;
       } else {
         c = mix3(C.slate, C.blackS, smoothstep(X_WRIST - 0.03, X_WRIST + 0.06, x));
         c = mix3(c, C.dark, (1 - hand) * 0.4);
@@ -763,7 +764,7 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 // long-lived pose values get their own vectors (the helpers below reuse _a.._z freely)
-const _hp = new THREE.Vector3(), _knee = new THREE.Vector3(), _ankle = new THREE.Vector3(), _foot = new THREE.Vector3(), _ft = new THREE.Vector3(), _dir = new THREE.Vector3(), _seg = new THREE.Vector3();
+const _dl = new THREE.Vector3(), _hp = new THREE.Vector3(), _knee = new THREE.Vector3(), _ankle = new THREE.Vector3(), _foot = new THREE.Vector3(), _ft = new THREE.Vector3(), _dir = new THREE.Vector3(), _seg = new THREE.Vector3();
 const easeIO = t => t * t * (3 - 2 * t);
 
 /** quaternion from a basis given by its Y (axis) and an approximate Z (forward) */
@@ -862,6 +863,7 @@ export class Heron {
     this.pitch = new Spring(0);             // + = nose down
     this.roll = new Spring(0);
     this.headW = new Spring3();             // world head-bone position
+    this.prevBody = new THREE.Vector3(); this.carried = false; this.headDriven = false;
     this.hYaw = new Spring(0); this.hPitch = new Spring(0); this.hRoll = new Spring(0); // head orientation, world
     this.fold = new Spring(1);              // 1 = wings folded (flight wings hidden)
     this.flapPh = 0; this.flapA = new Spring(0); this.flapF = 1.8; this.sweep = new Spring(0); this.bow = new Spring(0.12);
@@ -923,20 +925,20 @@ export class Heron {
       if (P.obstacleGap(x, z) < 0.22 + pad) return false;
       if (P.spoutHit && Math.hypot(x - P.spoutHit.x, z - P.spoutHit.z) < 1.3) return false;
       for (const p of P.pads) if (Math.hypot(x - p.anchor.x, z - p.anchor.z) < 0.75 + pad) return false;
-      for (const s of P.stones) if (Math.hypot(x - s.x, z - s.z) < s.s + 0.28 + pad) return false;
+      for (const s of P.stones) if (Math.hypot(x - s.x, z - s.z) < s.s * 0.8 + 0.18 + pad) return false;
       for (const s of P.irisSpots || []) if (Math.hypot(x - s.x, z - s.z) < 0.5 + pad) return false;
       if (P.lanternPos && Math.hypot(x - P.lanternPos.x, z - P.lanternPos.z) < 0.85) return false;
       return true;
     };
     const spots = [];
-    // shallows: walk in from the shore to ~0.12–0.22 m of water
-    for (const L of P.lobes) {
+    // shallows: walk in from the shore to ~0.12–0.22 m of water (two rings)
+    for (const L of P.lobes) for (const ring of [0.32, 0.46]) {
       for (let k = 0; k < 40; k++) {
         const a = (k / 40) * TAU + r.range(-0.03, 0.03);
         let x = L.x + Math.cos(a) * L.r, z = L.z + Math.sin(a) * L.r;
-        for (let it = 0; it < 14; it++) { const d = P.sdf(x, z); P.sdfGrad(x, z, _a); x -= _a.x * (d + 0.34); z -= _a.z * (d + 0.34); }
+        for (let it = 0; it < 14; it++) { const d = P.sdf(x, z); P.sdfGrad(x, z, _a); x -= _a.x * (d + ring); z -= _a.z * (d + ring); }
         const d = P.sdf(x, z);
-        if (Math.abs(d + 0.34) > 0.08) continue;
+        if (Math.abs(d + ring) > 0.08) continue;
         const fy = P.height(x, z);
         if (fy < -0.26 || fy > -0.07) continue;
         if (!clearOf(x, z, 0)) continue;
@@ -987,6 +989,8 @@ export class Heron {
       if (this.wait > 0 || !this.spots.length) return;
       this.beginVisit();
     }
+    this.prevBody.copy(this.bodyPos.x);
+    this.carried = false; this.headDriven = false;
     this.alarm = Math.max(0, this.alarm - dt * 0.35);
     this.t += dt;
     switch (this.state) {
@@ -1016,22 +1020,26 @@ export class Heron {
     this.spotInfo = sp;
     this.spot.copy(sp.pos);
     this.visits++;
-    // facing after landing: along the shore (water spots) so it is seen side-on
-    const P = this.pond;
-    const camDir = _a.subVectors(this.spot, P.camera.position).setY(0).normalize();
-    let face;
-    if (sp.kind === 'water') { face = Math.atan2(sp.along.x, sp.along.z); if (r.chance(0.5)) face += Math.PI; }
-    else face = Math.atan2(-camDir.z, camDir.x) + (r.chance(0.5) ? 0 : Math.PI) + r.range(-0.5, 0.5);
-    // approach: come in across the view, ending along the landing heading; try several and keep a clear one
+    // facing after landing: in profile to the camera (the S-neck, bill and legs read best), in the shallows
+    // turned partway to the line of the shore; left or right varies
+    let face = this.profileYaw(r.chance(0.5) ? 0 : Math.PI);
+    if (sp.kind === 'water') {
+      let along = Math.atan2(sp.along.x, sp.along.z);
+      if (Math.abs(nearAngle(along, face) - face) > Math.PI / 2) along += Math.PI;
+      face = lerp(face, nearAngle(along, face), 0.35);
+    }
+    face += r.range(-0.25, 0.25);
+    // approach: come in across the view, ending along the landing heading; keep the clearest of the nearest options
     let best = null;
     for (let k = 0; k < 10; k++) {
-      const ang = face + (k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.32);
+      const dev = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.32;
+      const ang = face + dev;
       const dir = V(Math.sin(ang), 0, Math.cos(ang));
       const lateral = V(dir.z, 0, -dir.x).multiplyScalar(r.range(5, 9) * (r.chance(0.5) ? 1 : -1));
       this.makeInbound(dir, lateral);
       const c = this.pathClearance();
-      if (!best || c > best.c) best = { c, dir, lateral, ang };
-      if (c > 0.6) break;
+      const sc = Math.min(c, 0.8) - Math.abs(dev) * 0.25;
+      if (!best || sc > best.sc) best = { sc, c, dir, lateral, ang };
     }
     this.makeInbound(best.dir, best.lateral);
     this.landYaw = best.ang;
@@ -1053,6 +1061,11 @@ export class Heron {
     this.present = false;
     this.prey = null; this.held = null;
   }
+  /** heading in profile to the current camera (offset 0 or PI picks which way it faces) */
+  profileYaw(off = 0) {
+    const cam = this.pond.camera.position, c = this.center && this.state === 'stay' ? this.center : this.spot;
+    return Math.atan2(-(c.z - cam.z), c.x - cam.x) + off;
+  }
   /** inbound path: from high and far behind the approach line down to the touchdown point */
   makeInbound(dir, lateral) {
     const end = _c.copy(this.spot).addScaledVector(dir, -0.16);
@@ -1064,12 +1077,12 @@ export class Heron {
     p[0].copy(end).addScaledVector(dir, -26).addScaledVector(lateral, 1.6); p[0].y += 12;
     this.path.measure();
   }
-  /** smallest clearance (m) of the path's low part from the bridge, the lantern and the tree */
-  pathClearance() {
+  /** smallest clearance (m) of part of the path (fractions f0..f1, its low part) from the bridge, lantern and tree */
+  pathClearance(f0 = 0.55, f1 = 1) {
     const P = this.pond;
     let c = 9;
     for (let i = 0; i <= 40; i++) {
-      const s = this.path.total * (0.55 + 0.45 * i / 40);
+      const s = this.path.total * (f0 + (f1 - f0) * i / 40);
       this.path.at(this.path.tAt(s), _a);
       if (P.bridgeLine) {
         const B = P.bridgeLine;
@@ -1191,7 +1204,7 @@ export class Heron {
     if (!type) {
       const canWalk = this.spotInfo.kind === 'water';
       const prev = this.act ? this.act.type : '';
-      const opts = [['still', 3], ['look', 1.2], ['stretch', 0.9], ['tilt', 1.4], ['preen', prev === 'preen' ? 0 : 1], ['hunt', this.pond.preyNear ? 2.2 : 0.6]];
+      const opts = [['still', 3], ['look', 1.2], ['stretch', 0.9], ['tilt', 1.4], ['preen', prev === 'preen' ? 0 : 1], ['hunt', this.pond.preyNear ? 3.5 : 0.6]];
       if (canWalk) opts.push(['walk', prev === 'walk' ? 0.6 : 2]);
       opts.push(['turn', 0.5]);
       let sum = 0; for (const o of opts) sum += o[1];
@@ -1203,7 +1216,13 @@ export class Heron {
     const d = durs[type];
     this.act = { type, t: 0, dur: dur || r.range(d[0], d[1]), k: 0, side: r.chance(0.5) ? 1 : -1, n: 0, next: 0 };
     if (type === 'walk') this.planWalk(r.int(2, 5));
-    if (type === 'turn') this.planTurn(r.range(0.6, 1.5) * (r.chance(0.5) ? 1 : -1));
+    if (type === 'turn') {
+      const y = this.yaw.x;
+      let tgt = this.profileYaw(r.chance(0.6) ? Math.PI : 0) + r.range(-0.35, 0.35);
+      tgt = nearAngle(tgt, y);
+      if (Math.abs(tgt - y) < 0.35) tgt = nearAngle(this.profileYaw(Math.PI), y);
+      this.planTurn(tgt - y);
+    }
     // the head's own small, slow adjustments while it stands
     this.act.lookYaw = 0; this.act.lookPitch = 0;
   }
@@ -1259,7 +1278,7 @@ export class Heron {
       case 'hunt': this.updateHunt(dt, A); ({ bodyLean, bodyLow, neckExt, headDown, headYaw, neckW, headFwd } = A.pose); break;
       case 'walk': case 'turn': {
         neckExt = 0.46; headDown = 0.28; neckW = 4; bodyLean = 0.16; bodyLow = 0.012;
-        if (this.stepsLeft <= 0 && this.feet.every(f => f.planted)) A.dur = Math.min(A.dur, A.t);
+        if (this.stepsLeft <= 0 && this.bothPlanted()) A.dur = Math.min(A.dur, A.t);
         else A.dur = A.t + 1;
         break;
       }
@@ -1267,6 +1286,16 @@ export class Heron {
     if (leaving && A.type !== 'walk' && A.type !== 'turn' && A.type !== 'hunt' && A.t > 1.2) {
       this.beginTakeoff();
       return;
+    }
+    // a minnow wanders into reach while it stands watching: it turns to hunting (now and then; not every time)
+    if ((A.type === 'still' || A.type === 'look' || A.type === 'tilt') && A.t > 1.5 && this.pond.findPrey && !leaving) {
+      A.huntCheck = (A.huntCheck || 0) - dt;
+      if (A.huntCheck <= 0) {
+        A.huntCheck = 0.8;
+        const fx = Math.sin(this.yaw.x), fz = Math.cos(this.yaw.x);
+        const prey = this.pond.findPrey(this.spot, fx, fz);
+        if (prey && r.chance(0.5)) this.pendingPrey = prey; // switched at the end of this frame
+      }
     }
     this.stepFeet(dt);
     {
@@ -1277,7 +1306,7 @@ export class Heron {
     this.roll.step(0, 3, dt);
     this.standBody(dt, 3.2, bodyLow);
     if (A.type === 'hunt') { a0 = 1.25; a3 = 1.25; }
-    this.headTarget(dt, { neckExt, headDown, headYaw, headRoll, neckW, crest, headFwd, headSide, headUp, a0, a3 });
+    this.headTarget(dt, this.ho(neckExt, headDown, headYaw, headRoll, neckW, crest, headFwd, headSide, headUp, a0, a3));
     this.flapA.step(0, 6, dt); this.fold.step(1, 5, dt); this.sweep.step(0.1, 3, dt);
     // legs standing in the water now and then send out a faint ring
     for (const f of this.feet) {
@@ -1285,7 +1314,8 @@ export class Heron {
       f.wetT -= dt;
       if (f.wetT <= 0) { f.wetT = r.range(3, 7); this.pond.addRipple(f.pos.x, f.pos.z, 0.12); }
     }
-    if (A.t >= A.dur && (A.type !== 'hunt' || !this.prey)) this.nextAct();
+    if (this.pendingPrey) { const p = this.pendingPrey; this.pendingPrey = null; this.nextAct('hunt'); this.prey = p; }
+    else if (A.t >= A.dur && (A.type !== 'hunt' || !this.prey)) this.nextAct();
   }
 
   /** The body follows the feet: over their midpoint, at standing height (lowered by `low`). */
@@ -1301,28 +1331,47 @@ export class Heron {
     this.bodyPos.step(_a, w, dt);
   }
 
+  /**
+   * The head is carried with the body's own translation (fully in flight, where a lagging spring would leave it a
+   * metre behind; partly while standing, so a wading heron's head stays steadier than its body), once per frame.
+   */
+  carryHead(k) {
+    if (this.carried) return;
+    this.carried = true;
+    this.headW.x.addScaledVector(_dl.subVectors(this.bodyPos.x, this.prevBody), k);
+  }
   /** Head targets in the body's frame, held in world space by a spring (the neck absorbs the body's motion). */
   headTarget(dt, o) {
+    this.carryHead(this.state === 'takeoff' ? 1 : 0.55);
     const ext = o.neckExt;
     // chord from the neck base to the head, in the body frame (y up, z forward)
     const up = lerp(0.17, 0.43, ext) + (o.headUp || 0), fwd = lerp(0.05, 0.1, ext) + (o.headFwd || 0);
     _a.set(o.headSide || 0, NECK_BASE.y + up, NECK_BASE.z + fwd);
-    this.obj.updateMatrixWorld();
+    this.applyRoot();
     _a.applyMatrix4(this.obj.matrixWorld);
+    this.crest.step(o.crest || 0, 3, dt);
+    this.neckA0.step(o.a0 ?? 0.95, o.neckW * 0.8, dt);
+    this.neckA3.step(o.a3 ?? 1.0, o.neckW * 0.8, dt);
+    if (this.headDriven) return; // the strike drives the head itself this frame
     this.headW.step(_a, o.neckW, dt);
     const yaw = this.yaw.x;
     this.hYaw.step(nearAngle(yaw + o.headYaw, this.hYaw.x), o.neckW * 0.9, dt);
     this.hPitch.step(o.headDown, o.neckW * 0.9, dt);
     this.hRoll.step(o.headRoll, o.neckW * 0.8, dt);
-    this.crest.step(o.crest || 0, 3, dt);
-    this.neckA0.step(o.a0 ?? 0.95, o.neckW * 0.8, dt);
-    this.neckA3.step(o.a3 ?? 1.0, o.neckW * 0.8, dt);
   }
-  standNeck(dt, ext, w) { this.headTarget(dt, { neckExt: ext, headDown: 0.2, headYaw: 0, headRoll: 0, neckW: w, crest: 0.15 }); }
+  /** the reusable head-target options (filled in place every frame: nothing allocated per frame) */
+  ho(neckExt, headDown, headYaw, headRoll, neckW, crest = 0, headFwd = 0, headSide = 0, headUp = 0, a0 = 0.95, a3 = 1.0) {
+    const o = this._ho || (this._ho = {});
+    o.neckExt = neckExt; o.headDown = headDown; o.headYaw = headYaw; o.headRoll = headRoll; o.neckW = neckW; o.crest = crest;
+    o.headFwd = headFwd; o.headSide = headSide; o.headUp = headUp; o.a0 = a0; o.a3 = a3;
+    return o;
+  }
+  bothPlanted() { return this.feet[0].planted && this.feet[1].planted; }
+  standNeck(dt, ext, w) { this.headTarget(dt, this.ho(ext, 0.2, 0, 0, w, 0.15)); }
   /** flight: the neck drawn back into an S, the head resting between the shoulders */
   flightNeck(snap, dt = 0, look = 0) {
     _a.set(0, NECK_BASE.y + lerp(0.08, 0.16, look), NECK_BASE.z + lerp(0.05, 0.12, look));
-    this.obj.updateMatrixWorld();
+    this.applyRoot();
     _a.applyMatrix4(this.obj.matrixWorld);
     if (snap) {
       this.headW.set(_a); this.hYaw.set(this.yaw.x); this.hPitch.set(this.pitch.x * 0.5); this.hRoll.set(0);
@@ -1330,6 +1379,7 @@ export class Heron {
       return;
     }
     this.neckA0.step(lerp(2.0, 1.2, look), 5, dt); this.neckA3.step(lerp(1.25, 1.0, look), 5, dt);
+    this.carryHead(1);
     this.headW.step(_a, 7, dt);
     this.hYaw.step(nearAngle(this.yaw.x, this.hYaw.x), 6, dt);
     this.hPitch.step(this.pitch.x * 0.6 + look * 0.35, 5, dt);
@@ -1340,7 +1390,10 @@ export class Heron {
   /* ---------- wading: planted feet, one deliberate step at a time ---------- */
   planWalk(n) {
     this.stepsLeft = n;
-    this.walkTurn = this.rng.range(-0.18, 0.18);
+    // wander a little, but drift back toward a profile to the camera
+    const y = this.yaw.x, prof = nearAngle(this.profileYaw(0), y), prof2 = nearAngle(this.profileYaw(Math.PI), y);
+    const tgt = Math.abs(prof - y) < Math.abs(prof2 - y) ? prof : prof2;
+    this.walkTurn = clamp((tgt - y) * 0.3 + this.rng.range(-0.08, 0.08), -0.18, 0.18);
     this.stepPause = 0.3;
   }
   planTurn(total) {
@@ -1368,7 +1421,7 @@ export class Heron {
       if (prevY > 0 && f.pos.y <= 0) this.waterTouch(f.pos, 0.55);
       if (f.t >= 1) { f.planted = true; f.pos.copy(f.to); f.yaw = f.toYaw; this.stepPauseT = this.stepPause + r.range(0, 0.6); }
     }
-    if (this.stepsLeft > 0 && this.feet.every(f => f.planted)) {
+    if (this.stepsLeft > 0 && this.bothPlanted()) {
       this.stepPauseT = (this.stepPauseT || 0) - dt;
       if (this.stepPauseT <= 0) this.takeStep();
     }
@@ -1416,6 +1469,11 @@ export class Heron {
     if (A.phase === 'watch') {
       if (!this.prey && P.findPrey) this.prey = P.findPrey(this.spot, fx, fz);
       if (this.prey) {
+        // it swam out of reach (or behind): give up on it and keep watching
+        const dx = this.prey.pos.x - this.center.x, dz = this.prey.pos.z - this.center.z, d = Math.hypot(dx, dz);
+        if (!this.prey.alive || d > 0.62 || d < 0.18 || (dx * fx + dz * fz) / Math.max(d, 1e-4) < 0.45) { this.prey = null; A.aimT = 0; }
+      }
+      if (this.prey) {
         _a.copy(this.prey.pos).sub(this.bodyPos.x);
         const ang = Math.atan2(_a.x, _a.z) - yaw;
         o.headYaw = clamp(nearAngle(ang, 0), -0.6, 0.6) * 0.7;
@@ -1462,6 +1520,8 @@ export class Heron {
   strikeHead(target, dt, w) {
     // head-bone position so that the bill tip reaches the target, bill pointing down along the strike
     const yaw = this.yaw.x;
+    this.carryHead(0.55);
+    this.headDriven = true;
     _a.subVectors(target, this.headW.x);
     const ang = Math.atan2(_a.x, _a.z);
     this.hYaw.step(nearAngle(ang, this.hYaw.x), w, dt);
@@ -1487,7 +1547,7 @@ export class Heron {
       const dir = V(Math.sin(ang), 0, Math.cos(ang));
       const away = dir.dot(P.farDir);
       this.makeOutbound(dir);
-      const c = this.pathClearance();
+      const c = this.pathClearance(0, 0.5);
       const sc = Math.min(c, 1.5) + away * 0.8 - Math.abs(da) * 0.15;
       if (!best || sc > best.sc) best = { sc, dir: dir.clone() };
     }
@@ -1511,7 +1571,7 @@ export class Heron {
       // crouch, neck drawn in, wings opened and raised: then the jump with the first deep downstroke
       this.pitch.step(STAND_PITCH + 0.5, 4, dt);
       this.standBody(dt, 5, 0.06 * smoothstep(0, 0.4, t));
-      this.headTarget(dt, { neckExt: 0.2, headDown: 0.1, headYaw: 0, headRoll: 0, neckW: 5, crest: -0.1, headFwd: 0.08 });
+      this.headTarget(dt, this.ho(0.2, 0.1, 0, 0, 5, -0.1, 0.08));
       this.fold.step(t > 0.25 ? 0 : 1, 7, dt);
       this.sweep.step(-0.1, 4, dt);
       this.flapF = 2.4;
@@ -1592,7 +1652,8 @@ export class Heron {
     this.frustum.setFromProjectionMatrix(_m);
     this.sphere.center.copy(this.bodyPos.x); this.sphere.radius = 1.3;
     const away = this.pathS > 14 && !this.frustum.intersectsSphere(this.sphere);
-    if (away || this.t > 25) this.endVisit();
+    // (the fallback: far off in the fog, ~180 m)
+    if (away || this.t > 40) this.endVisit();
   }
   endVisit() {
     this.state = 'away';

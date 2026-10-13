@@ -701,7 +701,7 @@ export class WhaleShark {
 
   /**
    * Plan a visit: candidates `from` .. `to` (of 260). Returns true as soon as one is safe; the visit is
-   * postponed when all 260 fail (update() runs them a few dozen per frame, so the search never stalls).
+   * postponed when all 260 fail (update() runs a dozen per frame, so the search never stalls a frame).
    */
   plan(staticCam = false, from = 0, to = 260) {
     const r = this.rng, cp = this.planCamera(staticCam);
@@ -716,14 +716,14 @@ export class WhaleShark {
       const u = r.next(), relax = attempt >= 160;
       // far, middle distance, close; when the haze pinnacles keep blocking, try in front of them, then far
       const kind = relax ? (u < 0.5 ? 0 : 2) : attempt >= 120 ? 0 : attempt >= 60 ? (u < 0.5 ? 1 : 2) : u < 0.4 ? 0 : u < 0.75 ? 1 : 2;
-      const D = relax ? (kind === 0 ? r.range(44, 52) : r.range(16, 20)) : kind === 0 ? r.range(36, 46) : kind === 1 ? r.range(27, 35) : r.range(19, 25);
+      const D = relax ? (kind === 0 ? r.range(44, 54) : r.range(16, 22)) : kind === 0 ? r.range(36, 46) : kind === 1 ? r.range(27, 35) : r.range(19, 25);
       const side = attempt < 24 ? this.side : (r.chance(0.5) ? 1 : -1);
-      const alpha = r.range(-0.38, 0.38) * (1 + Math.min(attempt, 80) / 80);
+      const alpha = relax ? r.range(-0.9, 0.9) : r.range(-0.38, 0.38) * (1 + Math.min(attempt, 80) / 80);
       // the ends: half a span to each side, each end receding into the blue (b > 0) or coming nearer
       // (b < 0: a diagonal pass that leaves the frame on the near side); the curve's radius at the
       // crossing is a^2 / (b1 + b2), kept above ~22 m so the giant only ever turns gently
-      const a = r.range(24, 34) + (kind === 2 ? 4 : 0);
-      let b1 = r.range(-12, 24) + (kind === 2 ? 5 : 0), b2 = r.range(-12, 24) + (kind === 2 ? 5 : 0);
+      const a = relax ? r.range(17, 36) : r.range(24, 34) + (kind === 2 ? 4 : 0);
+      let b1 = r.range(relax ? -16 : -12, 24) + (kind === 2 ? 5 : 0), b2 = r.range(relax ? -16 : -12, 24) + (kind === 2 ? 5 : 0);
       const bs = (b1 + b2) / (a * a);
       if (Math.abs(bs) > 0.045) { const k = 0.045 / Math.abs(bs); b1 *= k; b2 *= k; }
       const dy1 = r.range(-1.5, 1.5), dy2 = r.range(-1.5, 1.5);
@@ -874,8 +874,9 @@ export class WhaleShark {
       if (this.warm > 0) { this.warm--; if (this.warm === 0) this.group.visible = false; }
       this.wait -= dt;
       if (this.wait > 0) return;
-      // plan over a few frames, 40 candidates each (about a millisecond on a desktop)
-      const from = this.planAt || 0, to = Math.min(260, from + 40);
+      // plan over several frames, 12 candidates each (well under a millisecond on a desktop; a boxed-in
+      // view that fails all 260 then costs nothing anyone could see, and tries again in 25 s)
+      const from = this.planAt || 0, to = Math.min(260, from + 12);
       if (this.plan(false, from, to)) { this.planAt = 0; this.start(); }
       else { this.planAt = to >= 260 ? 0 : to; if (to >= 260) this.wait = 25; return; }
     }

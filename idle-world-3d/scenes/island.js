@@ -13,6 +13,9 @@ import { createFx } from './island/fx.js';
 import { createFauna } from './island/fauna.js';
 import { createGiant } from './island/whale.js';
 import { createWhaleFx } from './island/whalefx.js';
+import { createAtmos } from './island/atmos.js';
+import { createSeabirds } from './island/seabirds.js';
+import { createFlyingFish } from './island/flyingfish.js';
 
 export default {
   id: 'island',
@@ -92,9 +95,20 @@ export default {
 
     /* ---------------- the gentle giant (a humpback passing far out every few minutes) ---------------- */
     const whaleFx = createWhaleFx(env, { wind });
-    const giant = createGiant(env, { camera, view, fx: whaleFx, wind });
+    // what hides the sea behind the island (palm crowns, the hill, the hut): passes keep clear of it
+    const occluders = flora.palmTops.map(p => ({ x: p.x, y: p.y, z: p.z, r: 3.4 }));
+    occluders.push({ x: terrain.hill.x, y: terrain.hill.h, z: terrain.hill.z, r: terrain.hill.r * 0.8 });
+    occluders.push({ x: plan.hut.x, y: plan.hut.y + 3.5, z: plan.hut.z, r: 2.4 });
+    const giant = createGiant(env, { camera, view, fx: whaleFx, wind, occluders });
     scene.add(giant.group, whaleFx.group);
     const GL = { rim: new THREE.Color(), haze: new THREE.Color() };
+    // layered light (rays through the cloud bank, dawn mist) and the life around the giant: a flock of boobies,
+    // flying fish
+    const atmos = createAtmos(env);
+    const boobies = createSeabirds(env, { fx: whaleFx });
+    const flyfish = createFlyingFish(env, { fx: whaleFx });
+    scene.add(atmos.group, boobies.mesh, flyfish.mesh);
+    const AL = { sunDir: new THREE.Vector3(), sunCol: new THREE.Color(), elev: 0, golden: 0, hours: 12, horizon: new THREE.Color(), zenith: new THREE.Color() };
     const FXL = { keyDir: new THREE.Vector3(0, 1, 0), key: new THREE.Color(), amb: new THREE.Color(), backK: 0.4, glow: new THREE.Color(), haze: new THREE.Color() };
 
     /* ---------------- time of day ---------------- */
@@ -235,6 +249,9 @@ export default {
       FXL.glow.copy(wu.uGlow.value);
       FXL.haze.copy(C.horizon);
       whaleFx.setLight(FXL);
+      AL.sunDir.copy(sunDir); AL.sunCol.copy(C.sunCol).multiplyScalar(s.sunIntensity); AL.elev = s.elevationDeg; AL.golden = golden;
+      AL.hours = h; AL.horizon.copy(C.horizon); AL.zenith.copy(su.uArtZen.value);
+      atmos.setLight(AL);
 
       // lights on the dock come on at dusk
       tod.lantern = smoothstep(3, -3, s.elevationDeg);
@@ -312,6 +329,8 @@ export default {
     /* ---------------- per-frame ---------------- */
     let todTimer = 0, hEased = env.hours();
     const faunaInfo = { dusk: 0, night: 0, timeJump: false }, fxInfo = { night: 0 }, giantInfo = { glow: 0 }; // reused every frame
+    const whaleNow = { on: false, x: 0, z: 0 };
+    const birdInfo = { day: 1, focus: giant.focus, time: 0 }, fishInfo = { day: 1, dolphins: fauna.dolphins.list, whale: whaleNow, time: 0 };
     const _buf = new THREE.Vector2();
     function update(dt, t) {
       // shader clocks wrapped seamlessly (every rate reading them completes whole cycles: island/shared.js), so
@@ -348,7 +367,16 @@ export default {
       fx.update(dt, t, fxInfo);
       giantInfo.glow = fxInfo.night;
       giant.update(dt, t, giantInfo);
-      whaleFx.setView(env.renderer.getDrawingBufferSize(_buf).y, camera.projectionMatrix);
+      const mom = giant.whales[0];
+      whaleNow.on = mom.mesh.visible; whaleNow.x = mom.pose.root.x; whaleNow.z = mom.pose.root.z;
+      const bufH = env.renderer.getDrawingBufferSize(_buf).y;
+      birdInfo.day = tod.day; birdInfo.time = t;
+      boobies.setView(bufH, camera.projectionMatrix);
+      boobies.update(dt, t, birdInfo);
+      fishInfo.day = tod.day; fishInfo.time = t;
+      flyfish.update(dt, t, fishInfo);
+      atmos.update(dt, t);
+      whaleFx.setView(bufH, camera.projectionMatrix);
       whaleFx.update(dt);
     }
 
@@ -363,10 +391,10 @@ export default {
       /** Test hook: start a whale pass now (if none is on) and play it to pass time t (s); returns its timeline. */
       debugGiant: (t = 0, opts = {}) => giant.debug(t, opts),
       giantTimeline: () => giant.timeline(),
-      _debug: { terrain, props, fx, fauna, water, sky, flora, giant, whaleFx },
+      _debug: { terrain, props, fx, fauna, water, sky, flora, giant, whaleFx, atmos, boobies, flyfish },
       dispose() {
         water.dispose(); sky.dispose(); terrain.dispose(); flora.dispose(); props.dispose(); fx.dispose(); fauna.dispose();
-        giant.dispose(); whaleFx.dispose();
+        giant.dispose(); whaleFx.dispose(); atmos.dispose(); boobies.dispose(); flyfish.dispose();
         normalTex.dispose();
         if (scene.environment) scene.environment = null;
       },

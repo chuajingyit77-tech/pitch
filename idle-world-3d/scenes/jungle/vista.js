@@ -217,9 +217,9 @@ function buildAncientTree(seed, base, land) {
   const barkShade = (gap, p, nrm, glowK) => {
     const lich = smoothstep(0.35, 0.6, n.noise2(p.x * 0.09, p.y * 0.05) * 0.5 + 0.5);
     const moss = clamp(smoothstep(0.1, 0.8, nrm.y) * 0.8 + smoothstep(0.2, -0.6, nrm.dot(sunSide)) * 0.45 + (n.noise2(p.x * 0.05 + 7, p.y * 0.03) * 0.5) * 0.4, 0, 1);
-    let r = 0.32, g = 0.29, b = 0.24;
-    r = lerp(r, 0.4, lich * 0.4); g = lerp(g, 0.41, lich * 0.4); b = lerp(b, 0.36, lich * 0.4);
-    r = lerp(r, 0.17, moss * 0.75); g = lerp(g, 0.27, moss * 0.75); b = lerp(b, 0.09, moss * 0.75);
+    let r = 0.2, g = 0.18, b = 0.15;
+    r = lerp(r, 0.27, lich * 0.4); g = lerp(g, 0.28, lich * 0.4); b = lerp(b, 0.24, lich * 0.4);
+    r = lerp(r, 0.1, moss * 0.75); g = lerp(g, 0.17, moss * 0.75); b = lerp(b, 0.05, moss * 0.75);
     const ao = clamp(1 - gap, 0.15, 1);
     // faint glowing moss in the deep folds of the lower roots (patches, not everywhere)
     const glowSpot = smoothstep(0.55, 0.8, n.noise2(p.x * 0.11 + 31, p.y * 0.07 + 5) * 0.5 + 0.5) * moss * glowK;
@@ -236,20 +236,22 @@ function buildAncientTree(seed, base, land) {
     const ang = y => a0 + tw * y + 0.14 * Math.sin(y * 0.035 + ph);
     const rad = y => girth(y) * rr * (0.82 + 0.3 * (n.noise2(i * 3.1, y * 0.03) * 0.5 + 0.5));
     const dist = y => girth(y) * 0.78 + 5 * Math.pow(Math.max(0, 1 - y / 18), 2);
+    // ring spacing ~2 m where the trunk is seen (20..75 m), coarse below and above
+    const yOf = t => t < 0.2 ? lerp(-6, 20, t / 0.2) : t < 0.8 ? lerp(20, 75, (t - 0.2) / 0.6) : lerp(75, TOP, (t - 0.8) / 0.2);
     const c = (t, out = new THREE.Vector3()) => {
-      const y = -6 + t * (TOP + 6);
+      const y = yOf(t);
       axis(y, out);
       const A = ang(y), D = dist(y);
       return out.set(out.x + Math.cos(A) * D, y < 0 ? base.y + y : out.y, out.z + Math.sin(A) * D);
     };
-    parts.push(tube(t => c(t), (t, a) => { const y = -6 + t * (TOP + 6); return rad(y) * (1 + 0.07 * Math.sin(a * 3 + y * 0.2)); },
+    parts.push(tube(t => c(t), (t, a) => { const y = yOf(t); return rad(y) * (1 + 0.07 * Math.sin(a * 3 + y * 0.2)); },
       (t, a, p, nrm) => {
         // the side facing the core sits in the gap between roots: darker
-        const y = -6 + t * (TOP + 6);
+        const y = yOf(t);
         const ax = axis(y);
         const out = Math.max(0, (p.x - ax.x) * nrm.x + (p.z - ax.z) * nrm.z) / Math.max(1, Math.hypot(p.x - ax.x, p.z - ax.z));
         return barkShade((1 - out) * 0.75, p, nrm, 1 - smoothstep(32, 62, y));
-      }, { rings: 46, sides: 9, uvScale: [3, 1 / 8] }));
+      }, { rings: 36, sides: 9, uvScale: [3, 1 / 8] }));
   }
   // thinner roots winding the other way over the columns: the lattice of a strangler fig
   for (let i = 0; i < 7; i++) {
@@ -257,7 +259,7 @@ function buildAncientTree(seed, base, land) {
     const r0 = rng.range(0.7, 1.1);
     parts.push(tube(t => { const y = lerp(y0, y1, t); const p = axis(y); const A = a0 + tw * (y - y0); const D = girth(y) * 0.98; return p.set(p.x + Math.cos(A) * D, p.y, p.z + Math.sin(A) * D); },
       (t) => r0 * (0.75 + 0.25 * Math.sin(Math.PI * t)) * (t < 0.06 ? 0.4 + 10 * t : 1),
-      (t, a, p, nrm) => barkShade(0.12, p, nrm, 0.6), { rings: 26, sides: 6, uvScale: [1, 1 / 6] }));
+      (t, a, p, nrm) => barkShade(0.12, p, nrm, 0.6), { rings: 18, sides: 6, uvScale: [1, 1 / 6] }));
   }
   // great limbs leaving the trunk high up and climbing out of view, with aerial roots hanging from them
   const limbs = [];
@@ -348,8 +350,8 @@ function buildLand(seed, land) {
         // forest canopy on the slopes (darker, mottled), open meadow along the crest (lighter, warmer)
         const crest = Math.exp(-Math.pow(rowsU[j] / 5.5, 2));
         const f = n.noise2(th * 9, r * 0.04) * 0.5 + 0.5;
-        const k = (0.75 + 0.5 * f) * (1 - 0.25 * (1 - crest));
-        col.push(tint[0] * k * (1 + 0.9 * crest), tint[1] * k * (1 + 0.55 * crest), tint[2] * k * (1 + 0.3 * crest));
+        const k = (0.75 + 0.5 * f) * (1 - 0.2 * (1 - crest));
+        col.push(tint[0] * k * (1 + 0.45 * crest), tint[1] * k * (1 + 0.3 * crest), tint[2] * k * (1 + 0.15 * crest));
         aux.push(1, 0, 0, 1);
       }
     }
@@ -363,18 +365,19 @@ function buildLand(seed, land) {
     return g;
   };
   // the near ridge: from below the plateau line up over the rounded crest and down into the valley
-  parts.push(strip(land.nearR, land.nearH, [34, 24, 16, 10, 6, 3, 1, -1, -3, -6, -10, -16, -24, -34, -46], 96, [0.075, 0.1, 0.045]));
-  parts.push(strip(land.farR, land.farH, [40, 26, 16, 9, 4, 1, -2, -6, -12, -22, -36], 80, [0.065, 0.085, 0.05]));
+  parts.push(strip(land.nearR, land.nearH, [34, 24, 16, 10, 6, 3, 1, -1, -3, -6, -10, -16, -24, -34, -46], 96, [0.055, 0.075, 0.032]));
+  parts.push(strip(land.farR, land.farH, [40, 26, 16, 9, 4, 1, -2, -6, -12, -22, -36], 80, [0.05, 0.068, 0.04]));
   // far mountain ranges: tall, steep, deep in the haze
+  // far hills and mountains: broad rounded shoulders deep in the haze
   const mnt = (R0, H0, amp, kx, tint, seedK) => strip(
     th => R0 + 30 * n.noise2(th * 1.1, seedK),
     (th, r) => {
       const u = R0 + 30 * n.noise2(th * 1.1, seedK) - r;
-      const peak = H0 + amp * (n.ridged2(th * kx + seedK, seedK * 0.7, 4) - 0.5) + amp * 0.6 * n.noise2(th * kx * 2.3, seedK + 3);
-      return peak - Math.abs(u) * 0.55;
+      const peak = H0 + amp * n.fbm2(th * kx + seedK, seedK * 0.7, 3) + amp * 0.35 * n.noise2(th * kx * 2.7, seedK + 3);
+      return peak - (Math.sqrt(u * u + 400) - 20) * 0.4;
     }, [90, 50, 20, 0, -20, -50], 120, tint);
-  parts.push(mnt(275, 82, 64, 3.1, [0.06, 0.08, 0.07], 17.3));
-  parts.push(mnt(430, 140, 90, 2.2, [0.06, 0.075, 0.08], 41.9));
+  parts.push(mnt(285, 58, 30, 2.6, [0.045, 0.06, 0.055], 17.3));
+  parts.push(mnt(450, 100, 48, 1.9, [0.045, 0.055, 0.06], 41.9));
   // trees and shrubs on both ridges: clusters of smooth, lumpy crowns (opaque: no cut-out edges to shimmer at this
   // distance). The walkway along each crest stays open meadow; trees stand a little below it on both slopes, so the
   // giants tower over them.
@@ -415,30 +418,52 @@ function buildLand(seed, land) {
     parts.push(g);
   };
   const greens = [[0.05, 0.09, 0.03], [0.065, 0.1, 0.035], [0.045, 0.08, 0.035], [0.08, 0.1, 0.035], [0.055, 0.085, 0.045]];
-  const tree = (Rf, H, th, u, h, s, near) => {
-    const r = Rf(th) - u;
-    const p = polar(th, r);
-    p.y = H(th, r) - 0.3;
-    const colr = greens[rng.int(0, greens.length - 1)];
-    trunk(p, h, s * 0.13);
-    const nb = rng.int(2, 3);
+  const pick = () => greens[rng.int(0, greens.length - 1)];
+  /** A canopy cluster standing at polar (th, u from the crest): two or three overlapping crowns, no trunk showing. */
+  const cluster = (Rf, H, th, u, s, hi) => {
+    const r = Rf(th) - u, p = polar(th, r);
+    p.y = H(th, r) - 0.4;
+    const colr = pick();
+    const nb = hi ? rng.int(2, 3) : 1;
     for (let b = 0; b < nb; b++) {
-      const q = p.clone().add(new THREE.Vector3(rng.range(-0.6, 0.6) * s, 0, rng.range(-0.6, 0.6) * s));
-      crown(q, s * (b ? rng.range(0.6, 0.8) : 1), rng.range(0.7, 0.9), colr, h - s * 0.35 + (b ? rng.range(-0.4, 0.5) * s : 0), near);
+      const q = b ? p.clone().add(new THREE.Vector3(rng.range(-0.7, 0.7) * s, 0, rng.range(-0.7, 0.7) * s)) : p;
+      crown(q, s * (b ? rng.range(0.55, 0.8) : 1), rng.range(0.75, 0.95), colr, s * (b ? rng.range(0.45, 0.85) : 0.42), hi && !b);
     }
-    perches.push({ pos: new THREE.Vector3(p.x, p.y + h + s * 0.6, p.z), near, th });
   };
-  // near ridge: a line of trees just behind the crest, a few lower ones on its face, shrubs along the flanks
-  for (let k = 0; k < 34; k++) tree(land.nearR, land.nearH, rng.range(-span * 0.9, span * 0.9), -rng.range(6, 17), rng.range(5, 8.5), rng.range(1.7, 2.9), true);
-  for (let k = 0; k < 9; k++) tree(land.nearR, land.nearH, rng.range(-0.8, 0.8), rng.range(7, 12), rng.range(4.5, 7), rng.range(1.5, 2.4), true);
-  for (let k = 0; k < 70; k++) {
-    const th = rng.range(-span * 0.9, span * 0.9), u = rng.chance(0.5) ? rng.range(4, 9) : -rng.range(4, 12);
+  /** A taller tree with its trunk showing: rises above the canopy line. */
+  const tall = (Rf, H, th, u, h, s, hi, near) => {
+    const r = Rf(th) - u, p = polar(th, r);
+    p.y = H(th, r) - 0.3;
+    const colr = pick();
+    trunk(p, h, s * 0.12);
+    for (let b = 0; b < 3; b++) {
+      const q = p.clone().add(new THREE.Vector3(rng.range(-0.55, 0.55) * s, 0, rng.range(-0.55, 0.55) * s));
+      crown(q, s * (b ? rng.range(0.55, 0.75) : 1), rng.range(0.7, 0.85), colr, h - s * 0.3 + (b ? rng.range(-0.5, 0.2) * s : 0), hi && !b);
+    }
+    perches.push({ pos: new THREE.Vector3(p.x, p.y + h + s * 0.5, p.z), near, th });
+  };
+  // near ridge: a continuous band of canopy just behind the crest (dense where the clearing looks through), so the
+  // giants walk along the crest in front of it and stand head and shoulders above it
+  for (let th = -span * 0.92; th < span * 0.92; ) {
+    const dense = Math.abs(th) < 0.95;
+    cluster(land.nearR, land.nearH, th, -rng.range(5.5, 13), rng.range(2.4, 3.9), dense);
+    th += dense ? rng.range(0.022, 0.036) : rng.range(0.06, 0.1);
+  }
+  for (let k = 0; k < 12; k++) tall(land.nearR, land.nearH, rng.range(-1.0, 1.0), -rng.range(13, 22), rng.range(9, 13), rng.range(2.2, 3.2), true, true);
+  // shrubs at the edges of the open walkway
+  for (let k = 0; k < 44; k++) {
+    const th = rng.range(-span * 0.9, span * 0.9), u = rng.chance(0.5) ? rng.range(3.5, 7) : -rng.range(3.5, 6);
     const r = land.nearR(th) - u, p = polar(th, r);
     p.y = land.nearH(th, r) - 0.25;
-    crown(p, rng.range(0.8, 1.6), rng.range(0.55, 0.75), greens[rng.int(0, greens.length - 1)], 0.1, false);
+    crown(p, rng.range(0.7, 1.3), rng.range(0.55, 0.75), pick(), 0.15, false);
   }
-  // far ridge: trees behind its crest
-  for (let k = 0; k < 30; k++) tree(land.farR, land.farH, rng.range(-span * 0.8, span * 0.8), -rng.range(5, 16), rng.range(6, 10), rng.range(2.2, 3.4), false);
+  // far ridge: its own canopy band and a few tall trees
+  for (let th = -span * 0.85; th < span * 0.85; ) {
+    const dense = Math.abs(th) < 0.85;
+    cluster(land.farR, land.farH, th, -rng.range(5, 13), rng.range(3, 4.6), false);
+    th += dense ? rng.range(0.022, 0.034) : rng.range(0.05, 0.08);
+  }
+  for (let k = 0; k < 10; k++) tall(land.farR, land.farH, rng.range(-0.9, 0.9), -rng.range(10, 20), rng.range(11, 16), rng.range(3, 4.2), false, false);
   blobHi.dispose(); blobLo.dispose();
   return { parts, perches };
 }
@@ -493,7 +518,7 @@ function vistaMaterial(shared, vistaU, barkTex) {
         // glowing moss in the folds of the roots: breathes slowly, each patch in its own time
         col += uFarGlow * vAux.y * uNight * (0.5 + 0.5 * sin(uGlowPh + vWorldP.y * 0.31 + vWorldP.x * 0.17)) * (1.0 - 0.6 * bark * (1.0 - bt.a)) * 0.9;
         // the crown is lost in luminous haze far above
-        float hi = smoothstep(55.0, 125.0, vWorldP.y) * bark;
+        float hi = smoothstep(60.0, 130.0, vWorldP.y) * bark;
         col = mix(col, mix(uHazeCol, uMistCol, 0.5), hi * 0.92);
         gl_FragColor = vec4(vistaAtmos(col, vWorldP, tSurf, rd), 1.0);
       }`,

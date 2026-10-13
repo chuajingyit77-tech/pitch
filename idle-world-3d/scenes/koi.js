@@ -11,6 +11,8 @@ import {
 } from '../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, createSwimDepthMaterial, Swimmer, addFinPass } from '../lib/fish.js';
 import { Heron } from './koi/heron.js';
+import { Medaka, Dragonflies, Frogs } from './koi/life.js';
+import { Mist, Shafts, GlowPools, FireflyReflections } from './koi/atmos.js';
 
 const KINDS = {
   kohaku: { zh: '红白' }, tancho: { zh: '丹顶' }, sanke: { zh: '大正三色' }, showa: { zh: '昭和三色' },
@@ -40,7 +42,7 @@ export default {
   starter: ['kohaku', 'kohaku', 'tancho', 'sanke', 'showa', 'ogon', 'asagi', 'chagoi', 'platinum', 'hirenaga'],
   addable: ['kohaku', 'tancho', 'sanke', 'showa', 'ogon', 'platinum', 'asagi', 'chagoi', 'kigoi', 'benigoi', 'hirenaga'],
   maxMembers: 18,
-  ambience: h => (h > 19.5 || h < 5) ? ['stream', 'insects', 'shishi'] : ['stream', 'birds', 'shishi'],
+  ambience: h => (h > 19.5 || h < 5) ? ['stream', 'insects', 'frogs', 'shishi'] : ['stream', 'birds', 'shishi'],
   eatSound: 'eat',
   async create(env) { return new KoiPond(env).build(); },
 };
@@ -681,6 +683,19 @@ class KoiPond {
     // the gentle giant: a grey heron that visits now and then (built here, hidden until its first visit)
     this.heron = new Heron(this, this.rng.fork('heron'));
     addUnderwater(this.heron.mat, this.U, { caustic: 0.8, tint: 1, key: 'heron' });
+    // small pond life: a school of medaka (the heron's prey), dragonflies by day, frogs on the lily pads
+    this.medaka = new Medaka(this, this.rng.fork('medaka'));
+    addUnderwater(this.medaka.mat, this.U, { caustic: 0.6, tint: 0.95, key: 'medaka' });
+    this.dragonflies = new Dragonflies(this, this.rng.fork('dragonflies'));
+    this.frogs = new Frogs(this, this.rng.fork('frogs'));
+    addUnderwater(this.frogs.mat, this.U, { caustic: 0.6, tint: 1, key: 'frog' });
+    // layered light: mist banks at dawn and dusk, sun shafts at golden hour, lantern light and firefly reflections
+    // on the water at night
+    this.mist = new Mist(this);
+    this.applyMist();
+    this.shafts = new Shafts(this);
+    this.pools = new GlowPools(this);
+    this.flyRefl = new FireflyReflections(this);
     this.updateTimeOfDay(true);
 
     return {
@@ -978,6 +993,42 @@ class KoiPond {
     this.stones = placed;
   }
 
+  /** Top of the stone under (x, z), or null (raycast once; used when building perches). */
+  rockTop(x, z) {
+    const ray = this._rtRay || (this._rtRay = new THREE.Raycaster());
+    ray.set(_v.set(x, 3, z), _v2.set(0, -1, 0)); ray.far = 4;
+    const hit = ray.intersectObjects(this.rockMeshes || [], false)[0];
+    return hit ? hit.point.clone() : null;
+  }
+  /* ---------- the heron's dealings with the rest of the pond ---------- */
+  get preyNear() { return !!(this.medaka && this.heron && this.medaka.near(this.heron)); }
+  findPrey(spot, fx, fz) { return this.medaka ? this.medaka.findPrey(spot, fx, fz) : null; }
+  catchPrey(f) { return this.medaka.catchPrey(f); }
+  swallowPrey(f) { this.medaka.swallow(f); }
+  preyScatter(p) { this.medaka?.scatter(p); this.frogs?.scare(p, 1.6); }
+  onHeronLanded(H) { this.medaka?.scatter(H.center); this.frogs?.scare(H.center, 4.5); }
+  onHeronLeft(H) { this.medaka?.scatter(H.center); }
+  /**
+   * Mist lies in a thin layer over the pond: every surface that can be inside it gets the mist term (koi are under
+   * the water, whose surface carries the mist for them; things standing above the layer are skipped).
+   */
+  applyMist() {
+    const done = new Set([this.skyMat, this.medaka.mat]);
+    for (const k of this.koi) done.add(k.mat);
+    const box = new THREE.Box3();
+    this.scene.updateMatrixWorld(true);
+    this.scene.traverse(o => {
+      if (!o.isMesh || !o.material || Array.isArray(o.material) || done.has(o.material) || o.material.isShaderMaterial) return;
+      if (o === this.water || /bamboo/.test(o.material.customProgramCacheKey())) return;
+      if (!(o.isInstancedMesh && o.count === 0) && !o.isSkinnedMesh) {
+        if (o.isInstancedMesh) { o.computeBoundingBox(); box.copy(o.boundingBox).applyMatrix4(o.matrixWorld); } else box.setFromObject(o);
+        if (box.isEmpty() || box.min.y > 0.75 || box.min.x > 14 || box.max.x < -14 || box.min.z > 14 || box.max.z < -14) return;
+      }
+      done.add(o.material);
+      this.mist.apply(o.material);
+    });
+    this.mist.apply(this.water.material, { premul: !(this.water.material.transmission > 0), key: 'water' });
+  }
   nearBridge(x, z, pad = 0) {
     if (!this.bridgeLine) return false;
     const B = this.bridgeLine;
@@ -1054,6 +1105,7 @@ class KoiPond {
         post.castShadow = true;
         group.add(post);
         top.push(p.clone().add(new THREE.Vector3(0, 0.78, 0)));
+        if (i > 0 && i < posts && i % 2 === 0) (this.railTops || (this.railTops = [])).push(p.clone().add(new THREE.Vector3(0, 0.78 + 0.045 + 0.0035, 0)));
         mid.push(p.clone().add(new THREE.Vector3(0, 0.42, 0)));
         if (i === 0 || i === posts || i === Math.round(posts / 2)) {
           const cap = new THREE.Mesh(new THREE.LatheGeometry([new THREE.Vector2(0.001, 0.3), new THREE.Vector2(0.03, 0.27), new THREE.Vector2(0.075, 0.17), new THREE.Vector2(0.07, 0.08), new THREE.Vector2(0.05, 0.03), new THREE.Vector2(0.06, 0.0)], 12), bronze);
@@ -1978,6 +2030,16 @@ class KoiPond {
     this.updateFlies(time);
     this.updateFloatLanterns(dt, time);
     this.heron.update(dt, time);
+    this.medaka.update(dt, time, sclock); this.medaka.render(dt, sclock);
+    this.dragonflies.update(dt, time); this.dragonflies.render();
+    this.frogs.update(dt, time); this.frogs.render();
+    const S = this.sunState, glow = S ? smoothstep(0.15, 0.7, S.night) : 0;
+    if (S) {
+      this.mist.update(dt, S, this.env.hours(), this.scene.fog.color);
+      this.shafts.update(dt, time, S);
+    }
+    this.pools.update(dt, time, glow);
+    this.flyRefl.update(glow);
 
     // spout keeps the water alive
     this.spoutT = (this.spoutT || 0) - dt;
@@ -2457,6 +2519,7 @@ class KoiPond {
     for (const k of this.koi) { k.painted.map.dispose(); k.mesh.customDepthMaterial?.dispose(); }
     this.koiGeo.dispose(); this.butterflyGeo.dispose();
     this.heron?.dispose();
+    for (const o of [this.medaka, this.dragonflies, this.frogs, this.mist, this.shafts, this.pools, this.flyRefl]) o?.dispose();
   }
   creatures() {
     const out = this.koi.map(k => ({ member: k.member, pos: k.sw.pos, radius: 0.32 * k.scale + 0.1 }));

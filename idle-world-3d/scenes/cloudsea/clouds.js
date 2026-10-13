@@ -56,6 +56,36 @@ vec3 cloudShade(vec3 N, vec3 V, vec3 L, float hn, float sh, float exposure, floa
 /* ------------------------------------------------------------------ */
 /* Cloud sea                                                           */
 /* ------------------------------------------------------------------ */
+// Height of the cloud sea's surface at xz, exactly as the sea's vertex shader puts it (texture LOD from its mesh
+// spacing), for other vertex shaders that meet the cloud tops softly (the Kun, mist bands). Needs SHARED_GLSL;
+// the uniforms come from seaHeightUniforms(sea).
+export const SEA_HEIGHT_GLSL = /* glsl */`
+#if __VERSION__ < 300
+#define textureLod texture2DLod
+#endif
+uniform sampler2D tBillow;
+uniform vec4 uL1, uL2, uL0;
+uniform vec2 uRot2;
+uniform float uTexSize, uCurve, uSeaA, uSeaB, uSeaSegs;
+float seaHeightAt(vec2 xz){
+  float r = length(xz);
+  float sp = max(uSeaB * (r + uSeaA), 6.2831853 * r / uSeaSegs);
+  float lod1 = clamp(log2(max(sp * uL1.x * uTexSize, 1.0)), 0.0, 9.0);
+  float lod2 = clamp(log2(max(sp * uL2.x * uTexSize, 1.0)), 0.0, 9.0);
+  vec2 xr = vec2(xz.x * uRot2.x - xz.y * uRot2.y, xz.x * uRot2.y + xz.y * uRot2.x);
+  float h1 = textureLod(tBillow, xz * uL1.x + uL1.yz, lod1).r;
+  float h2 = textureLod(tBillow, xr * uL2.x + uL2.yz, lod2).r;
+  float sw = textureLod(tBillow, xz * uL0.x + uL0.yz, 5.0).a;
+  return uCloudTop + (h1 - 0.45) * uL1.w * (0.55 + 0.9 * sw) + (h2 - 0.5) * uL2.w + (sw - 0.5) * uL0.w - dot(xz, xz) * uCurve;
+}
+`;
+export function seaHeightUniforms(sea) {
+  const U = sea.uniforms, G = sea.grid;
+  return {
+    tBillow: U.tBillow, uL1: U.uL1, uL2: U.uL2, uL0: U.uL0, uRot2: U.uRot2, uTexSize: U.uTexSize, uCurve: U.uCurve,
+    uSeaA: { value: G.A }, uSeaB: { value: G.b }, uSeaSegs: { value: G.segs },
+  };
+}
 const SEA_VERT = /* glsl */`
 // textureLod is GLSL ES 3.0; WebGL 1 vertex shaders have texture2DLod (Safari 14)
 #if __VERSION__ < 300

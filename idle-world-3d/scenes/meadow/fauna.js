@@ -98,8 +98,8 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
   scene.add(mesh);
   const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), sc = new THREE.Vector3(), m = new THREE.Matrix4();
   const groundSpot = (r, out) => {
-    pathPoint(r.range(0.06, 0.3), out);
-    out.x += r.range(-0.9, 0.9); out.z += r.range(-0.6, 0.6);
+    pathPoint(r.range(0.08, 0.26), out);
+    out.x += r.range(-1.0, 1.0); out.z += r.range(-0.6, 0.6);
     out.y = heightAt(out.x, out.z);
     return out;
   };
@@ -114,16 +114,18 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
   }
   let clock = 0;
   const crumbs = { pos: new THREE.Vector3(), t: -1 };
+  // a flight lasts long enough that it never tops ~7 m/s (eased in and out); the bird faces its way first
   const startFlight = (b, to, T, arc) => {
-    b.mode = 'fly'; b.t = 0; b.T = T;
+    b.mode = 'fly'; b.t = 0; b.hop = null; b.nextHop = null;
+    b.T = Math.max(T, b.pos.distanceTo(to) / 4.5);
     b.from.copy(b.pos); b.to.copy(to);
     b.ctrl.lerpVectors(b.from, b.to, 0.5); b.ctrl.y = Math.max(b.from.y, b.to.y) + arc;
   };
   const flee = (b, delay) => { if (b.mode === 'ground' && b.react < 0) b.react = delay; };
   const api = {
-    mesh,
+    mesh, birds,
     /** an offering dropped at p: birds close by flush */
-    onDrop(p) { for (const b of birds) if (b.mode === 'ground' && Math.hypot(b.pos.x - p.x, b.pos.z - p.z) < 2.6) flee(b, b.r.range(0, 0.12)); },
+    onDrop(p) { for (const b of birds) if (b.mode === 'ground' && b.react < 0 && Math.hypot(b.pos.x - p.x, b.pos.z - p.z) < 2.6) flee(b, b.r.range(0, 0.12)); },
     /** a fox has eaten at p: crumbs to peck at, a little later */
     onCrumbs(p) { crumbs.pos.copy(p); crumbs.t = 0; },
     /** threats: [{x, z, r}] bodies the birds keep away from (foxes, the spirit fox, deer) */
@@ -137,19 +139,24 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
         const r = b.r;
         // ---- decisions ----
         if (b.mode === 'ground') {
-          for (const th of threats) if (Math.hypot(b.pos.x - th.x, b.pos.z - th.z) < th.r) flee(b, r.range(0.0, 0.1));
-          if (roost) flee(b, r.range(0, 3));
+          // (random draws only on events, never per frame: the same choices at any frame rate)
+          if (b.react < 0) for (const th of threats) if (b.react < 0 && Math.hypot(b.pos.x - th.x, b.pos.z - th.z) < th.r) flee(b, r.range(0.0, 0.1));
+          if (roost && b.react < 0) flee(b, r.range(0, 3));
           if (b.react >= 0) {
-            b.react -= dt;
-            if (b.react < 0) {
-              // up into a maple
+            // startled: pick a perch in a maple, turn toward it (a quick hop-turn), then fly
+            if (!b.dest) {
               const p = perches[r.int(0, perches.length - 1)];
-              tmp.set(p.x + r.range(-0.8, 0.8), p.y + r.range(-0.4, 0.3), p.z + r.range(-0.8, 0.8));
-              startFlight(b, tmp, r.range(1.3, 2.0), r.range(0.6, 1.4));
+              b.dest = (b.destV || (b.destV = new THREE.Vector3())).set(p.x + r.range(-0.8, 0.8), p.y + r.range(-0.4, 0.3), p.z + r.range(-0.8, 0.8));
+              b.wantH = Math.atan2(b.dest.x - b.pos.x, b.dest.z - b.pos.z);
+              b.hop = null; b.nextHop = null;
+            }
+            b.react -= dt;
+            if (b.react < 0 && Math.abs(angleDelta(b.heading, b.wantH)) < 0.45) {
+              startFlight(b, b.dest, r.range(1.3, 2.0), r.range(0.6, 1.4));
               b.perch = 'tree';
-              b.react = -1;
+              b.react = -1; b.dest = null;
               // the rest of the flock goes with it
-              for (const o of birds) if (o !== b && o.mode === 'ground' && o.pos.distanceTo(b.pos) < 2.2) flee(o, r.range(0.05, 0.3));
+              for (const o of birds) if (o !== b && o.mode === 'ground' && o.react < 0 && o.pos.distanceTo(b.pos) < 2.2) flee(o, r.range(0.05, 0.3));
             }
           }
         } else if (b.mode === 'perch') {
@@ -159,9 +166,9 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
             let safe = true;
             if (crumbs.t > 3 && crumbs.t < 35) tmp.copy(crumbs.pos).add(tmp2.set(r.range(-0.5, 0.5), 0, r.range(-0.5, 0.5)));
             else groundSpot(r, tmp);
-            for (const th of threats) if (Math.hypot(tmp.x - th.x, tmp.z - th.z) < th.r + 1.2) safe = false;
+            for (const th of threats) if (Math.hypot(tmp.x - th.x, tmp.z - th.z) < th.r + 0.7) safe = false;
             if (safe) { tmp.y = heightAt(tmp.x, tmp.z); startFlight(b, tmp, r.range(1.5, 2.3), r.range(0.3, 0.8)); b.perch = 'ground'; }
-            else b.wait = r.range(2, 5);
+            else b.wait = r.range(1, 3);
           }
         }
         // ---- motion ----
@@ -176,13 +183,13 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
           b.pos.copy(tmp);
           b.flap = damp(b.flap, u > 0.85 && b.perch === 'tree' ? 0.4 : 1, 10, dt);
           if (u >= 1) {
-            if (b.perch === 'tree') { b.mode = 'perch'; b.wait = roost ? 1e9 : r.range(8, 20); }
+            if (b.perch === 'tree') { b.mode = 'perch'; b.wait = roost ? 1e9 : r.range(5, 12); }
             else { b.mode = 'ground'; b.wait = r.range(0.3, 1.2); }
           }
         } else {
           b.flap = damp(b.flap, 0, 10, dt);
           b.pitch = damp(b.pitch, b.peck > 0 ? 0.55 : 0, 18, dt);
-          if (b.mode === 'ground') {
+          if (b.mode === 'ground' && b.react < 0) {
             if (b.hop) {
               // a hop: a short exact arc (the same at any frame rate)
               b.hop.t += dt / b.hop.T;
@@ -190,17 +197,21 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
               b.pos.lerpVectors(b.hop.a, b.hop.b, u);
               b.pos.y += 4 * b.hop.h * u * (1 - u);
               if (u >= 1) { b.hop = null; b.wait = r.chance(0.3) ? r.range(0.05, 0.15) : r.range(0.3, 1.6); }
+            } else if (b.nextHop) {
+              // facing the way it will hop: off it goes
+              if (Math.abs(angleDelta(b.heading, b.wantH)) < 0.3) { b.hop = b.nextHop; b.nextHop = null; b.hop.t = 0; b.hop.a.copy(b.pos); }
             } else {
               b.wait -= dt;
+              b.peckIn = (b.peckIn ?? r.range(0.2, 1.2)) - dt;
               if (b.peck > 0) b.peck -= dt;
-              else if (r.chance(dt * 1.6)) b.peck = r.range(0.12, 0.2);
+              else if (b.peckIn <= 0) { b.peck = r.range(0.12, 0.2); b.peckIn = r.range(0.35, 1.3); }
               if (b.wait <= 0 && b.peck <= 0) {
                 // next hop: toward the crumbs while there are any, otherwise a little wander along the path
                 let dx, dz;
                 if (crumbs.t > 1 && crumbs.t < 35 && b.pos.distanceTo(crumbs.pos) < 7 && b.pos.distanceTo(crumbs.pos) > 0.3) { dx = crumbs.pos.x - b.pos.x; dz = crumbs.pos.z - b.pos.z; }
                 else { const a = b.heading + r.range(-1.6, 1.6); dx = Math.sin(a); dz = Math.cos(a); }
                 const dl = Math.hypot(dx, dz) || 1, len = r.range(0.08, 0.2);
-                const hop = b.hop = b.hopObj || (b.hopObj = { a: new THREE.Vector3(), b: new THREE.Vector3(), t: 0, T: 0.15, h: 0.04 });
+                const hop = b.nextHop = b.hopObj || (b.hopObj = { a: new THREE.Vector3(), b: new THREE.Vector3(), t: 0, T: 0.15, h: 0.04 });
                 hop.a.copy(b.pos); hop.b.set(b.pos.x + dx / dl * len, 0, b.pos.z + dz / dl * len);
                 // stay near the path (they like the bare earth)
                 pathPoint(0.18, tmp);

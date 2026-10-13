@@ -2,14 +2,17 @@
 // Chinese pavilions with flying eaves, an immortal peach tree, an old tortoise practising tai chi,
 // red-crowned cranes and flocks of little blue spirit birds. Feed them glowing peaches (蟠桃).
 import * as THREE from 'three';
-import { createWind, clamp, lerp, damp, smoothstep, TAU } from '../lib/util.js';
-import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, makeRockTexture, CLOUD_TOP, CLOCK_PERIOD } from './cloudsea/common.js';
+import { createWind, clamp, lerp, damp, smoothstep, angleDelta, TAU } from '../lib/util.js';
+import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, makeRockTexture, CLOUD_TOP, CLOCK_PERIOD, angQ } from './cloudsea/common.js';
 import { createSky, createEnvironment } from './cloudsea/sky.js';
 import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './cloudsea/clouds.js';
 import { createGarden } from './cloudsea/garden.js';
 import { createCreatures } from './cloudsea/creatures.js';
 import { createSparkles, createPetals, createMotes, createSkyLanterns, createPeaches, createHalos, SKYL_PERIOD } from './cloudsea/fx.js';
 import { createKun } from './cloudsea/kun.js';
+import { createRays, createMistBands } from './cloudsea/atmos.js';
+import { createFalls } from './cloudsea/falls.js';
+import { createSwallows, createButterflies } from './cloudsea/critters.js';
 
 // lib/util.js addWind() uses uWindTime at 1.7, 3.1, 8 and 9 rad/s: all whole cycles in 20π s, so wrapping the
 // clock there is seamless and keeps the sway precise in float32 however long the page stays open.
@@ -62,6 +65,12 @@ export default {
     scene.add(garden.group);
     garden.casters.slice(0, 4).forEach((c, i) => sea.casters[i].copy(c));
     for (const f of garden.mistFalls) scene.add(mistFall(shared, tex, f.lip, f.dir, f.height, f.w0, f.w1));
+    // real water spilling through those mist veils (the main islet's fed by a runnel from the spring pool)
+    const falls = createFalls(shared, tex, garden.mistFalls.map((f, i) => ({
+      lip: f.lip, dir: f.dir, height: f.height, w0: f.w0,
+      runnel: i === 0 ? { from: garden.poolC.clone().addScaledVector(f.dir, 1.25), ground: (x, z) => garden.main.topY(x, z) } : null,
+    })), rng.fork('falls'));
+    scene.add(falls.mesh);
 
     /* ---- clouds: far towers & banks (static), auspicious swirls + collars (dynamic) ---- */
     const glowU = { casters: sea.uniforms.uCasters, glowPos: sea.uniforms.uGlowPos, glowCol: sea.uniforms.uGlowCol };
@@ -304,9 +313,36 @@ export default {
       ...garden.decor.map(d => ({ x: d.obj.position.x, z: d.obj.position.z, R: d.R * d.scale + 6, y0: d.obj.position.y - d.depth * d.scale - 6, y1: d.obj.position.y + 12 })),
       { x: 0, z: 0, R: 60, y0: -60, y1: 40 },
     ].map(o => ({ x: o.x, z: o.z, r: o.R, y0: o.y0, y1: o.y1 }));
-    const kun = createKun(env, shared, tex, sea, { glowU, occluders, bound, far: farOccl, obstacles, drift: 0.025 });
+    const kun = createKun(env, shared, tex, sea, { glowU, occluders, bound, far: farOccl, obstacles, drift: 0.025, escort: creatures.sys.escort });
     scene.add(kun.group);
+
+    /* ---- light and air: crepuscular rays at sunrise and golden hour, mist bands at three depths ---- */
+    const arng = rng.fork('atmos');
+    const rays = createRays(shared, tex, arng.fork('rays'), q);
+    scene.add(rays.mesh);
+    const mrng = arng.fork('mist'), bands = [];
+    const decorAt = garden.decor.map(d => ({ x: d.obj.position.x, z: d.obj.position.z, R: d.R * d.scale * 1.6 + 4 }));
+    // bands keep clear of the floating islets (they turn to face the camera, so allow their whole width either way)
+    const clearOf = (r, a, hw) => decorAt.every(d => Math.abs(Math.hypot(d.x, d.z) - r) > d.R + 22 || Math.abs(angleDelta(a, Math.atan2(d.x, d.z))) * r > hw + d.R + 14);
+    const band = (rr, yy, hw0, hh0, dd, drift) => {
+      for (let k = 0; k < 40; k++) {
+        const r = mrng.range(rr[0], rr[1]), a = mrng.range(0, TAU), hw = mrng.range(hw0[0], hw0[1]);
+        if (!clearOf(r, a, hw) || bands.some(b => Math.abs(b.r - r) < 30 && Math.abs(angleDelta(b.a, a)) * r < (b.hw + hw) * 0.85)) continue;
+        bands.push({ r, a, y: mrng.range(yy[0], yy[1]), w: drift ? angQ(mrng.range(0.3, 0.9) / r) * mrng.sign() : 0, hw, hh: mrng.range(hh0[0], hh0[1]), dens: mrng.range(dd[0], dd[1]) });
+        return;
+      }
+    };
+    for (let i = 0; i < (q >= 0.7 ? 4 : 3); i++) band([46, 74], [-17, -8], [20, 36], [3, 5], [0.38, 0.52], false);      // near: between the islands
+    for (let i = 0; i < (q >= 0.7 ? 5 : 4); i++) band([110, 230], [-16, 2], [50, 95], [5, 9], [0.32, 0.46], false);    // middle
+    for (let i = 0; i < (q >= 0.7 ? 6 : 4); i++) band([300, 520], [-14, 16], [110, 220], [8, 16], [0.36, 0.55], true); // far, drifting round
+    const mist = createMistBands(shared, tex, sea, mrng.fork('m'), bands, new THREE.Vector3(0, 0, 0));
+    scene.add(mist.mesh);
     const foods = creatures.sys.foods;
+    // small lives: swallows round the pavilion's eaves, butterflies on the peach blossom
+    const lrng = rng.fork('critters');
+    const swallows = createSwallows(env, shared, world, garden, lrng.fork('swallows'), Math.round(3 + 5 * q));
+    const butterflies = createButterflies(env, shared, world, garden, foods, lrng.fork('butterflies'), Math.round(4 + 6 * q));
+    scene.add(swallows.mesh, butterflies.mesh);
     const _ray = new THREE.Vector3();
     function spawnPeach(p, { ground = null, float = false, onMain = false, drop = 2.6 } = {}) {
       if (foods.filter(f => f.alive).length >= 12) return null;
@@ -373,6 +409,9 @@ export default {
       sky.mesh.position.copy(camera.position);
       sea.update(dt);
       kun.update(dt, t, camera, tod, target, env.isIdle());
+      rays.update(dt, t, tod);
+      falls.update(dt, t);
+      mist.update(dt, t, tod);
       // swirls drift around the garden and turn to face the viewer
       for (const sw of swirls) {
         sw.a += sw.speed * dt;
@@ -392,6 +431,8 @@ export default {
 
       // residents & food
       creatures.update(dt, t, camera, tod);
+      swallows.update(dt, t, tod, creatures.sys);
+      butterflies.update(dt, t, tod);
       for (let i = foods.length - 1; i >= 0; i--) {
         const f = foods[i];
         if (!f.alive) { foods.splice(i, 1); continue; }

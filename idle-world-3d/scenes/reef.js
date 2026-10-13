@@ -360,7 +360,7 @@ export default {
     let time = 0;
     return {
       scene, camera, view, post,
-      debug: { anemones: reef.anemones, bommies: rocks.bommies, life, manta, eagle, hm, giant, cuttle },
+      debug: { anemones: reef.anemones, bommies: rocks.bommies, life, manta, eagle, hm, giant, cuttle, eels: reef.eelColonies, glow },
       /** Test hook: start a whale-shark visit now and jump to t s from its closest pass (0 = crossing the view). */
       debugGiant(t = 0) { return giant.debug(t); },
       update(dt, t) {

@@ -306,7 +306,7 @@ function paintHide(seed) {
     const dors = 0.5 + 0.5 * Math.cos(v * TAU);          // 1 on the back, 0 on the belly
     const mott = n.fbm2(u * 22, v * 6, 3) * 0.5 + 0.5;
     // base countershading: dark olive back, warm grey flanks, pale belly
-    let r = lerp(0.8, 0.33, Math.pow(dors, 0.8)), gg = lerp(0.76, 0.33, Math.pow(dors, 0.8)), b = lerp(0.62, 0.25, Math.pow(dors, 0.8));
+    let r = lerp(0.74, 0.26, Math.pow(dors, 0.8)), gg = lerp(0.7, 0.26, Math.pow(dors, 0.8)), b = lerp(0.56, 0.2, Math.pow(dors, 0.8));
     // saddle stripes over the back and down the flanks (torso and tail), slightly wavy
     const body = smoothstep(0.08, 0.2, u) * (1 - smoothstep(0.58, 0.66, u));
     const st = Math.sin((u * 46 + n.noise2(u * 6, v * 3) * 0.6) * Math.PI);
@@ -377,7 +377,7 @@ function giantMaterial(shared, vistaU, hideTex) {
         vec3 N = normalize(vN);
         vec3 V = normalize(cameraPosition - vWorldP);
         float ao = 1.0 - 0.55 * vHide.w;
-        vec3 col = vistaLight(albedo, N, V, ao, 0.45);
+        vec3 col = vistaLight(albedo, N, V, ao, 0.22);
         // glowing lichen on the back at night: a slow wave of light travelling along the body (never a flash)
         col += uFarGlow * h.a * uNight * (0.55 + 0.45 * sin(uGlowPh - vHide.x * 7.0)) * 1.6;
         vec3 d = vWorldP - cameraPosition;
@@ -471,11 +471,11 @@ export function createGiants(shared, vistaU, land, rng) {
   const sched = { next: rng.range(20, 45), pass: null, count: 0, rng: rng.fork('passes') };
   const P = { lane: null, s: 0, v: 1.3, t: 0, members: [] };
 
-  function startPass(now) {
+  function startPass(now, opts = {}) {
     const r = sched.rng;
     sched.count++;
-    const dir = r.chance(0.5) ? 1 : -1;
-    const variant = r.int(0, 2);
+    const dir0 = r.chance(0.5) ? 1 : -1, variant0 = r.int(0, 2);
+    const dir = opts.dir ?? dir0, variant = opts.variant ?? variant0;
     const lane = land.lane(variant, dir, r);
     const n = r.chance(0.7) ? 3 : 2;
     const spacing = r.range(15, 19);
@@ -703,18 +703,12 @@ export function createGiants(shared, vistaU, land, rng) {
     debug(now, t, ahead = 30, opts = {}) {
       if (sched.pass) endPass(now);
       sched.lastStart = now;
-      if (opts.variant !== undefined || opts.dir !== undefined) {
-        const r = sched.rng;
-        const keep = land.lane;
-        land.lane = (variant, dir, rr) => keep(opts.variant ?? variant, opts.dir ?? dir, rr);
-        startPass(now);
-        land.lane = keep;
-      } else startPass(now);
+      startPass(now, opts);
       for (let k = 0; k < ahead * 30; k++) { P.t += 1 / 30; for (const g of P.members) { g.mesh.visible = P.t >= g.delay && g.s <= P.lane.length; if (g.mesh.visible) updateAnimal(g, 1 / 30, t - ahead + k / 30); } }
       return { members: P.members.map(g => ({ role: g.role, pos: g.pos.toArray().map(x => +x.toFixed(1)), s: +g.s.toFixed(1) })), lane: +P.lane.length.toFixed(1), v: +P.v.toFixed(2) };
     },
     /** World positions of the animals that are out, for the egrets and the camera tests. */
-    positions(out) { out.length = 0; if (sched.pass) for (const g of P.members) out.push(g.pos); return out; },
+    positions(out) { out.length = 0; if (sched.pass) for (const g of P.members) if (g.mesh.visible) out.push(g.pos); return out; },
     dispose() { hide.dispose(); material.dispose(); adultKit.geometry.dispose(); youngKit.geometry.dispose(); herd.forEach(g => g.mesh.skeleton.dispose()); },
   };
   return api;

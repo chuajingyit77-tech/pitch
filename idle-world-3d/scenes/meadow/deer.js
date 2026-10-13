@@ -15,7 +15,7 @@ import { SkinGeo, SegRig, Animal } from './quad.js';
 /* Body plan (a hind; metres, bind pose facing +z, hooves on y = 0)    */
 /* ------------------------------------------------------------------ */
 const HIND = {
-  spine: { P: [0.77, -0.34], M: [0.76, 0.0], C: [0.77, 0.32], N1: [0.88, 0.47], N2: [1.08, 0.59], H: [1.27, 0.66], S: [1.16, 1.0] },
+  spine: { P: [0.77, -0.34], M: [0.76, 0.0], C: [0.77, 0.32], N1: [0.88, 0.47], N2: [1.06, 0.58], H: [1.215, 0.64], S: [1.125, 0.985] },
   sections: [
     [-0.54, 0.83, 0.04, 0.04, 0.04, 0],
     [-0.49, 0.83, 0.1, 0.075, 0.1, 0],
@@ -25,33 +25,33 @@ const HIND = {
     [0.08, 0.765, 0.145, 0.125, 0.18, 0.2],
     [0.22, 0.765, 0.142, 0.135, 0.195, 0.28],
     [0.34, 0.79, 0.12, 0.13, 0.18, 0.34],
-    [0.44, 0.85, 0.09, 0.105, 0.135, 0.3],
-    [0.52, 0.95, 0.07, 0.08, 0.095, 0.2],
-    [0.58, 1.05, 0.062, 0.068, 0.075, 0.15],
-    [0.625, 1.15, 0.058, 0.062, 0.066, 0.12],
-    [0.66, 1.24, 0.06, 0.06, 0.062, 0.12],
-    [0.71, 1.28, 0.066, 0.062, 0.066, 0.25],
-    [0.78, 1.26, 0.062, 0.058, 0.062, 0.32],
-    [0.86, 1.225, 0.046, 0.046, 0.052, 0.3],
-    [0.93, 1.19, 0.036, 0.038, 0.044, 0.2],
-    [0.98, 1.17, 0.03, 0.032, 0.034, 0.1],
-    [1.005, 1.16, 0.01, 0.01, 0.01, 0],
+    [0.44, 0.86, 0.1, 0.115, 0.145, 0.3],
+    [0.52, 0.96, 0.085, 0.095, 0.11, 0.2],
+    [0.575, 1.05, 0.075, 0.082, 0.09, 0.15],
+    [0.615, 1.14, 0.07, 0.074, 0.08, 0.12],
+    [0.645, 1.205, 0.068, 0.07, 0.07, 0.12],
+    [0.7, 1.235, 0.07, 0.066, 0.07, 0.25],
+    [0.77, 1.215, 0.064, 0.06, 0.064, 0.32],
+    [0.85, 1.185, 0.05, 0.05, 0.056, 0.3],
+    [0.92, 1.155, 0.04, 0.042, 0.048, 0.2],
+    [0.96, 1.135, 0.033, 0.035, 0.037, 0.1],
+    [0.985, 1.125, 0.01, 0.01, 0.01, 0],
   ],
   bodyRings: 34, segBody: 16, headDense: 1.3,
   pawH: 0.035,
   legs: {
-    F: { hip: [0.075, 0.6, 0.33], foot: [0.08, 0.35], L: [0.2, 0.25, 0.19, 0.065], alpha: 0.1, flex: 1.5, curl: 1.0, align: 0.7, scap: 0.05,
-      r: [0.068, 0.06, 0.044, 0.029, 0.022, 0.017, 0.0135, 0.015], seg: 8, topUp: 0.06,
+    F: { hip: [0.068, 0.6, 0.33], foot: [0.075, 0.35], L: [0.2, 0.25, 0.19, 0.065], alpha: 0.1, flex: 1.2, curl: 1.0, align: 0.7, scap: 0.05,
+      r: [0.05, 0.048, 0.04, 0.028, 0.022, 0.017, 0.0135, 0.015], seg: 8, topUp: 0.06,
       paw: { w: 0.02, h: 0.03, back: 0.012, lift: 0.5, seg: 6, prof: [0.55, 1, 0.95, 0.75, 0.3] } },
-    H: { hip: [0.07, 0.68, -0.34], foot: [0.075, -0.36], L: [0.22, 0.28, 0.27, 0.065], alpha: 0.22, flex: 0.7, curl: 0.8, align: 0.6,
+    H: { hip: [0.07, 0.68, -0.34], foot: [0.075, -0.36], L: [0.22, 0.28, 0.27, 0.065], alpha: 0.22, flex: 0.4, curl: 0.8, align: 0.6,
       r: [0.1, 0.088, 0.06, 0.033, 0.024, 0.018, 0.014, 0.015], seg: 8, topUp: 0.08,
       paw: { w: 0.02, h: 0.03, back: 0.012, lift: 0.5, seg: 6, prof: [0.55, 1, 0.95, 0.75, 0.3] } },
   },
-  ears: { base: [0.042, 0.045, 0.005], tip: [0.15, 0.1, -0.055], w: 0.042, d: 0.011, turn: 0.25,
+  ears: { base: [0.04, 0.045, 0.0], tip: [0.13, 0.088, -0.05], w: 0.036, d: 0.011, turn: 0.25,
     shape: f => Math.sin(Math.PI * Math.min(1, 0.22 + f * 0.86)) * (1 - 0.25 * f) + 0.02 },
   tail: { root: [0.84, -0.52], len: 0.13, pitch: -1.2, w: 0.034, d: 0.016 },
-  graze: { n1: -1.05, n2: -1.3, h: -1.78 },
-  gait: { duty: 0.66, L0: 0.78, vRef: 0.9, swingH: 0.075, off: [0, 0.25, 0.5, 0.75], tMin: 0.18, tMax: 0.45 },
+  graze: { n1: -1.1, n2: -1.4, h: -1.95 },
+  gait: { duty: 0.66, L0: 0.78, vRef: 0.9, swingH: 0.1, off: [0, 0.25, 0.5, 0.75], tMin: 0.18, tMax: 0.45 },
 };
 // trot (diagonal pairs) for the flight: LH, LF, RH, RF
 const TROT_OFF = [0, 0.5, 0.5, 1.0];
@@ -152,7 +152,7 @@ function coatTexture(anim, seed, { spots = 1, dark = 0 } = {}) {
 /* ------------------------------------------------------------------ */
 function deerMaterial({ tex, fogU, n, uRumpEdge }) {
   const U = {
-    tCoat: { value: tex }, uMinW: { value: 0.0006 }, uRim: { value: new THREE.Color(0, 0, 0) }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    tCoat: { value: tex }, uMinW: { value: 0.0006 }, uRim: { value: new THREE.Color(0, 0, 0) }, uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uFill: { value: new THREE.Color(0, 0, 0) },
     uFlare: { value: new Array(8).fill(0) }, uTint: { value: Array.from({ length: 8 }, () => new THREE.Vector3(1, 1, 1)) },
     uRumpEdge: { value: uRumpEdge },
   };
@@ -162,7 +162,7 @@ function deerMaterial({ tex, fogU, n, uRumpEdge }) {
     uniforms: U,
     vertexHeader: `attribute vec4 aAux; uniform float uMinW; uniform float uFlare[8]; uniform vec3 uTint[8];
       varying vec2 vCoatUv; varying vec4 vAux; varying float vFlare; varying vec3 vTint; varying vec3 vWN;`,
-    fragmentHeader: `uniform sampler2D tCoat; uniform vec3 uRim, uSunDir; uniform float uRumpEdge;
+    fragmentHeader: `uniform sampler2D tCoat; uniform vec3 uRim, uSunDir, uFill; uniform float uRumpEdge;
       varying vec2 vCoatUv; varying vec4 vAux; varying float vFlare; varying vec3 vTint; varying vec3 vWN;`,
     vertex: {
       '#include <skinning_vertex>': `$&
@@ -187,21 +187,26 @@ function deerMaterial({ tex, fogU, n, uRumpEdge }) {
           // white rump patch around the tail, edged black; it flares (spreads) when the deer is alarmed
           float vTop = min(vCoatUv.y, 1.0 - vCoatUv.y);
           float edge = uRumpEdge + vFlare * 0.035;
-          float rump = body * (1.0 - smoothstep(edge - 0.012, edge, vCoatUv.x)) * (1.0 - smoothstep(0.17 + 0.05 * vFlare, 0.22 + 0.05 * vFlare, vTop));
-          float rim = body * (1.0 - smoothstep(edge, edge + 0.014, vCoatUv.x)) * smoothstep(edge - 0.02, edge - 0.006, vCoatUv.x) * (1.0 - smoothstep(0.2, 0.26, vTop));
+          float rump = body * (1.0 - smoothstep(edge - 0.012, edge, vCoatUv.x)) * (1.0 - smoothstep(0.3 + 0.05 * vFlare, 0.36 + 0.05 * vFlare, vTop));
+          float rim = body * (1.0 - smoothstep(edge, edge + 0.014, vCoatUv.x)) * smoothstep(edge - 0.02, edge - 0.006, vCoatUv.x) * (1.0 - smoothstep(0.3, 0.38, vTop));
           c = mix(c, vec3(0.86, 0.84, 0.8), rump);
           c = mix(c, vec3(0.025, 0.02, 0.018), rim * 0.85);
-          // legs: coat colour above, paler and greyer toward the hooves, cream inside
-          float leg = step(0.5, part) * step(part, 1.5);
-          vec3 legC = mix(vec3(0.24, 0.13, 0.07), vec3(0.3, 0.24, 0.18), smoothstep(0.35, 0.75, vCoatUv.x));
-          legC = mix(legC, vec3(0.55, 0.5, 0.42), smoothstep(0.55, 0.75, abs(vCoatUv.y - 0.5) * 2.0) * 0.0);
+          // legs: the coat's russet above, paler grey-tan from the knee and hock down; the white rump patch
+          // continues down the back of the hind thighs
+          float leg = step(0.5, part) * step(part, 1.5), hindLeg = step(1.1, part) * step(part, 1.4);
+          vec3 legC = mix(vec3(0.33, 0.14, 0.055), vec3(0.24, 0.18, 0.125), smoothstep(0.32, 0.55, vCoatUv.x));
+          legC = mix(legC, vec3(0.1, 0.07, 0.05), smoothstep(0.86, 0.95, vCoatUv.x));
+          float thighBack = hindLeg * (1.0 - smoothstep(0.16, 0.26, vCoatUv.x)) * (1.0 - smoothstep(0.12, 0.2 + 0.04 * vFlare, abs(vCoatUv.y - 0.5)));
+          legC = mix(legC, vec3(0.86, 0.84, 0.8), thighBack);
           c = mix(c, legC, leg);
-          // hooves, antlers, ears, tail
+          // hooves, antlers (dark at the burr, pale at the tips), ears (russet, pale inside, dark-rimmed tips), tail
           c = mix(c, vec3(0.03, 0.025, 0.022), step(4.5, part) * step(part, 5.5));
-          c = mix(c, mix(vec3(0.16, 0.11, 0.07), vec3(0.62, 0.56, 0.46), smoothstep(0.15, 0.9, vAux.y)), step(3.5, part) * step(part, 4.5));
+          c = mix(c, mix(vec3(0.24, 0.17, 0.1), vec3(0.78, 0.72, 0.62), smoothstep(0.1, 0.85, vAux.y)), step(3.5, part) * step(part, 4.5));
           float ear = step(2.5, part) * step(part, 3.5);
-          vec3 earC = mix(vec3(0.2, 0.12, 0.07), vec3(0.6, 0.55, 0.48), smoothstep(0.25, 0.45, abs(vCoatUv.y - 0.5)) * 0.0 + step(0.5, vCoatUv.y) * 0.7);
-          earC = mix(earC, vec3(0.03, 0.025, 0.02), smoothstep(0.8, 0.95, vAux.y));
+          float earR = step(1.5, vCoatUv.x), frontL = 1.0 - smoothstep(0.16, 0.3, abs(vCoatUv.y - 0.5));
+          float inner = mix(frontL, 1.0 - frontL, earR);
+          vec3 earC = mix(vec3(0.3, 0.15, 0.07), vec3(0.62, 0.56, 0.48), inner * (1.0 - smoothstep(0.55, 0.85, vAux.y)));
+          earC = mix(earC, vec3(0.05, 0.035, 0.03), smoothstep(0.82, 0.96, vAux.y));
           c = mix(c, earC, ear);
           float tailp = step(5.5, part);
           c = mix(c, mix(vec3(0.8, 0.78, 0.74), vec3(0.04, 0.03, 0.025), 1.0 - smoothstep(0.06, 0.14, min(vCoatUv.y, 1.0 - vCoatUv.y))), tailp);
@@ -213,7 +218,9 @@ function deerMaterial({ tex, fogU, n, uRumpEdge }) {
           float fr = 1.0 - clamp(abs(dot(normalize(vWN), V)), 0.0, 1.0);
           float back = max(dot(-V, uSunDir), 0.0);
           back *= back;
-          outgoingLight += uRim * (fr * fr * (0.25 + 2.4 * back) * (diffuseColor.rgb + 0.12) + step(2.5, vAux.x) * step(vAux.x, 3.5) * back * 0.35 * diffuseColor.rgb);
+          outgoingLight += uRim * (fr * fr * (0.3 + 3.2 * back) * (diffuseColor.rgb + 0.15) + step(2.5, vAux.x) * step(vAux.x, 3.5) * back * 0.5 * diffuseColor.rgb);
+          // skylight in the fur: the side away from the sun is never a flat dark cut-out
+          outgoingLight += uFill * diffuseColor.rgb * (0.6 + 0.4 * normalize(vWN).y);
         }
         $&`,
     },
@@ -260,7 +267,7 @@ export class DeerHerd {
     this.tex = coat.tex;
     this.skeleton = rig.skeleton();
     this.geometry = geo.build();
-    this.mat = deerMaterial({ tex: this.tex, fogU, n, uRumpEdge: coat.uTail + 0.06 });
+    this.mat = deerMaterial({ tex: this.tex, fogU, n, uRumpEdge: coat.uTail + 0.085 });
     const U = this.mat.userData.U;
     this.deer.forEach(d => {
       const t = U.uTint.value[d.i];
@@ -346,7 +353,7 @@ export class DeerHerd {
     d.C.set(d.pos.x + hx * T * 0.5, 0, d.pos.z + hz * T * 0.5);
     d.P.set(d.pos.x - px * T * 0.5, 0, d.pos.z - pz * T * 0.5);
     const mv = smoothstep(0.05, 0.6, d.speed), ph = a.phase;
-    const bounce = d.gait.duty < 0.5 ? 0.05 * d.k * Math.max(0, Math.sin(TAU * 2 * (ph - 0.12))) : 0;
+    const bounce = d.gait.duty < 0.5 ? 0.028 * d.k * Math.max(0, Math.sin(TAU * 2 * (ph - 0.12))) : 0;
     d.C.y = this.heightAt(d.C.x, d.C.z) + a.chestH - 0.012 * mv * (0.5 + 0.5 * Math.cos(TAU * 2 * (ph - 0.3))) + bounce - (a.dropC || 0);
     d.P.y = this.heightAt(d.P.x, d.P.z) + a.hipH - 0.012 * mv * (0.5 + 0.5 * Math.cos(TAU * 2 * (ph - 0.05))) + bounce - (a.dropP || 0);
     void dt;
@@ -373,7 +380,7 @@ export class DeerHerd {
     // ---- the herd's lead point along the route ----
     if (this.flee) {
       this.flee += dt;
-      const vRun = this.flee < 0.8 ? 0 : this.flee < 7 ? 2.6 : 1.4;
+      const vRun = this.flee < 0.8 ? 0 : this.flee < 7 ? 2.2 : 1.3;
       this.v = damp(this.v, vRun * this.fleeDir, 1.5, dt);
     } else if (this.phase === 'arrive') {
       this.v = damp(this.v, this.vHerd, 1, dt);
@@ -432,7 +439,7 @@ export class DeerHerd {
       if (!this.flee) d.flare = damp(d.flare, 0, 0.8, dt);
       // speed and heading
       const run = d.mode === 'run';
-      const vMax = run ? 3.2 * d.k : (d.mode === 'graze' || d.mode === 'look') ? 0.35 : 1.25 * Math.sqrt(d.k);
+      const vMax = run ? 2.6 * d.k : (d.mode === 'graze' || d.mode === 'look') ? 0.35 : 1.25 * Math.sqrt(d.k);
       let vT = d.mode === 'alert' ? 0 : clamp(dist * (run ? 1.2 : 0.75), 0, vMax);
       if (dist < 0.35 && !run) vT = 0;
       const want = dist > 0.05 ? Math.atan2(dx, dz) : d.heading;
@@ -445,14 +452,18 @@ export class DeerHerd {
       d.speed = damp(d.speed, vT, vT > d.speed ? (run ? 3 : 1.6) : 3, dt);
       d.pos.x += Math.sin(d.heading) * d.speed * dt;
       d.pos.z += Math.cos(d.heading) * d.speed * dt;
+      const hpPrev = d.hp;
       d.hp += angleDelta(d.hp, d.heading) * (1 - Math.exp(-(2 + 4 * d.speed) * dt));
+      // the hindquarters swinging round after a turn step the hind legs too
+      const hpRate = dt > 1e-6 ? angleDelta(hpPrev, d.hp) / dt : 0;
       // gait: a springy trot when running, the walk otherwise (offsets slide over while it is stepping briskly)
       const G = d.gait, base = a.spec.gait;
       const trot = run && d.speed > 1.2 ? 1 : 0;
       const rate = a.rate || 0;
       G.duty = damp(G.duty, trot ? 0.4 : base.duty, 3, dt);
       G.swingH = damp(G.swingH, trot ? base.swingH * 1.8 : base.swingH, 3, dt);
-      G.L0 = damp(G.L0, trot ? base.L0 * 1.7 : base.L0, 3, dt);
+      // a quick, short trot (about 2 strides a second): long enough strides would over-reach a deer's legs
+      G.L0 = damp(G.L0, trot ? base.L0 * 1.15 : base.L0, 3, dt);
       if (rate > 0.8) for (let i = 0; i < 4; i++) { const tgt = trot ? TROT_OFF[i] : base.off[i]; G.off[i] += clamp(tgt - G.off[i], -0.5 * dt, 0.5 * dt); }
       // head, ears, tail
       d.down = damp(d.down, d.downT, d.downT > d.down ? 1.3 : 2.2, dt);
@@ -475,7 +486,7 @@ export class DeerHerd {
       }
       d.cPrev.copy(d.C); d.pPrev.copy(d.P);
       const st = d.st || (d.st = { ears: [0, 0] });
-      st.P = d.P; st.C = d.C; st.vP = d.vP; st.vC = d.vC; st.speed = d.speed; st.turn = d.turnV;
+      st.P = d.P; st.C = d.C; st.vP = d.vP; st.vC = d.vC; st.speed = d.speed; st.turn = Math.abs(d.turnV) > Math.abs(hpRate) ? d.turnV : hpRate;
       st.roll = 0.02 * smoothstep(0.1, 0.8, d.speed) * Math.sin(TAU * a.phase);
       st.bend = clamp(-d.turnV * 0.08, -0.06, 0.06);
       st.down = d.down;
@@ -500,6 +511,7 @@ export class DeerHerd {
     this.mat.userData.U.uMinW.value = 0.5 * 1.5 / Math.max(ctx.pxK, 1);
     this.mat.userData.U.uRim.value.copy(ctx.rim);
     if (ctx.sunDir) this.mat.userData.U.uSunDir.value.copy(ctx.sunDir);
+    if (ctx.fill) this.mat.userData.U.uFill.value.copy(ctx.fill);
     void t; void r;
     return true;
   }

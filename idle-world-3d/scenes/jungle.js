@@ -21,6 +21,7 @@ import { FruitSystem, FRUIT_KINDS } from './jungle/fruit.js';
 import { createVistaUniforms, setVistaClock } from './jungle/far.js';
 import { buildVista } from './jungle/vista.js';
 import { createGiants } from './jungle/giants.js';
+import { createEgrets } from './jungle/egrets.js';
 
 /* ------------------------------------------------------------------ */
 /* Weather schedule (shared by the scene and the ambience helper)       */
@@ -557,6 +558,26 @@ export default {
       podList.push({ x, y: L.groundH(x, z), z, s: rmu.range(0.9, 1.6), rot: rmu.next() * TAU });
     }
     instance(podGeo, mushMat, podList, { shadow: false });
+    // bracket fungi: shelves stepping up the big trunks above their buttresses and along the logs' flanks; their
+    // pale gills glow at night (breathing slowly with the other fungi). Own rng stream: no other placement changes.
+    {
+      const rbk = R('brackets');
+      const brList = [];
+      for (const t of trees.slice(0, 4)) for (let k = 0; k < 3; k++) {
+        const y = t.def.opt.finH + rbk.range(0.3, 2.6);
+        const c = t.axis(y);
+        // facing the clearing, give or take
+        const a = Math.atan2(camPos0.z - c.z, camPos0.x - c.x) + rbk.range(-0.9, 0.9);
+        const r = t.rTrunk(y) * 0.98; // the shelf's root just inside the bark
+        brList.push({ x: c.x + Math.cos(a) * r, y: c.y, z: c.z + Math.sin(a) * r, s: rbk.range(0.9, 1.5), rot: Math.atan2(Math.cos(a), Math.sin(a)) });
+      }
+      for (const lg of logs) for (let k = 0; k < 3; k++) {
+        const along = rbk.range(-0.38, 0.38) * lg.len, side = rbk.sign();
+        const nx = Math.sin(lg.rot) * side, nz = Math.cos(lg.rot) * side;
+        brList.push({ x: lg.x + Math.cos(lg.rot) * along + nx * lg.r0 * 0.92, y: lg.y + rbk.range(-0.1, 0.15), z: lg.z - Math.sin(lg.rot) * along + nz * lg.r0 * 0.92, s: rbk.range(0.8, 1.2), rot: Math.atan2(nx, nz) });
+      }
+      instance(P.bracketCluster(R('bracketG'), { shelves: 4 }), mushMat, brList, { shadow: false });
+    }
     // glow light sources for night (strongest clusters)
     const glowSources = mushList.map(m => new THREE.Vector4(m.x, m.y + 0.3, m.z, 0.2 * m.s));
     glowFernList.forEach(f => glowSources.push(new THREE.Vector4(f.x, f.y + 0.4, f.z, 0.4 * f.s)));
@@ -692,6 +713,9 @@ export default {
     giants.group.traverse(o => o.layers.set(1)); // main view only: the pond's reflection never sees past the cliff
     scene.add(giants.group);
     const giantPos = [];
+    // white egrets roosting in the ridge trees: they flee when the giants come close (jungle/egrets.js)
+    const egrets = createEgrets(shared, vistaU, vista.perches, R('egrets'), { count: Math.round(14 * Math.max(q, 0.7)) });
+    scene.add(egrets.mesh);
     const sun = new THREE.DirectionalLight(0xffffff, 3);
     sun.castShadow = env.shadows;
     const sm = q >= 0.9 ? 2048 : 1024;
@@ -1344,12 +1368,15 @@ export default {
       // sunlit mist curtains; open-air ambient. Rain and dawn mist thicken the air until the far ridges fade away.
       {
         const V = vistaU;
-        V.uHazeCol.value.copy(su.uHorizon.value).multiplyScalar(0.35).add(_c.copy(fog).multiplyScalar(1.1 * 0.65)).multiplyScalar(lerp(1, 0.92, rainA));
+        V.uHazeCol.value.copy(su.uHorizon.value).multiplyScalar(0.4).add(_c.copy(fog).multiplyScalar(0.6)).multiplyScalar(lerp(0.92, 0.85, rainA));
         V.uHazeSunCol.value.copy(V.uHazeCol.value).add(_c.copy(lc).multiplyScalar(Math.min(li, 4) * (0.07 + golden * 0.12) * (1 - rainA * 0.7)));
-        V.uMistCol.value.copy(V.uHazeCol.value).multiplyScalar(1.08).add(_c.copy(lc).multiplyScalar(Math.min(li, 4) * 0.035 * (1 - rainA * 0.6)));
+        V.uMistCol.value.copy(V.uHazeCol.value).multiplyScalar(1.03).add(_c.copy(lc).multiplyScalar(Math.min(li, 4) * 0.02 * (1 - rainA * 0.6)));
         V.uMistAmt.value = clamp(0.85 + dawnMist * 0.5 + rainA * 0.45 + dusk * 0.15 + night * 0.1 - golden * 0.1, 0, 1.4);
-        V.uHazeK.value = (1 + dawnMist * 0.8 + rainA * 2.2 + night * 0.3) / 240;
+        V.uHazeK.value = (1 + dawnMist * 0.8 + rainA * 2.2 + night * 0.3) / 340;
         V.uSkyAmb.value.copy(hemi.color).multiplyScalar(hemi.intensity * 0.95);
+        // exposure of the open air beyond the cliff: much brighter than the clearing by day, kept from washing out;
+        // the low warm sun of golden hour may glow, and the moonlit vista stays readable at night
+        V.uVistaExp.value = lerp(lerp(0.58, 0.8, golden), 1.0, night);
         V.uGroundAmb.value.copy(hemi.groundColor).lerp(pal.envGreen, 0.35).multiplyScalar(hemi.intensity * 0.8);
       }
       // water, waterfall, mist
@@ -1368,7 +1395,7 @@ export default {
       splash.material.uniforms.uAmb.value.copy(amb);
       // fx
       const ru = godRays.material.uniforms;
-      ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.26 : (0.075 + golden * 0.12 + dawnMist * 0.06) * Math.min(li, 4));
+      ru.uRayCol.value.copy(lc).multiplyScalar(useMoon ? 0.26 : (0.09 + golden * 0.16 + dawnMist * 0.1) * Math.min(li, 4));
       ru.uRayAmt.value = (1 - rainA * 0.85) * (useMoon ? smoothstep(-4, -12, e) : smoothstep(0, 8, e));
       godRays.visible = ru.uRayAmt.value > 0.002;
       motes.material.uniforms.uAmt.value = (0.35 + day * 0.65) * (1 - rainA) * (1 - night * 0.7);
@@ -1382,7 +1409,7 @@ export default {
       spores.visible = spores.material.uniforms.uAmt.value > 0.002;
       motes.visible = motes.material.uniforms.uAmt.value > 0.002;
       rain.material.uniforms.uAmb.value.copy(amb);
-      mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.18 + night * 0.3 + dusk * 0.25 + 0.03, 0, 0.95);
+      mistSheets.material.uniforms.uAmt.value = clamp(dawnMist * 0.8 + rainA * 0.18 + night * 0.3 + dusk * 0.25 + golden * 0.12 + 0.07, 0, 0.95);
       mistSheets.material.uniforms.uAmb.value.copy(amb);
       // environment map: re-filtered in place whenever its colours have drifted by more than ~1%
       {
@@ -1451,6 +1478,7 @@ export default {
       // between passes: hidden and not updated)
       setVistaClock(vistaU, t);
       giants.update(dt, t, simT);
+      egrets.update(dt, t, giants.positions(giantPos), night);
       // frogs
       for (let i = 0; i < frogs.length; i++) { frogs[i].update(dt, t); frogs[i].write(i); }
       frogKit.mesh.count = frogs.length;
@@ -1583,7 +1611,7 @@ export default {
     const compileRT = new THREE.WebGLRenderTarget(1, 1);
     renderer.setRenderTarget(compileRT);
     let compileRTLive = true;
-    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, dragonflies, allFish, pondRocks, boulderSpots, post, view, L, vista, vistaU, giants };
+    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, dragonflies, allFish, pondRocks, boulderSpots, post, view, L, vista, vistaU, giants, egrets };
     // initial pose
     update(1 / 60, 0);
 
@@ -1662,7 +1690,7 @@ export default {
         fruits.dispose();
         frogKit.mesh.customDepthMaterial?.dispose();
         macawKit.geo.dispose(); macawKit.mat.dispose();
-        vista.dispose(); giants.dispose();
+        vista.dispose(); giants.dispose(); egrets.dispose();
       },
     };
   },

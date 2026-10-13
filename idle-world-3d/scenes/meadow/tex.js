@@ -269,7 +269,10 @@ export function tofuTextures(seed = 13) {
 
 /** Black lacquer plaque with gold border and 稲荷. */
 export function plaqueTexture() {
-  return canvasTexture(128, 192, (g, w, h) => {
+  // Laid out at 128×192 (the plaque's 2:3 face) but stored 128×256 and stretched to fit: a power of two, which WebGL 1
+  // (the iPad) would otherwise squeeze to 128×128 at load, softening the characters.
+  return canvasTexture(128, 256, (g, w, H) => {
+    const h = 192; g.scale(1, H / h);
     g.fillStyle = '#121010'; g.fillRect(0, 0, w, h);
     g.strokeStyle = '#c9a24a'; g.lineWidth = 6; g.strokeRect(7, 7, w - 14, h - 14);
     g.lineWidth = 2; g.strokeRect(16, 16, w - 32, h - 32);

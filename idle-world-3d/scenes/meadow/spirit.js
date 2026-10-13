@@ -42,10 +42,10 @@ export const FOX_SPEC = {
   bodyRings: 44, segBody: 22, headDense: 1.35,
   pawH: 0.055,
   legs: {
-    F: { hip: [0.105, 0.92, 0.44], foot: [0.12, 0.47], L: [0.34, 0.40, 0.22, 0.12], alpha: 0.1, flex: 1.25, curl: 0.85, align: 0.7, scap: 0.08,
+    F: { hip: [0.105, 0.92, 0.44], foot: [0.12, 0.47], L: [0.34, 0.40, 0.22, 0.12], alpha: 0.1, flex: 1.05, curl: 0.85, align: 0.7, scap: 0.08,
       r: [0.1, 0.1, 0.085, 0.062, 0.052, 0.044, 0.038, 0.037], seg: 10, topUp: 0.1,
       paw: { w: 0.047, h: 0.034, back: 0.035, lift: 0.45, seg: 8, prof: [0.1, 0.85, 1, 0.92, 0.6, 0.05] } },
-    H: { hip: [0.11, 0.95, -0.46], foot: [0.115, -0.48], L: [0.37, 0.40, 0.30, 0.12], alpha: 0.28, flex: 0.62, curl: 0.6, align: 0.6,
+    H: { hip: [0.11, 0.95, -0.46], foot: [0.115, -0.48], L: [0.37, 0.40, 0.30, 0.12], alpha: 0.28, flex: 0.35, curl: 0.6, align: 0.6,
       r: [0.16, 0.15, 0.115, 0.068, 0.055, 0.045, 0.038, 0.037], seg: 10, topUp: 0.12,
       paw: { w: 0.046, h: 0.033, back: 0.04, lift: 0.45, seg: 8, prof: [0.1, 0.85, 1, 0.92, 0.6, 0.05] } },
   },
@@ -246,7 +246,7 @@ export class Motes {
     this.geo = g;
     this.U = {
       uTime: { value: 0 }, uPR: { value: 1 }, uMinPx: { value: minPx }, uAlpha: { value: 1 },
-      uColA: { value: new THREE.Color(0.55, 0.85, 1.6) }, uColB: { value: new THREE.Color(1.6, 1.25, 0.8) },
+      uColA: { value: new THREE.Color(0.38, 0.6, 1.1) }, uColB: { value: new THREE.Color(1.1, 0.85, 0.55) },
       uWind: { value: new THREE.Vector3() },
     };
     this.mat = new THREE.ShaderMaterial({
@@ -327,8 +327,8 @@ export class SpiritFox {
     const U = this.U = {
       ...fogU,
       uMinW: { value: 0.0006 }, uDissolve: { value: 1.2 }, uAlpha: { value: 0 }, uTime: { value: 0 }, uBreath: { value: 1 }, uEyeK: { value: 1 },
-      uBody: { value: new THREE.Color(0.3, 0.45, 0.72) }, uRim: { value: new THREE.Color(0.6, 0.85, 1.3) },
-      uMark: { value: new THREE.Color(1.5, 0.22, 0.08) }, uEye: { value: new THREE.Color(2.6, 1.7, 0.6) }, uTip: { value: new THREE.Color(0.9, 1.15, 1.5) },
+      uBody: { value: new THREE.Color(0.1, 0.16, 0.28) }, uRim: { value: new THREE.Color(0.3, 0.46, 0.78) },
+      uMark: { value: new THREE.Color(0.85, 0.11, 0.045) }, uEye: { value: new THREE.Color(2.0, 1.25, 0.42) }, uTip: { value: new THREE.Color(0.42, 0.58, 0.85) },
       tNoise: { value: this.tNoise }, tMark: { value: this.tMark },
     };
     this.depthMat = new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS, fragmentShader: FS_DEPTH, transparent: true, colorWrite: false, depthWrite: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 });
@@ -366,7 +366,9 @@ export class SpiritFox {
     this.active = false;
     this.rng = makeRng(seed ^ 0x9e37);
     const r = this.rng;
-    this.tailPh = Array.from({ length: 9 }, () => ({ a: r.range(0, TAU), b: r.range(0, TAU), wa: r.range(1.35, 1.9), wb: r.range(1.05, 1.5), amp: r.range(0.85, 1.15) }));
+    // each tail its own rhythm (rates in rad/s) and its own set: lift, fan offset and the droop of its tip
+    this.tailPh = Array.from({ length: 9 }, () => ({ a: r.range(0, TAU), b: r.range(0, TAU), wa: r.range(1.35, 1.9), wb: r.range(1.05, 1.5), amp: r.range(0.85, 1.15),
+      lift: r.range(-0.2, 0.12), fan: r.range(-0.09, 0.09), droop: r.range(0.05, 0.3) }));
     this._to = [0, 0];
     this.path = null;
     this.P = new THREE.Vector3(); this.C = new THREE.Vector3(); this.vP = new THREE.Vector3(); this.vC = new THREE.Vector3();
@@ -450,8 +452,8 @@ export class SpiritFox {
     const lift = Math.sin(ph.b - lag * 0.9) * (0.05 + 0.03 * s) * ph.amp;
     // walking draws the tails back and together; standing lets them open out
     const mv = this.moveK;
-    o[0] = lift - mv * (0.16 + 0.05 * s) + this.spread * 0.08 * (1 - Math.abs(c));
-    o[1] = sway + c * (this.spread * 0.18 - mv * 0.16);
+    o[0] = lift - mv * (0.16 + 0.05 * s) + this.spread * 0.08 * (1 - Math.abs(c)) + ph.lift - ph.droop * Math.max(0, s - 2) * 0.6;
+    o[1] = sway + c * (this.spread * 0.18 - mv * 0.16) + ph.fan * (1 + 0.3 * s);
     return o;
   }
 

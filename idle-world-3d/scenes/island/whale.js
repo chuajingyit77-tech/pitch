@@ -518,7 +518,7 @@ function makeSpineUniforms() {
 function makeWhaleMaterial(maps, U) {
   const m = new THREE.MeshStandardMaterial({
     name: 'Humpback', map: maps.map, normalMap: maps.normalMap, normalScale: new THREE.Vector2(0.75, 0.75),
-    roughness: 0.4, metalness: 0, envMapIntensity: 0.95,
+    roughness: 0.46, metalness: 0, envMapIntensity: 0.6,
   });
   return patchMaterial(m, {
     key: 'humpback',
@@ -637,7 +637,7 @@ function Pose() {
 /* ================================================================== */
 /* The giant                                                           */
 /* ================================================================== */
-export function createGiant(env, { camera, view, fx, wind }) {
+export function createGiant(env, { camera, view, fx, wind, occluders = [] }) {
   const q = env.q;
   const rng = makeRng(env.seed ^ 0x6b1e);
   const group = new THREE.Group();
@@ -688,45 +688,79 @@ export function createGiant(env, { camera, view, fx, wind }) {
     },
   };
 
+  /**
+   * Where the pass runs. The island fills the middle of the view and its palms rise almost to the horizon there,
+   * so the whale keeps to the open sea on one side of it (alternating), between the island's silhouette (measured
+   * from the camera, palm crowns and hill) and the edge of the view, 45-110 m out, on a straight line in the camera's
+   * frame (which turns with the screensaver's orbit) at 1-3.5 m/s over the ground. Only the middle of a pass is
+   * seen (it rises from the blue ~9 s in and sounds ~8 s before the end); that stretch is what must fit.
+   */
   function choosePath(T) {
     const c = camera.position, tgt = view.target;
     const tx = tgt.x !== undefined ? tgt.x : tgt[0], tz = tgt.z !== undefined ? tgt.z : tgt[2];
     const D = Math.max(20, Math.hypot(c.x - tx, c.z - tz));
     const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * Math.max(0.3, camera.aspect);
     const om = Math.abs(camState.omega) < 0.004 ? 0 : clamp(camState.omega, -0.045, 0.045);
-    F.phi0 = camState.phi !== null ? camState.phi : Math.atan2(c.x - tx, c.z - tz);
-    F.om = om; F.T = T;
-    const near = pass.n % 2 === 0;
-    const prefer = (pass.n >> 1) % 2 === 0 ? 1 : -1; // screen direction, alternating every other pass
+    const phi = camState.phi !== null ? camState.phi : Math.atan2(c.x - tx, c.z - tz);
+    F.phi0 = phi; F.om = om; F.T = T;
+    // the island's silhouette, as angles either side of the view's axis
+    const fx = -Math.sin(phi), fz = -Math.cos(phi), rx = Math.cos(phi), rz = -Math.sin(phi);
+    let thL = 0.12, thR = 0.12;
+    for (const o of occluders) {
+      const ox = o.x - c.x, oz = o.z - c.z, along = ox * fx + oz * fz, lat = ox * rx + oz * rz;
+      if (along < 5) continue;
+      thR = Math.max(thR, Math.atan2(lat + o.r, along));
+      thL = Math.max(thL, Math.atan2(-(lat - o.r), along));
+    }
+    const thOut = Math.atan(tanH) * 0.92;
+    const Tv = Math.max(30, T - 17);
+    const want = rng.range(1.7, 2.6);
+    const prefer = pass.n % 2 === 0 ? (rng.chance(0.5) ? 1 : -1) : -lastSide;
+    const near = pass.n % 3 !== 2;
     let best = null;
-    for (let tries = 0; tries < 6 && !best; tries++) {
-      const d0 = (near ? rng.range(64, 86) : rng.range(96, 135)) - tries * 7;
-      const Wd = (D + d0) * tanH;
-      const uMax = 1.1 * Wd / T;
-      const want = rng.range(1.7, 2.8);
-      for (const sgn of [prefer, -prefer]) {
-        for (const fu of [1, 0.75, 0.5, 0.3, 0.12]) {
-          for (const dv of [0, 0.35, -0.35, 0.7, -0.7]) {
-            const u = sgn * fu * uMax;
-            if (Math.abs(dv) * T / 2 > Math.min(d0 - 52, 175 - d0)) continue;
-            let ok = true, sum = 0;
-            for (const e of [-0.55, 0, 0.55]) { // world speed at both ends and the middle of the sweep
-              const x = e * Wd, d = d0 + dv * e * T;
-              const sp = Math.hypot(dv + om * x, u - om * d);
-              if (sp < 1.25 || sp > 3.5) { ok = false; break; }
-              sum += Math.abs(sp - want);
+    const fit = (side, dc, xc, dv, u, thIn) => {
+      let sum = 0;
+      for (let k = -2; k <= 2; k++) {
+        const e = k / 4 * Tv, d = dc + dv * e, x = xc + u * e;
+        if (Math.hypot(d, x) < 46 || d > 175) return -1;
+        const m = 7.5 / (D + d) + 0.02;                    // half the whale, and a little more
+        const th = Math.atan2(x * side, D + d);
+        if (th < thIn + m || th > thOut - m) return -1;
+        const sp = Math.hypot(dv + om * x, u - om * d);
+        if (sp < 1.05 || sp > 3.4) return -1;
+        sum += Math.abs(sp - want);
+      }
+      for (const e of [-T / 2, T / 2]) if (Math.hypot(dc + dv * e, xc + u * e) < 42) return -1; // open water, start to end
+      return sum / 5;
+    };
+    for (const side of [prefer, -prefer]) {
+      const thIn = side > 0 ? thR : thL;
+      if (thOut - thIn < 0.12) continue;
+      for (const dc of [36, 44, 52, 62, 74, 90, 110]) {
+        for (const frac of [0.35, 0.55, 0.75]) {
+          const th = lerp(thIn, thOut, frac), xc = side * (D + dc) * Math.tan(th);
+          for (let ai = 0; ai < 16; ai++) {
+            const ang = ai / 16 * TAU;
+            for (const vr of [0.45, 0.75, 1.05, 1.4, 1.8]) {
+              const dv = vr * Math.cos(ang), u = vr * Math.sin(ang);
+              const f = fit(side, dc, xc, dv, u, thIn);
+              if (f < 0) continue;
+              // closer is bigger on screen (every other pass keeps a little farther out); sideways motion reads
+              // better than coming straight at the camera or going away
+              const score = f + (near ? 0.03 : 0.012) * (D + dc) - 0.6 * Math.abs(u) / vr + (side === prefer ? 0 : 0.5) + rng.range(0, 0.25);
+              if (!best || score < best.score) best = { score, side, dc, xc, dv, u };
             }
-            if (!ok) continue;
-            const score = sum - fu * 0.8 + (sgn === prefer ? 0 : 0.6);
-            if (!best || score < best.score) best = { score, d0, dv, u, Wd };
           }
         }
       }
+      if (best) break;
     }
-    if (!best) best = { d0: 80, dv: 0, u: 0, Wd: (D + 80) * tanH }; // (unreachable: a slow drift straight out)
-    F.d0 = best.d0; F.dv = best.dv; F.xv = best.u;
-    F.x0 = rng.range(-0.12, 0.12) * best.Wd;
+    // no clear sea beside the island (a tall narrow screen): far out beyond it instead, above its palms
+    if (!best) best = { side: prefer, dc: 165, xc: 0, dv: 0, u: (om ? om * 165 : 0) + prefer * 1.2 };
+    lastSide = best.side;
+    F.d0 = best.dc; F.dv = best.dv; F.x0 = best.xc; F.xv = best.u;
   }
+  let lastSide = 1;
 
   /** The mother's script: rise, two breaths with a roll, one or two breaches, a last breath and the fluke-up dive. */
   function scriptMother(nBreach) {
@@ -1117,20 +1151,29 @@ export function createGiant(env, { camera, view, fx, wind }) {
     for (let b = 0; b < tr.breaches.length; b++) {
       const B = tr.breaches[b];
       if (t > B.te - 0.9 && t < B.te + 1.2) {
+        // round the body's cross-section (back, both flanks, belly) wherever it cuts the surface: water dragged up
+        // with it and flung off the flanks, streaming back down
         for (let i = 0; i < 7; i++) {
           const u = 0.05 + i * 0.14;
-          bodyPoint(W, u, 0, 0, 0, _a);
-          const h = _a.y - waveHeight(_a.x, _a.z, wtime);
-          if (h > -0.5 && h < 1.2) {
-            W.dripAcc += dt * 26 * k;
-            while (W.dripAcc > 1) { W.dripAcc -= 1; fx.pour(_a.x, Math.max(_a.y, 0.2), _a.z, W.pose.vel.x, Math.max(W.pose.vel.y, 0) * 0.7, W.pose.vel.z, k, gl); }
+          for (let s = 0; s < 4; s++) {
+            const oy = s === 0 ? PHD(u) * L : s === 3 ? -PHV(u) * L : 0, oz = s === 1 ? -PW(u) * L : s === 2 ? PW(u) * L : 0;
+            bodyPoint(W, u, 0, oy * 0.9, oz * 0.9, _a);
+            const h = _a.y - waveHeight(_a.x, _a.z, wtime);
+            if (h > -0.4 && h < 1.0) {
+              W.dripAcc += dt * 9 * k;
+              while (W.dripAcc > 1) {
+                W.dripAcc -= 1;
+                bodyPoint(W, u, 0, oy * 1.6, oz * 1.6, _b); // outward from the skin: the way the water is flung
+                fx.pour(_a.x, Math.max(_a.y, 0.15), _a.z, W.pose.vel.x + (_b.x - _a.x) * 1.5, Math.max(W.pose.vel.y, 0) * 0.75, W.pose.vel.z + (_b.z - _a.z) * 1.5, k, gl);
+              }
+            }
           }
         }
       }
       if (t >= B.te - 0.75 && !B.firedX) {
         B.firedX = true;
         rootAt(tr, B.te, _a);
-        fx.crown(_a.x, _a.z, W.pose.vel.x, W.pose.vel.z, 3 * k, 0.5 * k, gl, false);
+        fx.crown(_a.x, _a.z, W.pose.vel.x, W.pose.vel.z, 0.32 * L, 0.75 * k, gl, false);
         fx.patch(0, _a.x, _a.z, 0.32 * L, 0.32 * L, 0, 10, 0.8);
       }
       if (t >= B.ti && !B.firedI) {
@@ -1139,14 +1182,14 @@ export function createGiant(env, { camera, view, fx, wind }) {
         const ax = _b.x, az = _b.z, ang = Math.atan2(az, ax);
         fx.crown(W.pose.root.x, W.pose.root.z, ax, az, 0.8 * L, 1.15 * k, gl);
         fx.patch(1, W.pose.root.x, W.pose.root.z, 0.62 * L, 0.38 * L, ang, 24, 1);
-        fx.patch(2, W.pose.root.x, W.pose.root.z, 30 * k, 30 * k, 0, 9, 0.8);
+        fx.patch(2, W.pose.root.x, W.pose.root.z, 30 * k, 30 * k, 0, 9, 0.45);
         focus.active = true; focus.x = W.pose.root.x; focus.z = W.pose.root.z; focus.t = 0; focus.seq++;
       }
       if (t >= B.ti + 0.45 && !B.firedJ) {
         B.firedJ = true;
         bodyPoint(W, 0.85, 0, 0, 0, _a);
         fx.crown(_a.x, _a.z, 1, 0, 0.3 * L, 0.6 * k, gl);
-        fx.patch(2, W.pose.root.x, W.pose.root.z, 44 * k, 44 * k, 0, 12, 0.55);
+        fx.patch(2, W.pose.root.x, W.pose.root.z, 44 * k, 44 * k, 0, 12, 0.3);
       }
     }
     // the fluke-up: water streaming off the trailing edge while the flukes are up, a smooth print where they went down

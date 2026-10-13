@@ -4,18 +4,20 @@
 // flow over the mantle) as it hunts; when food falls nearby it comes over to watch it, clouds rolling;
 // when the whale shark passes it darkens, raises its arms and sinks close to the reef until the giant
 // has gone. At night it rests low on the reef, dull and slow. Colour changes ease over a second or two.
-// One mesh, one draw call (~2.6k triangles). Local frame: +X forward (arms), +Y up, +Z right.
+// One mesh, one draw call (~2.8k triangles). Local frame: +X forward (arms), +Y up, +Z right.
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, TAU, damp, angleDelta, quatFromForward, patchMaterial } from '../../lib/util.js';
 import { waterize, UW_VERT, UW_FRAG, NOISE_GLSL } from './uw.js';
 
 /* ------------------------------------------------------------------ */
-/* Geometry (metres, total length ~0.56 m)                             */
+/* Geometry (metres, total length ~0.6 m)                              */
 /* ------------------------------------------------------------------ */
-const KX = [-0.300, -0.292, -0.270, -0.220, -0.120, -0.010, 0.070, 0.105, 0.125, 0.148, 0.168, 0.180];
-const KW = [0.000, 0.024, 0.042, 0.060, 0.073, 0.076, 0.071, 0.063, 0.051, 0.054, 0.047, 0.030];
-const KT = [0.000, 0.016, 0.026, 0.035, 0.041, 0.043, 0.040, 0.035, 0.032, 0.035, 0.033, 0.022];
-const KB = [0.000, 0.015, 0.024, 0.031, 0.036, 0.037, 0.035, 0.031, 0.029, 0.031, 0.029, 0.019];
+// a broad oval mantle (width ~0.45, height ~0.25 of its length; domed back, flatter belly), a short neck
+// and a broad head with the eyes bulging from its upper sides
+const KX = [-0.300, -0.293, -0.272, -0.225, -0.130, -0.030, 0.050, 0.098, 0.118, 0.142, 0.163, 0.178];
+const KW = [0.000, 0.030, 0.054, 0.074, 0.088, 0.091, 0.085, 0.074, 0.060, 0.064, 0.056, 0.036];
+const KT = [0.000, 0.019, 0.035, 0.049, 0.059, 0.062, 0.057, 0.047, 0.040, 0.046, 0.042, 0.028];
+const KB = [0.000, 0.015, 0.028, 0.038, 0.045, 0.047, 0.044, 0.038, 0.033, 0.036, 0.033, 0.022];
 function pw(xs, ys, x) {   // smooth piecewise (cosine) interpolation
   if (x <= xs[0]) return ys[0];
   for (let i = 0; i < xs.length - 1; i++) if (x <= xs[i + 1]) { const t = (x - xs[i]) / (xs[i + 1] - xs[i]); return lerp(ys[i], ys[i + 1], (1 - Math.cos(Math.PI * t)) / 2); }
@@ -73,13 +75,14 @@ function buildGeometry() {
   }
   // eyes (cut = 3)
   for (const sd of [1, -1]) {
-    const cx = 0.147, cy = 0.013, cz = sd * 0.05, R = 0.0165, NU = 10, NV = 7, base = pos.length / 3;
+    // half sunk into the head's upper flank, so each eye bulges by about half its radius
+    const cx = 0.146, cy = pw(KX, KT, 0.146) * 0.35, cz = sd * pw(KX, KW, 0.146) * 0.8, R = 0.019, NU = 10, NV = 7, base = pos.length / 3;
     for (let i = 0; i <= NV; i++) {
       const th = (i / NV) * Math.PI;
       for (let j = 0; j < NU; j++) {
         const ph = (j / NU) * TAU;
         const nx = Math.sin(th) * Math.cos(ph), ny = Math.cos(th), nz = Math.sin(th) * Math.sin(ph);
-        vtx(cx + nx * R, cy + ny * R * 0.85, cz + nz * R, 0.9, 0.5, 3, nz * sd, ny);
+        vtx(cx + nx * R, cy + ny * R * 0.85, cz + nz * R, 0.5 + 0.5 * nx, 0.3, 3, nz * sd, ny);   // u: along the eye (W pupil)
       }
     }
     for (let i = 0; i < NV; i++) for (let j = 0; j < NU; j++) {
@@ -87,26 +90,35 @@ function buildGeometry() {
       idx.push(a, b, c, b, d, c);
     }
   }
-  // eight arms in a crown (cut = 2, t along the arm, arm index); the first pair rides highest
-  const NR = 5, NS = 7;
+  // eight arms held together in a crown: thick bases that overlap round the mouth, converging toward the
+  // tips (a cone pointing forward, not a splayed fan); the dorsal pair rides a little higher.
+  // cut = 2, t along the arm, arm index k (0 and 7 are the dorsal pair)
+  const NR = 6, NS = 7, AX = 0.168;
+  const ry = pw(KX, KT, AX) * 0.62, rz = pw(KX, KW, AX) * 0.6;
+  const c0 = new THREE.Vector3(), c1 = new THREE.Vector3(), tg = new THREE.Vector3(), sd = new THREE.Vector3(), up2 = new THREE.Vector3();
+  const armAt = (k, t, out) => {
+    const th = (k / 8) * TAU + Math.PI / 8, cy = Math.cos(th), sz = Math.sin(th);
+    const L = 0.112 + 0.012 * Math.max(0, -cy);            // the ventral arms a touch longer
+    const conv = lerp(1, 0.3, Math.pow(t, 0.9)) + 0.12 * Math.sin(Math.PI * t);   // converge, with a slight belly
+    const lift = cy > 0.5 ? 0.016 * t * t : 0;              // dorsal pair
+    return out.set(AX + L * t, -0.006 + cy * ry * conv + lift - 0.016 * t * t, sz * rz * conv);   // the crown droops a little
+  };
   for (let k = 0; k < 8; k++) {
-    const th = (k / 8) * TAU + Math.PI / 8;
-    const bx = 0.172, by = -0.004 + Math.cos(th) * 0.02, bz = Math.sin(th) * 0.024;
-    const L = 0.1 + 0.025 * Math.abs(Math.cos(th));
-    const dir = new THREE.Vector3(1, Math.cos(th) * 0.32 + (Math.cos(th) > 0.5 ? 0.18 : 0), Math.sin(th) * 0.18).normalize();
-    const side = new THREE.Vector3(0, 1, 0).cross(dir).normalize(), up2 = new THREE.Vector3().crossVectors(dir, side).normalize();
     const base = pos.length / 3;
     for (let i = 0; i <= NS; i++) {
-      const t = i / NS, r = lerp(0.0085, 0.0016, Math.pow(t, 0.8));
-      // converge toward the crown's axis and curl slightly
-      const cx = bx + dir.x * L * t, cy = by + dir.y * L * t - Math.cos(th) * 0.012 * t * t, cz = bz + dir.z * L * t - Math.sin(th) * 0.012 * t * t;
+      const t = i / NS, r = lerp(0.0125, 0.0022, Math.pow(t, 0.85));
+      armAt(k, t, c0); armAt(k, Math.min(t + 0.02, 1), c1);
+      if (t >= 1) { armAt(k, 0.98, tg); tg.subVectors(c0, tg); } else tg.subVectors(c1, c0);
+      tg.normalize();
+      sd.set(0, 1, 0).cross(tg).normalize(); up2.crossVectors(tg, sd).normalize();
       for (let j = 0; j < NR; j++) {
-        const a = (j / NR) * TAU;
-        const ox = side.x * Math.cos(a) + up2.x * Math.sin(a), oy = side.y * Math.cos(a) + up2.y * Math.sin(a), oz = side.z * Math.cos(a) + up2.z * Math.sin(a);
-        vtx(cx + ox * r, cy + oy * r, cz + oz * r, 0.86 + 0.14 * t, 0.2 + 0.6 * (j / NR), 2, t, k);
+        const a = (j / NR) * TAU, ca = Math.cos(a), sa = Math.sin(a);
+        vtx(c0.x + (sd.x * ca + up2.x * sa) * r, c0.y + (sd.y * ca + up2.y * sa) * r, c0.z + (sd.z * ca + up2.z * sa) * r,
+          0.86 + 0.14 * t, 0.2 + 0.6 * (j / NR), 2, t, k);
       }
     }
-    const tip = vtx(bx + dir.x * L * 1.06, by + dir.y * L * 1.06 - Math.cos(th) * 0.013, bz + dir.z * L * 1.06 - Math.sin(th) * 0.013, 1, 0.5, 2, 1.05, k);
+    armAt(k, 1, c0); armAt(k, 0.98, c1); tg.subVectors(c0, c1).normalize();
+    const tip = vtx(c0.x + tg.x * 0.004, c0.y + tg.y * 0.004, c0.z + tg.z * 0.004, 1, 0.5, 2, 1.03, k);
     for (let i = 0; i < NS; i++) for (let j = 0; j < NR; j++) {
       const a = base + i * NR + j, b = base + i * NR + (j + 1) % NR, c = a + NR, d = b + NR;
       idx.push(a, b, c, b, d, c);
@@ -120,7 +132,7 @@ function buildGeometry() {
   g.setAttribute('aCut', new THREE.Float32BufferAttribute(cut, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(-0.05, 0, 0), 0.36);
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 0.37);
   return g;
 }
 
@@ -140,26 +152,37 @@ varying vec2 vCuUv;
 vec3 cuttleColor(){
   float u = vCuUv.x, v = vCuUv.y;          // u: 0 tail .. 1 arm tips; v: 0 dorsal midline .. 1 belly
   float dors = 1.0 - smoothstep(0.35, 0.72, v);
-  // mottled camouflage, coarse (it is small on screen): the fine octave fades out under ~3 px
-  float aa = 1.0 - smoothstep(0.08, 0.16, fwidth(u) * 12.0);
-  float m = vnoise(vec2(u * 7.0, v * 3.0) + uCuSeed) * 0.65 + (vnoise(vec2(u * 13.0, v * 6.0) + uCuSeed * 1.7) - 0.5) * 0.35 * aa + 0.175 * (1.0 - aa);
-  // (linear colours: a dark brown to a sandy tan mottle, cream spots)
-  vec3 col = mix(vec3(0.075, 0.048, 0.026), vec3(0.3, 0.22, 0.12), smoothstep(0.3, 0.72, m));
-  col = mix(col, vec3(0.5, 0.46, 0.37), smoothstep(0.7, 0.8, vnoise(vec2(u * 9.0, v * 4.0) + uCuSeed * 2.3 + 5.0)) * 0.75);
+  // each octave of skin detail fades to its average before it gets smaller than ~4 px (no shimmer)
+  float fw = max(fwidth(u), fwidth(v) * 0.4);
+  float aa = 1.0 - smoothstep(0.009, 0.018, fw), aaF = 1.0 - smoothstep(0.0056, 0.011, fw), aaD = 1.0 - smoothstep(0.0075, 0.015, fw);
+  // camouflage (linear colours): dark brown blotches over a tan ground, mean-preserving at any distance
+  float m = vnoise(vec2(u * 6.0, v * 2.6) + uCuSeed) * 0.7 + 0.15 + (vnoise(vec2(u * 14.0, v * 6.0) + uCuSeed * 1.7) - 0.5) * 0.4 * aa;
+  vec3 col = mix(vec3(0.05, 0.032, 0.018), vec3(0.17, 0.115, 0.06), smoothstep(0.28, 0.48, m));
+  col = mix(col, vec3(0.34, 0.27, 0.16), smoothstep(0.55, 0.75, m));
+  // cream flecks
+  float fl = smoothstep(0.72, 0.8, vnoise(vec2(u * 22.0, v * 9.0) + uCuSeed * 2.3 + 5.0));
+  col = mix(col, vec3(0.52, 0.48, 0.38), mix(0.05, fl * 0.8, aaF));
+  // the broadclub's white fin-line: a row of pale dashes along the base of each fin
+  float lineV = (1.0 - smoothstep(0.035, 0.075, abs(v - 0.5))) * step(u, 0.7);
+  col = mix(col, vec3(0.55, 0.53, 0.46), lineV * mix(0.3, smoothstep(0.1, 0.6, sin(u * 70.0 + 1.3)), aaD) * 0.8);
   // passing clouds: dark bands that flow from the tail toward the head
   float band = smoothstep(0.15, 0.85, sin(u * 14.0 - uCuCloudPh + v * 1.5));
   col = mix(col, vec3(0.018, 0.012, 0.008), band * uCuClouds * dors * 0.85);
-  // zebra display: bold transverse stripes on the back
-  float zb = smoothstep(-0.35, 0.35, sin(u * 30.0 + sin(v * 8.0) * 1.2));
+  // zebra display: bold transverse stripes on the back (their average far away)
+  float zb = mix(0.5, smoothstep(-0.35, 0.35, sin(u * 30.0 + sin(v * 8.0) * 1.2)), 1.0 - smoothstep(0.03, 0.06, fw));
   col = mix(col, mix(vec3(0.012, 0.01, 0.008), vec3(0.55, 0.52, 0.45), zb), uCuZebra * dors * 0.85);
   col *= 1.0 - 0.62 * uCuDark;
   col = mix(col, vec3(0.42, 0.39, 0.32), uCuPale * 0.7);
   col = mix(col, vec3(0.44, 0.41, 0.34), smoothstep(0.6, 0.86, v) * 0.8);   // paler underside
-  if (vCut.x > 0.5 && vCut.x < 1.5) col = mix(col * 0.85 + 0.03, vec3(0.6, 0.62, 0.58), smoothstep(0.6, 0.95, vCut.y) * 0.75);   // fin: pale edge
-  else if (vCut.x > 2.5) {                  // eye: golden iris facing out, a dark curved slit pupil
-    float e = vCut.y, ey = vCut.z;
-    col = mix(vec3(0.02, 0.018, 0.015), vec3(0.42, 0.3, 0.08), smoothstep(0.3, 0.55, e));
-    col = mix(col, vec3(0.02), smoothstep(0.62, 0.74, e) * smoothstep(0.3, 0.16, abs(ey + 0.12 * (1.0 - e) - 0.04)));
+  if (vCut.x > 0.5 && vCut.x < 1.5) col = mix(col * 0.7 + 0.015, vec3(0.5, 0.52, 0.48), smoothstep(0.65, 0.98, vCut.y) * 0.5);   // fin: a pale rim
+  else if (vCut.x > 2.5) {
+    // eye: a gold-and-silver iris with a dark W-shaped pupil; a fold of skin hoods the top of it
+    float e = vCut.y, ey = vCut.z, ex = vCuUv.x * 2.0 - 1.0;
+    vec3 iris = mix(vec3(0.15, 0.11, 0.045), vec3(0.36, 0.3, 0.14), smoothstep(0.55, 0.92, e) * (0.65 + 0.35 * ey));
+    vec3 ec = mix(vec3(0.03, 0.025, 0.02), iris, smoothstep(0.35, 0.55, e));
+    float yw = 0.035 * cos(ex * 15.7) - 0.035;
+    ec = mix(ec, vec3(0.008), smoothstep(0.075, 0.04, abs(ey - yw)) * smoothstep(0.48, 0.38, abs(ex)) * smoothstep(0.6, 0.75, e));
+    col = mix(ec, col, smoothstep(0.4, 0.55, ey));
   } else if (vCut.x > 1.5) col = mix(col, col * 0.8 + vec3(0.02, 0.015, 0.01), 0.5);
   return col;
 }
@@ -193,11 +216,14 @@ export class Cuttlefish {
           } else if (aCut.x > 1.5 && aCut.x < 2.5) {
             // arms: slow searching curls, raised and spread in alarm
             float t = aCut.y, k = aCut.z;
-            transformed.y += (sin(uTimeS * 1.1 + k * 0.9 + t * 2.5) * 0.008 + uCuArms * 0.05 * (k < 1.5 || k > 6.5 ? 1.0 : 0.35)) * t * t;
+            transformed.y += (sin(uTimeS * 1.1 + k * 0.9 + t * 2.5) * 0.008 + uCuArms * 0.05 * (k < 0.5 || k > 6.5 ? 1.0 : (k < 1.5 || k > 5.5 ? 0.5 : 0.22))) * t * t;
             transformed.z += cos(uTimeS * 0.9 + k * 1.3 + t * 2.0) * 0.006 * t * t;
           }`,
       },
-      fragment: { '#include <color_fragment>': '$&\ndiffuseColor.rgb = cuttleColor();' },
+      fragment: {
+        '#include <color_fragment>': '$&\ndiffuseColor.rgb = cuttleColor();',
+        '#include <roughnessmap_fragment>': '$&\nif (vCut.x > 2.5) roughnessFactor = 0.2;',   // a wet glint on the eye
+      },
     });
     waterize(mat, W, { key: 'cuttle', rim: 1.0 });
     this.mat = mat;
@@ -218,7 +244,7 @@ export class Cuttlefish {
     this.fin = rng.range(0, TAU); this.cloudPh = 0; this.roll = 0;
     this.huntT = rng.range(10, 25); this.huntOn = 0;
     this.d = { clouds: 0, dark: 0, pale: 0, zebra: 0, arms: 0 };
-    this.zebraT = 0;
+    this.zebraT = 0; this.zebraNext = rng.range(60, 140);
   }
 
   pickSpot() {
@@ -301,7 +327,9 @@ export class Cuttlefish {
     // skin: hunting episodes (passing clouds) now and then by day, a rare zebra display while hovering
     this.huntT -= dt;
     if (this.huntT <= 0) { this.huntOn = this.huntOn ? 0 : 1; this.huntT = this.huntOn ? r.range(6, 11) : r.range(14, 32); }
-    if (this.state === 'hover' && this.zebraT <= 0 && r.next() < dt * 0.012) this.zebraT = r.range(4, 7);
+    // the rare zebra display: a countdown (random draws only when it fires, so the same at any frame rate)
+    if (this.state === 'hover') this.zebraNext -= dt;
+    if (this.zebraNext <= 0) { this.zebraT = r.range(4, 7); this.zebraNext = r.range(60, 140); }
     this.zebraT -= dt;
     const day = 1 - smoothstep(0.3, 0.8, night);
     const tg = {
@@ -323,3 +351,6 @@ export class Cuttlefish {
 
   dispose() { this.geo.dispose(); }
 }
+
+// for tests (a node-side or bare-page look at the mesh)
+export { buildGeometry };

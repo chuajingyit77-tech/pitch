@@ -522,17 +522,20 @@ export function createLanterns(shared, list) {
     paint(new THREE.ConeGeometry(0.045, 0.22, 8), '#b8261c').rotateX(Math.PI).translate(0, -0.33, 0),
   ]);
   const n = list.length;
-  const glowU = { value: 1 };
+  const glowU = { value: 1 }, breathU = { value: 0 };
   const bodyMat = patchStd(new THREE.MeshStandardMaterial({ color: '#c42a1c', roughness: 0.7, emissive: new THREE.Color('#ff5a1e'), emissiveIntensity: 1 }), shared, {
     key: 'lantern',
-    uniforms: { uLanternGlow: glowU },
-    fragmentHeader: 'uniform float uLanternGlow;',
+    uniforms: { uLanternGlow: glowU, uBreath: breathU },
+    // each lantern breathes on its own slow phase (from where it hangs): a soft, unhurried glow, never in unison
+    vertexHeader: 'varying float vBreath;',
+    vertex: { '#include <begin_vertex>': '$&\n #ifdef USE_INSTANCING\n vBreath = dot(instanceMatrix[3].xyz, vec3(0.83, 0.37, 0.61));\n #else\n vBreath = 0.0;\n #endif' },
+    fragmentHeader: 'uniform float uLanternGlow, uBreath; varying float vBreath;',
     fragment: {
       '#include <emissivemap_fragment>': /* glsl */`$&
         { vec3 Vv = normalize(vViewPosition);
           float facing = abs(dot(normalize(vNormal), Vv));
           float ribs = 0.8 + 0.2 * smoothstep(0.0, 1.0, facing);
-          totalEmissiveRadiance *= uLanternGlow * (0.35 + 0.95 * pow(facing, 1.5)) * ribs; }
+          totalEmissiveRadiance *= uLanternGlow * (0.35 + 0.95 * pow(facing, 1.5)) * ribs * (0.9 + 0.1 * sin(uBreath + vBreath)); }
       `,
     },
   });
@@ -556,8 +559,10 @@ export function createLanterns(shared, list) {
     meshes: [bodies, capsM], state,
     update(t, night) {
       write(t);
-      // every lantern shares this value: a fast ±8% pulse made all of them throb together at night
+      // every lantern shares this value: a fast ±8% pulse made all of them throb together at night. On top, each
+      // breathes ±10% on its own phase, one slow breath every 7.5 s (the phase wraps after exactly one breath)
       glowU.value = lerp(0.12, 2.6, night) * (0.97 + 0.03 * Math.sin(t * 2.7));
+      breathU.value = ((t % 7.5) / 7.5) * TAU;
     },
   };
 }

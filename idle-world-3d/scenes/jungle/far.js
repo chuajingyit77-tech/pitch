@@ -12,11 +12,12 @@
 import * as THREE from 'three';
 import { JG_GLSL } from './shading.js';
 
-/** The mist curtains: radius about the view target, centre height, half-thickness, density. */
+/** The mist curtains: radius about the view target, centre height, half-thickness, density. The valley between
+ * the ridges, the foot of the ancient tree and the air before the mountains each hold one. */
 export const MIST_SHEETS = [
-  { r: 74, y: 25.5, h: 3.6, k: 0.5 },     // round the giants' feet, just in front of the near ridge
-  { r: 140, y: 46, h: 6.5, k: 0.58 },     // round the ancient tree's foot, in front of the far ridge
-  { r: 215, y: 70, h: 20, k: 0.5 },       // high haze in front of the far mountains
+  { r: 101, y: 27, h: 5.5, k: 0.5 },      // valley mist behind the near ridge: the giants stand out against it
+  { r: 153, y: 44, h: 8, k: 0.55 },       // round the ancient tree's foot, behind the far ridge
+  { r: 230, y: 66, h: 20, k: 0.45 },      // high haze in front of the far mountains
 ];
 const CX = 1.4, CZ = -3.6; // the view target (jungle.js VIEW_TARGET)
 
@@ -24,13 +25,14 @@ export function createVistaUniforms() {
   return {
     uHazeCol: { value: new THREE.Color('#9fb8ae') },     // aerial perspective colour (away from the sun)
     uHazeSunCol: { value: new THREE.Color('#e8e0c0') },  // toward the sun
-    uHazeK: { value: 1 / 240 },                          // haze per metre beyond the clearing
+    uHazeK: { value: 1 / 340 },                          // haze per metre beyond the clearing
     uMistCol: { value: new THREE.Color('#c8d8d0') },     // lit mist
     uMistAmt: { value: 1 },
     uMistScroll: { value: new THREE.Vector4() },          // drifting noise offsets, wrapped to 1 in JS
     uSkyAmb: { value: new THREE.Color('#9ab0c0') },
     uGroundAmb: { value: new THREE.Color('#3a4a30') },
     uFarGlow: { value: new THREE.Color('#3ff0d8') },     // bioluminescent moss on the tree roots / the giants' backs
+    uVistaExp: { value: 0.6 },                            // the open air out there is far brighter than the shaded clearing: an exposure for it
     uGlowPh: { value: 0 },                                // breathing phase of that glow, wrapped in JS
   };
 }
@@ -44,7 +46,7 @@ const sheetCall = (k, scroll) => {
 // The GLSL shared by every far material and the sky (needs JG_GLSL's uniforms and functions in front of it).
 export const VISTA_GLSL = /* glsl */`
   uniform vec3 uHazeCol, uHazeSunCol, uMistCol, uSkyAmb, uGroundAmb, uFarGlow;
-  uniform float uHazeK, uMistAmt, uGlowPh;
+  uniform float uHazeK, uMistAmt, uGlowPh, uVistaExp;
   uniform vec4 uMistScroll;
   // one curtain of mist: the vertical cylinder of radius R about the view target, a soft band round height y0
   // (denser at its foot), its noise drifting along it
@@ -81,13 +83,15 @@ export const VISTA_GLSL = /* glsl */`
   }
   // haze + mist curtains + the scene's height fog
   vec3 vistaAtmos(vec3 col, vec3 wp, float tSurf, vec3 rd) {
-    // aerial perspective beyond the clearing (the first 40 m are the clearing's own air)
-    float d = max(tSurf - 40.0, 0.0);
+    // aerial perspective beyond the clearing (the first 60 m are the clearing's own air)
+    float d = max(tSurf - 60.0, 0.0);
     float haze = 1.0 - exp(-d * uHazeK);
     float sunF = pow(max(dot(rd, uLightDirW), 0.0), 3.0) * smoothstep(-0.12, 0.08, uLightDirW.y);
     col = mix(col, mix(uHazeCol, uHazeSunCol, sunF), haze);
     col = vistaMist(col, tSurf, rd);
-    return jgFog(col, wp);
+    // the clearing's ground fog is calibrated for its own humid air: light from the vista only crosses the first few
+    // tens of metres of it (the rest of the way is the haze above)
+    return jgFog(col, cameraPosition + (wp - cameraPosition) * 0.2);
   }
   // open-air light: sun or moon with a soft wrap, sky / ground ambient (ao = baked occlusion), soft rim light
   vec3 vistaLight(vec3 albedo, vec3 N, vec3 V, float ao, float wrapK) {
@@ -96,12 +100,12 @@ export const VISTA_GLSL = /* glsl */`
     float wrap = max((ndl + wrapK) / (1.0 + wrapK), 0.0);
     float up = N.y * 0.5 + 0.5;
     vec3 amb = mix(uGroundAmb, uSkyAmb, up);
-    vec3 col = albedo * (amb * ao + uLightCol * wrap * (0.55 + 0.45 * ao));
+    vec3 col = albedo * (amb * ao * 0.5 + uLightCol * wrap * (0.55 + 0.45 * ao) * 0.78);
     // rim: a thin bright edge on the silhouette, strongest with the light behind it (back-lit mist and hide)
     float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
     float back = pow(max(dot(-V, L), 0.0), 2.0);
-    col += (uLightCol * (0.05 + 0.3 * back) + uSkyAmb * 0.1) * rim * ao;
-    return col;
+    col += (uLightCol * (0.04 + 0.42 * back) + uSkyAmb * 0.1) * rim * ao;
+    return col * uVistaExp;
   }
 `;
 

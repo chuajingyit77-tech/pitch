@@ -9,7 +9,7 @@ import { puffTexture } from './textures.js';
 
 const PVERT = /* glsl */`
 attribute vec4 aP;   // centre xyz, size (m)
-attribute vec4 aC;   // alpha, glow share, kind (0 mist puff, 1 spray), seed
+attribute vec4 aC;   // alpha, glow share, kind (0 mist puff .. 1 spray drop; sheets of water in between), seed
 attribute vec4 aV;   // velocity (m/s), stretch (s): spray is drawn as a streak along its motion
 uniform float uPxScale;   // pixels per metre at distance 1 (0.5 x buffer height x projection[1][1])
 varying vec2 vUv;
@@ -23,7 +23,7 @@ void main() {
   float sp = length(vv);
   if (aV.w > 0.0 && sp > 0.05) {
     ax1 = vv / sp;
-    ax2 = normalize(cross(ax1, camDir));
+    ax2 = normalize(cross(camDir, ax1));   // (ax2, ax1) wind counter-clockwise seen from the camera: front-facing
     len = 1.0 + aV.w * sp;
   } else {
     vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
@@ -133,8 +133,12 @@ export function createWhaleFx(env, { wind }) {
    * single call. Velocities in m/s; drag pulls toward the wind (wk = how much it rides the wind).
    */
   function emit(x, y, z, ux, uy, uz, lf, sa, sb, al, k, gl, dr, gr, w, delay = 0, fadeIn = 0.12, stretch = 0) {
-    const i = cursor; cursor = (cursor + 1) % MAXP;
-    if (life[i] < 0) alive++;
+    // the next free slot; when every slot is busy the new one is dropped (a live one never vanishes mid-flight)
+    if (alive >= MAXP) return;
+    let i = cursor;
+    while (life[i] >= 0) i = (i + 1) % MAXP;
+    cursor = (i + 1) % MAXP;
+    alive++;
     px[i] = x; py[i] = y; pz[i] = z; vx[i] = ux; vy[i] = uy; vz[i] = uz;
     age[i] = -delay; life[i] = lf; s0[i] = sa; s1[i] = sb; a0[i] = al;
     kind[i] = k; glow[i] = gl; drag[i] = dr; grav[i] = gr; wk[i] = w; fin[i] = fadeIn; seed[i] = rnd(); str[i] = stretch;
@@ -152,10 +156,10 @@ export function createWhaleFx(env, { wind }) {
     const n = Math.round(22 + 26 * k);
     for (let i = 0; i < n; i++) {
       const side = i % 2 ? 1 : -1, f = rnd();
-      const up = lerp(3, 13, Math.pow(f, 0.55)) * sk, tilt = 0.05 + 0.1 * f + rnd() * 0.04;
+      const up = lerp(3, 14.5, Math.pow(f, 0.55)) * sk, tilt = 0.05 + 0.1 * f + rnd() * 0.04;
       emit(x + sx * side * 0.2 * k, y + 0.05, z + sz * side * 0.2 * k,
         sx * side * up * tilt + jit(0.3 + 0.6 * f), up, sz * side * up * tilt + jit(0.3 + 0.6 * f),
-        2.2 + 3.0 * f + rnd() * 0.8, 0.28 * k, (0.9 + 2.4 * f) * k, 0.5 + rnd() * 0.3,
+        2.4 + 3.0 * f + rnd() * 0.8, 0.32 * k, (1.0 + 2.8 * f) * k, 0.55 + rnd() * 0.3,
         0, gl * 0.35, 2.3, -0.1, 1, rnd() * 0.75, 0.08);
     }
     for (let i = 0; i < Math.round(8 + 8 * k); i++) {
@@ -175,6 +179,11 @@ export function createWhaleFx(env, { wind }) {
   }
   /** Water pouring off a surface moving at (ux, uy, uz): streaks that fall back. */
   function pour(x, y, z, ux, uy, uz, k = 1, gl = 0) {
+    if (rnd() < 0.3) {   // a sheet of white water
+      emit(x + jit(0.3 * k), y, z + jit(0.3 * k), ux * 0.7 + jit(0.8), uy * 0.7 + jit(0.6), uz * 0.7 + jit(0.8),
+        0.8 + rnd() * 0.6, (0.6 + rnd() * 0.4) * k, (1.2 + rnd() * 0.6) * k, 0.5 + rnd() * 0.2, 0.65, gl * 0.8, 0.45, 9.8, 0.1, 0, 0.08, 0.05);
+      return;
+    }
     emit(x + jit(0.35 * k), y, z + jit(0.35 * k), ux * 0.82 + jit(1.0), uy * 0.82 + jit(0.8), uz * 0.82 + jit(1.0),
       0.9 + rnd() * 0.7, (0.2 + rnd() * 0.16) * k, (0.3 + rnd() * 0.2) * k, 0.6 + rnd() * 0.2, 1, gl * 0.8, 0.3, 9.8, 0.1, 0, 0.06, 0.08);
   }
@@ -191,32 +200,43 @@ export function createWhaleFx(env, { wind }) {
   function crown(cx, cz, ax, az, len, k = 1, gl = 0, mist = true) {
     const l = Math.hypot(ax, az) || 1, ux = ax / l, uz = az / l, nx = -uz, nz = ux;
     const sk = Math.sqrt(k);
-    // spray: streaks thrown up and out to both sides, the tallest from the middle of the line
-    const nDrop = Math.round((90 + 80 * q) * k);
-    for (let i = 0; i < nDrop; i++) {
-      const along = (rnd() - 0.5) * len, side = rnd() < 0.5 ? -1 : 1, mid = 1 - Math.abs(along) / (len * 0.5 + 1e-3) * 0.6;
-      const f = Math.pow(rnd(), 0.8);
-      const up = (4 + 14 * f * mid) * sk, out = (1 + 5.5 * rnd()) * sk;
-      emit(cx + ux * along + nx * side * (0.5 + rnd()) * k, 0.1, cz + uz * along + nz * side * (0.5 + rnd()) * k,
-        nx * side * out + ux * jit(1.2), up, nz * side * out + uz * jit(1.2),
-        0.7 + up / 9.8 * 1.6 + rnd() * 0.3, (0.45 + rnd() * 0.5) * k, (0.8 + rnd() * 0.6) * k, 0.8 + rnd() * 0.15, 1, gl, 0.25, 9.8, 0.05, rnd() * 0.15, 0.05, 0.07);
+    // the body goes in front end first (along +axis): the splash runs back along the line over a moment
+    const run = 0.3 * Math.min(1, len / 8), half = len * 0.5 + 1e-3;
+    // jets: streamers of water flung high from the middle of the line, the tallest part of the splash
+    const nJet = Math.round((14 + 10 * q) * k);
+    for (let i = 0; i < nJet; i++) {
+      const along = (rnd() - 0.5) * len * 0.7, side = rnd() < 0.5 ? -1 : 1, mid = 1 - 0.45 * Math.abs(along) / half;
+      const up = (9 + 9 * Math.pow(rnd(), 0.7) * mid) * sk, out = (0.5 + 2.4 * rnd()) * sk;
+      emit(cx + ux * along + nx * side * 0.6 * k, 0.2, cz + uz * along + nz * side * 0.6 * k,
+        nx * side * out + ux * jit(0.8), up, nz * side * out + uz * jit(0.8),
+        0.8 + up / 9.8 * 1.5, (0.55 + 0.45 * rnd()) * k, (1.1 + 0.8 * rnd()) * k, 0.85, 1, gl, 0.22, 9.8, 0.05,
+        run * (0.5 - along / len) + rnd() * 0.14, 0.05, 0.1);
     }
-    // sheets of white water: big, soft, they rise as walls along both flanks and collapse
-    for (let i = 0; i < Math.round((26 + 18 * q) * k); i++) {
-      const along = (rnd() - 0.5) * len, side = rnd() < 0.5 ? -1 : 1;
-      const up = (3 + 7 * rnd()) * sk;
-      emit(cx + ux * along + nx * side * (0.8 + rnd()) * k, 0.3, cz + uz * along + nz * side * (0.8 + rnd()) * k,
-        nx * side * (1.2 + 3 * rnd()) * sk, up, nz * side * (1.2 + 3 * rnd()) * sk,
-        0.9 + up / 9.8 * 1.5, (2.0 + rnd() * 1.2) * k, (3.0 + rnd() * 1.5) * k, 0.55 + rnd() * 0.2, 1, gl, 0.4, 9.8, 0.05, rnd() * 0.12, 0.08, 0.03);
+    // curtains: sheets of white water thrown up and out to both sides (a wall seen broadside, a V seen end-on),
+    // steep close in, flatter and lower further out; they hang, then collapse back
+    const nSheet = Math.round((24 + 16 * q) * k);
+    for (let i = 0; i < nSheet; i++) {
+      const along = (rnd() - 0.5) * len, side = i % 2 ? 1 : -1, f = rnd();
+      const el = lerp(1.2, 0.6, f), s = (6 + 6.5 * rnd()) * sk * (1 - 0.3 * Math.abs(along) / half);
+      const up = s * Math.sin(el), out = s * Math.cos(el);
+      emit(cx + ux * along + nx * side * (0.6 + 0.9 * f) * k, 0.25, cz + uz * along + nz * side * (0.6 + 0.9 * f) * k,
+        nx * side * out + ux * jit(0.6), up, nz * side * out + uz * jit(0.6),
+        0.9 + up / 9.8 * 1.6, (1.4 + rnd()) * k, (2.8 + 1.6 * rnd()) * k, 0.55 + rnd() * 0.25, 0.65, gl, 0.35, 9.8, 0.05,
+        run * (0.5 - along / len) + rnd() * 0.1, 0.07, 0.06);
+    }
+    // spray: drops flung everywhere, the finest the furthest
+    const nDrop = Math.round((70 + 60 * q) * k);
+    for (let i = 0; i < nDrop; i++) {
+      const along = (rnd() - 0.5) * len * 1.1, side = rnd() < 0.5 ? -1 : 1, f = Math.pow(rnd(), 0.7);
+      const el = lerp(1.3, 0.45, rnd()), s = (5 + 12 * f) * sk;
+      const up = s * Math.sin(el), out = s * Math.cos(el);
+      emit(cx + ux * along + nx * side * (0.5 + rnd()) * k, 0.2, cz + uz * along + nz * side * (0.5 + rnd()) * k,
+        nx * side * out + ux * jit(1.2), up, nz * side * out + uz * jit(1.2),
+        0.7 + up / 9.8 * 1.7 + rnd() * 0.3, (0.22 + 0.3 * rnd()) * k, (0.36 + 0.36 * rnd()) * k, 0.8 + rnd() * 0.15, 1, gl, 0.2, 9.8, 0.05,
+        run * (0.5 - along / len) + rnd() * 0.22, 0.05, 0.08);
     }
     if (!mist) return;
-    // the plume where the body went in, and a low mist that spreads, settles and thins out
-    for (let i = 0; i < Math.round(8 * k); i++) {
-      const along = (rnd() - 0.5) * len * 0.5;
-      const up = (6 + 6 * rnd()) * sk;
-      emit(cx + ux * along + jit(1) * k, 0.4, cz + uz * along + jit(1) * k, jit(1), up, jit(1),
-        1.0 + up / 9.8 * 1.4, (2.2 + rnd()) * k, (3.4 + rnd() * 1.2) * k, 0.6, 1, gl, 0.5, 9.8, 0.05, rnd() * 0.1, 0.08, 0.02);
-    }
+    // a low mist that spreads, settles and thins out as the spray rains back
     const nMist = Math.round((9 + 6 * q) * k);
     for (let i = 0; i < nMist; i++) {
       const along = (rnd() - 0.5) * len * 0.9, side = rnd() < 0.5 ? -1 : 1;
@@ -224,6 +244,16 @@ export function createWhaleFx(env, { wind }) {
         nx * side * (1 + rnd() * 2.2), 0.2 + rnd() * 0.8, nz * side * (1 + rnd() * 2.2),
         3.4 + rnd() * 1.8, (2.2 + rnd()) * k, (6 + rnd() * 3) * k, 0.32 + rnd() * 0.15, 0, gl * 0.6, 0.9, 0.08, 0.6, 0.35 + rnd() * 0.6, 0.5);
     }
+  }
+
+  /** A diving bird going in: a thin column of spray and a small ring. */
+  function splashBird(x, y, z, ux, uz, k = 1) {
+    for (let i = 0; i < Math.round(8 + 6 * q); i++) {
+      emit(x + jit(0.15), y + 0.05, z + jit(0.15), ux * 0.05 + jit(0.9), 2.5 + rnd() * 3.5, uz * 0.05 + jit(0.9),
+        0.5 + rnd() * 0.5, 0.12 + rnd() * 0.08, 0.2, 0.7, 1, 0, 0.3, 9.8, 0.05, 0, 0.04, 0.06);
+    }
+    emit(x, y + 0.2, z, 0, 0.6, 0, 0.9, 0.3, 0.9, 0.35, 0, 0, 1.5, 0.5, 0.2, 0, 0.1);
+    patch(2, x, z, 3.2, 3.2, 0, 2.6, 0.6 * k);
   }
 
   /* ---------------- the field on the sea (white water, rings, calm slicks) ---------------- */
@@ -378,8 +408,9 @@ export function createWhaleFx(env, { wind }) {
   function setView(bufH, proj) { U.uPxScale.value = 0.5 * bufH * proj.elements[5]; }
 
   return {
-    group, emit, spout, wash, pour, drip, crown, patch, centre, update, setLight, setView,
+    group, emit, spout, wash, pour, drip, crown, splashBird, patch, centre, update, setLight, setView,
     get busy() { return alive > 0 || fieldLive > 0; },
+    stats() { return { drawn: geo.instanceCount, alive, max: MAXP, patches: fieldLive }; },
     dispose() { base.dispose(); geo.dispose(); mat.dispose(); puff.dispose(); tex.dispose(); whaleFieldUniforms.tWhaleFx.value = null; },
   };
 }

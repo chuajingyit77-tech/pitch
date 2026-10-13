@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, makeCanvas } from '../../lib/util.js';
 import { SHARED_GLSL, CLOUD_TOP } from './common.js';
-import { createPuffs } from './clouds.js';
+import { createPuffs, SEA_HEIGHT_GLSL, seaHeightUniforms } from './clouds.js';
 import { DECODE_GLSL } from './flora.js';
 
 /* ------------------------------------------------------------------ */
@@ -33,8 +33,8 @@ import { DECODE_GLSL } from './flora.js';
 // stock with keels. top / bot: height of the back / depth of the belly above / below the spine axis, w: half
 // width, yc: offset of the section centre.
 const P_U = [0, 0.0015, 0.005, 0.011, 0.02, 0.032, 0.045, 0.06, 0.10, 0.15, 0.22, 0.30, 0.40, 0.50, 0.60, 0.70, 0.78, 0.85, 0.91, 0.96, 1.0];
-const P_TOP = [0, 0.0089, 0.0162, 0.0240, 0.0323, 0.0409, 0.0485, 0.056, 0.069, 0.079, 0.087, 0.091, 0.090, 0.084, 0.074, 0.061, 0.049, 0.038, 0.028, 0.019, 0.013];
-const P_BOT = [0, 0.0085, 0.0156, 0.0231, 0.0312, 0.0394, 0.0468, 0.054, 0.070, 0.083, 0.094, 0.098, 0.094, 0.084, 0.069, 0.052, 0.038, 0.027, 0.018, 0.012, 0.009];
+const P_TOP = [0, 0.0072, 0.0128, 0.0186, 0.0246, 0.0306, 0.0366, 0.0428, 0.058, 0.072, 0.084, 0.090, 0.090, 0.084, 0.074, 0.061, 0.049, 0.038, 0.028, 0.019, 0.013];
+const P_BOT = [0, 0.0098, 0.0178, 0.0262, 0.0352, 0.0444, 0.0526, 0.0606, 0.078, 0.091, 0.099, 0.100, 0.094, 0.084, 0.069, 0.052, 0.038, 0.027, 0.018, 0.012, 0.009];
 const P_W = [0, 0.0092, 0.0167, 0.0248, 0.0335, 0.0424, 0.0502, 0.058, 0.071, 0.081, 0.090, 0.093, 0.090, 0.081, 0.068, 0.052, 0.037, 0.025, 0.016, 0.011, 0.008];
 const P_YC = [0, -0.002, -0.004, -0.006, -0.007, -0.008, -0.008, -0.008, -0.007, -0.005, -0.003, 0, 0.002, 0.004, 0.006, 0.008, 0.010, 0.011, 0.012, 0.012, 0.012];
 function spline(xs, ys, x) {
@@ -166,19 +166,19 @@ export function kunGeometry(L, q = 0.45) {
   }
 
   /* ---- pectoral fins: long, wing-like, swept back, tubercles on the leading edge ---- */
-  const S = 0.30 * L, uR = 0.255, pr = prof(uR), aR = 1.98;   // root on the lower flank (~113 deg from the top)
+  const S = 0.33 * L, uR = 0.255, pr = prof(uR), aR = 1.98;   // root on the lower flank (~113 deg from the top)
   const eR = 2 / 2.25;
   const fins = [], veils = [];
   const pecMeta = [];
   for (const sz of [-1, 1]) {
     const part = new Part(sz < 0 ? 1 : 2);
     const root = new THREE.Vector3(-uR * L, (pr.yc + pr.bot * spow(Math.cos(aR), eR)) * L * 0.92, sz * pr.w * spow(Math.sin(aR), eR) * L * 0.92);
-    const Lam = 0.32, dih = 0.36;   // sweep back, droop (rad)
+    const Lam = 0.52, dih = 0.26;   // sweep back, droop (rad)
     const ds = new THREE.Vector3(-Math.sin(Lam), -Math.sin(dih), sz * Math.cos(dih) * Math.cos(Lam)).normalize();
     const dc = new THREE.Vector3(-1, 0, 0).addScaledVector(ds, ds.x).normalize();
     const dt = new THREE.Vector3().crossVectors(dc, ds).normalize();
     if (dt.y < 0) dt.negate();
-    const chord = sig => 0.066 * L * (1 - 0.5 * sig) * Math.sqrt(Math.max(0.02, 1 - Math.pow(Math.max(sig, 0), 6)));
+    const chord = sig => 0.062 * L * (1 - 0.52 * sig) * Math.sqrt(Math.max(0.02, 1 - Math.pow(Math.max(sig, 0), 6)));
     const c0 = chord(0);
     const bump = sig => 0.0085 * L * Math.pow(Math.max(0, Math.sin(sig * Math.PI * 9 - 0.6)), 2) * smoothstep(0.15, 0.45, sig) * (1 - smoothstep(0.86, 0.98, sig));
     const st = [], nS = q >= 0.7 ? 22 : 17;
@@ -196,14 +196,14 @@ export function kunGeometry(L, q = 0.45) {
   /* ---- flukes ---- */
   const fl = new Part(3);
   const tail = new THREE.Vector3(-L, prof(1).yc * L, 0);
-  const B = 0.155 * L;
+  const B = 0.17 * L;
   const flukeMeta = [];
   for (const sz of [-1, 1]) {
     const st = [], nS = q >= 0.7 ? 18 : 14;
-    const chord = sig => 0.072 * L * (1 - 0.6 * Math.pow(sig, 1.3)) * Math.sqrt(Math.max(0.02, 1 - Math.pow(sig, 8)));
+    const chord = sig => 0.078 * L * (1 - 0.6 * Math.pow(sig, 1.3)) * Math.sqrt(Math.max(0.02, 1 - Math.pow(sig, 8)));
     for (let j = 0; j <= nS; j++) {
       const sig = Math.min(0.99, Math.pow(j / nS, 0.9) * 0.99);
-      const le = tail.clone().add(new THREE.Vector3(0.03 * L - 0.085 * L * Math.pow(sig, 1.5), 0.004 * L * sig * sig, sz * B * sig));
+      const le = tail.clone().add(new THREE.Vector3(0.03 * L - 0.09 * L * Math.pow(sig, 1.5), 0.018 * L * Math.pow(sig, 2.2), sz * B * sig));
       const notch = 0.016 * L * (1 - smoothstep(0, 0.16, sig));
       const te = le.clone().add(new THREE.Vector3(-chord(sig) + notch + 0.006 * L * Math.sin(sig * Math.PI), 0, 0));
       st.push({ le, te, t: 0.11 * chord(sig) * (1 - 0.5 * sig), sig });
@@ -226,13 +226,13 @@ export function kunGeometry(L, q = 0.45) {
     cols.forEach((j, ci) => {
       const s = m.st[j], sig = s.sig;
       const scal = 0.8 + 0.2 * Math.abs(Math.sin(sig * Math.PI * 5.5));
-      const len = L * (0.03 + 0.05 * smoothstep(0.35, 0.95, sig) + 0.07 * smoothstep(0.86, 0.985, sig)) * scal;
+      const len = L * (0.04 + 0.07 * smoothstep(0.35, 0.95, sig) + 0.08 * smoothstep(0.86, 0.985, sig)) * scal;
       base.push(V.pos.length / 3);
       const ph = ci * 0.9;
       for (let k = 0; k <= nR; k++) {
         const rho = k / nR;
         // the free part trails back along the chord, curling a little toward the fin's underside
-        const p = m.tes[j].clone().addScaledVector(m.dc, rho * len).addScaledVector(m.dt, -0.08 * rho * rho * len);
+        const p = m.tes[j].clone().addScaledVector(m.dc, rho * len).addScaledVector(m.dt, -0.18 * rho * rho * len);
         V.v(p.x, p.y, p.z, sig, rho, [m.root.x, m.root.y, m.root.z, sig], 0, [rho, len, ph, 0]);
       }
     });
@@ -250,11 +250,11 @@ export function kunGeometry(L, q = 0.45) {
     m.st.forEach((s, j) => {
       if (s.sig < 0.18) return;
       const sig = s.sig, scal = 0.78 + 0.22 * Math.abs(Math.sin(sig * Math.PI * 4.5));
-      const len = L * (0.025 + 0.04 * smoothstep(0.2, 0.9, sig)) * scal;
+      const len = L * (0.035 + 0.065 * smoothstep(0.2, 0.9, sig)) * scal;
       base.push(V.pos.length / 3);
       for (let k = 0; k <= nR; k++) {
         const rho = k / nR;
-        const p = m.tes[j].clone().add(new THREE.Vector3(-rho * len, -0.05 * rho * rho * len, 0));
+        const p = m.tes[j].clone().add(new THREE.Vector3(-rho * len, -0.2 * rho * rho * len, m.sz * 0.12 * rho * rho * len * sig));
         V.v(p.x, p.y, p.z, sig, rho, [tail.x, tail.y, tail.z, sig], 0, [rho, len, j * 1.1 + (m.sz > 0 ? 2.0 : 0), 0]);
       }
     });
@@ -285,8 +285,8 @@ function kunSkin(rng, W) {
   const w = 1024, h = 256;
   // countershading: slate-jade back, grey-jade flank, white-jade belly
   const grad = ga.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#3a5553'); grad.addColorStop(0.28, '#47625f'); grad.addColorStop(0.44, '#6f8b85');
-  grad.addColorStop(0.56, '#a9bdb6'); grad.addColorStop(0.66, '#d5e0da'); grad.addColorStop(1, '#e6ede8');
+  grad.addColorStop(0, '#30554c'); grad.addColorStop(0.28, '#3f6359'); grad.addColorStop(0.44, '#6a8e82');
+  grad.addColorStop(0.56, '#a6c0b4'); grad.addColorStop(0.66, '#d2e2d8'); grad.addColorStop(1, '#e4eee6');
   ga.fillStyle = grad; ga.fillRect(0, 0, w, h);
   // the belly's edge: wavy, higher on the throat, lower toward the tail (feathered in layers: no canvas blur on Safari 14)
   const edge = x => {
@@ -294,7 +294,7 @@ function kunSkin(rng, W) {
     return h * (0.53 + 0.035 * Math.sin(u * 14.5 + 1.0) + 0.02 * Math.sin(u * 37 + 2.0) - 0.07 * (1 - smoothstep(0.0, 0.42, u)) + 0.09 * smoothstep(0.62, 1.0, u));
   };
   for (let l = 0; l < 7; l++) {
-    ga.fillStyle = `rgba(222,232,226,${0.16 + l * 0.05})`;
+    ga.fillStyle = `rgba(220,234,225,${0.16 + l * 0.05})`;
     ga.beginPath(); ga.moveTo(0, h);
     for (let x = 0; x <= w; x += 8) ga.lineTo(x, edge(x) - 9 + l * 3);
     ga.lineTo(w, h); ga.closePath(); ga.fill();
@@ -387,17 +387,11 @@ function kunSkin(rng, W) {
 /* Shaders                                                             */
 /* ------------------------------------------------------------------ */
 const KUN_GLSL = /* glsl */`
-#if __VERSION__ < 300
-#define textureLod texture2DLod
-#endif
+${SEA_HEIGHT_GLSL}
 uniform vec3 uC0, uC1, uC2, uC3;     // the spine path under the body, a cubic in u (0 snout .. 1 tail stock)
 uniform float uLen, uPhase, uAmp, uWaveK, uRoll;
 uniform vec4 uFin;     // stroke amplitude (rad), rest offset (rad), phase offset, span-wise lag
 uniform vec4 uFluke;   // pitch amplitude, phase lag, veil lag, unused
-uniform sampler2D tBillow;   // the cloud sea's height field (same uniforms as the sea)
-uniform vec4 uL1, uL2, uL0;
-uniform vec2 uRot2;
-uniform float uTexSize, uCurve, uSeaA, uSeaB, uSeaSegs;
 attribute vec4 aHinge;
 attribute float aPart, aSide;
 vec3 kRotX(vec3 v, float a){ float c = cos(a), s = sin(a); return vec3(v.x, v.y * c - v.z * s, v.y * s + v.z * c); }
@@ -437,18 +431,6 @@ void kunDeform(vec3 p, vec3 n, float part, vec4 hinge, float lagPh, out vec3 wp,
   kunFrame(ub, S, F, U, R);
   wp = S + F * (q.x + ub * uLen) + U * q.y + R * q.z;
   wn = F * m.x + U * m.y + R * m.z;
-}
-// height of the cloud sea's surface, exactly as its vertex shader puts it (texture LOD by its mesh spacing)
-float seaHeightAt(vec2 xz){
-  float r = length(xz);
-  float sp = max(uSeaB * (r + uSeaA), 6.2831853 * r / uSeaSegs);
-  float lod1 = clamp(log2(max(sp * uL1.x * uTexSize, 1.0)), 0.0, 9.0);
-  float lod2 = clamp(log2(max(sp * uL2.x * uTexSize, 1.0)), 0.0, 9.0);
-  vec2 xr = vec2(xz.x * uRot2.x - xz.y * uRot2.y, xz.x * uRot2.y + xz.y * uRot2.x);
-  float h1 = textureLod(tBillow, xz * uL1.x + uL1.yz, lod1).r;
-  float h2 = textureLod(tBillow, xr * uL2.x + uL2.yz, lod2).r;
-  float sw = textureLod(tBillow, xz * uL0.x + uL0.yz, 5.0).a;
-  return uCloudTop + (h1 - 0.45) * uL1.w * (0.55 + 0.9 * sw) + (h2 - 0.5) * uL2.w + (sw - 0.5) * uL0.w - dot(xz, xz) * uCurve;
 }
 `;
 
@@ -494,14 +476,16 @@ void main(){
   if (part < 0.5 || part > 3.5) {
     vec4 tx = texture2D(tPattern, vUv);
     alb = csDecodeSRGB(tx.rgb); glow = tx.a;
+    // soft occlusion where the flanks turn under toward the belly, and round the throat
+    alb *= 1.0 - 0.28 * smoothstep(0.5, 0.78, vUv.y) * (1.0 - smoothstep(0.86, 1.0, vUv.y));
     if (part > 3.5) { thin = 0.45; alb = mix(alb, vec3(0.13, 0.2, 0.19), 0.35); glow = 0.0; }
   } else {
     // fins and flukes: slate above, pale jade below, the trailing edge and the tip paler and translucent
     float sig = vUv.x, c = vUv.y;
-    vec3 top = vec3(0.052, 0.085, 0.082), under = vec3(0.62, 0.71, 0.67);
+    vec3 top = vec3(0.04, 0.09, 0.072), under = vec3(0.34, 0.47, 0.42);
     alb = mix(under, top, smoothstep(-0.6, 0.6, vInfo.y));
     float edgeZone = smoothstep(0.55, 1.0, c) * 0.6 + smoothstep(0.7, 1.0, sig) * 0.4;
-    alb = mix(alb, vec3(0.42, 0.6, 0.56), edgeZone * 0.6);
+    alb = mix(alb, vec3(0.4, 0.62, 0.53), edgeZone * 0.6);
     // pale knobs along the pectoral fins' leading edges
     alb = mix(alb, vec3(0.7, 0.78, 0.74), (1.0 - smoothstep(0.0, 0.12, c)) * step(part, 2.5) * 0.6);
     thin = 0.35 + 0.65 * edgeZone;
@@ -509,7 +493,7 @@ void main(){
   }
   float ndl = dot(N, L);
   float wr = clamp((ndl + 0.32) / 1.32, 0.0, 1.0);
-  vec3 col = alb * (uLightCol * wr * wr + uAmbient * (0.66 + 0.4 * N.y) + uBounce * (0.42 - 0.42 * N.y));
+  vec3 col = alb * (uLightCol * wr * wr + uAmbient * (0.66 + 0.4 * N.y) + uBounce * (0.3 - 0.3 * N.y));
   // light through the thin fins and the edges when the sun or moon is behind
   float bl = pow(max(dot(-V, L), 0.0), 3.0);
   col += alb * uLightCol * bl * (thin * 1.1 + 0.08);
@@ -542,7 +526,7 @@ void main(){
   // further out, the veil follows the fin's stroke later: it flows
   kunDeform(position, normal, aPart, aHinge, rho * uFluke.z, wp, wn, ub);
   wn = normalize(wn);
-  wp += wn * sin(uPhase * 2.0 - rho * 4.5 + aVeil.z) * rho * rho * aVeil.y * 0.1;
+  wp += wn * sin(uPhase * 2.0 - rho * 4.5 + aVeil.z) * rho * rho * aVeil.y * 0.16;
   vW = wp; vN = wn; vUv = uv;
   vInfo = vec4(aPart, rho, seaHeightAt(wp.xz), ub);
   gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
@@ -560,8 +544,8 @@ void main(){
   // fine rays along the membrane, faded out before they get thinner than a pixel
   float rp = sig * 64.0;
   float rays = sin(rp * 6.2831853) * (1.0 - smoothstep(0.25, 0.6, fwidth(rp)));
-  float a = (1.0 - smoothstep(0.3, 1.0, rho)) * 0.58 * (0.88 + 0.12 * rays);
-  vec3 alb = vec3(0.6, 0.78, 0.73);
+  float a = (1.0 - smoothstep(0.35, 1.0, rho)) * 0.78 * (0.88 + 0.12 * rays);
+  vec3 alb = vec3(0.56, 0.8, 0.7);
   float bl = pow(max(dot(-V, L), 0.0), 2.0);
   vec3 col = alb * (uAmbient * 0.9 + uBounce * 0.35 + uLightCol * (0.25 + 0.45 * abs(dot(N, L)) + 1.2 * bl));
   col += uGlowCol * uGlowAmt * 0.3 * (1.0 - rho) * breathe(vInfo.w);
@@ -647,13 +631,10 @@ export function createKun(env, shared, tex, sea, opts) {
   const L = 58 * rng.range(0.94, 1.06);
   const geo = kunGeometry(L, q);
   const skin = kunSkin(rng.fork('skin'), q >= 0.7 ? 1024 : 512);
-  const seaU = sea.uniforms, G = sea.grid;
-  const uniforms = Object.assign({}, shared, {
-    tBillow: seaU.tBillow, uL1: seaU.uL1, uL2: seaU.uL2, uL0: seaU.uL0, uRot2: seaU.uRot2, uTexSize: seaU.uTexSize, uCurve: seaU.uCurve,
-    uSeaA: { value: G.A }, uSeaB: { value: G.b }, uSeaSegs: { value: G.segs },
+  const uniforms = Object.assign({}, shared, seaHeightUniforms(sea), {
     uC0: { value: new THREE.Vector3() }, uC1: { value: new THREE.Vector3(0, 0, -L) }, uC2: { value: new THREE.Vector3() }, uC3: { value: new THREE.Vector3() },
     uLen: { value: L }, uPhase: { value: 0 }, uAmp: { value: 0.028 * L }, uWaveK: { value: TAU * 0.72 }, uRoll: { value: 0 },
-    uFin: { value: new THREE.Vector4(0.3, 0.0, -1.1, 0.9) }, uFluke: { value: new THREE.Vector4(0.36, 1.25, 1.1, 0) },
+    uFin: { value: new THREE.Vector4(0.3, 0.0, -1.1, 0.9) }, uFluke: { value: new THREE.Vector4(0.42, 1.25, 1.1, 0) },
     tPattern: { value: skin }, tNoise: { value: tex.noise },
     uGlowCol: { value: new THREE.Color(0.32, 1.0, 0.8) }, uGlowAmt: { value: 0 }, uGlowPh: { value: 0 }, uVapT: { value: 0 },
   });
@@ -682,7 +663,14 @@ export function createKun(env, shared, tex, sea, opts) {
   puffs.mesh.name = 'kunVapour';
   let puffHead = 0, livePuffs = 0;
   function emit(x, y, z, vx, vy, vz, r0, r1, life, a0, rise) {
-    const i = puffHead; puffHead = (puffHead + 1) % NP;
+    // a free slot (or one in its last moments, already faded): a puff still showing is never taken over
+    let i = -1;
+    for (let k = 0; k < NP; k++) {
+      const j = (puffHead + k) % NP;
+      if (P[j].life <= 0 || P[j].age > P[j].life * 0.97) { i = j; break; }
+    }
+    if (i < 0) return;
+    puffHead = (i + 1) % NP;
     const p = P[i], it = items[i];
     p.age = 0; p.life = life; p.vx = vx; p.vy = vy; p.vz = vz; p.r0 = r0; p.r1 = r1; p.a0 = a0; p.rise = rise;
     it.x = x; it.y = y; it.z = z; it.r = r0 * 0.6; it.alpha = 0; it.seed = vrng.next();
@@ -717,8 +705,14 @@ export function createKun(env, shared, tex, sea, opts) {
     const sOfH = hh => { let j = 0; while (j < tb.n - 1 && H[j + 1] < hh) j++; return j * DS + DS * clamp((hh - H[j]) / Math.max(H[j + 1] - H[j], 1e-6), 0, 1); };
     tb.sStart = sOfH(0); tb.sMid = sOfH(pr.hr + pr.ht * 0.5); tb.sEnd = sOfH(pr.hr + pr.ht + pr.hf) + L + 12;
     tb.dur = (tb.sEnd - tb.sStart) / pr.v; tb.tauMid = (tb.sMid - tb.sStart) / pr.v;
+    // when the middle of the body breaks out of the cloud tops, and when it sinks back into them
+    let hb = 0, hd = pr.hr + pr.ht;
+    while (hb < pr.hr && profileY(pr, hb) < CLOUD_TOP) hb += 1;
+    while (hd < pr.hr + pr.ht + pr.hf && profileY(pr, hd) > CLOUD_TOP) hd += 1;
+    tb.tauRise = (sOfH(hb) + L * 0.5 - tb.sStart) / pr.v; tb.tauDive = (sOfH(hd) + L * 0.5 - tb.sStart) / pr.v;
     return tb;
   }
+  const hAtS = (tb, s) => { const H = tb.hOfS, f = clamp(s / DS, 0, tb.n - 1.0001), i = Math.floor(f); return H[i] + (H[i + 1] - H[i]) * (f - i); };
   const pathAt = (s, out) => {
     const tb = path.tb, H = tb.hOfS;
     const f = clamp(s / DS, 0, tb.n - 1.0001), i = Math.floor(f), h = H[i] + (H[i + 1] - H[i]) * (f - i);
@@ -771,7 +765,7 @@ export function createKun(env, shared, tex, sea, opts) {
     const hx = cam.x - tgt.x, hz = cam.z - tgt.z;
     c.hd = Math.hypot(hx, hz); c.cy = cam.y - tgt.y; c.psi0 = Math.atan2(hx, hz);
     c.tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2); c.tanH = c.tanV * camera.aspect;
-    job.drift = drift; job.pref = pref; job.list.length = 0; job.k = 0; job.best = null; job.on = true;
+    job.drift = drift; job.pref = pref; job.list.length = 0; job.k = 0; job.best = null; job.on = true; job.align = 'mid';
     VARIANTS.forEach((V, vi) => {
       const pr = { kind: V.kind, yTop: CLOUD_TOP + rng.range(V.y[0], V.y[1]), hr: rng.range(V.hr[0], V.hr[1]), ht: rng.range(V.ht[0], V.ht[1]), hf: rng.range(V.hf[0], V.hf[1]), arch: rng.range(V.arch[0], V.arch[1]), v: rng.range(V.v[0], V.v[1]) };
       pr.s0 = 2 * (pr.yTop - Y_DEEP) / pr.hr; pr.s1 = 2 * (pr.yTop - Y_DEEP) / pr.hf;
@@ -788,9 +782,11 @@ export function createKun(env, shared, tex, sea, opts) {
   function scoreCandidate(cd) {
     const tb = tables[cd.vi], pr = tb.pr, c = job.cam, v = pr.v;
     path.tb = tb; path.cx = c.tx; path.cz = c.tz; path.D = cd.D; path.sgn = cd.sgn;
-    // the middle of the pass sits at phi (share of the half view width; positive: right of centre) at tauMid
-    const midH = pr.hr + pr.ht * 0.5 - L * 0.5;
-    path.b0 = c.psi0 + Math.PI + job.drift * tb.tauMid - cd.phi * Math.atan(c.tanH) - cd.sgn * midH / cd.D;
+    // the middle of the body sits at phi (share of the half view width; positive: right of centre) at the middle of
+    // the pass (or, for tests, as it breaks out of the clouds or dives back in)
+    const tauA = job.align === 'rise' ? tb.tauRise : job.align === 'dive' ? tb.tauDive : tb.tauMid;
+    const hMid = hAtS(tb, tb.sStart + v * tauA - L * 0.5);
+    path.b0 = c.psi0 + Math.PI + job.drift * tauA - cd.phi * Math.atan(c.tanH) - cd.sgn * hMid / cd.D;
     cd.b0 = path.b0;
     for (let s = 0; s < tb.n * DS; s += 12) {
       pathAt(s, _pt);
@@ -801,10 +797,11 @@ export function createKun(env, shared, tex, sea, opts) {
     for (let tau = 0; tau < tb.dur; tau += 2) {
       camAt(tau);
       const sh = tb.sStart + v * tau;
-      let vis = 0;
+      let vis = 0, above = 0;
       for (let kk = 0; kk < 4; kk++) {
         pathAt(sh - L * (0.08 + 0.27 * kk), _pt);
         if (_pt.y < seaH(_pt.x, _pt.z) + 1.5) continue;
+        above++;
         const dx = _pt.x - _cp.x, dy = _pt.y - _cp.y, dz = _pt.z - _cp.z;
         const zc = dx * _cf.x + dy * _cf.y + dz * _cf.z;
         if (zc < 1) continue;
@@ -813,8 +810,10 @@ export function createKun(env, shared, tex, sea, opts) {
         if (occluded(_cp, _pt)) continue;
         vis++;
       }
-      // (weighted by how large it looks: a near pass shows it twice the size of a far one)
-      score += vis * 2 * 320 / cd.D;
+      // weighted by how large it looks (a near pass shows it twice the size of a far one), and twice when it is
+      // breaking out of the clouds or diving back in: the moments most worth seeing (a test framing one of those
+      // counts only that moment)
+      score += vis * 2 * 320 / cd.D * (above > 0 && above < 4 ? 2.2 : 1) * (job.align === 'mid' || Math.abs(tau - tauA) < 5 ? 1 : 0.05);
       peak = Math.max(peak, vis);
       // the best moment to look at (tests and screenshots): most of it in view, as high as it gets
       const pick = vis + (_pt.y - CLOUD_TOP) * 0.005;
@@ -841,7 +840,7 @@ export function createKun(env, shared, tex, sea, opts) {
     const pick = (force ? best : good[Math.floor(rng.next() * good.length)]) || best;
     const tb = tables[pick.vi];
     path.tb = tb; path.cx = job.cam.tx; path.cz = job.cam.tz; path.D = pick.D; path.sgn = pick.sgn; path.b0 = pick.b0;
-    return { pr: tb.pr, v: tb.pr.v, D: pick.D, sgn: pick.sgn, phi: pick.phi, score: pick.score, bestTau: pick.bestTau, dur: tb.dur, sStart: tb.sStart, sEnd: tb.sEnd, sMid: tb.sMid };
+    return { pr: tb.pr, v: tb.pr.v, D: pick.D, sgn: pick.sgn, phi: pick.phi, score: pick.score, bestTau: pick.bestTau, dur: tb.dur, sStart: tb.sStart, sEnd: tb.sEnd, sMid: tb.sMid, tauRise: tb.tauRise, tauDive: tb.tauDive };
   }
 
   /* ---- runtime state ---- */
@@ -861,6 +860,7 @@ export function createKun(env, shared, tex, sea, opts) {
   }
   function stop() {
     st.active = false; st.pass = null;
+    if (opts.escort) opts.escort.on = false;
     body.visible = veil.visible = false;
     sea.glowPos[0].w = 0; sea.glowPos[1].w = 0; sea.casters[3].w = 0;
   }
@@ -908,7 +908,11 @@ export function createKun(env, shared, tex, sea, opts) {
       if (p === null) return;
       if (p === false) { st.next = st.clock + 20; return; }
       begin(p);
-      st.next = st.clock + rng.range(180, 300);
+      // the pass runs from its scheduled time (planning takes a few frames, twice as many at 30 fps as at 60; the
+      // Kun is deep in the clouds then): the same pass, to the same instant, at any frame rate
+      st.tau = st.clock - st.next - dt;
+      st.phase = (st.beat * (st.tau + dt)) % (TAU * 64);
+      st.next = st.next + rng.range(180, 300);
     }
     const p = st.pass;
     st.tau += dt;
@@ -929,8 +933,8 @@ export function createKun(env, shared, tex, sea, opts) {
     const U = uniforms;
     U.uRoll.value = damp(U.uRoll.value, bank, 0.5, dt);
     U.uPhase.value = st.phase;
-    U.uFin.value.x = lerp(0.14, 0.42, st.air);
-    U.uFin.value.y = lerp(-0.05, 0.06, st.air);
+    U.uFin.value.x = lerp(0.16, 0.52, st.air);
+    U.uFin.value.y = lerp(-0.1, -0.02, st.air);
     U.uGlowPh.value = st.glowPh;
     U.uVapT.value = st.vapT;
     const night = tod.night;
@@ -957,6 +961,13 @@ export function createKun(env, shared, tex, sea, opts) {
     } else { sea.glowPos[0].w = 0; sea.glowPos[1].w = 0; }
     const sk = smoothstep(3, 12, hgt) * (1 - night);
     if (sk > 0.01) sea.casters[3].set(_a.x, _a.y, _a.z, 9 * sk); else sea.casters[3].w = 0;
+    // the distant cranes come to circle on the line of sight in front of it (until it starts its dive)
+    if (opts.escort) {
+      const E = opts.escort, cam = camera.position;
+      E.on = st.tau < p.tauDive - 6;
+      E.p.copy(cam).lerp(_a, 0.45); E.p.y += 4;
+      E.r.subVectors(_a, cam).cross(_up).normalize();
+    }
 
     emitVapour(dt);
     updatePuffs(dt, camera);
@@ -976,16 +987,16 @@ export function createKun(env, shared, tex, sea, opts) {
       if (e <= 0 || e >= 1 && top - hsea > 9) continue;
       // breaking the surface: a churned collar of cloud on both flanks; rising: wisps peel off the back
       const width = pf.w * L;
-      const rate = (e > 0 && e < 1 ? 0.7 : 0) + clamp(Math.abs(de) * 9, 0, 2.2);
+      const rate = (e > 0 && e < 1 ? 0.35 : 0) + clamp(Math.abs(de) * 4, 0, 1.2);
       sliceAcc[k * 2] += rate * dt;
       while (sliceAcc[k * 2] >= 1) {
         sliceAcc[k * 2] -= 1;
         const side = vrng.chance(0.5) ? 1 : -1, r0 = vrng.range(3.2, 5.5) * (0.8 + 0.4 * pf.w / 0.093);
         const x = _a.x + _r.x * side * (width + r0 * 0.3), z = _a.z + _r.z * side * (width + r0 * 0.3);
-        emit(x, hsea + r0 * 0.35, z, -_f.x * p.v * 0.15 + _r.x * side * 0.8, 0.35, -_f.z * p.v * 0.15 + _r.z * side * 0.8, r0, r0 * vrng.range(1.8, 2.5), vrng.range(11, 17), vrng.range(0.65, 0.9), 0.05);
+        emit(x, hsea + r0 * 0.35, z, -_f.x * p.v * 0.15 + _r.x * side * 0.8, 0.35, -_f.z * p.v * 0.15 + _r.z * side * 0.8, r0, r0 * vrng.range(1.8, 2.5), vrng.range(8, 12), vrng.range(0.65, 0.9), 0.05);
       }
       if (de > 0.02 && top - hsea > 0.5 && top - hsea < 8) {
-        sliceAcc[k * 2 + 1] += clamp(de * 6, 0, 1.6) * dt;
+        sliceAcc[k * 2 + 1] += clamp(de * 3, 0, 0.9) * dt;
         while (sliceAcc[k * 2 + 1] >= 1) {
           sliceAcc[k * 2 + 1] -= 1;
           const r0 = vrng.range(2.2, 3.6);
@@ -1034,15 +1045,16 @@ export function createKun(env, shared, tex, sea, opts) {
       // planned for the camera as it is (it jumps into the pass at once, the view has no time to drift); the best
       // plan is taken (not one of the good ones at random), optionally of a given variant / distance / direction
       planBegin(camera, viewTarget, 0, 'soar');
+      if (force.align) job.align = force.align;
       const p = planStep(1e9, force);
       if (!p) return null;
       begin(p);
       st.next = st.clock + rng.range(180, 300);
-      const target = tau ?? p.bestTau;
+      const target = tau ?? (job.align === 'rise' ? p.tauRise : job.align === 'dive' ? p.tauDive : p.bestTau);
       const pre = Math.min(target, 10);
       st.tau = target - pre;
       for (let s = 0; s < pre; s += 1 / 30) update(1 / 30, 0, camera, tod, viewTarget, idle);
-      return { L, D: p.D, sgn: p.sgn, phi: p.phi, v: p.v, score: p.score, kind: p.pr.kind, yTop: p.pr.yTop, tau: target, dur: p.dur,
+      return { L, D: p.D, sgn: p.sgn, phi: p.phi, v: p.v, score: p.score, kind: p.pr.kind, yTop: p.pr.yTop, tau: target, dur: p.dur, tauRise: p.tauRise, tauDive: p.tauDive,
         cands: job.list.map(c => [c.vi, c.D, c.sgn, c.phi, +c.score.toFixed(1)]) };
     },
     dispose() { skin.dispose(); },

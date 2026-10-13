@@ -14,6 +14,7 @@ import { createFx } from './meadow/fx.js';
 import { applyFoxPose, findFoxBones } from './meadow/foxpose.js';
 import { Giants } from './meadow/giants.js';
 import { createShafts, createMist } from './meadow/light.js';
+import { createSparrows, createMoths } from './meadow/fauna.js';
 
 const FOX_SCALE = 0.0078;     // ≈1.2 m nose to tail
 const WALK_REF = 115;         // walking ground speed in model units / s (× scale = m/s)
@@ -62,21 +63,21 @@ export default {
       return h;
     }
     // A gentle knoll on the far side of the field, right of the torii in the default view, its top a grazed lawn:
-    // the sika herd's stage (they are shorter than the susuki, and the field lies below the torii's mound). Raised
-    // to about the mound's height whatever the seed's terrain; exactly zero outside its footprint, so nothing near
-    // the torii moves. (Its own fork: the layout stream is untouched.)
+    // the sika herd's stage (they are shorter than the susuki, and the field lies below the torii's mound). The
+    // ground blends to a flat crest a little above the mound's height, whatever the seed's terrain (an added bump
+    // left the slope facing the viewer higher than the crest on some seeds, hiding the herd); exactly the old
+    // ground outside its footprint, so nothing near the torii moves. (Its own fork: the layout stream is untouched.)
     const knr = rng.fork('knoll');
-    const KNOLL = { x: knr.range(3.5, 6.0), z: knr.range(-23, -20.5), rx: 24, rz: 17, a: 0, lx: 9.5, lz: 6.5 };
-    KNOLL.a = clamp(baseHeight(0, 0) + 0.55 - baseHeight(KNOLL.x, KNOLL.z), 1.6, 3.6);
+    const KNOLL = { x: knr.range(3.5, 6.0), z: knr.range(-23, -20.5), rx: 24, rz: 17, top: 0, lx: 9.5, lz: 9, lzo: 3 };
+    KNOLL.top = baseHeight(0, 0) + 0.8;
     function rawHeight(x, z) {
-      let h = baseHeight(x, z);
+      const h = baseHeight(x, z);
       const dx = (x - KNOLL.x) / KNOLL.rx, dz = (z - KNOLL.z) / KNOLL.rz, r2 = dx * dx + dz * dz;
-      if (r2 < 1) h += KNOLL.a * smoothstep(1, 0.3, Math.sqrt(r2));
-      return h;
+      return r2 < 1 ? h + (KNOLL.top - h) * smoothstep(1, 0.4, Math.sqrt(r2)) : h;
     }
-    /** 1 on the knoll's grazed lawn (short, greener grass), 0 off it, with a ragged edge. */
+    /** 1 on the knoll's grazed lawn (its crest and the slope toward the view: short, greener grass), 0 off it. */
     function lawnAt(x, z) {
-      const dx = (x - KNOLL.x) / KNOLL.lx, dz = (z - KNOLL.z) / KNOLL.lz;
+      const dx = (x - KNOLL.x) / KNOLL.lx, dz = (z - KNOLL.z - KNOLL.lzo) / KNOLL.lz;
       return 1 - smoothstep(0.72, 1.1, Math.sqrt(dx * dx + dz * dz) + 0.18 * noise.noise2(x * 0.21 + 5.1, z * 0.21 - 2.7));
     }
     const H0 = rawHeight(0, 0);
@@ -223,7 +224,7 @@ export default {
       patchMaterial(tmat, {
         key: 'meadowTerrain',
         uniforms: { ...windU, uPath: { value: pathU }, uPathW: { value: 0.58 }, uNearCol: { value: new THREE.Color('#3e3622') }, uFarCol: { value: new THREE.Color('#8c7442') }, uFarCol2: { value: new THREE.Color('#4e4a2a') }, uDirtCol: { value: new THREE.Color('#7c6548') },
-          uLawn: { value: new THREE.Vector4(KNOLL.x, KNOLL.z, 1 / KNOLL.lx, 1 / KNOLL.lz) }, uTurfCol: { value: new THREE.Color('#6a6a32') } },
+          uLawn: { value: new THREE.Vector4(KNOLL.x, KNOLL.z + KNOLL.lzo, 1 / KNOLL.lx, 1 / KNOLL.lz) }, uTurfCol: { value: new THREE.Color('#6a6a32') } },
         vertexHeader: '',
         fragmentHeader: WIND_GLSL.replace(/uniform vec4 uPress\[4\];/, 'uniform vec4 uPress[4];') + SPIRIT_GLSL + `
           uniform vec2 uPath[24]; uniform float uPathW; uniform vec3 uNearCol, uFarCol, uFarCol2, uDirtCol, uTurfCol; uniform vec4 uLawn;
@@ -874,8 +875,19 @@ export default {
     const giants = new Giants({ env, scene, heightAt, fogU, seed: env.seed, obstacles, target: TARGET, shrine: SHRINE, knoll: KNOLL });
     const shafts = createShafts({ scene, fogU, trees, heightAt, rng: rng.fork('shafts'), q, target: TARGET });
     const mist = createMist({ scene, fogU, heightAt, rng: rng.fork('mist'), target: TARGET, noiseTex: giants.fox.tNoise });
-    const giantCtx = { night: 0, el: 30, pr: 1, pxK: 1000, wind: new THREE.Vector2(1, 0), rim: new THREE.Color(), sunDir: new THREE.Vector3(0, 1, 0) };
+    // Upload the giants' textures now, under the loading veil: they are first drawn mid-play, when a pass begins,
+    // and an upload then (canvas read-back and mipmaps) would cost the iPad a frame.
+    if (env.renderer && env.renderer.initTexture) for (const tx of [giants.fox.tNoise, giants.fox.tMark, giants.herd.tex]) env.renderer.initTexture(tx);
+    const giantCtx = { night: 0, el: 30, pr: 1, pxK: 1000, wind: new THREE.Vector2(1, 0), rim: new THREE.Color(), sunDir: new THREE.Vector3(0, 1, 0), fill: new THREE.Color() };
     let giantSlot = -1;   // the grass-press slot the spirit fox holds while it parts the susuki
+    // small life: sparrows on the path (perching in the two nearest maples), moths round the lit lanterns
+    const perches = [];
+    for (const tr of trees.slice(0, 2)) for (const c of tr.clusters) perches.push(new THREE.Vector3(tr.x + c.p.x, tr.y + c.p.y - 0.2, tr.z + c.p.z));
+    const sparrows = createSparrows({ env, scene, fogU, heightAt, rng: rng.fork('sparrows'), pathPoint, perches });
+    const moths = createMoths({ env, scene, rng: rng.fork('moths'), lanterns: LANTERNS });
+    const threats = [], threatPool = Array.from({ length: 20 }, () => ({ x: 0, z: 0, r: 0 }));
+    let threatN = 0;
+    const threat = (x, z, r) => { if (threatN < threatPool.length) { const o = threatPool[threatN++]; o.x = x; o.z = z; o.r = r; threats.push(o); } };
 
     const world = { night: 0, dusk: 0, day: 1, golden: 0, el: 30, sunVis: 1, morning: false };
     for (const m of env.members) foxes.push(new Fox(m));
@@ -959,6 +971,7 @@ export default {
         this.scale = n === 1 ? 0.55 : 0;
         tmpV.copy(this.pos).y += 0.08;
         fx.puff(tmpV, 16, true);
+        if (n === 2) sparrows.onCrumbs(this.pos);
         env.onEat(fox ? fox.member : null, tmpV);
         if (n === 2) this.kill(true);
       }
@@ -1041,8 +1054,9 @@ export default {
       guide.pos.copy(p);
       guide.dir.set(p.x - camera.position.x, p.z - camera.position.z).normalize();
       fx.stream(camera, p);
-      // the sika herd startles at an offering landing near it
+      // the sika herd startles at an offering landing near it; sparrows beside it flush
       giants.onFood(p);
+      sparrows.onDrop(p);
       // the nearest free fox notices
       assignFoxes();
       return f;
@@ -1202,6 +1216,7 @@ export default {
       }
       // lanterns / shrine glow
       const lampOn = smoothstep(-1, -7, el);
+      world.lampOn = lampOn;
       for (let i = 0; i < lanternLights.length; i++) { const l = lanternLights[i]; l.intensity = 9 * lampOn * (0.92 + 0.08 * Math.sin(t * 9.0 + l.position.x)); }
       windowMat.emissiveIntensity = 3.2 * lampOn;
       for (let i = 0; i < lanternGlows.length; i++) { const g = lanternGlows[i]; g.material.opacity = lampOn * (0.85 + 0.15 * Math.sin(t * 7 + i)); g.visible = lampOn > 0.01; }
@@ -1347,8 +1362,8 @@ export default {
       const sunK = smoothstep(-1.5, 2.5, el) * (1 - smoothstep(14, 28, el)) * (0.35 + 0.65 * world.sunVis) * (morning ? 0.5 + 0.5 * dawn : 1);
       const moonK = smoothstep(-6, -14, el) * 0.3;
       let k;
-      if (sunK >= moonK) { shaftL.copy(sunDirV).negate(); shaftCol.copy(pal.halo).lerp(pal.sun, 0.35); k = sunK * 0.5; }
-      else { shaftL.copy(moonDir).negate(); shaftCol.copy(MOONRAY); k = moonK * 0.55; }
+      if (sunK >= moonK) { shaftL.copy(sunDirV).negate(); shaftCol.copy(pal.halo).lerp(pal.sun, 0.35); k = sunK * 1.25; }
+      else { shaftL.copy(moonDir).negate(); shaftCol.copy(MOONRAY); k = moonK * 0.9; }
       if (shaftL.y > -0.07) { shaftL.y = -0.07; shaftL.normalize(); }
       shafts.update(dt, shaftL, shaftCol, k);
       const amount = Math.max(dawn * 0.75, dusk * 0.3, world.night * 0.34);
@@ -1361,7 +1376,7 @@ export default {
         mistGlow.copy(pal.glow).multiplyScalar(0.35 * (0.3 + 0.7 * world.sunVis));
         glowDir.copy(sunDirV);
       }
-      mist.update(dt, amount, mistCol, mistGlow, glowDir, windDir, camera.position.distanceTo(view.target));
+      mist.update(dt, amount, mistCol, mistGlow, glowDir, windDir, camera.position.distanceTo(view.target), Math.max(dawn, dusk * 0.7) / Math.max(amount, 1e-3) * 0.75);
     }
 
     let lastT = 0;
@@ -1402,13 +1417,21 @@ export default {
         giantCtx.night = world.night; giantCtx.el = world.el; giantCtx.pr = fxCtx.pr;
         giantCtx.pxK = prVec.y / (2 * Math.tan(camera.fov * Math.PI / 360));
         giantCtx.wind.copy(windDir);
-        giantCtx.rim.copy(lightCol).multiplyScalar(world.day * (0.3 + 0.5 * world.golden) * (0.4 + 0.6 * world.sunVis));
+        giantCtx.rim.copy(lightCol).multiplyScalar(world.day * (0.55 + 0.6 * world.golden) * (0.4 + 0.6 * world.sunVis));
         giantCtx.sunDir.copy(lightDir);
+        giantCtx.fill.copy(hemi.color).multiplyScalar(hemi.intensity * 0.45);
         giants.update(dt, t, giantCtx);
         const sp = windU.uSpirit.value;
         if (giants.kind === 'fox') sp.set(giants.fox.glowPos.x, giants.fox.glowPos.y, giants.fox.glowPos.z, 0.55 * giants.fox.glow);
         else sp.w = 0;
         updateLight(dt);
+        // sparrows keep clear of foxes (more so of a running one), of the spirit fox and of the deer
+        threats.length = 0; threatN = 0;
+        for (const f of foxes) threat(f.pos.x, f.pos.z, f.speed > f.walkSpeed * 1.3 ? 2.4 : 1.3);
+        if (giants.kind === 'fox') threat(giants.fox.anchor.position.x, giants.fox.anchor.position.z, 5);
+        if (giants.kind === 'deer') for (const d of giants.herd.deer) threat(d.pos.x, d.pos.z, 3);
+        sparrows.update(dt, t, { day: world.day, threats });
+        moths.update(dt, world.lampOn || 0, fxCtx.pr);
         void tod;
       },
       feed(raycaster) {
@@ -1438,7 +1461,7 @@ export default {
       },
       /** Test hook: start a giant's pass now ('fox' | 'deer', or by the hour) and run it `secs` s on. */
       debugGiant(kind = null, secs = 25) { return giants.debug(kind, secs, giantCtx); },
-      debug: { foxes, foods, world, heightAt, pathPoint, spawnFood: p => spawnFood(p), giants, shafts, mist, knoll: KNOLL },
+      debug: { foxes, foods, world, heightAt, pathPoint, spawnFood: p => spawnFood(p), giants, shafts, mist, sparrows, moths, knoll: KNOLL },
       dispose() {
         foxes.forEach(f => f.dispose());
         cranes.forEach(c => { c.mixer.stopAllAction(); c.mixer.uncacheRoot(c.o); });
@@ -1451,7 +1474,7 @@ export default {
         envSky.geometry.dispose();
         disposables.forEach(d => d && d.dispose && d.dispose());
         fx.dispose();
-        giants.dispose(); shafts.dispose(); mist.dispose();
+        giants.dispose(); shafts.dispose(); mist.dispose(); sparrows.dispose(); moths.dispose();
       },
     };
     void lastT; void tmpV2;

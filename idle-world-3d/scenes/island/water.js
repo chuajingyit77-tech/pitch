@@ -308,7 +308,7 @@ void main() {
   float lacyN = vnoiseAAP(wp2 * 2.2 + vec2(uCapOff.x, 0.0), 3.74, fp) * 0.55 + vnoiseAAP(wp2 * 6.5 + vec2(0.0, uCapOff.y), 11.05, fp) * 0.45;
   float lacy = mix(smoothstep(0.52, 0.78, lacyN), 0.12, aaFade(3.74, fp));
   float caps = smoothstep(0.7, 1.0, vCrest + (fn - 0.5) * 0.45) * lacy * smoothstep(5.0, 9.0, depth) * 0.6;
-  float wFoam = smoothstep(0.1, 0.75, wfx.r * (0.6 + 0.8 * fn));
+  float wFoam = smoothstep(0.22, 0.85, wfx.r * (0.4 + 1.0 * fn));   // lacy toward its edges and as it fades
   float foam = clamp(foamEdge + lines + lace + ob * 0.85 + reef + caps + wFoam, 0.0, 1.0) * 0.92;
 
   // bioluminescent plankton: the shore foam, the shallows and whatever the whale stirs up glow blue at night. The glow

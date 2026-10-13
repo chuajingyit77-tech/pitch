@@ -78,7 +78,8 @@ export class Giants {
   deerRoute(flip) {
     const r = this.rng, K = this.o.knoll;
     const dz = r.range(-1.8, 1.8);
-    let pts = [[K.x + 22, K.z + 3], [K.x + 12, K.z + 1.6], [K.x + 1, K.z + 0.2], [K.x - 7, K.z - 0.6], [K.x - 16, K.z - 1.4], [K.x - 26, K.z - 2.5]]
+    // across the knoll's lawn (its crest and the slope facing the view), entering and leaving behind the maples
+    let pts = [[K.x + 22, K.z + 4], [K.x + 12, K.z + 3.2], [K.x + 1, K.z + 2.2], [K.x - 7, K.z + 1.6], [K.x - 16, K.z + 0.6], [K.x - 26, K.z - 1.5]]
       .map(([x, z]) => ({ x: x + r.range(-0.5, 0.5), z: z + dz + r.range(-0.5, 0.5) }));
     let graze = 2;
     if (flip) { pts.reverse(); graze = pts.length - 1 - graze; }
@@ -87,11 +88,11 @@ export class Giants {
   }
 
   /* ---------------- schedule ---------------- */
-  start(kind, el) {
+  start(kind, el, route) {
     kind = kind || (el < -3 ? 'fox' : 'deer');
     if (kind === 'fox') {
       const n = this.passN.fox++;
-      const name = this.foxOrder[n % this.foxOrder.length];
+      const name = route || this.foxOrder[n % this.foxOrder.length];
       this.fox.begin(this.foxRoute(name, (n + (this.o.seed & 1)) % 2 === 1));
     } else {
       const n = this.passN.deer++;
@@ -110,11 +111,12 @@ export class Giants {
     else if (this.kind === 'deer' && !this.herd.update(dt, t, ctx)) this.kind = null;
     this.fox.idle(dt, ctx);
   }
-  /** Test hook: start a pass now (by the hour, or `kind`) and run it `secs` seconds on. */
+  /** Test hook: start a pass now (by the hour, or `kind`; 'fox:far' picks the fox's route) and run it `secs` s on. */
   debug(kind, secs, ctx) {
     if (this.kind === 'fox') this.fox.end(); else if (this.kind === 'deer') this.herd.end();
     this.kind = null;
-    this.start(kind, ctx.el);
+    const [k, route] = (kind || '').split(':');
+    this.start(k && k !== 'auto' ? k : null, ctx.el, route || null);
     const step = 1 / 30;
     for (let s = 0; s < secs && this.kind; s += step) {
       if (this.kind === 'fox' && !this.fox.update(step, this.clock + s, ctx)) this.kind = null;

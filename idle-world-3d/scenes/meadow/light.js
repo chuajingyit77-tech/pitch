@@ -31,7 +31,9 @@ void main() {
   p += ax * side * mix(aW.x, aW.y, along);
   // forward scattering: brightest looking toward the light; a shaft seen end-on (al small) narrows away
   float ph = 0.18 + 0.82 * pow(max(dot(-toCam, uL), 0.0), 3.0);
-  vK = aW.w * ph * smoothstep(0.08, 0.3, al) * smoothstep(2.5, 7.0, dc);
+  // seen almost end-on (a beam coming toward the viewer) it is a short radial streak; only the degenerate
+  // dead-on case fades away
+  vK = aW.w * ph * smoothstep(0.015, 0.07, al) * smoothstep(3.0, 8.0, dc);
   vC = vec2(side, along); vSeed = aW.z; vW = p;
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }`;
@@ -60,13 +62,13 @@ export function createShafts({ scene, fogU, trees, heightAt, rng, q, target }) {
     for (let i = 0; i < nTree; i++) {
       const c = cl[i % cl.length];
       shafts.push({ kind: 'tree', base: new THREE.Vector3(t.x + c.p.x + rng.range(-0.5, 0.5), t.y + c.p.y - rng.range(0.2, 0.6), t.z + c.p.z + rng.range(-0.5, 0.5)),
-        w0: rng.range(0.22, 0.4), w1: rng.range(0.55, 0.95), k: rng.range(0.75, 1.0), seed: rng.next() });
+        w0: rng.range(0.3, 0.5), w1: rng.range(0.8, 1.3), k: rng.range(0.8, 1.0), seed: rng.next() });
     }
   }
   for (let i = 0; i < nField; i++) {
     // long beams over the field, from the light's side: placed relative to it every frame
-    shafts.push({ kind: 'field', lat: lerp(-16, 16, (i + 0.5) / nField) + rng.range(-3, 3), back: rng.range(26, 40), h: rng.range(7, 11),
-      w0: rng.range(0.9, 1.5), w1: rng.range(2.2, 3.4), k: rng.range(0.4, 0.6), seed: rng.next(), base: new THREE.Vector3() });
+    shafts.push({ kind: 'field', lat: lerp(-14, 14, (i + 0.5) / nField) + rng.range(-3, 3), back: rng.range(20, 32), h: rng.range(2.6, 5.5),
+      w0: rng.range(0.7, 1.1), w1: rng.range(1.6, 2.6), k: rng.range(0.45, 0.65), seed: rng.next(), base: new THREE.Vector3() });
   }
   const n = shafts.length;
   const geo = new THREE.InstancedBufferGeometry();
@@ -146,11 +148,11 @@ ${FOG_GLSL}
 void main() {
   float n1 = texture2D(tNoise, vec2(vUv.x * 0.055 + uDrift.x, vUv.y * 0.32 + uDrift.y)).r;
   float n2 = texture2D(tNoise, vec2(vUv.x * 0.13 - uDrift2.x, vUv.y * 0.55 + 0.37)).g;
-  float n = n1 * 0.62 + n2 * 0.38;
-  float prof = smoothstep(0.08, 0.42, vUv.y) * (1.0 - smoothstep(0.42, 1.0, vUv.y));
+  float n = n1 * 0.7 + n2 * 0.3;
+  float prof = smoothstep(0.1, 0.5, vUv.y) * (1.0 - smoothstep(0.5, 1.0, vUv.y));
   float ends = smoothstep(0.0, 0.18, vUv.x / uSpan) * (1.0 - smoothstep(0.82, 1.0, vUv.x / uSpan));
   vec3 rd = vW - cameraPosition; float dist = length(rd); rd /= max(dist, 1e-3);
-  float a = prof * ends * smoothstep(0.22, 0.78, n) * uAlpha * smoothstep(1.5, 5.0, dist);
+  float a = prof * ends * smoothstep(0.12, 0.88, n) * uAlpha * smoothstep(1.5, 5.0, dist);
   float sc = pow(max(dot(rd, uGlowDir), 0.0), 4.0);
   vec3 col = uColor + uGlow * sc;
   col = applyMeadowFog(col, vW);
@@ -159,7 +161,7 @@ void main() {
 
 export function createMist({ scene, fogU, heightAt, rng, target, noiseTex }) {
   const layers = [
-    { name: 'mistNear', r: 7.5, a0: -1.5, a1: 1.5, h: 0.95, k: 0.55, seg: 28, sink: 0.35 },
+    { name: 'mistNear', r: 7.5, a0: -1.5, a1: 1.5, h: 1.3, k: 0.4, seg: 28, sink: 0.3 },
     { name: 'mistMid', r: 19, a0: Math.PI - 1.15, a1: Math.PI + 1.15, h: 2.3, k: 0.8, seg: 32, sink: 0.4 },
     { name: 'mistFar', r: 50, a0: Math.PI - 1.05, a1: Math.PI + 1.05, h: 5.5, k: 1.0, seg: 40, sink: 0.6 },
   ];
@@ -197,13 +199,15 @@ export function createMist({ scene, fogU, heightAt, rng, target, noiseTex }) {
     layers: out,
     /**
      * amount: 0..1 overall density for this hour; col / glow: mist colour and the forward-scatter tint (linear);
-     * glowDir: toward the sun or moon; wind: Vector2 direction (drift); camDist: camera distance to the target.
+     * glowDir: toward the sun or moon; wind: Vector2 direction (drift); camDist: camera distance to the target;
+     * nearK: how much of the near bank to show.
      */
-    update(dt, amount, col, glow, glowDir, wind, camDist) {
+    update(dt, amount, col, glow, glowDir, wind, camDist, nearK = 1) {
       for (const m of out) {
         let a = amount * m.L.k;
-        // the near bank thins away as the camera closes in on it (and costs nothing then)
-        if (m.L.name === 'mistNear') a *= smoothstep(10.5, 14, camDist);
+        // the near bank lies over the grass only at dawn and dusk, and thins away as the camera closes in on it
+        // (costing nothing then)
+        if (m.L.name === 'mistNear') a *= nearK * smoothstep(10.5, 14, camDist);
         m.mesh.visible = a > 0.003;
         if (!m.mesh.visible) continue;
         m.U.uAlpha.value = a;

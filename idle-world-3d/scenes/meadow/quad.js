@@ -291,7 +291,7 @@ export class Animal {
       // close the bottom of the leg tube inside the paw
       const last = ringsAt[ringsAt.length - 1];
       ringsAt.push({ ...last, c: J3.clone(), rx: 0.001, ryT: 0.001, ryB: 0.001, u: 1, w: [[kP, 1]] });
-      geo.tube(ringsAt, L.seg || 10, { part: 1, idx: this.idx, v0: 0, v1: 1 });
+      geo.tube(ringsAt, L.seg || 10, { part: front ? 1 : 1.25, idx: this.idx, v0: 0, v1: 1 });
       // paw / hoof: a small closed loft from the heel to the toe
       const pw = L.paw, pr = [];
       const prof = pw.prof || [0.05, 0.75, 1, 0.95, 0.75, 0.05];
@@ -327,7 +327,7 @@ export class Animal {
         const l0 = new THREE.Vector3(side * Math.cos(E.turn || 0.3), 0, Math.sin(E.turn || 0.3));
         const l = l0.addScaledVector(t, -l0.dot(t)).normalize();
         const wv = (E.shape ? E.shape(f) : Math.sin(Math.PI * Math.min(1, 0.15 + f * 0.95)) * (1 - f * 0.85) + 0.02);
-        rings.push({ c, t, l, rx: E.w * wv, ryT: E.d * wv, ryB: E.d * wv * 0.6, keel: 0, u: f, tip: f, w: f < 0.2 ? [[k, 0.6], [ids.head, 0.4]] : [[k, 1]] });
+        rings.push({ c, t, l, rx: E.w * wv, ryT: E.d * wv, ryB: E.d * wv * 0.6, keel: 0, u: f + (side < 0 ? 2 : 0), tip: f, w: f < 0.2 ? [[k, 0.6], [ids.head, 0.4]] : [[k, 1]] });
       }
       rings[n].rx = rings[n].ryT = rings[n].ryB = 0.001;
       geo.tube(rings, 8, { part: 3, idx: this.idx, v0: 0, v1: 1 });
@@ -513,8 +513,12 @@ export class Animal {
       const g = this.legs[i];
       const off = G.off ? G.off[i] : g.off;
       const kk = Math.floor(this.phase - off - duty);
-      if (kk > g.k) {
-        g.k = kk;
+      // a planted paw the body has drifted too far from (a slow shuffle, a turn on the spot) takes a catch-up step
+      // of its own, as long as the legs either side of it are planted
+      const reachK = g.stance && g.J0.lengthSq() > 0 ? g.J0.distanceTo(g.J2) / (g.L[0] + g.L[1]) : 0;
+      const catchUp = reachK > 0.975 && this.legs[(i + 1) % 4].stance && this.legs[(i + 3) % 4].stance;
+      if (kk > g.k || catchUp) {
+        if (kk > g.k) g.k = kk;
         if (g.stance) {
           g.stance = false; g.w = 0; g.lift.copy(g.foot); g.yawLift = g.yaw; g.aLift = g.alpha;
           g.Tsw = clamp((1 - duty) / Math.max(rate, 1e-3), G.tMin || 0.24, G.tMax || 0.62);
@@ -538,7 +542,8 @@ export class Animal {
         g.foot.y += G.swingH * Math.min(1, span / (0.3 * G.L0) + 0.25) * Math.sin(Math.PI * Math.pow(w, 0.85));
         let dy = yawBody - g.yawLift; dy -= Math.round(dy / TAU) * TAU;
         g.yaw = g.yawLift + dy * e;
-        g.alpha = lerp(g.aLift, this.alphaAt(g, g.target), e) + g.flex * Math.sin(Math.PI * Math.pow(w, 0.8));
+        // mid-swing the joint above the paw folds: the wrist (hock) rides up and ahead and the paw trails behind it
+        g.alpha = lerp(g.aLift, this.alphaAt(g, g.target), e) - g.flex * Math.sin(Math.PI * Math.pow(w, 0.8));
         g.curl = g.curlMax * Math.sin(Math.PI * w);
         if (g.w >= 1) { g.stance = true; g.foot.copy(g.target); g.curl = 0; }
       } else {

@@ -189,7 +189,8 @@ function pointsMaterial(shared, sprite, kind) {
           float life = fract(t * cycRate(0.035 * aPrm.y) + aPrm.x);
           p += vec3(sin(t * 0.4 + ph) * 0.4 * life, life * 4.5, cos(t * 0.33 + ph) * 0.4 * life);
           vCol = vec3(0.3, 1.0, 0.9) * 2.2;
-          vA = sin(life * 3.14159) * (0.6 + 0.4 * sin(t * 2.0 + ph)) * uAmt;
+          // each spore breathes slowly (a ~5 s swell of light), never a blink
+          vA = sin(life * 3.14159) * (0.55 + 0.45 * sin(t * 1.2 + ph)) * uAmt;
           vWorldP = p;
         #endif
         vec4 mv = viewMatrix * vec4(p, 1.0);

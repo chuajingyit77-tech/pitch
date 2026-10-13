@@ -466,3 +466,33 @@ export function mushroomCluster(rng, { count = 5 } = {}) {
   parts.forEach(p => p.dispose());
   return m;
 }
+
+/**
+ * Bracket (shelf) fungi: half-disc shelves stacked on bark, growing out along +z with +y up. aGlow: the pale gills
+ * under each shelf glow at night (1), the caps a little (0.35); colour: cream to apricot caps, pale gills.
+ */
+export function bracketCluster(rng, { shelves = 4 } = {}) {
+  const parts = [];
+  for (let i = 0; i < shelves; i++) {
+    const r = rng.range(0.06, 0.15) * (1 - i * 0.12), y = i * rng.range(0.07, 0.12) + rng.range(-0.02, 0.02), x = rng.range(-0.08, 0.08);
+    const cap = new THREE.SphereGeometry(r, 8, 3, -Math.PI / 2, Math.PI, 0, Math.PI * 0.5); // the outer half of a dome
+    cap.scale(1, 0.32, 0.9);
+    cap.translate(x, y, 0.01);
+    const gill = new THREE.CircleGeometry(r * 0.97, 8, -Math.PI / 2, Math.PI);
+    gill.rotateX(Math.PI / 2); // facing down
+    gill.scale(1, 1, 0.9);
+    gill.translate(x, y - 0.002, 0.01);
+    const tint = rng.range(0, 1);
+    for (const [g, glow, c] of [[cap, 0.35, [lerp(0.86, 0.95, tint), lerp(0.76, 0.6, tint), lerp(0.6, 0.42, tint)]], [gill, 1.0, [0.92, 0.95, 0.88]]]) {
+      const ng = g.index ? g.toNonIndexed() : g;
+      const cnt = ng.attributes.position.count;
+      ng.setAttribute('aGlow', new THREE.BufferAttribute(new Float32Array(cnt).fill(glow), 1));
+      ng.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cnt * 3).map((_, k) => c[k % 3]), 3));
+      ng.deleteAttribute('uv');
+      parts.push(ng);
+    }
+  }
+  const m = mergeGeometries(parts);
+  parts.forEach(p => p.dispose());
+  return m;
+}
