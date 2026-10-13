@@ -2,27 +2,31 @@
 import * as THREE from 'three';
 import { TAU, clamp, lerp, makeRng, GLSL } from '../../lib/util.js';
 import { JG_GLSL, JG_PNOISE, JG_FBMP, JG_PERIOD } from './shading.js';
+import { VISTA_GLSL } from './far.js';
 
 /* ------------------------------------------------------------------ */
 /* Sky                                                                  */
 /* ------------------------------------------------------------------ */
-export function buildSky(shared) {
+export function buildSky(shared, vistaU) {
   const geo = new THREE.SphereGeometry(400, 32, 16);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
+      ...shared, ...vistaU,
       uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
       uSunCol: { value: new THREE.Color() }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uNight: shared.uNight, uSimplexDrift: shared.uSimplexDrift,
       uOvercast: { value: 0 }, uFogColor: shared.uFogColor, uDay: { value: 1 }, uStarPh: { value: 0 },
     },
     vertexShader: /* glsl */`
-      varying vec3 vDir;
-      void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
+      varying vec3 vDir; varying vec3 vWorldP;
+      void main(){ vDir = normalize(position); vWorldP = (modelMatrix * vec4(position, 1.0)).xyz; vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
     fragmentShader: /* glsl */`
+      ${JG_GLSL}
+      ${VISTA_GLSL}
       ${GLSL.noise}
       ${JG_FBMP}
-      uniform vec3 uZenith, uHorizon, uSunDir, uSunCol, uMoonDir, uFogColor;
+      uniform vec3 uZenith, uHorizon, uSunDir, uSunCol, uMoonDir;
       uniform vec4 uSimplexDrift; // .x cloud drift, .y cloud evolution (wrapped to 867, the noise's period)
-      uniform float uNight, uOvercast, uDay, uStarPh;
+      uniform float uOvercast, uDay, uStarPh;
       varying vec3 vDir;
       void main(){
         vec3 d = normalize(vDir);
@@ -53,6 +57,8 @@ export function buildSky(shared) {
           float md = max(dot(d, uMoonDir), 0.0);
           col += vec3(0.75, 0.85, 1.0) * (pow(md, 1600.0) * 14.0 + pow(md, 40.0) * 0.25) * uNight * (1.0 - uOvercast * 0.7);
         }
+        // the vista's mist curtains stand in front of the sky too (far.js), so they read as one layered haze
+        col = vistaMist(col, 1e6, normalize(vWorldP - cameraPosition));
         gl_FragColor = vec4(col, 1.0);
       }`,
     side: THREE.BackSide,
@@ -103,6 +109,9 @@ export function buildGodRays(shared, anchors, rng) {
         // only where the canopy lets the light through to this spot
         float ck = (jgCookie(aAnchor.xyz) - uCookieMin) / max(1.0 - uCookieMin, 1e-3);
         float open = smoothstep(0.45, 0.9, ck);
+        // shafts out in the vista (beyond the cliff) fall through open air: no canopy test, a little stronger
+        float farA = step(60.0, length(aAnchor.xz - vec2(1.4, -3.6)));
+        open = mix(open, 1.6, farA);
         vWorldP = p; vUv = uv; vSeed = aPrm.x; vK = aPrm.z * aPrm.w * open; vAlong = along;
         gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
       }`,

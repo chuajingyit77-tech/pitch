@@ -272,7 +272,11 @@ export function addDetail(mat, W, { glsl, space = 'world', bump = 1, key = 'd', 
   });
 }
 
-/** Night fluorescence: per-vertex amount (attribute aFluor) times a material colour times uFluor. */
+/**
+ * Night fluorescence: per-vertex amount (attribute aFluor) times a material colour times uFluor. Each
+ * colony breathes slowly on its own phase (from where it stands): about +-25 % over 15 and 27 s, so the
+ * reef's glow lives without anything flashing or pulsing in step.
+ */
 export function addFluor(mat, W, color, strength = 1, key = 'f') {
   const u = { uFluorCol: { value: new THREE.Color(color).multiplyScalar(strength) } };
   mat.userData.fluorCol = u.uFluorCol;
@@ -281,7 +285,15 @@ export function addFluor(mat, W, color, strength = 1, key = 'f') {
     uniforms: { ...W, ...u },
     vertexHeader: UW_VERT + 'attribute float aFluor; varying float vFluor;',
     fragmentHeader: UW_FRAG + 'varying float vFluor; uniform vec3 uFluorCol;',
-    vertex: { '#include <begin_vertex>': '$&\nvFluor = aFluor;' },
+    vertex: { '#include <begin_vertex>': /* glsl */`$&
+      {
+        vec3 flO = modelMatrix[3].xyz;
+        #ifdef USE_INSTANCING
+          flO += instanceMatrix[3].xyz;
+        #endif
+        float flP = dot(flO, vec3(0.73, 0.21, 1.13));
+        vFluor = aFluor * (1.0 + 0.25 * (0.62 * sin(uTimeS * 0.42 + flP) + 0.38 * sin(uTimeS * 0.23 + flP * 1.7)));
+      }` },
     fragment: { '#include <emissivemap_fragment>': '$&\ntotalEmissiveRadiance += uFluorCol * vFluor * uFluor;' },
   });
 }
@@ -407,7 +419,7 @@ export function createSurface(W, n1, n2) {
 /* ------------------------------------------------------------------ */
 /* Light shafts: camera-facing ribbons along the refracted light       */
 /* ------------------------------------------------------------------ */
-export function createShafts(W, rng, { count = 32, radius = 26, center = new THREE.Vector3() } = {}) {
+export function createShafts(W, rng, { count = 32, radius = 26, center = new THREE.Vector3(), far = 0, farR = [34, 58], frng = null } = {}) {
   const pos = [], aC = [], aP = [], idx = [];
   for (let i = 0; i < count; i++) {
     const a = rng.range(0, Math.PI * 2), r = radius * Math.sqrt(rng.next());
@@ -421,6 +433,22 @@ export function createShafts(W, rng, { count = 32, radius = 26, center = new THR
     }
     idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
   }
+  // Far layer: broad cathedral shafts out in the blue, spread round the reef (own random stream, so the
+  // near shafts above keep their places). Brighter at the source: the water between them and the eye
+  // dims them into soft, wide columns, a second depth layer behind the reef's crisp near shafts.
+  for (let k = 0; k < far; k++) {
+    const a = (k / far) * Math.PI * 2 + frng.range(-0.3, 0.3), r = frng.range(farR[0], farR[1]);
+    const cx = center.x + Math.cos(a) * r, cz = center.z + Math.sin(a) * r;
+    const w = frng.range(4.5, 7.5), ph = frng.next(), I = frng.range(2.2, 3.2);
+    const base = pos.length / 3;
+    for (const [x, y] of [[-0.5, 0], [0.5, 0], [-0.5, 1], [0.5, 1]]) {
+      pos.push(x, y, 0);
+      aC.push(cx, 0, cz);
+      aP.push(w, ph, I, 1);
+    }
+    idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
+  }
+  count += far;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('aC', new THREE.Float32BufferAttribute(aC, 3));
@@ -575,11 +603,11 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
         gl_PointSize = ps;
         float edge = 1.0 - smoothstep(uBox * 0.32, uBox * 0.5, length(p - cameraPosition));
         vA = edge * smoothstep(0.4, 1.6, dist) * step(p.y, uSurfY - 0.1) * max(px * px / (ps * ps), 0.12);
-        // sparse bioluminescent sparkles at night (on the wrapped clock: rates rounded to 0.01 rad/s so
-        // the twinkle stays continuous across the wrap; unbounded float32 uTime made it step after days)
+        // sparse bioluminescent specks at night that breathe, a soft swell over a few seconds (they were
+        // sharp 0.3-s twinkles); rates are whole multiples of 0.01 rad/s, so the wrapped clock stays seamless
         float bio = step(0.82, fract(s * 13.7));
-        float twf = floor((0.6 + s * 1.4) * 100.0 + 0.5) * 0.01;
-        vTw = pow(max(sin(uTimeS * twf + s * 70.0), 0.0), 18.0) * bio;
+        float twf = floor((0.3 + s * 0.7) * 100.0 + 0.5) * 0.01;
+        vTw = pow(0.5 + 0.5 * sin(uTimeS * twf + s * 70.0), 6.0) * bio;
         vBio = bio;
         vWp = p;
         gl_Position = projectionMatrix * mv;
@@ -594,7 +622,7 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
         float a = exp(-r * 3.5) * vA;
         vec3 lit = uwLc(vWp.y) * 3.2 * uSnowI + vec3(0.55, 0.65, 0.6) * uSnowI * 0.08;
         // night: twinkles plus a faint steady glow of the luminous plankton (steady, so no flicker)
-        vec3 glow = vec3(0.25, 0.95, 1.3) * vTw * uBio * 6.0 + vec3(0.1, 0.5, 0.8) * vBio * uBio * 0.13;
+        vec3 glow = vec3(0.25, 0.95, 1.3) * vTw * uBio * 2.6 + vec3(0.1, 0.5, 0.8) * vBio * uBio * 0.13;
         vec3 col = (lit + glow) * a;
         gl_FragColor = vec4(uwAtten(col, vWp), 1.0);
       }`,
@@ -611,6 +639,109 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
     for (let i = 0; i < count; i++) {
       const s = seeds[i * 4 + 3], k = 0.4 + s;
       const d = [0.06 * k, (-0.035 - s * 0.03) * k, 0.045 * k];
+      for (let c = 0; c < 3; c++) a[i * 3 + c] = (((d[c] * hi) % box) + box) % box;
+    }
+    hiOff.needsUpdate = true;
+  };
+  return { mesh: pts, u, syncHi };
+}
+
+/* ------------------------------------------------------------------ */
+/* Bioluminescent plankton (night)                                     */
+/* ------------------------------------------------------------------ */
+/**
+ * Glowing motes hanging in the water column at night, drifting with the current round the camera (the
+ * snow's wrap-around box). Each breathes on its own slow cycle (7–25 s, a soft swell, never a flash).
+ * Where the whale shark pushes through them they brighten round its body and in its wake, a glow that
+ * builds over a second or two and fades back over the ~8 m behind it. Sized from the drawing buffer;
+ * under 3 px a mote keeps 3 px and dims with its area instead of shrinking into twinkling aliasing.
+ */
+export function createGlow(W, rng, { count = 500, box = 22 } = {}) {
+  const seeds = new Float32Array(count * 4), glow = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    for (let k = 0; k < 4; k++) seeds[i * 4 + k] = rng.next();
+    // breathing rate (whole 0.01 rad/s, so the wrapped clock stays seamless), phase, size (m), hue
+    glow[i * 4] = Math.round(rng.range(0.25, 0.85) * 100) / 100;
+    glow[i * 4 + 1] = rng.range(0, Math.PI * 2);
+    glow[i * 4 + 2] = rng.range(0.03, 0.07);
+    glow[i * 4 + 3] = rng.next();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 4));
+  g.setAttribute('aGlow', new THREE.BufferAttribute(glow, 4));
+  const hiOff = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+  hiOff.setUsage(THREE.DynamicDrawUsage);
+  g.setAttribute('aHi', hiOff);
+  // the wrap-around box sits mostly in front of the camera (uBoxC, set each frame), where the motes are seen
+  const u = { ...W, uBox: { value: box }, uBoxC: { value: new THREE.Vector3() }, uScale: { value: 800 }, uBio: { value: 0 },
+    uGiantA: { value: new THREE.Vector4(0, -999, 0, 0) }, uGiantB: { value: new THREE.Vector4(0, -999, 0, 1) } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: UW_VERT + /* glsl */`
+      attribute vec4 aSeed, aGlow;
+      attribute vec3 aHi;
+      uniform float uBox, uScale, uBio;
+      uniform vec3 uBoxC;
+      uniform vec4 uGiantA, uGiantB;   // tail (xyz, on), snout (xyz, body radius)
+      varying float vA, vHue; varying vec3 vWp;
+      void main(){
+        float s = aSeed.w;
+        vec3 drift = vec3(0.045, 0.01, 0.032) * (0.5 + s);
+        vec3 p = aSeed.xyz * uBox + aHi + drift * uTimeLo;
+        p += 0.3 * vec3(sin(uTimeS * 0.21 + s * 40.0), sin(uTimeS * 0.17 + s * 23.0), cos(uTimeS * 0.19 + s * 31.0));
+        vec3 c = uBoxC - uBox * 0.5;
+        p = c + mod(p - c, uBox);
+        // fade near the box faces, so motes that wrap (or that the box leaves as the view turns) ease out
+        vec3 bq = abs(p - uBoxC) / (uBox * 0.5);
+        float edge = 1.0 - smoothstep(0.72, 0.98, max(bq.x, max(bq.y, bq.z)));
+        vec4 mv = viewMatrix * vec4(p, 1.0);
+        float dist = -mv.z;
+        float b = 0.5 + 0.5 * sin(uTimeS * aGlow.x + aGlow.y);
+        b = b * b;
+        // the whale shark stirs them: brighter round its body and along a fading wake behind it
+        vec3 ab = uGiantB.xyz - uGiantA.xyz; float L = max(length(ab), 1e-3); vec3 f = ab / L;
+        vec3 ap = p - uGiantA.xyz; float t = dot(ap, f);
+        float d = length(ap - f * clamp(t, -8.0, L + 1.0));
+        float wake = t < 0.0 ? clamp(1.0 + t / 8.0, 0.0, 1.0) : 1.0;
+        float R = uGiantB.w * (t < 0.0 ? 0.9 - t * 0.1 : 1.0) + 1.3;
+        float stir = (1.0 - smoothstep(R * 0.5, R, d)) * wake * uGiantA.w;
+        float px = aGlow.z * (1.0 + stir * 0.6) * uScale / max(dist, 0.1);
+        float ps = clamp(px, 3.0, 22.0);
+        gl_PointSize = ps;
+        vA = edge * smoothstep(0.5, 2.0, dist) * step(p.y, uSurfY - 0.4) * min(px * px / (ps * ps), 1.0)
+           * uBio * (0.18 + 1.1 * b + 2.6 * stir);
+        vHue = aGlow.w + stir;
+        vWp = p;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: UW_FRAG + /* glsl */`
+      varying float vA, vHue; varying vec3 vWp;
+      void main(){
+        vec2 c = gl_PointCoord * 2.0 - 1.0;
+        float r = dot(c, c);
+        if (r > 1.0 || vA < 0.002) discard;
+        float a = (exp(-r * 6.0) + exp(-r * 2.2) * 0.25) * vA;
+        // mostly blue-cyan dinoflagellate light, a few greener motes
+        vec3 col = mix(vec3(0.16, 0.6, 1.25), vec3(0.22, 1.1, 0.72), step(0.78, fract(vHue)));
+        gl_FragColor = vec4(uwAtten(col * a, vWp), 1.0);
+      }`,
+  });
+  const pts = new THREE.Points(g, mat);
+  pts.frustumCulled = false;
+  pts.renderOrder = 6;
+  let hiLast = 0;
+  /** Call every frame with W.uTimeHi.value: refreshes the per-mote drift offsets when it steps. */
+  const syncHi = hi => {
+    if (hi === hiLast) return;
+    hiLast = hi;
+    const a = hiOff.array;
+    for (let i = 0; i < count; i++) {
+      const k = 0.5 + seeds[i * 4 + 3];
+      const d = [0.045 * k, 0.01 * k, 0.032 * k];
       for (let c = 0; c < 3; c++) a[i * 3 + c] = (((d[c] * hi) % box) + box) % box;
     }
     hiOff.needsUpdate = true;

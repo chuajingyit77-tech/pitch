@@ -9,6 +9,7 @@ import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './
 import { createGarden } from './cloudsea/garden.js';
 import { createCreatures } from './cloudsea/creatures.js';
 import { createSparkles, createPetals, createMotes, createSkyLanterns, createPeaches, createHalos, SKYL_PERIOD } from './cloudsea/fx.js';
+import { createKun } from './cloudsea/kun.js';
 
 // lib/util.js addWind() uses uWindTime at 1.7, 3.1, 8 and 9 rad/s: all whole cycles in 20π s, so wrapping the
 // clock there is seamless and keeps the sway precise in float32 however long the page stays open.
@@ -73,9 +74,13 @@ export default {
       const d = crng.range(950, 2300);
       towerPuffs(crng, new THREE.Vector3(Math.cos(a) * d, CLOUD_TOP - 25, Math.sin(a) * d), crng.range(170, 420), crng.range(80, 170), Math.round(lerp(22, 40, q)), farItems);
     }
+    const banks = [];   // low cloud banks, as spheres along their length: the Kun's passes are planned to be seen past them
     for (let i = 0; i < 11; i++) {
       const a = crng.range(0, TAU), d = crng.range(190, 760);
-      bankPuffs(crng, new THREE.Vector3(Math.cos(a) * d, CLOUD_TOP - 2, Math.sin(a) * d), crng.range(110, 280), crng.range(40, 80), crng.range(14, 30), Math.round(lerp(9, 15, q)), crng.range(0, TAU), farItems);
+      const c = new THREE.Vector3(Math.cos(a) * d, CLOUD_TOP - 2, Math.sin(a) * d), len = crng.range(110, 280), dep = crng.range(40, 80), hgt = crng.range(14, 30);
+      const n0 = Math.round(lerp(9, 15, q)), yaw = crng.range(0, TAU);
+      bankPuffs(crng, c, len, dep, hgt, n0, yaw, farItems);
+      for (let k = -2; k <= 2; k++) banks.push({ type: 'sphere', c: new THREE.Vector3(c.x + Math.cos(yaw) * len * 0.18 * k, c.y + hgt * 0.35, c.z + Math.sin(yaw) * len * 0.18 * k), r: hgt * 0.85 * Math.cos(k * 0.45) });
     }
     const farPuffs = createPuffs(shared, tex, farItems, { glow: glowU, fogMul: 0.6 });
     farPuffs.mesh.renderOrder = 1;
@@ -273,6 +278,34 @@ export default {
     };
     const creatures = createCreatures(env, shared, world, fx);
     scene.add(creatures.group);
+
+    /* ---- the Kun (鲲): a colossal sky whale passing through the cloud sea now and then ---- */
+    const cyl = (x, z, r, y0, y1) => ({ type: 'cyl', x, z, r, y0, y1 });
+    // what can hide it from view (the planner looks for passes that are seen) and what its paths keep clear of
+    const occluders = [
+      { type: 'sphere', c: spheres[0].c, r: spheres[0].r * 1.15 },
+      ...garden.tree.clusters.map(c => ({ type: 'sphere', c: c.c, r: c.r * 1.7 })),
+      ...builds.map(b => cyl(b.x, b.z, b.r, b.top - 9, b.top)),
+      cyl(0, 0, garden.main.radius + 0.5, -7, 0.8), cyl(0, 0, garden.main.radius * 0.6, -22, -7),
+      cyl(garden.A.x, garden.A.z, garden.islA.radius + 0.4, garden.A.y - garden.islA.depth * 0.6, garden.A.y + 0.8),
+      cyl(garden.Bp.x, garden.Bp.z, garden.islB.radius + 0.4, garden.Bp.y - garden.islB.depth * 0.6, garden.Bp.y + 0.8),
+    ];
+    const bound = { c: new THREE.Vector3(0, -5, 0), r: 0 };
+    for (const o of occluders) {
+      const d = o.type === 'sphere' ? o.c.distanceTo(bound.c) + o.r : Math.hypot(Math.hypot(o.x, o.z) + o.r, Math.max(Math.abs(o.y0 + 5), Math.abs(o.y1 + 5)));
+      bound.r = Math.max(bound.r, d);
+    }
+    const farOccl = [
+      ...banks,
+      ...garden.decor.map(d => cyl(d.obj.position.x, d.obj.position.z, d.R * d.scale + 1, d.obj.position.y - d.depth * d.scale, d.obj.position.y + 5 * d.scale)),
+    ];
+    const obstacles = [
+      ...garden.peaks,
+      ...garden.decor.map(d => ({ x: d.obj.position.x, z: d.obj.position.z, R: d.R * d.scale + 6, y0: d.obj.position.y - d.depth * d.scale - 6, y1: d.obj.position.y + 12 })),
+      { x: 0, z: 0, R: 60, y0: -60, y1: 40 },
+    ].map(o => ({ x: o.x, z: o.z, r: o.R, y0: o.y0, y1: o.y1 }));
+    const kun = createKun(env, shared, tex, sea, { glowU, occluders, bound, far: farOccl, obstacles, drift: 0.025 });
+    scene.add(kun.group);
     const foods = creatures.sys.foods;
     const _ray = new THREE.Vector3();
     function spawnPeach(p, { ground = null, float = false, onMain = false, drop = 2.6 } = {}) {
@@ -339,6 +372,7 @@ export default {
       if (envMap.update(t, false)) scene.environment = envMap.texture;
       sky.mesh.position.copy(camera.position);
       sea.update(dt);
+      kun.update(dt, t, camera, tod, target, env.isIdle());
       // swirls drift around the garden and turn to face the viewer
       for (const sw of swirls) {
         sw.a += sw.speed * dt;
@@ -455,8 +489,12 @@ export default {
       creatures: () => creatures.list(),
       addMember(m) { creatures.addMember(m); },
       // test handle (motion probes read the creatures' state through it)
-      debug: { sys: creatures.sys, foods, garden, world },
+      debug: { sys: creatures.sys, foods, garden, world, kun },
+      /** Test hook: bring the Kun out now, on a pass planned for the current view, `tau` s into it (default: the
+       *  middle of its pass). Returns the plan. */
+      debugGiant(tau, force) { return kun.debug(camera, target, env.isIdle(), tau, tod, force); },
       dispose() {
+        kun.dispose();
         envMap.dispose();
         creatures.dispose();
         garden.dispose();

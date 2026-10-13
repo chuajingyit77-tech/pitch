@@ -22,8 +22,21 @@ export function makeWindUniforms() {
     // screen-space minimum blade width: half the drawing-buffer size (px) and the width floor (px)
     uHalfRes: { value: new THREE.Vector2(640, 360) },
     uMinPx: { value: 1.05 },
+    // the spirit fox's glow on the grass round it: position, strength (0 = off) and colour (linear)
+    uSpirit: { value: new THREE.Vector4(0, -100, 0, 0) },
+    uSpiritCol: { value: new THREE.Color(0.45, 0.7, 1.2) },
   };
 }
+
+/** Light the spirit fox throws on the grass and ground round it (a soft ellipsoid, nothing at all when it is away). */
+export const SPIRIT_GLSL = /* glsl */`
+uniform vec4 uSpirit; uniform vec3 uSpiritCol;
+vec3 spiritGlow(vec3 wp, float k) {
+  if (uSpirit.w < 0.001) return vec3(0.0);
+  vec3 d = wp - uSpirit.xyz;
+  return uSpiritCol * (uSpirit.w * k * exp(-(dot(d.xz, d.xz) * 0.2 + d.y * d.y * 0.32)));
+}
+`;
 
 export const WIND_GLSL = /* glsl */`
 uniform float uWindStr;
@@ -164,7 +177,7 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
       attribute vec4 aInst; attribute float aSide; attribute vec3 aW, aTan; ${plume ? 'attribute float aPart;' : ''}
       uniform vec2 uHalfRes; uniform float uMinPx;
       varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;`,
-    fragmentHeader: `
+    fragmentHeader: SPIRIT_GLSL + `
       uniform vec3 uRootCol, uMidCol, uTipCol, uPlumeCol; uniform float uTransl, uWrap, uGustBright, uNoMsaa;
       varying float vH; varying float vGust; varying vec4 vInst; varying float vPart; varying float vSide; varying float vCov;
       // blade colour at normalised height h: root-to-tip gradient, per-clump tint, darkening toward the root, gust sheen
@@ -198,7 +211,8 @@ export function grassMaterial({ wind, colors, fogU, plume = false, map = null, t
       '#include <alphatest_fragment>': plume ? A2C_SOFT : '',
       '#include <normal_fragment_begin>': NFB_NOFLIP,
       '#include <lights_lambert_pars_fragment>': translucentLambert(plume ? 'mix(0.3 + 0.7 * vH, 1.6, vPart)' : '0.12 + 0.88 * pow2(mix(susukiBgH(), vH, vCov))'),
-      '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+      // the blade tips and plumes catch the spirit fox's glow
+      '#include <opaque_fragment>': 'gl_FragColor = vec4( outgoingLight + spiritGlow(vFogWorld, (0.15 + 0.85 * vH) * (1.0 + 0.7 * vPart)), diffuseColor.a );',
     },
   });
   addFog(mat, fogU, plume ? 'mfogP' : 'mfogG');
