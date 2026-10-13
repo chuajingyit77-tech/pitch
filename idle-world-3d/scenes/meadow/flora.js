@@ -331,6 +331,151 @@ export function instancedFrom(geo, mat, list) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Drawing only the part of the field that is in view                  */
+/* ------------------------------------------------------------------ */
+// The field is planted for every view a viewer can reach (yaw ±0.8, zoom 8–26 m), but one view sees only a quarter
+// to a third of it, and three.js draws an InstancedMesh whole: two thirds of the field's 1.2 M triangles were
+// bent by the wind, projected and thrown away, every frame. Here the plants are stored sorted by bearing around a
+// pivot behind the camera's orbit, in 1° bins, and each draw starts at the first bin that can be in view and ends
+// after the last one: an attribute offset and an instance count, so no extra draw call and no upload. A bin is in
+// view when one of its bounding spheres, grown by how far the current wind and pressing can bend its tallest
+// plant, touches the camera's frustum. Nothing that could reach the screen is ever left out: the picture is the
+// same, the GPU just skips the field behind and beside the view. The mesh must stay at the scene origin.
+const _view = { frustum: new THREE.Frustum(), m: new THREE.Matrix4(), renderer: null, cam: null, frame: -1 };
+function viewPlanes(renderer, camera) {
+  const frame = renderer.info.render.frame;
+  if (_view.renderer !== renderer || _view.cam !== camera || _view.frame !== frame) {
+    _view.m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _view.frustum.setFromProjectionMatrix(_view.m);
+    _view.renderer = renderer; _view.cam = camera; _view.frame = frame;
+  }
+  return _view.frustum.planes;
+}
+
+/** Like instancedFrom, but each draw covers only the plants that can be in view (see above). `wind` holds the
+ * field's wind uniforms and `flex` the material's bend factor; `chunk` (m) sets how finely each bin is bounded;
+ * `before(renderer)` runs before every draw. mesh.userData.cull.enabled = false draws the whole field (tests). */
+export function windowedInstances(geo, mat, list, { pivot, wind, flex = 1, binDeg = 1, chunk = 6, before = null }) {
+  const n = list.length;
+  // A plant bends only sideways and down toward its root (bendAt), so it always stays inside the upright cylinder
+  // around its root that holds the unbent plant, widened by the bend. Each plant is bounded by the sphere around
+  // that cylinder: radius hypot(reach, half height), plus (bend per metre of height) × height at draw time.
+  const pos = geo.attributes.position;
+  let reach = 0, yLo = Infinity, yHi = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    reach = Math.max(reach, Math.hypot(pos.getX(i), pos.getZ(i)));
+    yLo = Math.min(yLo, pos.getY(i)); yHi = Math.max(yHi, pos.getY(i));
+  }
+  yLo = Math.min(yLo, 0);
+  // the bend grows with the square of the normalised height (clamped at 1.3 in the shader)
+  const tipW = Math.pow(Math.min(Math.max(yHi, 1), 1.3), 2);
+  // bearings around the pivot, turned so that the widest empty arc of the field sits on the 0 / 2π seam: the run
+  // of bins in view is then one contiguous range
+  const ang = list.map(r => Math.atan2(r.x - pivot.x, r.z - pivot.z));
+  const srt = ang.slice().sort((a, b) => a - b);
+  let gap = n ? srt[0] + TAU - srt[n - 1] : TAU, seam = n ? srt[n - 1] + gap / 2 : 0;
+  for (let i = 1; i < n; i++) { const g = srt[i] - srt[i - 1]; if (g > gap) { gap = g; seam = srt[i - 1] + g / 2; } }
+  const binW = binDeg * Math.PI / 180;
+  const recs = list.map((r, i) => {
+    let a = ang[i] - seam; a -= Math.floor(a / TAU) * TAU;
+    return { r, bin: Math.floor(a / binW), d: Math.hypot(r.x - pivot.x, r.z - pivot.z) };
+  });
+  // within a bin, nearest the camera first
+  recs.sort((a, b) => a.bin - b.bin || a.d - b.d);
+
+  const mats = new Float32Array(Math.max(n, 1) * 16), inst = new Float32Array(Math.max(n, 1) * 4), sph = new Float32Array(n * 5);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), yAxis = new THREE.Vector3(0, 1, 0);
+  recs.forEach(({ r }, i) => {
+    q.setFromAxisAngle(yAxis, r.rot);
+    p.set(r.x, r.y, r.z); s.set(r.sx, r.sy, r.sx);
+    m.compose(p, q, s);
+    m.toArray(mats, i * 16);
+    inst.set(r.inst, i * 4);
+    sph[i * 5] = r.x; sph[i * 5 + 1] = r.y + (yLo + yHi) * 0.5 * r.sy; sph[i * 5 + 2] = r.z;
+    sph[i * 5 + 3] = Math.hypot(reach * r.sx, (yHi - yLo) * 0.5 * r.sy); sph[i * 5 + 4] = r.sy * tipW;
+  });
+  // bins: [first plant, end, first sphere, end]; spheres: [x, y, z, radius, largest height × tip bend weight] over
+  // runs of `chunk` m along the distance from the pivot
+  const binA = [], sphA = [];
+  for (let i = 0; i < n;) {
+    let j = i;
+    while (j < n && recs[j].bin === recs[i].bin) j++;
+    const c0 = sphA.length / 5;
+    for (let k = i; k < j;) {
+      let e = k;
+      while (e < j && recs[e].d < recs[k].d + chunk) e++;
+      let cx = 0, cy = 0, cz = 0;
+      for (let t = k; t < e; t++) { cx += sph[t * 5]; cy += sph[t * 5 + 1]; cz += sph[t * 5 + 2]; }
+      cx /= e - k; cy /= e - k; cz /= e - k;
+      let R = 0, H = 0;
+      for (let t = k; t < e; t++) {
+        R = Math.max(R, Math.hypot(sph[t * 5] - cx, sph[t * 5 + 1] - cy, sph[t * 5 + 2] - cz) + sph[t * 5 + 3]);
+        H = Math.max(H, sph[t * 5 + 4]);
+      }
+      sphA.push(cx, cy, cz, R, H);
+      k = e;
+    }
+    binA.push(i, j, c0, sphA.length / 5);
+    i = j;
+  }
+  const bins = Int32Array.from(binA), spheres = Float32Array.from(sphA), nb = bins.length / 4;
+
+  const g = geo.clone();
+  const mesh = new THREE.InstancedMesh(g, mat, 1);
+  const matBuf = new THREE.InstancedInterleavedBuffer(mats, 16, 1), instBuf = new THREE.InstancedInterleavedBuffer(inst, 4, 1);
+  let w0 = -1, w1 = -1;
+  const setWindow = (i0, i1) => {
+    if (i0 === w0 && i1 === w1) return;
+    w0 = i0; w1 = i1;
+    // new attribute objects: three re-specifies the vertex arrays when an attribute object changes, not its offset
+    mesh.instanceMatrix = new THREE.InterleavedBufferAttribute(matBuf, 16, i0 * 16);
+    g.setAttribute('aInst', new THREE.InterleavedBufferAttribute(instBuf, 4, i0 * 4));
+    mesh.count = i1 - i0;
+  };
+  setWindow(0, n);
+  const press = wind.uPress.value, px = new Float32Array(press.length), pz = new Float32Array(press.length), pk = new Float32Array(press.length);
+  let pl = null, grow = 0, np = 0;
+  const binInView = b => {
+    for (let k = bins[b * 4 + 2], ke = bins[b * 4 + 3]; k < ke; k++) {
+      const x = spheres[k * 5], y = spheres[k * 5 + 1], z = spheres[k * 5 + 2], R = spheres[k * 5 + 3], H = spheres[k * 5 + 4];
+      let r = R + grow * H + 0.25;
+      // an offering presses the grass within 2.4 m of it (windInst)
+      for (let j = 0; j < np; j++) { const dx = x - px[j], dz = z - pz[j], e = R + 2.4; if (dx * dx + dz * dz < e * e) r += pk[j] * H; }
+      let inside = true;
+      for (let f = 0; f < 6; f++) {
+        const P = pl[f];
+        if (P.normal.x * x + P.normal.y * y + P.normal.z * z + P.constant < -r) { inside = false; break; }
+      }
+      if (inside) return true;
+    }
+    return false;
+  };
+  mesh.userData.cull = { enabled: true };
+  mesh.onBeforeRender = function (renderer, scene, camera, geometry, material, group) {
+    THREE.Object3D.prototype.onBeforeRender.call(this, renderer, scene, camera, geometry, material, group);
+    if (before) before(renderer);
+    if (!this.userData.cull.enabled) { setWindow(0, n); return; }
+    pl = viewPlanes(renderer, camera);
+    // how far a plant can bend, per metre of its height (windInst / bendAt): lean up to 0.73 × wind strength × flex
+    // and flutter up to 0.03, plus 1.1 × weight for each offering pressing the grass nearby; the extra 0.25 m covers
+    // the blade's on-screen minimum width
+    grow = Math.max(wind.uWindStr.value, 0) * 0.76 * flex;
+    np = 0;
+    for (let i = 0; i < press.length; i++) if (press[i].w > 1e-4) { px[np] = press[i].x; pz[np] = press[i].z; pk[np] = 1.1 * press[i].w; np++; }
+    let b0 = 0;
+    while (b0 < nb && !binInView(b0)) b0++;
+    if (b0 === nb) { setWindow(0, 0); return; }
+    let b1 = nb - 1;
+    while (b1 > b0 && !binInView(b1)) b1--;
+    setWindow(bins[b0 * 4], bins[b1 * 4 + 1]);
+  };
+  mesh.frustumCulled = false;
+  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  return mesh;
+}
+
+/* ------------------------------------------------------------------ */
 /* Maple trees                                                         */
 /* ------------------------------------------------------------------ */
 function tubeAlong(points, radii, radial, out, vScale = 1.2) {

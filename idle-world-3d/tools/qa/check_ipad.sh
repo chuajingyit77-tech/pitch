@@ -19,4 +19,6 @@ echo "== 3. Motion: snaps, jumps, misalignment, 30 vs 60 fps"
 for w in $WORLDS; do timeout 1500 node "$QA/motion.cjs" "$OUT/motion" "$w" --fps 60,30 --secs 20 --feed 8 | grep -E "^==|frame-rate"; done
 echo "== 4. Skinned creatures: WebGL 1 pose = WebGL 2 pose"
 timeout 2400 node "$QA/skin_parity.cjs" "$OUT/parity" meadow cloudsea
+echo "== 5. Fields drawn only where in view: identical to the whole field in every test view"
+case " $WORLDS " in *" meadow "*) timeout 3000 node "$QA/cullcheck.cjs" meadow | tail -1 ;; esac
 echo "done: $OUT"

@@ -8,6 +8,7 @@
 // screen fractions, top-left origin); over32 = pixels brighter than 32; flickerPermille = per-mille of pixels that
 // swing up then down by >0.12 between consecutive 60 fps frames; meanDelta = mean per-pixel change per frame;
 // globalJump = largest frame-to-frame change of mean screen brightness (a whole-screen flash).
+// The page's own animation loop is stopped (manualClock): the probe alone steps the world, so runs repeat exactly.
 const { chromium } = require('playwright');
 const http = require('http');
 const fs = require('fs');
@@ -51,7 +52,7 @@ const srv = http.createServer((req, resp) => {
   });
   await page.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await page.route('https://fonts.gstatic.com/**', r => r.abort());
-  await page.addInitScript(cfg => { window.__IDLE_TEST__ = cfg; try { localStorage.clear(); } catch (e) {} }, { scene: JOBS[0].id, hours: JOBS[0].h, seed: 777, quality: process.env.Q || 'high', noUI: true });
+  await page.addInitScript(cfg => { window.__IDLE_TEST__ = cfg; try { localStorage.clear(); } catch (e) {} }, { scene: JOBS[0].id, hours: JOBS[0].h, seed: 777, quality: process.env.Q || 'high', noUI: true, manualClock: true });
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);

@@ -1308,6 +1308,9 @@ function frame(now) {
   acc = 0;
   if (contextLost) return;
   if (needsResize) { needsResize = false; resize(); }
+  // tests that step the world themselves (simulate / diagnose) stop it here, so a result does not depend on how
+  // many real frames happened to run in between
+  if (TEST && TEST.manualClock) return;
   if (current && !loading) {
     elapsed += dt;
     tickHours(dt);

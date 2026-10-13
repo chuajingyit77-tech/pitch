@@ -6,7 +6,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
-import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
+import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, windowedInstances, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
 import { buildTorii, buildHokora, buildLantern, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
 import { buildRocks, makeRockMaterial, rockSurfaceTexture, rockFootTufts } from './meadow/rock.js';
 import * as TX from './meadow/tex.js';
@@ -265,11 +265,13 @@ export default {
         return false;
       };
       const regions = [
-        { r0: 0, r1: 24, step: 0.48, geo: buildClump(grng, { blades: 15, segs: 4, width: 0.024 }), pgeo: buildPlumeStalk({ planes: 3, segs: 3, plumeFrom: 0.72, width: 0.07 }), xz: 1.0, y: 1.0, pp: 0.34 },
-        { r0: 24, r1: 72, step: 0.92, geo: buildClump(grng, { blades: 11, segs: 3, width: 0.032 }), pgeo: buildPlumeStalk({ planes: 3, segs: 2, plumeFrom: 0.72, width: 0.075 }), xz: 1.3, y: 1.06, pp: 0.36 },
-        { r0: 72, r1: 200, step: 1.8, geo: buildClump(grng, { blades: 8, segs: 2, width: 0.05 }), pgeo: buildPlumeStalk({ planes: 2, segs: 2, plumeFrom: 0.7, width: 0.095 }), xz: 1.75, y: 1.14, pp: 0.3 },
+        { r0: 0, r1: 24, step: 0.48, geo: buildClump(grng, { blades: 15, segs: 4, width: 0.024 }), pgeo: buildPlumeStalk({ planes: 3, segs: 3, plumeFrom: 0.72, width: 0.07 }), xz: 1.0, y: 1.0, pp: 0.34, chunk: 3 },
+        { r0: 24, r1: 72, step: 0.92, geo: buildClump(grng, { blades: 11, segs: 3, width: 0.032 }), pgeo: buildPlumeStalk({ planes: 3, segs: 2, plumeFrom: 0.72, width: 0.075 }), xz: 1.3, y: 1.06, pp: 0.36, chunk: 6 },
+        { r0: 72, r1: 200, step: 1.8, geo: buildClump(grng, { blades: 8, segs: 2, width: 0.05 }), pgeo: buildPlumeStalk({ planes: 2, segs: 2, plumeFrom: 0.7, width: 0.095 }), xz: 1.75, y: 1.14, pp: 0.3, chunk: 10 },
       ];
-      const camDefault = new THREE.Vector2(TARGET.x, TARGET.z + 16);
+      // each draw covers only the plants that can be in view (windowedInstances): sorted by bearing around a point
+      // 4 m behind the default camera (the views orbit the target from +z)
+      const pivot = { x: TARGET.x, z: TARGET.z + 20 };
       for (const R of regions) {
         const step = R.step / Math.sqrt(Math.max(q, 0.3));
         const clumps = [], plumes = [];
@@ -285,21 +287,18 @@ export default {
           const H = (1.15 + 0.6 * grng.next()) * (0.78 + 0.4 * patch) * (0.24 + 0.76 * f) * R.y;
           const y = heightAt(x, z) - 0.04;
           const hue = clamp((noise.fbm2(x * 0.03 - 9, z * 0.03 + 4, 2)) * 1.3 + (1 - f) * 0.7 + grng.range(-0.25, 0.25), -1, 1);
-          const rec = { x, y, z, rot: grng.range(0, TAU), sx: H * grng.range(0.7, 1.0) * R.xz, sy: H, inst: [hue, grng.next(), grng.next(), grng.next()], d: Math.hypot(x - camDefault.x, z - camDefault.y) };
+          const rec = { x, y, z, rot: grng.range(0, TAU), sx: H * grng.range(0.7, 1.0) * R.xz, sy: H, inst: [hue, grng.next(), grng.next(), grng.next()] };
           clumps.push(rec);
           if (f > 0.55 && grng.chance(R.pp * (0.6 + 0.8 * patch))) {
             const nP = grng.chance(0.35) ? 2 : 1;
             for (let k = 0; k < nP; k++) {
               const ph = H * grng.range(1.15, 1.45);
-              plumes.push({ x: x + grng.range(-0.15, 0.15) * rec.sx, y, z: z + grng.range(-0.15, 0.15) * rec.sx, rot: Math.atan2(-baseWind.y, baseWind.x) + grng.range(-0.7, 0.7), sx: ph * grng.range(0.85, 1.1) * (R.xz > 1.5 ? 1.25 : 1), sy: ph, inst: [grng.range(-0.3, 0.3), grng.next(), grng.next(), grng.next()], d: rec.d });
+              plumes.push({ x: x + grng.range(-0.15, 0.15) * rec.sx, y, z: z + grng.range(-0.15, 0.15) * rec.sx, rot: Math.atan2(-baseWind.y, baseWind.x) + grng.range(-0.7, 0.7), sx: ph * grng.range(0.85, 1.1) * (R.xz > 1.5 ? 1.25 : 1), sy: ph, inst: [grng.range(-0.3, 0.3), grng.next(), grng.next(), grng.next()] });
             }
           }
         }
-        clumps.sort((a, b) => a.d - b.d);
-        plumes.sort((a, b) => a.d - b.d);
-        const gm = instancedFrom(R.geo, grassMat, clumps);
-        const pm = instancedFrom(R.pgeo, plumeMat, plumes);
-        pm.onBeforeRender = probeMsaa;
+        const gm = windowedInstances(R.geo, grassMat, clumps, { pivot, wind: windU, flex: 1, chunk: R.chunk });
+        const pm = windowedInstances(R.pgeo, plumeMat, plumes, { pivot, wind: windU, flex: 1.3, chunk: R.chunk, before: probeMsaa });
         R.geo.dispose(); R.pgeo.dispose();
         scene.add(gm, pm);
       }
