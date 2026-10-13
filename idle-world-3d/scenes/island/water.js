@@ -6,7 +6,7 @@
 // - Foam: swash edge, incoming wavelets, reef surf, rocks/posts, whitecaps; bioluminescent at night.
 import * as THREE from 'three';
 import { GLSL, TAU, smoothstep } from '../../lib/util.js';
-import { waterUniforms } from './shared.js';
+import { waterUniforms, WATER_PERIOD } from './shared.js';
 import { fieldUniforms, SWASH_GLSL } from './terrain.js';
 
 const WAVES = [
@@ -15,26 +15,31 @@ const WAVES = [
   [-0.4, 1.0, 0.075, 6.1],
   [0.92, -0.5, 0.055, 3.7],
 ];
+// Deep-water waves (omega = sqrt(g k)), each angular frequency snapped to a whole number of cycles per
+// WATER_PERIOD so the wrapped shader clock is seamless (CPU and GPU use the same speeds)
 const WV = WAVES.map(([dx, dz, st, len]) => {
   const l = Math.hypot(dx, dz), k = TAU / len;
-  return { dx: dx / l, dz: dz / l, k, c: Math.sqrt(9.8 / k), a: st / k };
+  const omega = Math.round(Math.sqrt(9.8 * k) * WATER_PERIOD / TAU) * TAU / WATER_PERIOD;
+  return { dx: dx / l, dz: dz / l, k, c: omega / k, a: st / k };
 });
 const AMP_SUM = WV.reduce((s, w) => s + w.a, 0);
 
 /** The swell as shader uniforms (shared by the water surface and things that ride on it, e.g. ripples). */
 export const swellUniforms = {
   uWaves: { value: WAVES.map(([, , st, len], i) => new THREE.Vector4(WV[i].dx, WV[i].dz, st, len)) },
+  uWaveC: { value: WV.map(w => w.c) }, // phase speeds (snapped, see WV)
   uAmpSum: { value: AMP_SUM },
 };
 
 /** GLSL: Gerstner displacement of the water grid point p (needs uWaves, uWTime). */
 export const SWELL_GLSL = /* glsl */`
+uniform float uWaveC[4];
 vec3 swellDisp(vec2 p, float atten) {
   vec3 disp = vec3(0.0);
   for (int i = 0; i < 4; i++) {
     vec4 w = uWaves[i];
     float k = 6.2831853 / w.w;
-    float f = k * (dot(w.xy, p) - sqrt(9.8 / k) * uWTime);
+    float f = k * (dot(w.xy, p) - uWaveC[i] * uWTime);
     float a = w.z * atten / k;
     disp += vec3(w.x * a * cos(f), a * sin(f), w.y * a * cos(f));
   }
@@ -94,6 +99,7 @@ const VERT = /* glsl */`
 uniform mat4 uTexMat;
 uniform float uWTime;
 uniform vec4 uWaves[4];
+uniform float uWaveC[4];
 uniform float uAmpSum;
 uniform sampler2D tField;
 uniform vec4 uField;
@@ -115,8 +121,7 @@ void main() {
   for (int i = 0; i < 4; i++) {
     vec4 w = uWaves[i];
     float k = 6.2831853 / w.w;
-    float c = sqrt(9.8 / k);
-    float f = k * (dot(w.xy, p.xz) - c * uWTime);
+    float f = k * (dot(w.xy, p.xz) - uWaveC[i] * uWTime);
     float st = w.z * atten;
     float a = st / k;
     float sf = sin(f), cf = cos(f);
@@ -139,7 +144,9 @@ uniform sampler2D tMirror;
 uniform sampler2D tNormal;
 uniform sampler2D tField;
 uniform vec4 uField;
-uniform float uWTime;
+uniform float uWTime, uWPeriod;
+uniform vec4 uNScroll, uFoamOff, uDriftOff;  // texture scrolls (wrapped to 1) and noise drifts (wrapped to 1024)
+uniform vec2 uNScroll3, uCapOff;
 uniform vec3 uSunDir, uSunCol, uMoonDir, uMoonCol;
 uniform vec3 uSSS, uFoamCol, uGlow, uHorizon;
 uniform float uNight, uReflStrength, uHazeNear, uHazeFar, uMirrorOn;
@@ -157,14 +164,25 @@ varying float vCrest;
 // camera slide it across pixel centres.
 float aaFade(float freq, float fp) { return smoothstep(0.3, 0.75, freq * fp); }
 float vnoiseAA(vec2 q, float freq, float fp) { return mix(vnoise(q), 0.5, aaFade(freq, fp)); }
+// Value noise whose lattice repeats every 1024 cells: the drifting foam reads it at offsets wrapped to 1024 in JS,
+// so the drift never jumps (and never grows past float32 precision)
+float vnoiseP(vec2 q) {
+  vec2 i = floor(q), f = fract(q); vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 i0 = mod(i, 1024.0), i1 = mod(i + 1.0, 1024.0);
+  return mix(mix(hash12(i0), hash12(vec2(i1.x, i0.y)), u.x), mix(hash12(vec2(i0.x, i1.y)), hash12(i1), u.x), u.y);
+}
+float vnoiseAAP(vec2 q, float freq, float fp) { return mix(vnoiseP(q), 0.5, aaFade(freq, fp)); }
 
-// One level of the glitter: a sparse field of short-lived sparkles (one per lit cell).
-float sparkleCell(vec2 p, float t, float density) {
+// One level of the glitter: a sparse field of short-lived sparkles (one per lit cell). Each cell's twinkle rate
+// is snapped to a whole number of cycles per clock period, and its seed counts cycles modulo that number, so the
+// wrapped clock (uWTime, period uWPeriod) carries every sparkle on without a jump.
+float sparkleCell(vec2 p, float t, float rate, float density) {
   vec2 c = floor(p);
   vec2 f = fract(p) - 0.5;
   float h = hash12(c);
-  float tt = t * (1.2 + h * 2.2) + h * 37.0;
-  float seed = mod(floor(tt), 1024.0);   // keeps the hash inputs small on screens left on all day
+  float nc = floor((1.2 + h * 2.2) * rate * uWPeriod + 0.5);
+  float tt = t * (nc / uWPeriod) + h * 37.0;
+  float seed = mod(mod(floor(tt), nc), 1024.0);   // small hash inputs
   float on = step(1.0 - density, hash12(c + seed * 7.13));
   vec2 o = (hash22(c + seed * 3.7) - 0.5) * 0.55;
   return on * sin(fract(tt) * 3.14159) * (1.0 - smoothstep(0.0, 0.2, length(f - o)));
@@ -172,12 +190,12 @@ float sparkleCell(vec2 p, float t, float density) {
 // Glitter at any distance, mip-mapped like a texture: the cell size follows the pixel footprint in powers
 // of two (neighbouring levels cross-faded), so a sparkle always covers more than a pixel and the field keeps
 // the same density and mean brightness. Sub-pixel sparkles used to blink on and off from frame to frame.
-float sparkle(vec2 p, float t, float density, float freq, float fp) {
+float sparkle(vec2 p, float t, float rate, float density, float freq, float fp) {
   float lv = max(log2(fp * freq / 0.16), 0.0);
   float l0 = floor(lv), k = lv - l0;
   float s0 = freq * exp2(-l0);
-  float a = sparkleCell(p * s0 + l0 * 17.0, t, density);
-  float b = sparkleCell(p * s0 * 0.5 + (l0 + 1.0) * 17.0, t, density);
+  float a = sparkleCell(p * s0 + l0 * 17.0, t, rate, density);
+  float b = sparkleCell(p * s0 * 0.5 + (l0 + 1.0) * 17.0, t, rate, density);
   return mix(a, b, k);
 }
 // Specular lobe pow(c, n), widened by the slope variance s2 (rad^2) hidden inside the pixel and dimmed to
@@ -205,9 +223,9 @@ void main() {
   float fpG = max(sqrt(lx * ly), 1e-4);
 
   // detail normals (three scrolling octaves), calmer over the lagoon, fading with distance
-  vec3 n1 = texture2D(tNormal, p * 0.105 + vec2(t * 0.021, t * 0.013)).rgb * 2.0 - 1.0;
-  vec3 n2 = texture2D(tNormal, p * 0.043 - vec2(t * 0.011, -t * 0.016)).rgb * 2.0 - 1.0;
-  vec3 n3 = texture2D(tNormal, p * 0.26 + vec2(-t * 0.031, t * 0.027)).rgb * 2.0 - 1.0;
+  vec3 n1 = texture2D(tNormal, p * 0.105 + uNScroll.xy).rgb * 2.0 - 1.0;
+  vec3 n2 = texture2D(tNormal, p * 0.043 + uNScroll.zw).rgb * 2.0 - 1.0;
+  vec3 n3 = texture2D(tNormal, p * 0.26 + uNScroll3).rgb * 2.0 - 1.0;
   vec2 slope = n1.xy * 0.45 + n2.xy * 0.6 + n3.xy * 0.28;
   float calm = mix(0.5, 1.0, smoothstep(0.3, 3.5, depth));
   float farK = 1.0 - smoothstep(50.0, 900.0, dist) * 0.75;
@@ -244,7 +262,7 @@ void main() {
   float gSun = sunOn > 0.0 ? pow(sd, 48.0) : 0.0;
   float gMoon = moonOn > 0.0 ? pow(md, 30.0) : 0.0;
   float spk = 0.0;
-  if (max(gSun * sunOn, gMoon * moonOn) > 0.002) spk = sparkle(p, t, 0.085, 3.1, fp) + sparkle(p + 17.0 / 5.7, t * 1.3, 0.07, 5.7, fp) * 0.8;
+  if (max(gSun * sunOn, gMoon * moonOn) > 0.002) spk = sparkle(p, t, 1.0, 0.085, 3.1, fp) + sparkle(p + 17.0 / 5.7, t, 1.3, 0.07, 5.7, fp) * 0.8;
   vec3 spec = vec3(0.0);
   if (sunOn > 0.0) spec += uSunCol * (lobe(sd, 1200.0, sig2) * 9.0 + lobe(sd, 240.0, sig2) * 0.3 + gSun * spk * 14.0 * farK);
   if (moonOn > 0.0) spec += uMoonCol * (lobe(md, 2600.0, sig2) * 2.2 + lobe(md, 160.0, sig2) * 0.12 + gMoon * spk * 8.0 * farK);
@@ -257,35 +275,35 @@ void main() {
   vec3 sss = uSSS * crest * crest * (0.35 + 1.6 * back) * smoothstep(2.0, 7.0, depth);
 
   // ---- foam (every noise octave is filtered to its mean before it would alias) ----
-  float fn = vnoiseAA(p * 1.55 + vec2(t * 0.25, -t * 0.18), 1.55, fp) * 0.6 + vnoiseAA(p * 4.3 - vec2(t * 0.33, t * 0.29), 4.3, fp) * 0.4;
+  float fn = vnoiseAAP(p * 1.55 + uFoamOff.xy, 1.55, fp) * 0.6 + vnoiseAAP(p * 4.3 + uFoamOff.zw, 4.3, fp) * 0.4;
   float edge = 1.0 - smoothstep(0.0, 0.13, depth);
   float foamEdge = edge * smoothstep(0.28, 0.5, fn + edge * 0.35);
   float uu = max(u, 0.0);
   float ph = swashPhase(p, uu, t);
   float lines = pow(0.5 + 0.5 * sin(ph + 1.35), 9.0) * (1.0 - smoothstep(0.6, 6.5, u)) * step(-0.3, u);
   lines *= smoothstep(0.32, 0.62, fn);
-  float laceN = mix(smoothstep(0.6, 0.82, vnoiseAA(p * 2.4 + vec2(t * 0.07, -t * 0.05), 2.4, fp)), 0.1, aaFade(2.4, fp));
+  float laceN = mix(smoothstep(0.6, 0.82, vnoiseAAP(p * 2.4 + uDriftOff.xy, 2.4, fp)), 0.1, aaFade(2.4, fp));
   float lace = laceN * (1.0 - smoothstep(0.0, 2.6, u)) * 0.32 * smoothstep(0.3, 0.6, fn);
   float ob = fld.b * smoothstep(0.3, 0.7, fn * 0.8 + 0.3 * sin(t * 1.6 + p.x * 1.7 + p.y * 1.3));
   // reef surf: streaks running along the reef edge, rolling shoreward in sets
   float ang = atan(p.y, p.x);
   float rr = length(p);
-  vec2 rp = vec2(ang * 18.0, rr * 1.4 + t * 0.35);
-  float streak = vnoiseAA(rp * vec2(1.0, 1.6), max(18.0 / max(rr, 1.0), 2.24), fp) * 0.65
-               + vnoiseAA(rp * vec2(2.3, 3.1) + 7.0, max(41.4 / max(rr, 1.0), 4.34), fp) * 0.35;
+  vec2 rp = vec2(ang * 18.0, rr * 1.4);   // the shoreward roll (0.35 /s) is in uDriftOff.zw
+  float streak = vnoiseAAP(rp * vec2(1.0, 1.6) + vec2(0.0, uDriftOff.z), max(18.0 / max(rr, 1.0), 2.24), fp) * 0.65
+               + vnoiseAAP(rp * vec2(2.3, 3.1) + vec2(7.0, 7.0 + uDriftOff.w), max(41.4 / max(rr, 1.0), 4.34), fp) * 0.35;
   float reefSet = smoothstep(0.35, 0.9, 0.5 + 0.5 * sin(t * 0.6 + ang * 3.0 + vnoise(p * 0.05) * 6.0));
   float reef = fld.a * smoothstep(0.5, 0.8, streak) * (0.35 + 0.65 * reefSet) * 0.65;
   // whitecaps: sparse lacy streaks riding the swell crests (stretched along the wind); far away they become
   // their average coverage instead of sub-pixel speckles
   vec2 wp2 = vec2(p.x * 0.8 + p.y * 0.35, p.y * 1.6 - p.x * 0.5);
-  float lacyN = vnoiseAA(wp2 * 2.2 + vec2(t * 0.4, 0.0), 3.74, fp) * 0.55 + vnoiseAA(wp2 * 6.5 - vec2(0.0, t * 0.5), 11.05, fp) * 0.45;
+  float lacyN = vnoiseAAP(wp2 * 2.2 + vec2(uCapOff.x, 0.0), 3.74, fp) * 0.55 + vnoiseAAP(wp2 * 6.5 + vec2(0.0, uCapOff.y), 11.05, fp) * 0.45;
   float lacy = mix(smoothstep(0.52, 0.78, lacyN), 0.12, aaFade(3.74, fp));
   float caps = smoothstep(0.7, 1.0, vCrest + (fn - 0.5) * 0.45) * lacy * smoothstep(5.0, 9.0, depth) * 0.6;
   float foam = clamp(foamEdge + lines + lace + ob * 0.85 + reef + caps, 0.0, 1.0) * 0.92;
 
   // bioluminescent plankton: the shore foam and the shallows glow blue at night
   float bio = (foamEdge * 1.0 + lines * 1.1 + lace * 0.3 + ob * 0.5 + reef * 0.06) * (0.7 + 0.3 * sin(t * 2.3 + p.x * 3.1 + p.y * 2.3) * (1.0 - aaFade(0.61, fp)));
-  if (uGlow.b > 0.0 && u < 4.0) bio += sparkle(p + 3.0 / 2.7, t * 0.7, 0.12, 2.7, fp) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4;
+  if (uGlow.b > 0.0 && u < 4.0) bio += sparkle(p + 3.0 / 2.7, t, 0.7, 0.12, 2.7, fp) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4;
   vec3 glow = uGlow * bio;
 
   vec3 surf = refl * F + spec + sss * (1.0 - F);
@@ -330,6 +348,9 @@ export function createWater(env, camera, { normalTex }) {
     uHazeNear: { value: 600 },
     uHazeFar: { value: 6000 },
     uMirrorOn: { value: 1 },
+    uWPeriod: { value: WATER_PERIOD },
+    uNScroll: { value: new THREE.Vector4() }, uNScroll3: { value: new THREE.Vector2() },
+    uFoamOff: { value: new THREE.Vector4() }, uDriftOff: { value: new THREE.Vector4() }, uCapOff: { value: new THREE.Vector2() },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -408,8 +429,19 @@ export function createWater(env, camera, { normalTex }) {
     renderer.setRenderTarget(prevRT);
   };
 
+  // Texture scrolls (the normal map repeats every 1 in uv) and foam drifts (the noise repeats every 1024 cells),
+  // wrapped here in double precision: continuous for ever, and always small numbers for the GPU.
+  const fr = x => x - Math.floor(x), w1k = x => x - 1024 * Math.floor(x / 1024);
+  function setTime(t) {
+    uniforms.uNScroll.value.set(fr(t * 0.021), fr(t * 0.013), fr(-t * 0.011), fr(t * 0.016));
+    uniforms.uNScroll3.value.set(fr(-t * 0.031), fr(t * 0.027));
+    uniforms.uFoamOff.value.set(w1k(t * 0.25), w1k(-t * 0.18), w1k(-t * 0.33), w1k(-t * 0.29));
+    uniforms.uDriftOff.value.set(w1k(t * 0.07), w1k(-t * 0.05), w1k(t * 0.35 * 1.6), w1k(t * 0.35 * 3.1));
+    uniforms.uCapOff.value.set(w1k(t * 0.4), w1k(-t * 0.5));
+  }
+
   return {
-    mesh, material, uniforms, state,
+    mesh, material, uniforms, state, setTime,
     resize() { const [w, h] = rtSize(); rt.setSize(w, h); },
     dispose() { rt.dispose(); geo.dispose(); material.dispose(); },
   };

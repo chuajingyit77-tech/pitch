@@ -104,6 +104,7 @@ export function buildCliff(L, q, seed) {
   const pos = new Float32Array(rows * cols * 3);
   const uv = new Float32Array(rows * cols * 2);
   const colr = new Float32Array(rows * cols * 3);
+  const aux = new Float32Array(rows * cols * 3); // crevice, wet, stain: moss and wet gloss in the cliff shader (cliff.js)
   const base = -1.8;
   for (let i = 0; i < cols; i++) {
     const u = i / NX;
@@ -158,6 +159,7 @@ export function buildCliff(L, q, seed) {
       const warm = n.noise2(x0 * 0.08 + 9, y * 0.1) * 0.5 + 0.5;
       const v = (0.95 + n.noise2(x0 * 0.3, y * 0.4) * 0.15) * (1 - clamp(crev, 0, 1) * 0.55) * (1 - stain * 0.5);
       colr[k * 3] = v * lerp(0.95, 1.08, warm) * lerp(1.0, 0.42, wet); colr[k * 3 + 1] = v * lerp(0.98, 0.98, warm) * lerp(1.0, 0.47, wet); colr[k * 3 + 2] = v * lerp(1.02, 0.86, warm) * lerp(1.0, 0.5, wet);
+      aux[k * 3] = clamp(crev, 0, 1); aux[k * 3 + 1] = clamp(wet, 0, 1); aux[k * 3 + 2] = clamp(stain, 0, 1);
     }
   }
   const idx = [];
@@ -169,6 +171,7 @@ export function buildCliff(L, q, seed) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geo.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+  geo.setAttribute('aCliff', new THREE.BufferAttribute(aux, 3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
   return geo;

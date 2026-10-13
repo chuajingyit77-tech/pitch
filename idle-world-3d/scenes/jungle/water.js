@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { TAU, lerp, clamp, makeRng, GLSL } from '../../lib/util.js';
-import { JG_GLSL } from './shading.js';
+import { JG_GLSL, JG_PNOISE, JG_PERIOD } from './shading.js';
 import { WATER_Y, FALL } from './terrain.js';
 
 export const RIPPLES = 14;
@@ -26,6 +26,8 @@ const WaterShader = {
   fragmentShader: /* glsl */`
     ${JG_GLSL}
     ${GLSL.noise}
+    ${JG_PNOISE}
+    uniform vec2 uPondDrift; // foam noise drifts, wrapped to 256 (the noise's period) in JS
     uniform sampler2D tDiffuse, tNormal1, tNormal2, tDepth;
     uniform vec4 uDepthBox;
     uniform vec3 uAmb, uMurk;
@@ -42,7 +44,9 @@ const WaterShader = {
         for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
           vec2 g = vec2(float(i), float(j));
           vec2 h = hash22(c + g + float(k) * 13.0);
-          float ph = fract(t * (0.9 + h.x * 0.4) + h.y);
+          // each cell's rate snapped to whole cycles in the wrapped clock's period: no jump when it wraps
+          float rq = floor((0.9 + h.x * 0.4) * ${JG_PERIOD.toFixed(6)} + 0.5) / ${JG_PERIOD.toFixed(6)};
+          float ph = fract(t * rq + h.y);
           vec2 d = g + h - f;
           float r = length(d);
           float ring = r - ph * 0.9;
@@ -105,7 +109,7 @@ const WaterShader = {
       float spec = pow(NdH, e1) * 9.0 * (e1 + 2.0) / 422.0 + pow(NdH, e2) * 0.18 * (e2 + 2.0) / 62.0;
       vec3 specCol = min(uLightCol * spec * cookie * smoothstep(-0.05, 0.1, uLightDirW.y), vec3(8.0));
       // foam near the plunge
-      float fn = vnoise(wp * 3.5 + vec2(0.0, uTime * 0.8)) * 0.6 + vnoise(wp * 9.0 - vec2(uTime * 0.6, 0.0)) * 0.4;
+      float fn = vnoiseP(wp * 3.5 + vec2(0.0, uPondDrift.x)) * 0.6 + vnoiseP(wp * 9.0 - vec2(uPondDrift.y, 0.0)) * 0.4;
       float foam = smoothstep(0.35, 0.85, fn * exp(-fr * 0.45) * 1.6) * uFall.z;
       foam += smoothstep(0.5, 1.0, fn) * rippleFoam;
       vec3 lightAmt = uAmb + uLightCol * cookie * max(uLightDirW.y, 0.0) * 0.8;
@@ -186,6 +190,8 @@ export function buildPond(env, shared, L, { normal1, normal2, rtScale = 0.5 }) {
       r.set(x, z, t, amp);
       next = (next + 1) % RIPPLES;
     },
+    /** The shader clock just wrapped back by `period`: keep every ripple's age (uTime - start) continuous. */
+    rebase(period) { for (const r of ripples) r.z -= period; },
     dispose() { water.dispose(); depthTex.dispose(); geo.dispose(); },
   };
 }
@@ -359,7 +365,8 @@ export function buildMist(shared, puffTex, q, rng, { count = 70, origin, spread 
   for (let i = 0; i < n; i++) {
     const a = rng.next() * TAU, r = Math.sqrt(rng.next()) * spread;
     off[i * 3] = Math.cos(a) * r * 1.3; off[i * 3 + 1] = rng.range(-0.2, 0.4); off[i * 3 + 2] = Math.sin(a) * r * 0.8;
-    prm[i * 4] = rng.next(); prm[i * 4 + 1] = rng.range(0.07, 0.16); prm[i * 4 + 2] = rng.range(1.0, 2.4); prm[i * 4 + 3] = rng.next() * TAU;
+    // the puff's cycle rate is snapped to whole cycles in the wrapped clock's period (shading.js JG_PERIOD)
+    prm[i * 4] = rng.next(); prm[i * 4 + 1] = Math.round(rng.range(0.07, 0.16) * JG_PERIOD) / JG_PERIOD; prm[i * 4 + 2] = rng.range(1.0, 2.4); prm[i * 4 + 3] = rng.next() * TAU;
   }
   geo.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 3));
   geo.setAttribute('aPrm', new THREE.InstancedBufferAttribute(prm, 4));

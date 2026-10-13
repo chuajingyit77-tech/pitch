@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep } from '../../lib/util.js';
-import { patchStd, SHARED_GLSL, CLOUD_TOP } from './common.js';
+import { patchStd, SHARED_GLSL, CLOUD_TOP, CLOCK_PERIOD, CLOCK_K, angQ } from './common.js';
 
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _m = new THREE.Matrix4(), _c = new THREE.Color();
 
@@ -168,10 +168,11 @@ export function createSparkles(max = 800) {
 /* ------------------------------------------------------------------ */
 const PETAL_VERT = /* glsl */`
 uniform float uTime, uPix;
-uniform vec3 uWind;
+uniform vec3 uWind, uLightDir;
 attribute vec4 aSpawn;   // xyz spawn, phase 0..1
 attribute vec4 aParam;   // life, fall speed, size, spin
-varying float vA; varying float vRot; varying float vShade; varying float vShape;
+attribute float aTone;   // 0 white-pink .. 1 deep pink (the crown's range)
+varying float vA; varying float vRot; varying float vShade; varying float vShape; varying float vTone; varying float vBack;
 void main(){
   float life = aParam.x;
   float age = mod(uTime + aSpawn.w * life, life);
@@ -185,6 +186,9 @@ void main(){
   vA *= smoothstep(0.1, 0.7, p.y);
   vRot = age * aParam.w + aSpawn.w * 6.28;
   vShade = 0.75 + 0.25 * sw;
+  vTone = aTone;
+  // the sun (or moon) shining through the petal toward the viewer
+  vBack = pow(max(dot(normalize(p - cameraPosition), uLightDir), 0.0), 4.0);
   // A spinning petal outline sampled by 2-3 pixels blinks on and off. Small petals become a soft speck
   // (at least 4 px, same coverage as before); the outline fades in once it spans enough pixels.
   float sz = aParam.z * uPix / max(-mv.z, 0.1);
@@ -195,33 +199,47 @@ void main(){
 }`;
 const PETAL_FRAG = /* glsl */`
 uniform vec3 uLightCol, uAmbient;
-uniform vec3 uTint;
-varying float vA; varying float vRot; varying float vShade; varying float vShape;
+uniform vec3 uPale, uDeep;
+varying float vA; varying float vRot; varying float vShade; varying float vShape; varying float vTone; varying float vBack;
 void main(){
   vec2 d0 = gl_PointCoord * 2.0 - 1.0;
   float c = cos(vRot), s = sin(vRot);
   vec2 d = vec2(c * d0.x - s * d0.y, s * d0.x + c * d0.y);
   d.x *= 1.0 + 0.6 * abs(sin(vRot * 0.7));  // tumbling foreshortening
-  float petal = smoothstep(1.0, 0.75, length(vec2(d.x * 1.5, d.y + 0.15 * d.x * d.x)));
-  float notch = smoothstep(0.0, 0.18, length(d - vec2(0.0, 0.85)));
-  float a = mix(exp(-dot(d0, d0) * 4.0), petal * notch, vShape) * vA;
+  // a peach petal: obovate, a broad rounded blade (+y) narrowing to the claw (-y), no notch
+  float hw = 0.6 * (0.42 + 0.58 * smoothstep(-0.95, 0.35, d.y));
+  float petal = smoothstep(1.0, 0.8, length(vec2(d.x / hw, (d.y - 0.04) / 0.9)));
+  float a = mix(exp(-dot(d0, d0) * 4.0), petal, vShape) * vA;
   if (a < 0.02) discard;
-  vec3 col = uTint * (uLightCol * 0.55 * vShade + uAmbient * 1.1 + 0.05);
+  // white-pink to deep pink like the crown, flushed deeper toward the claw
+  vec3 tint = mix(uPale, uDeep, vTone) * mix(0.78, 1.04, smoothstep(-0.85, 0.5, d.y));
+  vec3 col = tint * (uLightCol * (0.55 * vShade + 0.6 * vBack) + uAmbient * 1.1 + 0.05);
   gl_FragColor = vec4(col * a, a);
 }`;
-export function createPetals(shared, spawnPts, count, wind) {
+/** Petals drifting from the crown. clusters: [{ c: Vector3, r }] (the tree's bough clusters); they leave from
+ *  the outer blossom, not the hidden middle of a cluster. */
+export function createPetals(shared, clusters, count, wind) {
   const geo = new THREE.BufferGeometry();
-  const spawn = new Float32Array(count * 4), param = new Float32Array(count * 4);
+  const spawn = new Float32Array(count * 4), param = new Float32Array(count * 4), tone = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    const s = spawnPts[i % spawnPts.length];
-    spawn.set([s.x + (Math.random() - 0.5) * 1.6, s.y + (Math.random() - 0.5) * 1.0, s.z + (Math.random() - 0.5) * 1.6, Math.random()], i * 4);
-    param.set([12 + Math.random() * 10, 0.35 + Math.random() * 0.35, 0.09 + Math.random() * 0.07, (Math.random() - 0.5) * 5], i * 4);
+    const cl = clusters[i % clusters.length];
+    const z = Math.random() * 2 - 1, az = Math.random() * TAU, rr = Math.sqrt(1 - z * z), k = cl.r * (0.55 + 0.45 * Math.random());
+    spawn.set([cl.c.x + rr * Math.cos(az) * k, cl.c.y + z * k * 0.82, cl.c.z + rr * Math.sin(az) * k, Math.random()], i * 4);
+    // a life of CLOCK_PERIOD / k s (12-22 s): the shared clock wraps between two of its loops, seamlessly
+    const life = CLOCK_PERIOD / Math.round(CLOCK_PERIOD / (12 + Math.random() * 10));
+    param.set([life, 0.35 + Math.random() * 0.35, 0.09 + Math.random() * 0.07, (Math.random() - 0.5) * 5], i * 4);
+    tone[i] = Math.random() * Math.random();
   }
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   geo.setAttribute('aSpawn', new THREE.BufferAttribute(spawn, 4));
   geo.setAttribute('aParam', new THREE.BufferAttribute(param, 4));
+  geo.setAttribute('aTone', new THREE.BufferAttribute(tone, 1));
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
-  const uniforms = { uTime: shared.uTime, uPix: { value: 600 }, uWind: { value: new THREE.Vector3(wind.x, 0, wind.y).multiplyScalar(0.7) }, uLightCol: shared.uLightCol, uAmbient: shared.uAmbient, uTint: { value: new THREE.Color('#ffc4d4') } };
+  const uniforms = {
+    uTime: shared.uTime, uPix: { value: 600 }, uWind: { value: new THREE.Vector3(wind.x, 0, wind.y).multiplyScalar(0.7) },
+    uLightCol: shared.uLightCol, uAmbient: shared.uAmbient, uLightDir: shared.uLightDir,
+    uPale: { value: new THREE.Color('#ffe6ee') }, uDeep: { value: new THREE.Color('#f58fb0') },
+  };
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: PETAL_VERT, fragmentShader: PETAL_FRAG, transparent: true, depthWrite: false, premultipliedAlpha: true });
   const pts = new THREE.Points(geo, mat);
   pts.frustumCulled = false;
@@ -240,7 +258,8 @@ void main(){
   vec3 p = aHome.xyz + vec3(sin(t + ph) * aMove.x, sin(t * 0.7 + ph * 2.0) * aMove.x * 0.5, cos(t * 0.9 + ph) * aMove.x);
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
-  float blink = aMove.w > 0.5 ? smoothstep(0.2, 0.9, sin(uTime * (0.8 + aHome.w) + ph * 3.0)) : 0.6 + 0.4 * sin(uTime * 2.0 + ph);
+  // (blink rates rounded to whole cycles per wrap of the shared clock)
+  float blink = aMove.w > 0.5 ? smoothstep(0.2, 0.9, sin(uTime * (floor((0.8 + aHome.w) * ${CLOCK_K} + 0.5) / ${CLOCK_K}) + ph * 3.0)) : 0.6 + 0.4 * sin(uTime * ${angQ(2.0).toFixed(7)} + ph);
   vA = blink * (aMove.w > 0.5 ? uNight : 0.35 + 0.4 * (1.0 - uNight));
   vKind = aMove.w;
   // A 1.5 px dot flips between one bright pixel and four dim ones as it drifts across the pixel grid (it
@@ -271,7 +290,9 @@ export function createMotes(shared, centers, count) {
     const fly = i % 3 === 0 ? 1 : 0;
     const a = Math.random() * TAU, r = Math.sqrt(Math.random()) * c.r;
     home.set([c.x + Math.cos(a) * r, c.y + Math.random() * c.h, c.z + Math.sin(a) * r, Math.random()], i * 4);
-    move.set([0.6 + Math.random() * 1.6, 0.15 + Math.random() * 0.3, fly ? 0.16 : 0.07 + Math.random() * 0.05, fly], i * 4);
+    // drift rate in steps of 20π / CLOCK_PERIOD: its 1x, 0.7x and 0.9x orbits all close at the clock wrap
+    const step = 20 * Math.PI / CLOCK_PERIOD, speed = Math.max(1, Math.round((0.15 + Math.random() * 0.3) / step)) * step;
+    move.set([0.6 + Math.random() * 1.6, speed, fly ? 0.16 : 0.07 + Math.random() * 0.05, fly], i * 4);
   }
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   geo.setAttribute('aHome', new THREE.BufferAttribute(home, 4));
@@ -385,6 +406,7 @@ export function createPeaches(shared, treeSpots, maxFood = 12) {
 /* ------------------------------------------------------------------ */
 /* Halos: a soft pulsing glow with a four-point flare around each peach */
 /* ------------------------------------------------------------------ */
+const HALO_PERIOD = 20 * Math.PI;
 const HALO_VERT = /* glsl */`
 uniform float uPix;
 attribute vec4 aHalo;   // size, pulse phase, intensity, unused
@@ -427,7 +449,8 @@ export function createHalos(max = 16) {
   return {
     points, uniforms,
     update(t, pix, foods, night) {
-      uniforms.uTime.value = t; uniforms.uPix.value = pix;
+      // wrapped at 20π s, where the pulse (2.6 rad/s) and the flare's turn (0.3 rad/s) both complete whole cycles
+      uniforms.uTime.value = t % HALO_PERIOD; uniforms.uPix.value = pix;
       let n = 0;
       for (const f of foods) {
         if (!f.alive || n >= max) continue;

@@ -1,8 +1,8 @@
-// 芒原 · built props: Myōjin torii, hokora shrine, Kasuga stone lanterns, rocks, fried tofu.
+// 芒原 · built props: Myōjin torii, hokora shrine, Kasuga stone lanterns, fried tofu (rocks: rock.js).
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TAU, clamp, lerp, smoothstep, patchMaterial } from '../../lib/util.js';
+import { lerp, patchMaterial } from '../../lib/util.js';
 import { addFog } from './sky.js';
 
 const shadowed = (m, cast = true, receive = true) => { m.castShadow = cast; m.receiveShadow = receive; return m; };
@@ -159,34 +159,6 @@ export function buildLantern({ stoneMat, windowMat }) {
   hj.scale.y = 1.25;
   add(new THREE.ConeGeometry(0.04, 0.07, 8), stoneMat, 1.72);
   return g;
-}
-
-/* ------------------------------------------------------------------ */
-/* Rocks: noise-displaced, flattened, merged into one mesh             */
-/* ------------------------------------------------------------------ */
-export function buildRocks({ rng, noise, list, heightAt, stoneMat }) {
-  const geos = [];
-  for (const r of list) {
-    const geo = new THREE.IcosahedronGeometry(1, 3);
-    const p = geo.attributes.position;
-    const ph = rng.range(0, 100);
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const d = 1 + noise.fbm3(x * 1.3 + ph, y * 1.3, z * 1.3, 4) * 0.35 + Math.abs(noise.noise3(x * 3 + ph, y * 3, z * 3)) * 0.08;
-      p.setXYZ(i, x * d, Math.max(y * d, -0.35), z * d);
-    }
-    geo.computeVertexNormals();
-    geo.scale(r.s * rng.range(0.9, 1.25), r.s * rng.range(0.6, 0.95), r.s * rng.range(0.8, 1.1));
-    geo.rotateY(rng.range(0, TAU));
-    geo.translate(r.x, heightAt(r.x, r.z) + r.s * 0.12, r.z);
-    // planar-ish uv for the tiling stone texture
-    const uv = [];
-    for (let i = 0; i < p.count; i++) uv.push(p.getX(i) * 0.5 + p.getY(i) * 0.3, p.getZ(i) * 0.5 + p.getY(i) * 0.2);
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    geos.push(geo);
-  }
-  const mesh = shadowed(new THREE.Mesh(mergeGeometries(geos), stoneMat));
-  return mesh;
 }
 
 /* ------------------------------------------------------------------ */

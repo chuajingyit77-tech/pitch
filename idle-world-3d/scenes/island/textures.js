@@ -273,26 +273,31 @@ export function turtleShellTexture(seed) {
 
 /** Cloud puff (alpha + density in red channel). Lumpy, cauliflower edge. */
 export function puffTexture(seed) {
+  // One cumulus puff: a soft round body with a gently billowing outline (two low octaves; the old four-octave
+  // edge gave every puff the same small scallops, which read as cog teeth along the cloud edges) and a wide,
+  // smooth margin. Exact data texture (a canvas would premultiply and requantise the soft edge) with mipmaps.
+  // R: density (shading), G: billow detail, A: coverage.
   const n = createNoise(seed);
   const S = 128;
-  const c = makeCanvas(S, S);
-  const g = c.getContext('2d');
-  const img = g.createImageData(S, S);
+  const data = new Uint8Array(S * S * 4);
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = (x + 0.5) / S * 2 - 1, v = (y + 0.5) / S * 2 - 1;
       const r = Math.hypot(u, v);
-      const nn = n.fbm2(u * 2.2 + 5, v * 2.2 - 3, 4) * 0.5 + 0.5;
-      const edge = 1 - clamp((r - 0.42 - nn * 0.38) / 0.22, 0, 1);
-      const a = clamp(edge, 0, 1) * clamp((1 - r) * 3, 0, 1);
+      const big = n.fbm2(u * 0.9 + 11, v * 0.9 + 2, 2) * 0.5 + 0.5;
+      const nn = n.fbm2(u * 1.7 + 5, v * 1.7 - 3, 3) * 0.5 + 0.5;
+      const rr = r * (1 + (big - 0.5) * 0.34 + (nn - 0.5) * 0.16);
+      const edge = clamp((0.95 - rr) / 0.36, 0, 1);
+      const a = edge * edge * (3 - 2 * edge) * clamp((1 - r) * 5, 0, 1);
       const dens = clamp(1 - r * 0.9 + (nn - 0.5) * 0.5, 0, 1);
       const i = (y * S + x) * 4;
-      img.data[i] = dens * 255; img.data[i + 1] = nn * 255; img.data[i + 2] = 255; img.data[i + 3] = a * a * (3 - 2 * a) * 255;
+      data[i] = Math.round(dens * 255); data[i + 1] = Math.round(nn * 255); data[i + 2] = 255; data[i + 3] = Math.round(a * 255);
     }
   }
-  g.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
+  const t = new THREE.DataTexture(data, S, S, THREE.RGBAFormat, THREE.UnsignedByteType);
   t.colorSpace = THREE.NoColorSpace;
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  t.needsUpdate = true;
   return t;
 }
 

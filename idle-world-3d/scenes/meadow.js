@@ -7,7 +7,8 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
 import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
-import { buildTorii, buildHokora, buildLantern, buildRocks, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
+import { buildTorii, buildHokora, buildLantern, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
+import { buildRocks, makeRockMaterial, rockSurfaceTexture, rockFootTufts } from './meadow/rock.js';
 import * as TX from './meadow/tex.js';
 import { createFx } from './meadow/fx.js';
 import { applyFoxPose, findFoxBones } from './meadow/foxpose.js';
@@ -333,7 +334,17 @@ export default {
       scene.add(pl);
       lanternLights.push(pl);
     });
-    scene.add(buildRocks({ rng: rng.fork('rocks'), noise, list: rockList, heightAt, stoneMat }));
+    // field boulders: ancient weathered stone with strata, cracks, lichen, moss on top and a damp foot (one merged
+    // mesh), with grass tufts nestled at their feet (the field's clump material, one instanced mesh)
+    const rockMat = makeRockMaterial(own(rockSurfaceTexture((env.seed % 997) + 31)), fogU);
+    const rocks = buildRocks({ rng: rng.fork('rocks'), noise, list: rockList, heightAt, material: rockMat });
+    scene.add(rocks);
+    {
+      const trng = rng.fork('rockTufts');
+      const tuftGeo = buildClump(trng, { blades: 11, segs: 3, width: 0.026, spread: 0.07, leanMin: 0.3, leanMax: 0.85 });
+      scene.add(instancedFrom(tuftGeo, grassMat, rockFootTufts(rocks.userData.feet, trng, heightAt)));
+      tuftGeo.dispose();
+    }
 
     const wind = createWind({ direction: new THREE.Vector2(baseWind.x, baseWind.y), strength: 1, gust: 1 });
     const mapleTex = own(TX.mapleAtlasTexture(env.seed % 1013));

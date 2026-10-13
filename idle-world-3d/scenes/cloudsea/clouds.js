@@ -312,6 +312,7 @@ void main(){
   float cs = cos(sd * 6.2831), sn = sin(sd * 6.2831);
   vec2 ruv = vec2(cs * vUv.x - sn * vUv.y, sn * vUv.x + cs * vUv.y);
   float n1 = texture2D(tDetail, ruv * 0.28 + vec2(sd * 3.7, sd * 1.3)).r;
+  // (uTime wraps at CLOCK_PERIOD = 10000 s: 20 whole texture repeats, seamless)
   float n2 = texture2D(tNoise, ruv * 0.45 + vec2(sd * 1.9, sd * 4.1) + uTime * 0.002).g;
   float edge = (1.0 - r2) + (n1 - 0.55) * 0.6 + (n2 - 0.5) * 0.35;
   float a = smoothstep(0.0, 0.55, edge) * vP2.z;

@@ -5,6 +5,7 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { TAU, clamp, lerp, smoothstep, createNoise, addWind, canvasTexture } from '../../lib/util.js';
 import { patchStd, SHARED_GLSL, CLOUD_TOP } from './common.js';
 import { Builder, archMaterials, pavilion, tower, gate, bridge, balustrade, plaqueGeometry, createLanterns, roofGeometry, paint, xf, COL } from './arch.js';
+import { createBlossomCrown, blossomMassMaterial, leafAtlas, leafMassTexture, leafMassMaterial, shrubCardGeometry, leafCardMaterial, grassTexture } from './flora.js';
 
 const _c = new THREE.Color(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _m = new THREE.Matrix4();
 
@@ -53,13 +54,14 @@ export function rockMaterial(shared, tex, { bump = 0.8, scale = 0.1, moss = 0.5,
   });
 }
 
-/** Velvet lawn: soft colour patches, a fuzzy sheen at grazing angles, gentle undulation. */
-function lawnMaterial(shared, tex) {
+/** Velvet lawn: soft colour patches, a fine grain of combed blades up close, a fuzzy sheen at grazing angles,
+ *  gentle undulation. */
+function lawnMaterial(shared, tex, grassTex) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, metalness: 0, envMapIntensity: 1.6 });
   return patchStd(m, shared, {
     key: 'lawn',
-    uniforms: { tNoise: { value: tex.noise }, tDetail: { value: tex.detail.tex } },
-    fragmentHeader: 'uniform sampler2D tNoise; uniform sampler2D tDetail;',
+    uniforms: { tNoise: { value: tex.noise }, tDetail: { value: tex.detail.tex }, tGrass: { value: grassTex } },
+    fragmentHeader: 'uniform sampler2D tNoise; uniform sampler2D tDetail; uniform sampler2D tGrass;',
     fragment: {
       '#include <color_fragment>': /* glsl */`$&
         vec4 nz = texture2D(tNoise, vWPos.xz * 0.045);
@@ -72,13 +74,16 @@ function lawnMaterial(shared, tex) {
         // vertex colours are linear: lawn ~(0.08,0.2,0.03), soil ~(0.16,0.1,0.06)
         float isLawn = smoothstep(0.03, 0.11, vColor.g - vColor.r * 0.6);
         diffuseColor.rgb = mix(diffuseColor.rgb, lawn, isLawn);
+        // turf grain (mean ~0.48 -> x2.08 = neutral): blades up close, unchanged from afar where it is mipmapped flat
+        diffuseColor.rgb *= mix(1.0, texture2D(tGrass, vWPos.xz * 1.5).r * 2.08, 0.5 * isLawn);
       `,
       '#include <normal_fragment_maps>': /* glsl */`$&
         {
           vec4 d = texture2D(tDetail, vWPos.xz * 0.22);
           vec3 wn = normalize(vec3(-(d.g - 0.5) * 0.9, 1.0, -(d.b - 0.5) * 0.9));
           vec3 vn = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
-          normal = normalize(mix(normal, vn, 0.5 * isLawn));
+          // (a gentle tilt: at full strength the 0.5 m domes of this texture quilted the lawn like a mattress)
+          normal = normalize(mix(normal, vn, 0.3 * isLawn));
         }
       `,
       '#include <lights_fragment_end>': /* glsl */`$&
@@ -238,38 +243,6 @@ function gnarledTube(noise, pts, r0, r1, { radial = 9, segs = 12, flare = 0, twi
 /* ------------------------------------------------------------------ */
 /* Textures                                                            */
 /* ------------------------------------------------------------------ */
-function blossomTexture(seed) {
-  let s = seed >>> 0;
-  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  return canvasTexture(256, 256, (g, w, h) => {
-    g.clearRect(0, 0, w, h);
-    const flower = (x, y, r, rot, open) => {
-      for (let k = 0; k < 5; k++) {
-        const a = rot + (k / 5) * TAU;
-        g.save(); g.translate(x, y); g.rotate(a);
-        const grd = g.createRadialGradient(0, -r * 0.2, r * 0.05, 0, -r * 0.55, r * 0.75);
-        grd.addColorStop(0, '#d9416b'); grd.addColorStop(0.35, '#f59ab4'); grd.addColorStop(1, '#ffe8ef');
-        g.fillStyle = grd;
-        g.beginPath(); g.ellipse(0, -r * 0.55 * open, r * 0.42, r * 0.58, 0, 0, TAU); g.fill();
-        g.restore();
-      }
-      g.fillStyle = '#b8204e'; g.beginPath(); g.arc(x, y, r * 0.16, 0, TAU); g.fill();
-      for (let k = 0; k < 9; k++) {
-        const a = rnd() * TAU, d = r * (0.18 + rnd() * 0.22);
-        g.strokeStyle = 'rgba(250,210,120,0.9)'; g.lineWidth = 1.2;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d); g.stroke();
-        g.fillStyle = '#ffd65a'; g.beginPath(); g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 1.8, 0, TAU); g.fill();
-      }
-    };
-    // a small twig with flowers and buds
-    g.strokeStyle = '#4a2c24'; g.lineWidth = 5; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(30, 230); g.quadraticCurveTo(110, 150, 220, 40); g.stroke();
-    const spots = [[70, 180, 34], [128, 128, 40], [178, 82, 34], [96, 104, 28], [168, 160, 30], [210, 52, 22], [52, 132, 22]];
-    for (const [x, y, r] of spots) flower(x, y, r, rnd() * TAU, 0.95 + rnd() * 0.1);
-    for (let k = 0; k < 4; k++) { const x = 40 + rnd() * 180, y = 40 + rnd() * 180; g.fillStyle = '#e0507a'; g.beginPath(); g.ellipse(x, y, 7, 10, rnd() * 3, 0, TAU); g.fill(); }
-  }, { srgb: true });
-}
-
 function taijiTexture() {
   return canvasTexture(512, 512, (g, w) => {
     const c = w / 2;
@@ -298,6 +271,91 @@ function taijiTexture() {
     g.fillStyle = '#3d4a52'; g.beginPath(); g.arc(c, c - R / 2, R / 7, 0, TAU); g.fill();
     g.strokeStyle = '#c9a24a'; g.lineWidth = 5; g.beginPath(); g.arc(c, c, R + 3, 0, TAU); g.stroke();
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Pond pebbles                                                        */
+/* ------------------------------------------------------------------ */
+/** A smooth, water-worn pebble (radius ~size): finely subdivided, gently lumpy, a flatter base, smooth normals,
+ *  and colour that darkens toward the waterline with faint mottling (the old ones were 80-facet icosahedra). */
+function pebble(noise, size, seed) {
+  let g = new THREE.IcosahedronGeometry(1, 3);
+  g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
+  const p = g.getAttribute('position'), col = new Float32Array(p.count * 3);
+  const base = new THREE.Color(seed % 3 ? '#cfc9bc' : '#c6c3ba');
+  for (let i = 0; i < p.count; i++) {
+    _p.fromBufferAttribute(p, i);
+    const n = noise.noise3(_p.x * 1.1 + seed * 3.7, _p.y * 1.1, _p.z * 1.1 - seed * 1.3);
+    const k = 1 + 0.09 * n + 0.03 * noise.noise3(_p.x * 2.7, _p.y * 2.7 + seed, _p.z * 2.7);
+    const y = _p.y < -0.35 ? -0.35 - (-0.35 - _p.y) * 0.45 : _p.y;   // sits flat on the pool bed
+    p.setXYZ(i, _p.x * k * size, y * k * size, _p.z * k * size);
+    const mott = 0.93 + 0.09 * noise.noise3(_p.x * 4.1 + seed, _p.y * 4.1, _p.z * 4.1 - seed);
+    const damp = 0.7 + 0.3 * smoothstep(-0.55, 0.15, _p.y);
+    _c.copy(base).multiplyScalar(mott * damp);
+    col[i * 3] = _c.r; col[i * 3 + 1] = _c.g * 0.995; col[i * 3 + 2] = _c.b * 0.985;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A lily pad (radius r) with its notch: radial veins, a darker heart, a paler rim curling up a little. */
+function lilyPad(radius, seed) {
+  const segs = 30, rings = 4, th0 = 0.3, thL = TAU - 0.4;
+  const pos = [0, 0.004, 0], col = [], idx = [];
+  const heart = new THREE.Color('#2e6629'), leaf = new THREE.Color('#3f7d33'), rim = new THREE.Color('#7aa548'), vein = new THREE.Color('#6d9c47');
+  col.push(heart.r, heart.g, heart.b);
+  for (let k = 1; k <= rings; k++) {
+    const f = k / rings;
+    for (let j = 0; j <= segs; j++) {
+      const th = th0 + thL * j / segs, wob = 1 + 0.03 * Math.sin(th * 5 + seed);
+      pos.push(Math.cos(th) * radius * f * wob, 0.004 + 0.014 * f * f * f, Math.sin(th) * radius * f * wob);
+      _c.copy(heart).lerp(leaf, smoothstep(0, 0.6, f)).lerp(rim, smoothstep(0.8, 1.0, f) * 0.7);
+      _c.lerp(vein, Math.pow(Math.abs(Math.cos(th * 6.5)), 16) * 0.55 * smoothstep(0.1, 0.5, f));
+      col.push(_c.r, _c.g, _c.b);
+    }
+  }
+  const row = segs + 1;
+  for (let j = 0; j < segs; j++) idx.push(0, 1 + j + 1, 1 + j);
+  for (let k = 0; k < rings - 1; k++) for (let j = 0; j < segs; j++) {
+    const a0 = 1 + k * row + j, a1 = a0 + 1, b0 = a0 + row, b1 = b0 + 1;
+    idx.push(a0, a1, b0, a1, b1, b0);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+/** A lotus bloom (~0.2 m across): three rings of pointed, cupped petals, cream at the base flushing to pink at the
+ *  tips, round a golden seed pod. */
+function lotusFlower(seed) {
+  const parts = [];
+  const cream = new THREE.Color('#fff4ee'), blush = new THREE.Color('#fbc3d3'), tipC = new THREE.Color('#e9558a');
+  const petal = (len, wid, tilt, yaw, cup) => {
+    let g = new THREE.SphereGeometry(1, 10, 8);
+    g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
+    const p = g.getAttribute('position'), col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x0 = p.getX(i), y0 = p.getY(i), z0 = p.getZ(i), t = (y0 + 1) / 2;   // 0 base .. 1 tip
+      const x = x0 * wid * (1 - 0.62 * t * t) * Math.min(1, 0.35 + t * 2.2);
+      const z = z0 * 0.012 - cup * (x / wid) * (x / wid) * len;   // edges curl in toward the flower's axis
+      p.setXYZ(i, x, t * len, z);
+      _c.copy(cream).lerp(blush, smoothstep(0.15, 0.55, t)).lerp(tipC, smoothstep(0.6, 1.0, t) * 0.85);
+      col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    return g.rotateX(tilt).rotateY(yaw);
+  };
+  const ring = (n, len, wid, tilt, cup, rot0) => { for (let k = 0; k < n; k++) parts.push(petal(len, wid, tilt, rot0 + (k / n) * TAU + 0.07 * Math.sin(k * 2.3 + seed), cup)); };
+  ring(8, 0.11, 0.045, 1.05, 0.22, 0);
+  ring(8, 0.1, 0.042, 0.68, 0.28, Math.PI / 8);
+  ring(6, 0.085, 0.036, 0.32, 0.32, 0.3);
+  parts.push(paint(new THREE.CylinderGeometry(0.03, 0.026, 0.012, 14), '#f0b03a').translate(0, 0.012, 0));
+  parts.push(paint(new THREE.CylinderGeometry(0.02, 0.017, 0.024, 14), '#e2d45c').translate(0, 0.022, 0));
+  return mergeGeometries(parts);
 }
 
 /* ------------------------------------------------------------------ */
@@ -380,7 +438,8 @@ export function createGarden(env, shared, tex, wind) {
 
   const rockMat = rockMaterial(shared, tex, { key: 'karst', bump: 0.9, scale: 0.075, moss: 0.55 });
   const barkMat = rockMaterial(shared, tex, { key: 'bark', bump: 1.0, scale: 0.55, moss: 0.25, strata: 0, roughness: 0.95 });
-  const lawnMat = lawnMaterial(shared, tex);
+  const grassTex = grassTexture(env.seed);
+  const lawnMat = lawnMaterial(shared, tex, grassTex);
   const am = archMaterials(shared, tex);
 
   /* ---- main islet ---- */
@@ -544,23 +603,24 @@ export function createGarden(env, shared, tex, wind) {
   pool.position.copy(poolC);
   group.add(pool);
   reserved.push({ x: poolC.x, z: poolC.z, r: 2.0 });
+  const pebbles = [];
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * TAU + rng.range(-0.08, 0.08);
     if (Math.cos(a - fallA) > 0.9) continue; // the spill gap toward the edge
     const r = 1.45 + rng.range(-0.05, 0.08);
-    B.add('jade', xf(paint(new THREE.IcosahedronGeometry(rng.range(0.22, 0.34), 1), '#b9b4a6', { ao: 0.3 }), poolC.x + Math.cos(a) * r, poolC.y + 0.02, poolC.z + Math.sin(a) * r, 0, rng.range(0, 3), 0, 1.3, 0.7, 1.1));
+    const size = rng.range(0.22, 0.34);
+    pebbles.push(xf(pebble(noise, size, i), poolC.x + Math.cos(a) * r, poolC.y + 0.02, poolC.z + Math.sin(a) * r, 0, rng.range(0, 3), 0, 1.3, 0.7, 1.1));
   }
+  // pale water-worn stone: fine pits and ridges in the normal, a touch of moss where the tops stay damp
+  const pebbleMesh = new THREE.Mesh(mergeGeometries(pebbles), rockMaterial(shared, tex, { key: 'pebble', bump: 0.38, scale: 1.15, moss: 0.14, strata: 0, roughness: 0.84 }));
+  pebbleMesh.castShadow = shadows; pebbleMesh.receiveShadow = shadows;
+  group.add(pebbleMesh); pickables.push(pebbleMesh);
   const lotusParts = [];
   for (let i = 0; i < 6; i++) {
     const a = rng.range(0, TAU), r = rng.range(0.2, 1.0);
-    const pad = new THREE.CircleGeometry(rng.range(0.16, 0.26), 12, 0.3, TAU - 0.4).rotateX(-Math.PI / 2).rotateY(rng.range(0, TAU));
-    lotusParts.push(paint(pad, '#3f7a35').translate(poolC.x + Math.cos(a) * r, poolC.y + 0.03, poolC.z + Math.sin(a) * r));
-    if (i < 3) {
-      for (let k = 0; k < 7; k++) {
-        const pg = new THREE.SphereGeometry(0.07, 8, 6); pg.scale(0.55, 1.5, 0.3); pg.translate(0, 0.08, 0.04); pg.rotateX(-0.35 - (k % 2) * 0.35); pg.rotateY((k / 7) * TAU);
-        lotusParts.push(paint(pg, k % 2 ? '#ffd6e2' : '#f7a8c0').translate(poolC.x + Math.cos(a) * r, poolC.y + 0.05, poolC.z + Math.sin(a) * r));
-      }
-    }
+    const pad = lilyPad(rng.range(0.16, 0.26), i).rotateY(rng.range(0, TAU));
+    lotusParts.push(pad.translate(poolC.x + Math.cos(a) * r, poolC.y + 0.03, poolC.z + Math.sin(a) * r));
+    if (i < 3) lotusParts.push(lotusFlower(i).translate(poolC.x + Math.cos(a) * r, poolC.y + 0.045, poolC.z + Math.sin(a) * r));
   }
   group.add(new THREE.Mesh(mergeGeometries(lotusParts), softMaterial(shared, { vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }, { key: 'lotus', trans: 0.6 })));
 
@@ -595,11 +655,13 @@ export function createGarden(env, shared, tex, wind) {
     return out;
   }
   const freeMain = (x, z) => !reserved.some(r => Math.hypot(r.x - x, r.z - z) < r.r);
-  // tufts: rounded moss cushions
+  // shrubs: rounded cushions of small leaves. A darker, leaf-textured core (the shade inside the bush) under
+  // leaf-sprig cards that stand out of its outline; both bend with the same wind, so the leaves stay on.
+  const TUFT_LUMPS = [[0, 0, 1], [0.7, 0.25, 0.72], [-0.55, 0.45, 0.68], [0.1, -0.7, 0.62], [-0.45, -0.4, 0.55]];
   let tuftGeo;
   {
     const lumps = [];
-    for (const [x, z, r] of [[0, 0, 1], [0.7, 0.25, 0.72], [-0.55, 0.45, 0.68], [0.1, -0.7, 0.62], [-0.45, -0.4, 0.55]]) {
+    for (const [x, z, r] of TUFT_LUMPS) {
       let g = new THREE.IcosahedronGeometry(r, q >= 0.9 ? 2 : 1);
       g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
       const p = g.getAttribute('position');
@@ -611,17 +673,21 @@ export function createGarden(env, shared, tex, wind) {
       lumps.push(g);
     }
     tuftGeo = mergeGeometries(lumps);
+    // grey shade (the leaf texture brings the colour): dark low down and between the lumps
     const p = tuftGeo.getAttribute('position'), col = new Float32Array(p.count * 3);
-    const base = new THREE.Color('#2f5a22'), tip = new THREE.Color('#729e3c');
     for (let i = 0; i < p.count; i++) {
-      _c.copy(base).lerp(tip, smoothstep(0.0, 0.95, p.getY(i)));
-      col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
+      const v = lerp(0.66, 1.0, smoothstep(0.0, 0.95, p.getY(i)));
+      col[i * 3] = v; col[i * 3 + 1] = v; col[i * 3 + 2] = v;
     }
     tuftGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     tuftGeo.computeVertexNormals();
   }
-  const tuftMat = softMaterial(shared, { vertexColors: true, roughness: 0.95 }, { key: 'tuft', trans: 0.35, wrap: 0.4 });
+  const leafMassTex = leafMassTexture(env.seed);
+  const tuftMat = leafMassMaterial(shared, leafMassTex);
   addWind(tuftMat, wind, { height: 0.6, amount: 0.03, stiffness: 1.5, key: 'tuftwind' });
+  const leafMat = leafCardMaterial(shared, leafAtlas(env.seed));
+  addWind(leafMat, wind, { height: 0.6, amount: 0.03, stiffness: 1.5, key: 'tuftwind' });
+  const leafCardGeo = shrubCardGeometry(TUFT_LUMPS, env.rng.fork('shrubleaves'));
   // tufts gather around the feet of things (stones, roots, rails) and in a few soft drifts
   const nearThings = (x, z) => {
     if (!freeMain(x, z)) return false;
@@ -636,16 +702,20 @@ export function createGarden(env, shared, tex, wind) {
     ...scatter(islB, Bp.x, Bp.y, Bp.z, Math.round(20 * q + 8), 0, (x, z) => Math.abs(x) > 1.0 || Math.abs(z) > 3.8),
   ];
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, tuftPts.length);
+  const tuftLeaves = new THREE.InstancedMesh(leafCardGeo, leafMat, tuftPts.length);
   tuftPts.forEach((p, i) => {
     const s = rng.range(0.13, 0.3) * (rng.chance(0.12) ? 1.5 : 1);
     _q.setFromEuler(_e.set(0, rng.range(0, TAU), 0));
     _m.compose(_p.set(p.x, p.y - 0.05, p.z), _q, _s.set(s * rng.range(0.9, 1.3), s * rng.range(0.9, 1.25), s * rng.range(0.9, 1.3)));
-    tufts.setMatrixAt(i, _m);
+    tufts.setMatrixAt(i, _m); tuftLeaves.setMatrixAt(i, _m);
     _c.setHSL(rng.range(0.16, 0.3), rng.range(0.25, 0.45), rng.range(0.78, 0.95));
-    tufts.setColorAt(i, _c);
+    tufts.setColorAt(i, _c); tuftLeaves.setColorAt(i, _c);
   });
   tufts.receiveShadow = shadows;
-  group.add(tufts);
+  tuftLeaves.receiveShadow = shadows;
+  // drawn after the cores: leaves hidden behind a core are rejected before shading
+  tuftLeaves.renderOrder = 1;
+  group.add(tufts, tuftLeaves);
   // flowers: little five-petal blooms on short stems
   const petal = new THREE.CircleGeometry(0.05, 8); petal.scale(0.75, 1.2, 1); petal.translate(0, 0.05, 0);
   const fparts = [];
@@ -671,70 +741,13 @@ export function createGarden(env, shared, tex, wind) {
   group.add(flowers);
 
   /* ---- blossoms & peaches on the tree ---- */
-  const coreParts = [];
-  const cardCount = Math.round(lerp(900, 2200, clamp((q - 0.45) / 0.55, 0, 1)));
-  const perCluster = Math.max(10, Math.floor(cardCount / tree.clusters.length));
-  const cardPos = [], cardNrm = [];
-  const pinkA = new THREE.Color('#e88aa6'), pinkB = new THREE.Color('#ffd2de');
-  for (const cl of tree.clusters) {
-    const r = cl.r;
-    let g = new THREE.IcosahedronGeometry(r * 0.78, 1);
-    g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
-    const p = g.getAttribute('position'), col = new Float32Array(p.count * 3);
-    for (let i = 0; i < p.count; i++) {
-      _p.fromBufferAttribute(p, i);
-      const k = 1 + 0.22 * noise.noise3(_p.x * 1.4 + cl.c.x, _p.y * 1.4, _p.z * 1.4 + cl.c.z);
-      p.setXYZ(i, _p.x * k + cl.c.x, _p.y * k * 0.78 + cl.c.y, _p.z * k + cl.c.z);
-      _c.copy(pinkA).lerp(pinkB, smoothstep(-r, r, _p.y)).multiplyScalar(0.62 + 0.38 * smoothstep(-r, r, _p.y));
-      col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
-    }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.computeVertexNormals();
-    coreParts.push(g);
-    for (let k = 0; k < perCluster; k++) {
-      const d = new THREE.Vector3().randomDirection();
-      d.y = d.y * 0.8 + 0.15; d.normalize();
-      const rr = r * rng.range(0.72, 1.08);
-      cardPos.push(cl.c.clone().addScaledVector(d, rr).setY(cl.c.y + d.y * rr * 0.8));
-      cardNrm.push(d);
-    }
+  // The crown used to be smooth pink spheres strewn with blossom cards; those cards drew five numbers each from
+  // the garden's stream. They are still drawn, so everything placed after this (the peaches, the floating islets,
+  // the cranes' landing spots) stays exactly where it was. The new crown has a stream of its own.
+  {
+    const oldCards = Math.max(10, Math.floor(Math.round(lerp(900, 2200, clamp((q - 0.45) / 0.55, 0, 1))) / tree.clusters.length)) * tree.clusters.length;
+    for (let i = 0; i < oldCards * 5; i++) rng.next();
   }
-  const coreMat = softMaterial(shared, { vertexColors: true, roughness: 0.85 }, { key: 'blossomcore', trans: 0.65, wrap: 0.6 });
-  const cores = new THREE.Mesh(mergeGeometries(coreParts), coreMat);
-  cores.castShadow = shadows; cores.receiveShadow = shadows;
-  group.add(cores);
-  const blossomTex = blossomTexture(env.seed);
-  const cardGeo = new THREE.PlaneGeometry(0.62, 0.62);
-  const aN = new Float32Array(cardPos.length * 3);
-  cardNrm.forEach((n, i) => { aN[i * 3] = n.x; aN[i * 3 + 1] = n.y; aN[i * 3 + 2] = n.z; });
-  cardGeo.setAttribute('aCardN', new THREE.InstancedBufferAttribute(aN, 3));
-  const cardMat = new THREE.MeshStandardMaterial({ map: blossomTex, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.8 });
-  addWind(cardMat, wind, { height: 1, amount: 0.035, stiffness: 1.0, flutter: 0.012, key: 'cardwind' });
-  patchStd(cardMat, shared, {
-    key: 'blossomcard',
-    vertexHeader: 'attribute vec3 aCardN;',
-    // light every card with its cluster's outward direction (world space), ignoring the card's own spin
-    vertex: { '#include <defaultnormal_vertex>': 'vec3 transformedNormal = normalize(normalMatrix * aCardN);' },
-    fragment: {
-      '#include <normal_fragment_begin>': '$&\n normal = normalize(vNormal);',
-      '#include <lights_fragment_end>': /* glsl */`$&
-        {
-          vec3 Vw = normalize(cameraPosition - vWPos);
-          float bl = pow(max(dot(-Vw, uLightDir), 0.0), 2.5);
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * (uLightCol * (bl * 0.8 + 0.12) + uAmbient * 0.3);
-        }
-      `,
-    },
-  });
-  const cards = new THREE.InstancedMesh(cardGeo, cardMat, cardPos.length);
-  cardPos.forEach((p, i) => {
-    _q.setFromEuler(_e.set(rng.range(0, TAU), rng.range(0, TAU), rng.range(0, TAU)));
-    const s = rng.range(0.75, 1.25);
-    _m.compose(p, _q, _s.set(s, s, s));
-    cards.setMatrixAt(i, _m);
-  });
-  cards.castShadow = shadows;
-  group.add(cards);
   // fruit hanging among the blossoms
   const peachSpots = [];
   for (const cl of tree.clusters) {
@@ -744,6 +757,13 @@ export function createGarden(env, shared, tex, wind) {
       peachSpots.push(cl.c.clone().add(new THREE.Vector3(Math.cos(a) * cl.r * 0.75, -cl.r * rng.range(0.45, 0.8), Math.sin(a) * cl.r * 0.75)));
     }
   }
+  const crown = createBlossomCrown(env, shared, wind, tree.clusters, {
+    rng: env.rng.fork('blossom'), noise, avoid: peachSpots, shadows,
+    count: Math.round(lerp(2100, 3200, clamp((q - 0.45) / 0.55, 0, 1))),
+  });
+  group.add(crown.cores, crown.cards);
+  // the far islets' little peach trees: the same blossom texture, unshaded (they are only a few pixels across)
+  const farBlossomMat = blossomMassMaterial(shared, crown.massTex, { inner: 2.2, scale: 0.9 });
 
   /* ---- decorative floating islets (bobbing) ---- */
   const nSmall = q >= 0.7 ? 6 : 4;
@@ -762,8 +782,8 @@ export function createGarden(env, shared, tex, wind) {
       const t = peachTree(rng, noise, new THREE.Vector3(0, isl.topY(0, 0), 0));
       holder.add(new THREE.Mesh(t.bark, barkMat));
       const parts = t.clusters.map(cl => new THREE.IcosahedronGeometry(cl.r * 0.95, 1).translate(cl.c.x, cl.c.y, cl.c.z));
-      const g = paint(mergeGeometries(parts.map(p => { p.deleteAttribute('uv'); return p; })), '#f2a8bc');
-      holder.add(new THREE.Mesh(g, coreMat));
+      const g = paint(mergeGeometries(parts.map(p => { p.deleteAttribute('uv'); return p; })), '#ffffff', { ao: 0.35, aoH: 0.6 });
+      holder.add(new THREE.Mesh(g, farBlossomMat));
       holder.scale.setScalar(0.55);
     } else if (kind === 'pine') {
       // a windswept pine: trunk + layered flat canopies (classic shan-shui)
@@ -881,6 +901,12 @@ export function createGarden(env, shared, tex, wind) {
     group, pickables, colliders, casters, main, islA, islB, A, Bp,
     treePos, tree, peachSpots, perches: tree.perches, taiji, taijiFloor, pavPos, pav, landSpots,
     mistFalls, lanterns, groundAt, mainGround, poolC, reserved, stoneLanternGlow,
+    /** Frees what the shell's scene disposal cannot reach: textures given to shaders as uniforms only, and the
+     *  crown's shadow-pass material. */
+    dispose() {
+      for (const t of [grassTex, leafMassTex, crown.massTex]) t.dispose();
+      if (crown.cards.customDepthMaterial) crown.cards.customDepthMaterial.dispose();
+    },
     update(dt, t, tod) {
       for (const b of bobbers) b.obj.position.y = b.base + Math.sin(t * b.speed + b.phase) * b.amp;
       for (let i = 0; i < stepStones.length; i++) {

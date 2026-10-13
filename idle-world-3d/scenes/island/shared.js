@@ -11,6 +11,19 @@ export const LAYER_NO_REFLECT = 1;
  * tints itself with the same absorption so the shallows read as one clear body of water that
  * fades to the open-ocean blue. The surface shader adds reflections, glitter and foam on top.
  */
+/**
+ * The shader clock uWTime is wrapped every WATER_PERIOD s so float32 keeps full precision on a screen left on for
+ * days, and the wrap is seamless because every rate that reads it completes whole cycles in that period:
+ *  - caustics (lib GLSL.caustics: sin at 0.9 and 1.15 × its time, fed uWTime × 0.7 and × 0.45 → 0.63, 0.805, 0.405,
+ *    0.5175 rad/s), swash (0.9 rad/s), surf sets (0.6), obstacle foam (1.6), plankton glow (2.3), star twinkle
+ *    (sky.js: rates snapped to 1/400 rad/s): 800π s holds 400 × each rate in cycles, all whole numbers;
+ *  - the Gerstner swell: each wave's angular frequency is snapped to whole cycles per period (water.js WV, the
+ *    same on the CPU and the GPU; the change is below 0.07%);
+ *  - glitter cells: their twinkle rates are snapped the same way in the shader (water.js sparkleCell).
+ * Texture scrolls and drifting foam noise do not read uWTime: their offsets are wrapped in JS (water.js setTime).
+ */
+export const WATER_PERIOD = 800 * Math.PI;
+
 export const waterUniforms = {
   uWTime: { value: 0 },
   uAbsorb: { value: new THREE.Vector3(0.9, 0.2, 0.13) },  // per metre of light path

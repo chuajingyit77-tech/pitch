@@ -57,7 +57,8 @@ export function createSky(env, rng) {
       vec3 fr = fract(sp) - 0.5;
       float h = sHash(cell);
       float bright = pow(sHash(cell + 7.7), 4.0) * 3.5 + 0.35;
-      float tw = 0.6 + 0.4 * sin(uTime * (1.3 + h * 3.0) + h * 61.0);
+      // twinkle rates snapped to 1/400 rad/s: whole cycles in the 800π s the clock wraps at (shared.js WATER_PERIOD)
+      float tw = 0.6 + 0.4 * sin(uTime * (floor((1.3 + h * 3.0) * 400.0 + 0.5) / 400.0) + h * 61.0);
       float star = step(0.9925, h) * bright * tw * smoothstep(0.45, 0.04, length(fr));
       star *= smoothstep(0.03, 0.3, upv);
       float band = exp(-pow(dot(direction, normalize(vec3(0.35, 0.5, -0.79))) * 3.0, 2.0));

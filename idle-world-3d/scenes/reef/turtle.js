@@ -1,14 +1,41 @@
 // 深蓝 · 珊瑚礁 — procedural green sea turtle: scute-patterned carapace, scaled skin, flying
 // front-flipper strokes with glides, rudder rear flippers. Local frame: head toward +X, up +Y.
 import * as THREE from 'three';
-import { canvasTexture, createNoise, makeRng, clamp, lerp, smoothstep, TAU, makeCanvas, normalMapFromHeight } from '../../lib/util.js';
+import { canvasTexture, createNoise, makeRng, clamp, lerp, smoothstep, TAU, makeCanvas } from '../../lib/util.js';
 import { waterize } from './uw.js';
 
 const L = 0.62, Wd = 0.5; // carapace half length / half width
 
+/**
+ * Tangent-space normal map from a height canvas with separate slope strengths along x and y (same
+ * formula as lib normalMapFromHeight, clamped edges).
+ */
+function normalMapXY(heightCanvas, sx, sy) {
+  const w = heightCanvas.width, h = heightCanvas.height;
+  const src = heightCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const out = makeCanvas(w, h), og = out.getContext('2d'), img = og.createImageData(w, h);
+  const H = (x, y) => src[(clamp(y, 0, h - 1) * w + clamp(x, 0, w - 1)) * 4] / 255;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (H(x + 1, y) - H(x - 1, y)) * sx, dy = (H(x, y + 1) - H(x, y - 1)) * sy;
+    const len = Math.hypot(dx, dy, 1), i = (y * w + x) * 4;
+    img.data[i] = ((-dx / len) * 0.5 + 0.5) * 255;
+    img.data[i + 1] = ((dy / len) * 0.5 + 0.5) * 255;
+    img.data[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+    img.data[i + 3] = 255;
+  }
+  og.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(out);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
 function shellTextures(seed) {
   const rng = makeRng(seed), n = createNoise(seed);
-  const TW = 640, TH = 512;
+  // Power-of-two size: WebGL 1 (Safari 14) needs it for mipmaps and resized the old 640×512 shell
+  // to 512×512 on every load. The shell is painted at 512×512 directly now (same normalised layout);
+  // x keeps the normal-map slope it had at 640 px (strength 3 × 512 / 640), so the look is unchanged.
+  const TW = 512, TH = 512;
   const seeds = [];
   [-0.7, -0.36, -0.02, 0.32, 0.64].forEach(x => seeds.push({ x, z: 0, k: 0 }));
   [-0.52, -0.18, 0.16, 0.48].forEach(x => { seeds.push({ x, z: 0.5, k: 1 }); seeds.push({ x, z: -0.5, k: 1 }); });
@@ -49,7 +76,7 @@ function shellTextures(seed) {
   }
   cg.putImageData(ci, 0, 0); hg.putImageData(hi, 0, 0);
   const map = new THREE.CanvasTexture(col); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
-  const normalMap = normalMapFromHeight(hgt, 3, false);
+  const normalMap = normalMapXY(hgt, 3 * 512 / 640, 3);
   return { map, normalMap };
 }
 

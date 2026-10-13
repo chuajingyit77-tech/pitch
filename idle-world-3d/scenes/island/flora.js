@@ -1,8 +1,9 @@
-// 晴岛 flora & beach dressing: palms, bushes + hibiscus, grass, rocks, shells, starfish, driftwood.
+// 晴岛 flora & beach dressing: palms, bushes + hibiscus, grass, rocks (shapes and surface: rock.js), shells, starfish, driftwood.
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TAU, clamp, lerp, smoothstep, addWind, patchMaterial, createNoise } from '../../lib/util.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { TAU, clamp, lerp, smoothstep, addWind, patchMaterial } from '../../lib/util.js';
 import { addUnderwater, softenNormals, LAYER_NO_REFLECT } from './shared.js';
+import { buildRock, islandRockTexture, makeIslandRockMaterial } from './rock.js';
 import { barkTexture, frondTexture, leafClusterTexture, grassTexture, flowerTexture, woodTexture, PALETTES } from './textures.js';
 
 const V3 = THREE.Vector3;
@@ -169,34 +170,6 @@ function buildGrassTuft() {
   geos.forEach(x => x.dispose());
   const n = g.attributes.normal;
   for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
-  return g;
-}
-
-function buildRock(seed, detail = 3) {
-  const nz = createNoise(seed);
-  let g = new THREE.IcosahedronGeometry(1, detail);
-  g.deleteAttribute('normal'); g.deleteAttribute('uv');
-  g = mergeVertices(g);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    _p.set(p.getX(i), p.getY(i), p.getZ(i));
-    const k = 1 + 0.28 * nz.fbm3(_p.x * 1.2, _p.y * 1.2, _p.z * 1.2, 4) + 0.06 * nz.noise3(_p.x * 5, _p.y * 5, _p.z * 5);
-    _p.multiplyScalar(k);
-    _p.y *= 0.62;
-    if (_p.y < -0.25) _p.y = -0.25 + (_p.y + 0.25) * 0.4;
-    p.setXYZ(i, _p.x, _p.y, _p.z);
-  }
-  g.computeVertexNormals();
-  // vertex colours: grey-brown with darker cracks; moss/sand on top decided in the shader
-  const cols = new Float32Array(p.count * 3);
-  const a = new THREE.Color('#8f877b'), b = new THREE.Color('#6a6259'), c = new THREE.Color('#a39a8b');
-  const col = new THREE.Color();
-  for (let i = 0; i < p.count; i++) {
-    const v = nz.noise3(p.getX(i) * 2.2, p.getY(i) * 2.2, p.getZ(i) * 2.2) * 0.5 + 0.5;
-    col.copy(a).lerp(b, smoothstep(0.55, 0.8, v)).lerp(c, smoothstep(0.45, 0.2, v) * 0.6);
-    cols[i * 3] = col.r; cols[i * 3 + 1] = col.g; cols[i * 3 + 2] = col.b;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   return g;
 }
 
@@ -426,7 +399,8 @@ export function createFlora(env, rng, terrain, wind, reserved) {
   addWind(grassMat, wind, { height: 0.5, amount: 0.12, stiffness: 1.5, flutter: 0.02 });
   noFlip(grassMat);
   const nGrass = Math.round(2600 * q);
-  const grass = new THREE.InstancedMesh(grassGeo, grassMat, nGrass);
+  const ROCK_TUFTS = 140; // reserved for tufts at the rocks' feet (added with the rocks below)
+  const grass = new THREE.InstancedMesh(grassGeo, grassMat, nGrass + ROCK_TUFTS);
   const grng = rng.fork('grass');
   let gi = 0;
   for (let guard = 0; gi < nGrass && guard < nGrass * 8; guard++) {
@@ -453,30 +427,10 @@ export function createFlora(env, rng, terrain, wind, reserved) {
   disposables.push(grassTex, grassGeo, grassMat);
 
   /* ---------------- rocks ---------------- */
-  const rockGeos = [buildRock(rng.int(1, 1e6)), buildRock(rng.int(1, 1e6)), buildRock(rng.int(1, 1e6), 2)];
-  const rockMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86, envMapIntensity: 0.6 });
-  patchMaterial(rockMat, {
-    key: 'rockTone',
-    vertexHeader: 'varying vec3 vRkPos; varying vec3 vRkN;',
-    fragmentHeader: 'varying vec3 vRkPos; varying vec3 vRkN;',
-    vertex: { '#include <fog_vertex>': '$&\n vRkPos = (mvPosition.xyz - viewMatrix[3].xyz) * mat3(viewMatrix); vRkN = normalize((vec4(transformedNormal, 0.0) * viewMatrix).xyz);' },
-    fragment: {
-      '#include <color_fragment>': `$&
-        float rkTop = smoothstep(0.55, 0.85, vRkN.y);
-        vec3 mossC = mix(vec3(0.62, 0.55, 0.38), vec3(0.24, 0.36, 0.12), smoothstep(0.6, 1.4, vRkPos.y));
-        diffuseColor.rgb = mix(diffuseColor.rgb, mossC, rkTop * 0.75 * smoothstep(0.25, 0.6, vRkPos.y));
-        float rkWet = (1.0 - smoothstep(0.02, 0.32, vRkPos.y)) * smoothstep(-0.5, -0.1, vRkPos.y);
-        diffuseColor.rgb *= mix(1.0, 0.55, rkWet);
-        // barnacle speckles near the waterline (4.5 cm cells: their average once a cell is under ~2 px)
-        vec2 bq = vRkPos.xz * 22.0 + vRkPos.y * 9.0;
-        vec2 bqx = dFdx(bq), bqy = dFdy(bq);
-        float sp = step(0.82, fract(sin(dot(floor(bq), vec2(12.9898, 78.233))) * 43758.5453));
-        sp = mix(sp, 0.18, smoothstep(0.3, 0.75, sqrt(max(dot(bqx, bqx), dot(bqy, bqy)))));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.82, 0.75), sp * rkWet * step(-0.3, vRkPos.y) * 0.6);
-      `,
-      '#include <roughnessmap_fragment>': '$&\n roughnessFactor = mix(roughnessFactor, 0.3, rkWet * step(-0.05, vRkPos.y));',
-    },
-  });
+  // smooth weathered stone with a triplanar surface (rock.js); the same seeds, shapes and heights as before
+  const rockGeos = [buildRock(rng.int(1, 1e6), 6), buildRock(rng.int(1, 1e6), 6), buildRock(rng.int(1, 1e6), 5, 2)];
+  const rockTex = islandRockTexture(rng.fork('rockTex').int(1, 1e6));
+  const rockMat = makeIslandRockMaterial(rockTex);
   addUnderwater(rockMat, { caustics: true, key: 'rock' });
   const rockSites = [[], [], []];
   const rrng = rng.fork('rocks');
@@ -526,7 +480,34 @@ export function createFlora(env, rng, terrain, wind, reserved) {
     group.add(mesh);
     return mesh;
   });
-  disposables.push(rockMat, ...rockGeos);
+  disposables.push(rockMat, rockTex, ...rockGeos);
+  // grass tufts nestled at the feet of the rocks that stand in grass (own rng: everything placed above is unchanged)
+  {
+    const trng = rng.fork('rockTufts');
+    let added = 0;
+    for (const r of rockSites.flat()) {
+      if (added >= ROCK_TUFTS) break;
+      if (terrain.zone(r.x, r.z).grass < 0.35) continue;
+      const n = Math.min(ROCK_TUFTS - added, Math.round(3 + r.s * 2.5));
+      for (let k = 0; k < n; k++) {
+        const a = (k + trng.range(-0.4, 0.4)) / n * TAU, rr = r.s * trng.range(0.85, 1.15);
+        const x = r.x + Math.cos(a) * rr, z = r.z + Math.sin(a) * rr;
+        if (terrain.zone(x, z).grass < 0.3) continue;
+        _q.setFromAxisAngle(UP, trng.range(0, TAU));
+        const sc = trng.range(0.6, 1.05);
+        _m.compose(_p.set(x, H(x, z) - 0.03, z), _q, _s.set(sc, sc * trng.range(0.8, 1.2), sc));
+        grass.setMatrixAt(gi, _m);
+        tint.setRGB(trng.range(0.8, 0.98), trng.range(0.92, 1.08), trng.range(0.7, 0.9));
+        grass.setColorAt(gi, tint);
+        gi++; added++;
+      }
+    }
+    grass.count = gi;
+    grass.instanceMatrix.needsUpdate = true;
+    if (grass.instanceColor) grass.instanceColor.needsUpdate = true;
+    grass.computeBoundingSphere();
+    grass.boundingSphere.radius += 0.4;
+  }
 
   /* ---------------- shells, starfish, fallen coconuts, driftwood ---------------- */
   const srng = rng.fork('shells');

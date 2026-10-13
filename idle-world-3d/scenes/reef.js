@@ -313,6 +313,8 @@ export default {
       update(dt, t) {
         time += dt;
         setWaterTime(W, time);
+        snow.syncHi(W.uTimeHi.value);
+        bubbles.syncHi(W.uTimeHi.value);
         applyTod(false);
         blendTod(1 - Math.exp(-dt / 1.2));
         glideDir(1 - Math.exp(-dt / 2.5));

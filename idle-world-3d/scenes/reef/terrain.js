@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createNoise, clamp, lerp, smoothstep, TAU, canvasTexture, makeRng } from '../../lib/util.js';
-import { waterize, addDetail, addFluor } from './uw.js';
+import { waterize, addDetail } from './uw.js';
+import { paintRock, paintMacro, cachedTexture, addRockSurface } from './surf.js';
 
 const softplus = (v, k = 1) => Math.log1p(Math.exp(v * k)) / k;
 
@@ -115,69 +116,24 @@ export function buildTerrain(ground, W, env, { rings = 130, segs = 180, rMax = 1
 /* ------------------------------------------------------------------ */
 /* Rocks                                                               */
 /* ------------------------------------------------------------------ */
-const ROCK_GLSL = /* glsl */`
-// Living crust: turf-covered reef rock with pink coralline crusts, encrusting colonies and sponge
-// patches as soft irregular blobs; relief shading and dark crevices keep it muted so the 3D corals pop.
-float gA, gB, gR;
-vec3 reefPal(float i){
-  i = mod(i, 10.0);
-  vec3 c = vec3(0.36, 0.22, 0.42);
-  c = i >= 1.0 ? vec3(0.5, 0.2, 0.26) : c;
-  c = i >= 2.0 ? vec3(0.26, 0.34, 0.14) : c;
-  c = i >= 3.0 ? vec3(0.5, 0.36, 0.12) : c;
-  c = i >= 4.0 ? vec3(0.14, 0.32, 0.32) : c;
-  c = i >= 5.0 ? vec3(0.56, 0.26, 0.1) : c;
-  c = i >= 6.0 ? vec3(0.3, 0.24, 0.16) : c;
-  c = i >= 7.0 ? vec3(0.42, 0.4, 0.24) : c;
-  c = i >= 8.0 ? vec3(0.4, 0.16, 0.4) : c;
-  c = i >= 9.0 ? vec3(0.22, 0.26, 0.38) : c;
-  return c;
-}
-float detailH(vec3 p){
-  float d = length(p - cameraPosition);
-  float fade = (1.0 - smoothstep(16.0, 36.0, d)) * (1.0 - smoothstep(0.25, 0.6, length(fwidth(p * 3.6))));
-  gA = snoise(p * 1.05);
-  gB = snoise(p * 1.5 + 7.0);
-  gR = snoise(p * 3.6) * 0.6 + snoise(p * 8.5 + 2.0) * 0.4;
-  float h = snoise(p * 3.6) * 0.02;
-  return h * fade;
-}
-vec3 detailCol(vec3 p, float h, vec3 c){
-  float expo = smoothstep(-0.45, 0.25, gWN.y);
-  vec3 base = c * (0.78 + 0.25 * gR);
-  // pink coralline crust with ragged edges
-  float m1 = gA + 0.45 * gR;
-  float coral = smoothstep(0.15, 0.6, m1) * expo;
-  base = mix(base, vec3(0.44, 0.22, 0.32) * (0.85 + 0.25 * gR), coral * 0.72);
-  // encrusting colonies: muted, ragged, textured
-  float m2 = gB + 0.5 * gR;
-  float idn = snoise(p * 0.33 + 3.0) * 0.5 + 0.5;
-  vec3 enc = reefPal(floor(idn * 10.0)) * (0.8 + 0.3 * gR);
-  float encM = smoothstep(0.45, 0.85, m2) * (1.0 - coral * 0.6) * expo;
-  base = mix(base, enc, encM * 0.5);
-  // rare sponge patches
-  float sp = smoothstep(0.72, 0.85, snoise(p * 1.3 + 11.0) + 0.3 * gR) * expo;
-  base = mix(base, vec3(0.6, 0.16, 0.06), sp * 0.6);
-  // fine porous texture as anti-aliased colour
-  vec3 q = p * 22.0;
-  float aa = 1.0 - smoothstep(0.25, 0.6, length(fwidth(q)));
-  base *= 1.0 + (vnoise3(q) - 0.5) * 0.35 * aa;
-  base *= 0.55 + 0.6 * clamp(gR * 0.6 + 0.55, 0.0, 1.0);
-  return base;
-}
-`;
-
 function rockTemplate(seed, detail) {
   const n = createNoise(seed);
-  const disp = (x, y, z) => {
+  const dispF = (x, y, z, fine, soft) => {
     let d = 1 + n.fbm3(x * 1.05 + 3.1, y * 1.05, z * 1.05, 3) * 0.44;
-    const r = 1 - Math.abs(n.noise3(x * 2.4 + 9, y * 2.4, z * 2.4));
+    const a = n.noise3(x * 2.4 + 9, y * 2.4, z * 2.4);
+    const r = 1 - (soft ? Math.sqrt(a * a + soft * soft) : Math.abs(a));  // soft: rounded crest, same flanks
     d += r * r * 0.17;
-    d += n.noise3(x * 6.1, y * 6.1 + 2, z * 6.1) * 0.05;
+    d += n.noise3(x * 6.1, y * 6.1 + 2, z * 6.1) * fine;
     if (y < -0.15) d *= 1 - (-0.15 - y) * 0.42;
     if (y > 0.55) d *= 1 - (y - 0.55) * 0.35;  // flatter tops for corals to sit on
     return d;
   };
+  // `disp` is the rock's solid shape (height map, placement of everything on it): unchanged. The mesh
+  // uses `meshDisp`, the same shape with rounded ridge crests and a third of the finest bumps: those
+  // were far smaller than a triangle and only produced creases and facets; the rock texture's normal
+  // map carries that detail now. The difference (a few cm) is within the height map's own 0.3 m grid.
+  const disp = (x, y, z) => dispF(x, y, z, 0.05, 0);
+  const meshDisp = (x, y, z) => dispF(x, y, z, 0.018, 0.07);
   const TW = 96, TH = 48, table = new Float32Array(TW * TH);
   for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) {
     const th = ((j + 0.5) / TH) * Math.PI, ph = (i / TW) * TAU;
@@ -191,39 +147,56 @@ function rockTemplate(seed, detail) {
     const a = lerp(table[j0 * TW + i0], table[j0 * TW + i1], ti), b = lerp(table[j1 * TW + i0], table[j1 * TW + i1], ti);
     return lerp(a, b, tj);
   };
+  // IcosahedronGeometry(1, d) splits every edge into d + 1 segments (20 (d+1)² triangles): the old
+  // d = 3 gave 320-triangle rocks whose facets and polygonal outlines showed at every zoom
   let g = new THREE.IcosahedronGeometry(1, detail);
   g.deleteAttribute('normal'); g.deleteAttribute('uv');
   g = mergeVertices(g);
   const p = g.getAttribute('position');
-  const v = new THREE.Vector3();
+  const v = new THREE.Vector3(), t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), w = new THREE.Vector3();
+  const cav = new Float32Array(p.count);
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i).normalize();
-    v.multiplyScalar(disp(v.x, v.y, v.z));
+    // concavity: how far the surface around (a 0.2 rad ring) stands above this point
+    t1.set(Math.abs(v.y) < 0.9 ? 0 : 1, Math.abs(v.y) < 0.9 ? 1 : 0, 0).cross(v).normalize();
+    t2.crossVectors(v, t1);
+    const d0 = meshDisp(v.x, v.y, v.z);
+    let ring = 0;
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * TAU;
+      w.copy(v).addScaledVector(t1, Math.cos(a) * 0.2).addScaledVector(t2, Math.sin(a) * 0.2).normalize();
+      ring += meshDisp(w.x, w.y, w.z) / 6;
+    }
+    cav[i] = ring - d0;
+    v.multiplyScalar(d0);
     p.setXYZ(i, v.x, v.y, v.z);
   }
+  // Shading normals come from a smoothed copy of the shape (rounder crests, no finest bumps): a few
+  // hundred triangles cannot follow the sharp ridge crests, which shaded as hard folds and stretched
+  // the triplanar texture; the outline keeps the true shape and the normal map adds the fine relief.
+  // The true vertex normals (aGeoN) still choose the texture projections, so nothing is stretched.
   g.computeVertexNormals();
-  // vertex colours: base stone, ochre crust, coralline algae, turf algae on tops, darker undersides
+  g.setAttribute('aGeoN', g.getAttribute('normal').clone());
+  {
+    const sm = g.clone(), sp = sm.getAttribute('position');
+    for (let i = 0; i < sp.count; i++) {
+      v.fromBufferAttribute(sp, i).normalize();
+      v.multiplyScalar(dispF(v.x, v.y, v.z, 0.0, 0.16));
+      sp.setXYZ(i, v.x, v.y, v.z);
+    }
+    sm.computeVertexNormals();
+    g.setAttribute('normal', sm.getAttribute('normal'));
+  }
+  // vertex colour = ambient occlusion only (undersides, hollows); the surface itself (limestone,
+  // coralline, turf, colonies, holes) comes from addRockSurface
   const nrm = g.getAttribute('normal');
-  const col = new Float32Array(p.count * 3), fl = new Float32Array(p.count);
-  const C = hex => new THREE.Color(hex);
-  const stone = C('#6a6157'), crust = C('#8e7752'), grey = C('#77736b'), coral1 = C('#b97895'), coral2 = C('#9a6aa6'), turf = C('#6e6c3e'), turf2 = C('#5a6e45');
-  const c = new THREE.Color();
+  const col = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ny = nrm.getY(i);
-    c.copy(stone).lerp(grey, clamp(n.noise3(x * 1.7, y * 1.7, z * 1.7) * 0.5 + 0.5, 0, 1));
-    c.lerp(crust, smoothstep(0.1, 0.6, n.noise3(x * 2.3 + 5, y * 2.3, z * 2.3)) * 0.7);
-    const ca = n.noise3(x * 1.9 + 11, y * 1.9, z * 1.9 - 4);
-    const cor = smoothstep(0.05, 0.45, ca) * (1 - smoothstep(0.55, 0.9, ny));
-    c.lerp(n.noise3(x * 3, y * 3, z * 3) > 0 ? coral1 : coral2, cor * 0.85);
-    const tf = smoothstep(0.45, 0.85, ny) * smoothstep(-0.3, 0.3, n.noise3(x * 2.2, y * 2.2 + 7, z * 2.2));
-    c.lerp(n.noise3(x * 4, y * 4, z * 4 + 2) > 0 ? turf : turf2, tf * 0.75);
-    const ao = smoothstep(-0.75, 0.1, ny) * 0.55 + 0.45;
-    c.multiplyScalar(ao * (0.9 + 0.2 * n.noise3(x * 8, y * 8, z * 8)));
-    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    fl[i] = cor * 0.35;
+    const ao = (smoothstep(-0.75, 0.1, ny) * 0.55 + 0.45) * (1 - smoothstep(0.0, 0.07, cav[i]) * 0.4) * (0.94 + 0.12 * n.noise3(x * 5, y * 5, z * 5));
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.setAttribute('aFluor', new THREE.BufferAttribute(fl, 1));
   g.computeBoundingSphere();
   return { geometry: g, sample };
 }
@@ -290,9 +263,12 @@ export class HeightMap {
  */
 export function buildRocks(ground, hm, W, env, rng) {
   const q = Math.max(0.6, env.q);
-  const T = [0, 1, 2, 3].map(i => rockTemplate((env.seed ^ (0x9e37 * (i + 1))) >>> 0, env.q >= 0.9 ? 4 : 3));
-  const Ts = [0, 1, 2, 3].map(i => rockTemplate((env.seed ^ (0x51ed * (i + 3))) >>> 0, 3));
-  const farT = rockTemplate((env.seed ^ 0x1234) >>> 0, 3);
+  // coral heads (big, central) 1620 triangles each, substrate rocks and the huge haze pinnacles 720
+  // (their 320-triangle outlines read as pyramids); same on every tier (~14 heads, ~120 substrate rocks
+  // and ~7 pinnacles on the iPad)
+  const T = [0, 1, 2, 3].map(i => rockTemplate((env.seed ^ (0x9e37 * (i + 1))) >>> 0, 8));
+  const Ts = [0, 1, 2, 3].map(i => rockTemplate((env.seed ^ (0x51ed * (i + 3))) >>> 0, 5));
+  const farT = rockTemplate((env.seed ^ 0x1234) >>> 0, 5);
   const all = [...T, ...Ts];
   const n = createNoise((env.seed ^ 0x77ab) >>> 0);
   const field = (x, z) => {
@@ -356,6 +332,19 @@ export function buildRocks(ground, hm, W, env, rng) {
     far.push({ pos: new THREE.Vector3(x, ground.height(x, z) - s * 0.3, z), scale: new THREE.Vector3(s * rng.range(0.9, 1.5), s * rng.range(1.0, 2.2), s * rng.range(0.9, 1.5)), rotY: rng.range(0, TAU) });
   }
 
+  // depth: a second, farther ring of tall formations whose silhouettes fade into the blue (own random
+  // stream, so nothing placed before moves)
+  {
+    const r2 = makeRng((env.seed ^ 0x5eaf00d) >>> 0);
+    const nFar2 = Math.round(10 * Math.max(0.8, q));
+    for (let i = 0; i < nFar2; i++) {
+      const a = (i / nFar2) * TAU + r2.range(-0.25, 0.25), r = r2.range(44, 64);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const s = r2.range(5, 9);
+      far.push({ pos: new THREE.Vector3(x, ground.height(x, z) - s * 0.35, z), scale: new THREE.Vector3(s * r2.range(0.8, 1.4), s * r2.range(1.4, 2.6), s * r2.range(0.8, 1.4)), rotY: r2.range(0, TAU) });
+    }
+  }
+
   // height map: rocks are solid
   const insideFn = it => (x, y, z) => {
     const dx = x - it.pos.x, dy = y - it.pos.y, dz = z - it.pos.z;
@@ -373,8 +362,12 @@ export function buildRocks(ground, hm, W, env, rng) {
 
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, envMapIntensity: 0.3 });
   waterize(mat, W, { key: 'rock' });
-  addDetail(mat, W, { glsl: ROCK_GLSL, space: 'world', bump: 1.0, key: 'rock' });
-  addFluor(mat, W, '#ff6fb0', 0.35, 'rock');
+  // textured on every tier (the old per-pixel procedural rock detail was too heavy for the iPad and off there)
+  addRockSurface(mat, W, {
+    detail: cachedTexture('rock', 512, () => paintRock(512, 7, 1.4)),
+    macro: cachedTexture('rockMacro', 128, () => paintMacro(128, 7)),
+    tile: 1.4, bump: 1.5, key: 'rock', fluorK: 0.075,
+  });
   const group = new THREE.Group();
   const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), e = new THREE.Euler();
   const meshes = [];
@@ -387,7 +380,8 @@ export function buildRocks(ground, hm, W, env, rng) {
     im.computeBoundingSphere();
     group.add(im); meshes.push(im);
   }
-  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, envMapIntensity: 0.3 });
+  // vertex colour is grey ambient occlusion now: the haze pinnacles get the old average stone tint
+  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: '#7a6f66', roughness: 0.95, envMapIntensity: 0.3 });
   waterize(farMat, W, { caustics: false, key: 'far' });
   const fim = new THREE.InstancedMesh(farT.geometry, farMat, far.length);
   far.forEach((it, i) => { qq.setFromEuler(e.set(0, it.rotY, 0)); m4.compose(it.pos, qq, it.scale); fim.setMatrixAt(i, m4); });

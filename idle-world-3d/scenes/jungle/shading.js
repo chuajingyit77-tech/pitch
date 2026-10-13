@@ -10,11 +10,26 @@ import { patchMaterial, GLSL } from '../../lib/util.js';
 
 export const GLOW_N = 8;
 
+/**
+ * Shader clock. uTime is wrapped every JG_PERIOD s (setJungleClock) so float32 keeps full precision on a screen
+ * left on for days, and the wrap is seamless because every rate that reads it completes whole cycles in that
+ * period: all of the fixed rates are multiples of 1/200 rad/s (glow pulses 1.3, 0.9, 0.8; caustics 0.99, 1.265;
+ * light shafts 0.25; motes 0.09, 0.21, 1.7; fireflies 3.1; spores 0.4, 0.33, 2.0; plunge mist 0.3, 0.05; the
+ * floating fruit's bob 0.3), and per-particle rates are snapped to whole cycles where they are used. Drifting
+ * noise does not read uTime at all: its offsets are wrapped in JS to the noise's own period (JG_PNOISE: 256
+ * lattice cells; simplex noise: 867) and texture scrolls to 1, all in double precision.
+ */
+export const JG_PERIOD = 400 * Math.PI;
+
 export function createShared() {
   const glow = [];
   for (let i = 0; i < GLOW_N; i++) glow.push(new THREE.Vector4(0, -100, 0, 0));
   return {
     uTime: { value: 0 },
+    uNoiseDrift: { value: new THREE.Vector4() },   // light-shaft noise (0.05, 0.04, 0.06 /s), wrapped to 256
+    uPondDrift: { value: new THREE.Vector2() },    // pond foam noise (0.8, 0.6 /s), wrapped to 256
+    uSimplexDrift: { value: new THREE.Vector4() }, // sky clouds (0.004, 0.01 /s), fireflies (0.12, 0.1 /s), wrapped to 867
+    uMistScroll: { value: new THREE.Vector4() },   // low mist sheets' texture scrolls, wrapped to 1
     uLightDirW: { value: new THREE.Vector3(0.3, 0.9, 0.2).normalize() },
     uLightCol: { value: new THREE.Color(1, 1, 1) },
     uCookieTex: { value: null },
@@ -252,3 +267,27 @@ export function jungleMaterial(material, shared, opts = {}) {
 
 /** GLSL for custom ShaderMaterials (water, waterfall, particles) that want the same fog/cookie. */
 export const JG_GLSL = HEADER_COMMON;
+
+/** Wrap the shader clock and the drift offsets (see JG_PERIOD). t = the scene clock in seconds, unwrapped. */
+export function setJungleClock(shared, t) {
+  const wrap = (x, n) => x - n * Math.floor(x / n);
+  shared.uTime.value = wrap(t, JG_PERIOD);
+  shared.uNoiseDrift.value.set(wrap(t * 0.05, 256), wrap(t * 0.04, 256), wrap(t * 0.06, 256), 0);
+  shared.uPondDrift.value.set(wrap(t * 0.8, 256), wrap(t * 0.6, 256));
+  shared.uSimplexDrift.value.set(wrap(t * 0.004, 867), wrap(t * 0.01, 867), wrap(t * 0.12, 867), wrap(t * 0.1, 867));
+  // mist sheets: p = xz * 0.035 + (0.0035, 0.0012) t + seed, and that p * 2.7 - (0.004, 0) t
+  shared.uMistScroll.value.set(wrap(t * 0.0035, 1), wrap(t * 0.0012, 1), wrap(t * (2.7 * 0.0035 - 0.004), 1), wrap(t * 2.7 * 0.0012, 1));
+}
+
+/** Value noise whose lattice repeats every 256 cells (needs GLSL.noise's hash12): read at drifts wrapped to 256. */
+export const JG_PNOISE = /* glsl */`
+float vnoiseP(vec2 q) {
+  vec2 i = floor(q), f = fract(q); vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 i0 = mod(i, 256.0), i1 = mod(i + 1.0, 256.0);
+  return mix(mix(hash12(i0), hash12(vec2(i1.x, i0.y)), u.x), mix(hash12(vec2(i0.x, i1.y)), hash12(i1), u.x), u.y);
+}
+`;
+/** fbm of GLSL.noise's simplex noise with lacunarity exactly 2: periodic with 867 along each axis like snoise. */
+export const JG_FBMP = /* glsl */`
+float fbmP(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * snoise(p); p *= 2.0; a *= 0.5; } return s; }
+`;

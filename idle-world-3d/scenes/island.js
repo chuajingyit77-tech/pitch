@@ -3,7 +3,7 @@
 // + Animal Crossing coziness (soft sand, palms, a little dock, hut and lantern, friendly residents).
 import * as THREE from 'three';
 import { TAU, clamp, lerp, smoothstep, createNoise, createWind, sunState } from '../lib/util.js';
-import { waterUniforms, LAYER_NO_REFLECT } from './island/shared.js';
+import { waterUniforms, WATER_PERIOD, LAYER_NO_REFLECT } from './island/shared.js';
 import { createTerrain } from './island/terrain.js';
 import { createWater, waveHeight } from './island/water.js';
 import { createSky } from './island/sky.js';
@@ -291,8 +291,12 @@ export default {
     let todTimer = 0, hEased = env.hours();
     const faunaInfo = { dusk: 0, night: 0, timeJump: false }, fxInfo = { night: 0 }; // reused every frame
     function update(dt, t) {
-      waterUniforms.uWTime.value = t;
-      sky.uniforms.uTime.value = t;
+      // shader clocks wrapped seamlessly (every rate reading them completes whole cycles: island/shared.js), so
+      // float32 keeps full precision on a screen left on for days; scrolls and drifts are wrapped in setTime
+      const tw = t % WATER_PERIOD;
+      waterUniforms.uWTime.value = tw;
+      sky.uniforms.uTime.value = tw;
+      water.setTime(t);
       wind.update(dt);
       // ease toward the clock (it steps once a minute); snap on big jumps (time set by hand, a new day)
       const hClock = env.hours();

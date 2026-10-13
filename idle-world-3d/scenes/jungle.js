@@ -4,8 +4,10 @@
 import * as THREE from 'three';
 import { TAU, clamp, lerp, smoothstep, damp, makeRng, createWind, addWind, patchMaterial, disposeObject, sunState } from '../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, FishInstances, Swimmer } from '../lib/fish.js';
+import { POND_FISH, mipmappedAtlas, matteFins, pushShown, clearerUnderwater } from './jungle/fish.js';
+import { cliffRockTexture, cliffSurface } from './jungle/cliff.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createShared, jungleMaterial, GLOW_N } from './jungle/shading.js';
+import { createShared, jungleMaterial, GLOW_N, setJungleClock, JG_PERIOD } from './jungle/shading.js';
 import * as TX from './jungle/textures.js';
 import { createLayout, buildTerrain, buildCliff, sampleCliff, buildBoulder, buildLog, WATER_Y, POND, FALL } from './jungle/terrain.js';
 import { buildTree, buildTrunk, taperTube, lianaCurve, dropCurve, buildClump } from './jungle/trees.js';
@@ -105,8 +107,12 @@ export default {
     terrain.receiveShadow = true;
     scene.add(terrain);
 
-    const rockMat = new THREE.MeshStandardMaterial({ map: rock.map, normalMap: rock.normalMap, normalScale: new THREE.Vector2(1.1, 1.1), vertexColors: true, roughness: 0.82, envMapIntensity: 0.6 });
+    // the cliff: wet layered rock with moss in the crevices (jungle/cliff.js), not a repeating embossed pattern
+    const cliffTex = cliffRockTexture((seed % 1000) + 9);
+    owned.push(cliffTex);
+    const rockMat = new THREE.MeshStandardMaterial({ map: cliffTex, vertexColors: true, roughness: 0.8, envMapIntensity: 0.6 });
     jungleMaterial(rockMat, shared, { moss: 0.9, caustics: true, specks: true });
+    cliffSurface(rockMat);
     const cliffGeo = buildCliff(L, q, seed % 100000);
     const cliff = new THREE.Mesh(cliffGeo, rockMat);
     cliff.castShadow = true; cliff.receiveShadow = true;
@@ -392,6 +398,13 @@ export default {
     // ferns on cliff ledges
     const cliffPts = sampleCliff(cliffGeo, R('cliffp'), Math.round(60 * q), { minY: 0.8, maxNy: 0.75, minNy: 0.1 });
     for (const c of cliffPts) fernList.push({ x: c.p.x, y: c.p.y - 0.05, z: c.p.z, s: rp.range(0.6, 1.2), rot: rp.next() * TAU, normal: c.n.clone().lerp(UP, 0.5).normalize() });
+    // smaller ferns tucked into the damp lower face and the crevices (own rng: every other placement is unchanged)
+    {
+      const rl = R('cliffLush');
+      for (const c of sampleCliff(cliffGeo, rl, Math.round(36 * q), { minY: 0.15, maxNy: 0.85, minNy: 0.0 })) {
+        fernList.push({ x: c.p.x, y: c.p.y - 0.04, z: c.p.z, s: rl.range(0.35, 0.75), rot: rl.next() * TAU, normal: c.n.clone().lerp(UP, 0.35).normalize() });
+      }
+    }
     instance(fernGeo, foliageMat(WIND_LOW), fernList, { shadow: false, mainOnly: true });
     // glowing ferns near the water and the log (bioluminescent veins at night)
     const glowFernGeo = P.fern(atlas, R('fernGlow'), { fronds: 8, rect: 'glowfern' });
@@ -719,12 +732,17 @@ export default {
     scene.add(mistSheets);
 
     /* ---------------- fish (ambient) ---------------- */
-    const fishGeo = buildFishGeometry('koi', { detail: q > 0.8 ? 1 : 0.6 });
-    const fishSets = [['ogon', 3], ['chagoi', 4], ['asagi', 3]].map(([variety, n], k) => {
-      const painted = paintFish('koi', { seed: (seed % 1000) + 90 + k, variety, size: [512, 256] });
-      const mat = createFishMaterial(painted, { roughness: 0.4 });
+    // Amazonian cichlids (jungle/fish.js): angelfish, peacock bass and discus, bright and high-contrast so they
+    // read through the green water. Same counts, swimmers and steering as before; each kind is drawn a little
+    // larger than its swimmer's size (pushShown), so the tail beat and pace are unchanged.
+    const fishSets = POND_FISH.map(({ species, n, show }, k) => {
+      const fishGeo = buildFishGeometry(species, { detail: 0.8 });
+      const painted = paintFish(species, { seed: (seed % 1000) + 90 + k, size: [512, 256] });
+      const mat = clearerUnderwater(matteFins(mipmappedAtlas(createFishMaterial(painted))), 0.5);
       jungleMaterial(mat, shared, { caustics: true, glowLight: false });
       const inst = new FishInstances(fishGeo, mat, n);
+      fishGeo.dispose(); // FishInstances keeps its own copy
+      inst.mesh.name = 'pondFish-' + species;
       ONLY_MAIN(inst.mesh);
       scene.add(inst.mesh);
       owned.push(painted.map);
@@ -740,9 +758,8 @@ export default {
         sw.food = null; sw.noticeT = sw.rng.range(0.3, 1.5); sw.slot = new THREE.Vector3(); sw.slotA = 0; sw.uturn = 0;
         fish.push(sw);
       }
-      return { inst, fish };
+      return { inst, fish, show };
     });
-    fishGeo.dispose();
     const allFish = fishSets.flatMap(s => s.fish);
 
     /* ---------------- residents ---------------- */
@@ -1359,7 +1376,11 @@ export default {
         compileRT.dispose();
       }
       simT += dt;
-      shared.uTime.value = t;
+      // the shader clock and noise drifts, wrapped seamlessly (jungle/shading.js JG_PERIOD); when the clock wraps,
+      // the pond's ripple start times move back with it so every ring keeps its age
+      const prevClock = shared.uTime.value;
+      setJungleClock(shared, t);
+      if (shared.uTime.value < prevClock) pond.rebase(JG_PERIOD);
       shared.uCookieDrift.value.set(Math.sin(t * 0.05) * 0.004, Math.cos(t * 0.043) * 0.004);
       // periodic motion gets its phase wrapped here in double precision (seamless), because the page runs
       // for days and float32 uTime * 70 or * 6 gets steppy within hours
@@ -1496,7 +1517,7 @@ export default {
       }
       for (const set of fishSets) {
         set.inst.begin();
-        for (const sw of set.fish) set.inst.push(sw);
+        for (const sw of set.fish) pushShown(set.inst, sw, set.show);
         set.inst.end(t);
       }
     }

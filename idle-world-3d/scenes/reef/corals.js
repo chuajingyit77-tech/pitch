@@ -1,9 +1,10 @@
 // 深蓝 · 珊瑚礁 — the living reef: staghorn thickets, brain corals, table and shelf corals, sea fans,
 // soft tree corals, tube sponges, anemones, seagrass and kelp, starfish, urchins and rubble.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createNoise, clamp, lerp, smoothstep, TAU, canvasTexture, makeRng, patchMaterial } from '../../lib/util.js';
 import { waterize, addDetail, addFluor, addSway } from './uw.js';
+import { addTranslucency, addTriplanar, cachedTexture, paintPolyps, paintCups, paintBrain } from './surf.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0), _e = new THREE.Euler(), _n = new THREE.Vector3(), _c = new THREE.Color();
@@ -98,11 +99,11 @@ function standOn(n, spin, upright = 0.5, out = new THREE.Quaternion()) {
 /* Geometry builders                                                   */
 /* ------------------------------------------------------------------ */
 function staghornGeo(rng, base, tip, maxD = 4) {
-  const segs = [], tips = [];
+  const segs = [];
   const grow = (a, dir, len, r, d) => {
     const b = a.clone().addScaledVector(dir, len);
     segs.push({ a, b, r0: r, r1: r * 0.84, d });
-    if (d >= maxD || r < 0.012) { tips.push({ p: b, r: r * 0.86 }); return; }
+    if (d >= maxD || r < 0.012) { segs[segs.length - 1].tip = true; return; }
     const nk = rng.chance(0.3) ? 3 : 2;
     for (let k = 0; k < nk; k++) {
       const axis = rng.onSphere(new THREE.Vector3()).cross(dir).normalize();
@@ -124,22 +125,26 @@ function staghornGeo(rng, base, tip, maxD = 4) {
   for (const s of segs) {
     dir.subVectors(s.b, s.a); const len = dir.length(); dir.divideScalar(len);
     const e = s.r0 * 0.7;
-    const g = new THREE.CylinderGeometry(s.r1, s.r0, len + e, 5, 1, true);
+    const t0 = clamp((s.d + 0.5) / (maxD + 1), 0, 1);
+    const cBr = _c.copy(base).lerp(tip, Math.pow(t0, 1.6)).clone(), fBr = Math.pow(t0, 2) * 0.6;
+    if (s.tip) {
+      // branch tip: one tube that ends in a rounded, paler cap (the axial corallite), continuous with
+      // the branch (it was a separate, oversized 5x3 ball)
+      const a0 = s.a.clone().addScaledVector(dir, -e), c = s.r1 * 0.95, T = e + len + c, tc = (e + len) / T;
+      const g = tubeGeo((t, o) => o.copy(a0).addScaledVector(dir, t * T),
+        t => (t < tc ? lerp(s.r0, s.r1, t / tc) : s.r1 * Math.sqrt(Math.max(0, 1 - ((t - tc) / (1 - tc)) ** 2))),
+        [0, tc, tc + (1 - tc) * 0.6, 1], 5);
+      const tUv = g.getAttribute('uv');
+      paint(g, (x, y, z, i) => { const k = smoothstep(tc - 0.25, 1, tUv.getY(i)); return [_c.copy(cBr).lerp(tip, k).clone(), lerp(fBr, 1, k)]; });
+      parts.push(strip(g));
+      continue;
+    }
+    // thick lower branches get a sixth side; thin ones stay five-sided (a few pixels wide)
+    const g = new THREE.CylinderGeometry(s.r1, s.r0, len + e, s.r0 > 0.034 ? 6 : 5, 1, true);
     g.translate(0, (len - e) / 2, 0);
     g.applyQuaternion(_q.setFromUnitVectors(_up, dir));
     g.translate(s.a.x, s.a.y, s.a.z);
-    const d0 = s.d;
-    paint(strip(g), (x, y, z, i) => {
-      const lt = (i / g.getAttribute('position').count);
-      const t = clamp((d0 + 0.5) / (maxD + 1), 0, 1);
-      return [_c.copy(base).lerp(tip, Math.pow(t, 1.6)).clone(), Math.pow(t, 2) * 0.6];
-    });
-    parts.push(g);
-  }
-  for (const tp of tips) {
-    const g = new THREE.SphereGeometry(tp.r * 1.1, 5, 3);
-    g.translate(tp.p.x, tp.p.y, tp.p.z);
-    paint(strip(g), () => [tip, 1]);
+    paint(strip(g), () => [cBr, fBr]);
     parts.push(g);
   }
   const g = mergeGeometries(parts);
@@ -149,7 +154,10 @@ function staghornGeo(rng, base, tip, maxD = 4) {
 }
 
 function brainGeo(seed) {
-  const g = strip(new THREE.SphereGeometry(1, 56, 22, 0, TAU, 0, Math.PI * 0.62));
+  // shared vertices: the sphere's seam and pole no longer shade as a line and a pinched star on top
+  let g = strip(new THREE.SphereGeometry(1, 44, 18, 0, TAU, 0, Math.PI * 0.62));
+  g.deleteAttribute('normal');
+  g = mergeVertices(g);
   const n = createNoise(seed);
   const p = g.getAttribute('position'), v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
@@ -163,7 +171,7 @@ function brainGeo(seed) {
 }
 
 /** Plate coral: a slightly cupped, uneven disc with a rim, optionally on a stalk. */
-function tableGeo(seed, { stalk = true, NS = 56, NR = 9, top = '#6a5c3a', rim = '#a89870', under = '#3a3024' } = {}) {
+function tableGeo(seed, { stalk = true, NS = 48, NR = 9, top = '#6a5c3a', rim = '#a89870', under = '#3a3024' } = {}) {
   const n = createNoise(seed);
   const R = [];
   for (let k = 0; k <= NS; k++) { const a = (k / NS) * TAU; R.push(1 + n.noise2(Math.cos(a) * 1.3, Math.sin(a) * 1.3) * 0.13 + n.noise2(Math.cos(a) * 4, Math.sin(a) * 4) * 0.04); }
@@ -265,56 +273,146 @@ function fanTexture(seed) {
   }, { srgb: true });
 }
 
+/**
+ * One closed, smooth tube along a spine: rings of `radial` vertices (no seam) at the parameters `ts`,
+ * each ring perpendicular to the spine, radius(t) from the profile; radius 0 at the last t closes the
+ * tube in a single pole vertex (rounded tip). The base stays open (it sits in something). uv.y = t.
+ */
+function tubeGeo(spine, radius, ts, radial) {
+  const pos = [], nor = [], uv = [], idx = [];
+  const p = new THREE.Vector3(), tg = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), q = new THREE.Vector3();
+  const prevT = new THREE.Vector3(), rot = new THREE.Quaternion(), n = new THREE.Vector3(), dir = new THREE.Vector3();
+  let rings = 0;
+  ts.forEach((t, k) => {
+    spine(t, p);
+    const t0 = Math.max(0, t - 1e-3), t1 = Math.min(1, t + 1e-3);
+    spine(t1, tg); spine(t0, q); tg.sub(q);
+    const ds = tg.length();
+    tg.divideScalar(ds);
+    // ring frame: any perpendicular at the start, then carried along the spine (parallel transport),
+    // so rings never twist or flip whatever the direction
+    if (k === 0) a.set(Math.abs(tg.y) < 0.9 ? 0 : 1, Math.abs(tg.y) < 0.9 ? 1 : 0, 0).cross(tg).normalize();
+    else { rot.setFromUnitVectors(prevT, tg); a.applyQuaternion(rot); a.addScaledVector(tg, -a.dot(tg)).normalize(); }
+    prevT.copy(tg);
+    b.crossVectors(tg, a);
+    const r = radius(t);
+    if (r <= 0 && k === ts.length - 1) { pos.push(p.x, p.y, p.z); nor.push(tg.x, tg.y, tg.z); uv.push(0.5, t); return; }
+    // exact normals: the radial direction tilted by the profile's slope (dr/ds)
+    const slope = (radius(t1) - radius(t0)) / ds;
+    for (let j = 0; j < radial; j++) {
+      const ang = (j / radial) * TAU;
+      dir.copy(a).multiplyScalar(Math.cos(ang)).addScaledVector(b, Math.sin(ang));
+      q.copy(p).addScaledVector(dir, r);
+      n.copy(dir).addScaledVector(tg, -slope).normalize();
+      pos.push(q.x, q.y, q.z); nor.push(n.x, n.y, n.z); uv.push(j / radial, t);
+    }
+    rings++;
+  });
+  for (let k = 0; k < rings - 1; k++) for (let j = 0; j < radial; j++) {
+    // counter-clockwise seen from outside (ring frame: a, b = tangent x a)
+    const a0 = k * radial + j, a1 = k * radial + (j + 1) % radial, b0 = a0 + radial, b1 = a1 + radial;
+    idx.push(a0, a1, b0, a1, b1, b0);
+  }
+  if (pos.length / 3 > rings * radial) {
+    const pole = rings * radial, last = (rings - 1) * radial;
+    for (let j = 0; j < radial; j++) idx.push(last + j, last + (j + 1) % radial, pole);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+/**
+ * Bubble-tip anemone tentacle: one smooth tube that tapers from the oral disc to a slim neck, swells into
+ * a bulb and closes in a rounded tip. Same length, base width and curl as the old prism + ball, so the
+ * clownfish still nestle in the same bunch. uv.y runs 0 (base) .. 1 (tip).
+ */
 function anemoneTentacleGeo(len = 0.3) {
-  const g = strip(new THREE.CylinderGeometry(0.014, 0.026, len, 5, 4, true));
-  g.translate(0, len / 2, 0);
-  const tipG = strip(new THREE.SphereGeometry(0.02, 5, 3));
-  tipG.translate(0, len, 0);
-  const merged = mergeGeometries([g, tipG]);
-  g.dispose(); tipG.dispose();
-  // gentle curl so a bunch looks soft
-  const p = merged.getAttribute('position');
-  for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) + Math.pow(y / len, 2) * 0.05); }
-  merged.computeVertexNormals();
-  return merged;
+  const L = len + 0.02;
+  const spine = (t, out) => { const y = t * L; return out.set(Math.pow(y / len, 2) * 0.05, y, 0); };
+  const radius = t => {
+    if (t >= 0.9) return 0.0222 * Math.sqrt(Math.max(0, 1 - ((t - 0.9) / 0.1) ** 2));
+    return 0.0255 - 0.0098 * smoothstep(0.0, 0.7, t) + 0.0065 * smoothstep(0.66, 0.9, t);
+  };
+  // 10 sides (round even end-on); rings sparse along the straight taper, dense through the bulb and tip
+  return tubeGeo(spine, radius, [0, 0.3, 0.56, 0.7, 0.8, 0.87, 0.92, 0.96, 0.985, 1], 10);
+}
+
+/** Lobed crown template: an icosphere (smooth, shared vertices) to be shaped per crown. */
+let crownBase = null;
+function crownTemplate() {
+  if (!crownBase) {
+    const g = new THREE.IcosahedronGeometry(1, 3);
+    g.deleteAttribute('normal'); g.deleteAttribute('uv');
+    crownBase = mergeVertices(g);
+  }
+  return crownBase;
 }
 
 function softCoralGeo(rng, stem, blossom) {
-  // Carnation tree coral: a translucent trunk, a few branches, each ending in a lumpy
-  // cauliflower crown of polyp clusters.
+  // Carnation tree coral: a translucent trunk and branches, each branch ending in a crown of rounded
+  // lobes (polyp clusters; the polyps themselves come from the polyp texture). The branch layout uses
+  // the same random sequence as before; smooth closed tubes and lobed crowns replace the faceted
+  // cylinders and the noisy 12x9 lumps. aSkin = 1 on crowns (polyps), 0 on the stalks.
   const parts = [];
   const nn = createNoise(Math.floor(rng.next() * 1e6));
   const trunkH = rng.range(0.3, 0.46);
-  const tr = strip(new THREE.CylinderGeometry(0.04, 0.08, trunkH, 8, 3, false));
-  tr.translate(0, trunkH / 2, 0);
-  paint(tr, () => [stem, 0.1]);
+  // translucent stalks take a little of the crown colour (they were chalk white)
+  stem = stem.clone().lerp(blossom, 0.3).multiplyScalar(0.74);
+  const tr = tubeGeo((t, o) => o.set(0, t * trunkH, 0), t => {
+    const r = lerp(0.08, 0.04, t) * (1 + 0.35 * (1 - smoothstep(0, 0.14, t)));
+    return t > 0.9 ? r * Math.sqrt(Math.max(0, 1 - ((t - 0.9) / 0.1) ** 2)) : r;
+  }, [0, 0.06, 0.18, 0.4, 0.65, 0.9, 0.95, 0.99, 1], 9);
+  paint(tr, (x, y) => [_c.copy(stem).multiplyScalar(lerp(0.82, 1.04, clamp(y / trunkH, 0, 1))).clone(), 0.1]);
   parts.push(tr);
   const nb = rng.int(5, 8);
+  const v = new THREE.Vector3(), d = new THREE.Vector3();
   for (let b = 0; b < nb; b++) {
     const a = (b / nb) * TAU + rng.range(-0.3, 0.3);
     const h0 = trunkH * rng.range(0.45, 0.95);
     const dir = new THREE.Vector3(Math.cos(a) * rng.range(0.6, 1.1), rng.range(0.7, 1.25), Math.sin(a) * rng.range(0.6, 1.1)).normalize();
     const L = rng.range(0.14, 0.28);
-    const br = strip(new THREE.CylinderGeometry(0.014, 0.026, L, 6, 1, true));
-    br.translate(0, L / 2, 0);
-    br.applyQuaternion(_q.setFromUnitVectors(_up, dir));
-    br.translate(0, h0, 0);
+    const base = new THREE.Vector3(0, h0, 0);
+    const br = tubeGeo((t, o) => o.copy(base).addScaledVector(dir, t * L), t => lerp(0.026, 0.014, t), [0, 0.5, 1], 7);
     paint(br, () => [stem, 0.1]);
     parts.push(br);
     const end = new THREE.Vector3(0, h0, 0).addScaledVector(dir, L);
     const R = rng.range(0.07, 0.12);
-    const crown = strip(new THREE.SphereGeometry(1, 12, 9));
-    const p = crown.getAttribute('position'), v = new THREE.Vector3();
     const off = rng.range(0, 100);
+    // 5-7 rounded lobes: one on top (leaning with the branch), the rest round the shoulders
+    const K = 5 + Math.floor(((off * 0.618) % 1) * 3), lobes = [];
+    for (let k = 0; k < K; k++) {
+      if (k === 0) d.set(dir.x * 0.35, 1, dir.z * 0.35);
+      else {
+        const ph = (k / (K - 1)) * TAU + nn.noise2(off, k * 1.7) * 0.7, el = 0.2 + 0.5 * (nn.noise2(k * 2.3, off) * 0.5 + 0.5);
+        d.set(Math.cos(ph) * Math.cos(el), Math.sin(el), Math.sin(ph) * Math.cos(el));
+      }
+      lobes.push({ d: d.clone().normalize(), s: 0.17 + 0.08 * (nn.noise2(off + k, 3.1) * 0.5 + 0.5) });
+    }
+    const crown = crownTemplate().clone();
+    const p = crown.getAttribute('position'), lf = new Float32Array(p.count);
     for (let i = 0; i < p.count; i++) {
-      v.fromBufferAttribute(p, i);
-      const k = 1 + nn.noise3(v.x * 2.6 + off, v.y * 2.6, v.z * 2.6) * 0.32 + nn.noise3(v.x * 6 + off, v.y * 6, v.z * 6) * 0.12;
+      v.fromBufferAttribute(p, i).normalize();
+      let f = 0;
+      for (const l of lobes) f = Math.max(f, Math.exp((v.dot(l.d) - 1) / l.s));
+      lf[i] = f;
+      let k = 0.68 + 0.38 * f + nn.noise3(v.x * 4 + off, v.y * 4, v.z * 4) * 0.035;
+      if (v.y < 0) k *= 1 - 0.3 * smoothstep(0.1, 0.9, -v.y);
       p.setXYZ(i, end.x + v.x * R * k, end.y + (v.y * 0.8 + 0.25) * R * k, end.z + v.z * R * k);
     }
     crown.computeVertexNormals();
     const cc = blossom.clone().offsetHSL(rng.range(-0.02, 0.02), 0, rng.range(-0.06, 0.05));
-    paint(crown, (x, y) => [_c.copy(cc).multiplyScalar(lerp(0.75, 1.1, clamp((y - end.y) / R * 0.5 + 0.5, 0, 1))).clone(), 0.8]);
+    // lobe tops lighter, the creases between lobes and the underside darker
+    paint(crown, (x, y, z, i) => [_c.copy(cc).multiplyScalar(lerp(0.66, 1.06, lf[i]) * lerp(0.8, 1.05, clamp((y - end.y) / R * 0.5 + 0.5, 0, 1))).clone(), 0.8]);
+    crown.setAttribute('aSkin', new THREE.BufferAttribute(new Float32Array(p.count).fill(1), 1));
     parts.push(crown);
+  }
+  for (const g of parts) {
+    if (!g.getAttribute('aSkin')) g.setAttribute('aSkin', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count), 1));
+    if (g.getAttribute('uv')) g.deleteAttribute('uv');
   }
   const g = mergeGeometries(parts);
   parts.forEach(p => p.dispose());
@@ -323,20 +421,31 @@ function softCoralGeo(rng, stem, blossom) {
 }
 
 function spongeGeo(rng, color) {
+  // Tube sponges: each tube is one closed surface of revolution with a real wall: outer wall (same size
+  // and flare as before), a rounded lip, a dark inner wall and floor (it was an open, paper-thin cylinder
+  // drawn double-sided). Same random sequence, so clusters keep their layout.
   const parts = [];
   const n = rng.int(3, 6);
   for (let i = 0; i < n; i++) {
     const h = rng.range(0.35, 0.85), r = rng.range(0.06, 0.1);
-    const g = strip(new THREE.CylinderGeometry(r * 1.25, r * 0.85, h, 14, 4, true));
-    const p = g.getAttribute('position');
-    for (let k = 0; k < p.count; k++) { const y = p.getY(k) / h + 0.5; const fl = 1 + smoothstep(0.75, 1, y) * 0.25; p.setX(k, p.getX(k) * fl); p.setZ(k, p.getZ(k) * fl); }
-    g.translate(0, h / 2 - 0.04, 0);
+    const ro = y => lerp(r * 0.85, r * 1.25, clamp(y / h, 0, 1)) * (1 + smoothstep(0.75, 1, y / h) * 0.25);
+    const w = r * 0.24, prof = [], shade = [];
+    // outer wall, bottom -> lip
+    for (const t of [0, 0.25, 0.55, 0.78, 0.92, 1]) { prof.push([ro(t * h), t * h]); shade.push(lerp(0.66, 1.08, t)); }
+    // rounded lip: half circle from the outer to the inner wall
+    const rt = ro(h), cx = rt - w / 2;
+    for (let k = 1; k < 4; k++) { const a = (k / 4) * Math.PI; prof.push([cx + Math.cos(a) * w / 2, h + Math.sin(a) * w * 0.55]); shade.push(1.12); }
+    // inner wall down into the dark, then the floor
+    for (const t of [1, 0.93, 0.75, 0.45]) { prof.push([Math.max(0.004, ro(t * h) - w * (t === 1 ? 1 : 1.05)), t * h]); shade.push(lerp(0.16, 0.62, smoothstep(0.4, 1, t))); }
+    prof.push([0.0, 0.42 * h]); shade.push(0.14);
+    const g = strip(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 14));
+    g.translate(0, -0.04, 0);
     const a = (i / n) * TAU + rng.range(-0.4, 0.4), off = i === 0 ? 0 : rng.range(0.08, 0.16);
     g.applyQuaternion(_q.setFromEuler(_e.set(Math.sin(a) * 0.18, 0, -Math.cos(a) * 0.18)));
     g.translate(Math.cos(a) * off, 0, Math.sin(a) * off);
-    g.computeVertexNormals();
-    const cc = color.clone().offsetHSL(0, 0, rng.range(-0.06, 0.06));
-    paint(g, (x, y) => [_c.copy(cc).multiplyScalar(lerp(0.65, 1.1, clamp(y / h, 0, 1))).clone(), 0.3]);
+    // colour per profile point (LatheGeometry walks the whole profile for every segment)
+    const np = prof.length, cc = color.clone().offsetHSL(0, 0, rng.range(-0.06, 0.06));
+    paint(g, (x, y, z, idx) => [_c.copy(cc).multiplyScalar(shade[idx % np]).clone(), 0.3]);
     parts.push(g);
   }
   const g = mergeGeometries(parts);
@@ -397,66 +506,12 @@ function kelpTexture(seed) {
 /* ------------------------------------------------------------------ */
 /* Detail shaders                                                      */
 /* ------------------------------------------------------------------ */
-const BRAIN_GLSL = /* glsl */`
-float detailH(vec3 p){
-  vec3 q = p * 2.1;
-  q += 0.6 * vec3(snoise(q * 0.45), snoise(q * 0.45 + 11.3), snoise(q * 0.45 + 23.1));
-  float n = snoise(q) + 0.22 * snoise(q * 2.1 + 5.0);
-  float k = n * 2.3;
-  float w = fwidth(k);
-  float ridge = 0.5 + 0.5 * cos(k * 6.2831853);
-  ridge = mix(ridge, 0.5, smoothstep(0.1, 0.35, w));
-  float d = length(vUwPos - cameraPosition);
-  return (ridge * 0.014 - 0.007) * (1.0 - smoothstep(12.0, 30.0, d));
-}
-vec3 detailCol(vec3 p, float h, vec3 c){
-  float r = smoothstep(-0.006, 0.006, h);
-  vec3 groove = c * vec3(0.5, 0.58, 0.42);
-  vec3 ridge = c * 1.1 + vec3(0.02, 0.03, 0.01);
-  return mix(groove, ridge, r);
-}
-`;
-const POLYP_GLSL = /* glsl */`
-// Fine polyp texture as anti-aliased colour only (derivative bumps of high-frequency patterns
-// shade in 2x2 blocks); a gentle low-frequency bump keeps the surface lumpy.
-float detailH(vec3 p){ return snoise(p * 6.0) * 0.006; }
-vec3 detailCol(vec3 p, float h, vec3 c){
-  vec2 q = p.xz * 18.0 + p.y * 13.0;
-  float aa = 1.0 - smoothstep(0.15, 0.45, length(fwidth(q)));
-  vec2 cc = cell2(q);
-  float dots = smoothstep(0.42, 0.12, cc.x);
-  return c * (0.92 + (dots - 0.45) * 0.2 * aa) * (0.92 + h * 12.0);
-}
-`;
-const TABLE_GLSL = /* glsl */`
-float detailH(vec3 p){ return snoise(p * 4.0) * 0.006; }
-vec3 detailCol(vec3 p, float h, vec3 c){
-  float a = atan(p.z, p.x);
-  vec2 q = p.xz * 22.0;
-  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
-  // the 70 radial ridges converge at the centre: fade them where they get closer than ~2 px
-  float aas = 1.0 - smoothstep(0.6, 1.6, 70.0 * length(fwidth(p.xz)) / max(length(p.xz), 1e-3));
-  float st = mix(0.5, sin(a * 70.0 + snoise(p * 3.0) * 4.0) * 0.5 + 0.5, aas);
-  float cells = smoothstep(0.05, 0.4, cell2(q).x);
-  vec3 col = c * (0.78 + (st * 0.12 + cells * 0.2) * aa + h * 20.0);
-  return col * (0.8 + 0.3 * (snoise(p * 2.5) * 0.5 + 0.5));
-}
-`;
 const STAR_GLSL = /* glsl */`
 float detailH(vec3 p){
   vec2 c = cell2(p.xz * 9.0 + p.y * 3.0);
   return (1.0 - smoothstep(0.0, 0.3, c.x)) * 0.05;
 }
 vec3 detailCol(vec3 p, float h, vec3 c){ return mix(c, c * 1.35 + 0.05, h * 15.0); }
-`;
-const SPONGE_GLSL = /* glsl */`
-float detailH(vec3 p){ return snoise(p * 5.0) * 0.006; }
-vec3 detailCol(vec3 p, float h, vec3 c){
-  vec2 q = vec2(atan(p.z, p.x) * 6.0, p.y * 30.0);
-  float aa = 1.0 - smoothstep(0.2, 0.55, length(fwidth(q)));
-  float pores = smoothstep(0.25, 0.0, cell2(q).x);
-  return c * (1.0 - pores * 0.45 * aa) * (0.9 + h * 15.0);
-}
 `;
 
 /* ------------------------------------------------------------------ */
@@ -609,6 +664,7 @@ class Occupancy {
 /* Reef assembly                                                       */
 /* ------------------------------------------------------------------ */
 export function buildReef(ctx) {
+  const cupsTex = () => cachedTexture('cups', 256, () => paintCups(256, 4, 0.1));
   const { W, env, hm, ground, rocks, rng } = ctx;
   const q = Math.max(0.5, env.q);
   const group = new THREE.Group();
@@ -664,7 +720,17 @@ export function buildReef(ctx) {
 
   /* ---- table corals: single plates on the reef and stacked tiers on coral heads ---- */
   const tableMat = stdMat(W, { vertexColors: true, roughness: 0.75, side: THREE.DoubleSide }, { key: 'table' });
-  addDetail(tableMat, W, { glsl: TABLE_GLSL, space: 'object', bump: 1, key: 'table' });
+  // textured on every tier: corallite cups (triplanar) and the radial ridges of the fused branches
+  // (analytic, faded where they converge to under ~2 px); the procedural version was off on the iPad
+  patchMaterial(tableMat, { key: 'plxz', vertexHeader: 'varying vec2 vPlXZ;', vertex: { '#include <begin_vertex>': '$&\nvPlXZ = position.xz;' }, fragmentHeader: 'varying vec2 vPlXZ;' });
+  addTriplanar(tableMat, W, {
+    tex: cupsTex(), tile: 0.07, bump: 0.8, key: 'table',
+    color: `float plR = length(vPlXZ);
+      float plAA = 1.0 - smoothstep(0.6, 1.6, 64.0 * length(fwidth(vPlXZ)) / max(plR, 1e-3));
+      float plS = mix(0.5, 0.5 + 0.5 * sin(atan(vPlXZ.y, vPlXZ.x) * 64.0 + plR * 9.0), plAA);
+      diffuseColor.rgb *= (tpT.b * 2.0) * (0.84 + 0.24 * plS);`,
+    emissive: 'totalEmissiveRadiance += uFluorCol * vFluor * uFluor * (tpT.b * 2.0 - 0.85) * 1.2;',
+  });
   addFluor(tableMat, W, '#7dff6a', 0.7, 'table');
   const tableG = tableGeo(env.seed ^ 31);
   const shelfG = tableGeo(env.seed ^ 57, { stalk: false, top: '#7b5e78', rim: '#d9b8d8', under: '#4a3448' });
@@ -692,6 +758,26 @@ export function buildReef(ctx) {
       shelves.push({ pos: new THREE.Vector3(x, yT, z), quat: _q.setFromEuler(_e.set(rng.range(-0.08, 0.08), -a, rng.range(0.02, 0.15))).clone(), scale: new THREE.Vector3(r * 1.2, r * 0.8, r), color: rng.pick([C('#ffffff'), C('#c8e0c0'), C('#f0d0b0'), C('#d0c0f0')]) });
     }
   }
+  // more terraces: shelves between the first ones on every coral head, so the heads read as stacked
+  // plate corals (own random stream: everything placed afterwards stays where it was)
+  {
+    const r3 = rng.fork('terraces');
+    for (const b of bommies) {
+      const g0 = ground.height(b.x, b.z), H = b.top - g0;
+      let a = r3.range(0, TAU);
+      for (const f of [0.45, 0.65, 0.85]) {
+        a += r3.range(1.6, 2.6);
+        if (r3.next() < 0.25) continue;
+        const yT = g0 + H * f;
+        let rr = 0.3;
+        while (rr < b.r * 1.6 && hm.at(b.x + Math.cos(a) * rr, b.z + Math.sin(a) * rr) > yT) rr += 0.1;
+        if (rr >= b.r * 1.6) continue;
+        const x = b.x + Math.cos(a) * (rr + 0.12), z = b.z + Math.sin(a) * (rr + 0.12);
+        const r = r3.range(0.36, 0.6);
+        shelves.push({ pos: new THREE.Vector3(x, yT, z), quat: _q.setFromEuler(_e.set(r3.range(-0.08, 0.08), -a, r3.range(0.02, 0.15))).clone(), scale: new THREE.Vector3(r * 1.2, r * 0.8, r), color: r3.pick([C('#ffffff'), C('#c8e0c0'), C('#f0d0b0'), C('#d0c0f0'), C('#f4c8d8')]) });
+      }
+    }
+  }
   for (let i = N(14); i > 0; i--) {
     const s = take(reefSpots, s2 => { const n = nrm(s2); return n.y < 0.75 && n.y > 0.12 && s2.h > 0.4; }, 0.32);
     if (!s) break;
@@ -706,7 +792,7 @@ export function buildReef(ctx) {
 
   /* ---- barrel sponges ---- */
   const barrelMat = stdMat(W, { vertexColors: true, roughness: 0.9 }, { key: 'barrel' });
-  addDetail(barrelMat, W, { glsl: SPONGE_GLSL, space: 'object', bump: 1, key: 'barrel' });
+  addTriplanar(barrelMat, W, { tex: cupsTex(), tile: 0.2, bump: 1.0, key: 'barrel', color: 'diffuseColor.rgb *= tpT.b * 2.0;' });
   const barrels = [];
   for (let i = N(7); i > 0; i--) {
     const s = take(reefSpots, s2 => nrm(s2).y > 0.6 && s2.h < 1.8, 0.55) || take(sandSpots, () => true, 0.55);
@@ -741,7 +827,7 @@ export function buildReef(ctx) {
   const stagWeights = [0, 0, 5, 5, 1, 2, 3, 4, 4];
   const stagGeos = stagPal.map(([b, t], i) => staghornGeo(rng.fork('stag' + i), b, t));
   const stagMat = stdMat(W, { vertexColors: true, roughness: 0.72 }, { key: 'stag' });
-  addDetail(stagMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'polyp' });
+  addTriplanar(stagMat, W, { tex: cupsTex(), tile: 0.06, bump: 0.9, key: 'stag', color: 'diffuseColor.rgb *= tpT.b * 2.0;', emissive: 'totalEmissiveRadiance += uFluorCol * vFluor * uFluor * (tpT.b * 2.0 - 0.85) * 1.2;' });
   addFluor(stagMat, W, '#47ffb0', 0.7, 'stag');
   const stagLists = stagGeos.map(() => []);
   const thickets = [];
@@ -768,7 +854,12 @@ export function buildReef(ctx) {
   /* ---- brain and boulder corals ---- */
   const brainG = brainGeo(env.seed ^ 77);
   const brainMat = stdMat(W, { vertexColors: true, roughness: 0.8 }, { key: 'brain' });
-  addDetail(brainMat, W, { glsl: BRAIN_GLSL, space: 'object', bump: 0.9, key: 'brain' });
+  // meandering ridges and valleys on every tier (the procedural version was off on the iPad)
+  addTriplanar(brainMat, W, {
+    tex: cachedTexture('brain', 256, () => paintBrain(256, 5, 0.36)), tile: 0.46, bump: 1.0, key: 'brain',
+    color: 'diffuseColor.rgb = mix(diffuseColor.rgb * 1.04, diffuseColor.rgb * vec3(0.6, 0.66, 0.52), tpT.a) * (tpT.b * 2.0);',
+    emissive: 'totalEmissiveRadiance += uFluorCol * vFluor * uFluor * (tpT.b * 2.0 - 0.85) * 1.2;',
+  });
   addFluor(brainMat, W, '#3dff8a', 0.55, 'brain');
   const brainCols = [C('#a8905a'), C('#7e8a52'), C('#a8785a'), C('#8f9a6a'), C('#c0a070'), C('#b0a060'), C('#8a7a9a')];
   const brains = [];
@@ -801,10 +892,20 @@ export function buildReef(ctx) {
   group.add(instanced(fanG, fanMat, fans, { pad: 0.25 }));
 
   /* ---- soft tree corals ---- */
-  const softMat = stdMat(W, { vertexColors: true, roughness: 0.6 }, { key: 'soft' });
-  addDetail(softMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1.4, key: 'softpolyp' });
+  const softMat = stdMat(W, { vertexColors: true, roughness: 0.62 }, { key: 'soft' });
+  // polyp clusters on the crowns, a fine granular skin on the stalks (aSkin: 1 crown, 0 stalk); the
+  // texture is mapped on the rest pose, so it sways with the coral instead of sliding over it
+  patchMaterial(softMat, { key: 'skin', vertexHeader: 'attribute float aSkin; varying float vSkin;', vertex: { '#include <begin_vertex>': '$&\nvSkin = aSkin;' }, fragmentHeader: 'varying float vSkin;' });
+  addTriplanar(softMat, W, {
+    tex: cachedTexture('polyps', 256, () => paintPolyps(256, 3, 0.16)), tile: 0.16, bump: 1.0, space: 'rest', key: 'soft',
+    // stalks: darker sclerite specks seen through the tissue; crowns: polyp relief and shading
+    color: 'diffuseColor.rgb *= mix((0.95 + 0.1 * tpT.a) * (1.0 - 0.28 * smoothstep(0.86, 0.93, tpT.a)), tpT.b * 2.0, vSkin);\ntpBump *= mix(0.3, 1.0, vSkin);',
+    // night: the polyps themselves light up (their tops brighter than the gaps between them)
+    emissive: 'totalEmissiveRadiance += uFluorCol * vFluor * uFluor * vSkin * (tpT.b * 2.0 - 0.7) * 1.3;',
+  });
   addSway(softMat, W, { height: 0.6, amount: 0.06, stiff: 1.3, flutter: 0.01, key: 'soft' });
   addFluor(softMat, W, '#ff5aa0', 0.8, 'soft');
+  addTranslucency(softMat, W, { amount: 0.45, ambient: 0.1, key: 'soft' });
   const softDefs = [[C('#f1d6dc'), C('#ff3f7f')], [C('#f3e3d0'), C('#ff7a2a')], [C('#e8d8f0'), C('#b44ae8')], [C('#f6e8d8'), C('#ffcf3a')], [C('#f6dce0'), C('#e8203a')]];
   const softGeos = softDefs.map(([a, b], i) => softCoralGeo(rng.fork('soft' + i), a, b));
   const softLists = softGeos.map(() => []);
@@ -818,19 +919,32 @@ export function buildReef(ctx) {
 
   /* ---- encrusting mound corals (Porites lumps) fill the gaps with colour ---- */
   const moundG = (() => {
-    const g = strip(new THREE.SphereGeometry(1, 18, 9, 0, TAU, 0, Math.PI * 0.55));
+    // rounded lumps: more segments, shared vertices (no seam), and no third noise octave (it was
+    // finer than the mesh and made sharp facets); the corallite texture adds the fine relief
+    let g = strip(new THREE.SphereGeometry(1, 20, 9, 0, TAU, 0, Math.PI * 0.55));
+    g.deleteAttribute('normal');
+    g = mergeVertices(g);
     const nn = createNoise(env.seed ^ 404), p = g.getAttribute('position'), v = new THREE.Vector3();
+    const sm = g.clone(), sp = sm.getAttribute('position');
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i);
-      const k = 1 + nn.fbm3(v.x * 1.8, v.y * 1.8, v.z * 1.8, 3) * 0.28;
+      const k = 1 + nn.fbm3(v.x * 1.8, v.y * 1.8, v.z * 1.8, 2) * 0.24;
+      const ks = 1 + nn.noise3(v.x * 1.8, v.y * 1.8, v.z * 1.8) * 0.24 * 0.667;
       p.setXYZ(i, v.x * k, (v.y * 0.75 - 0.05) * k, v.z * k);
+      sp.setXYZ(i, v.x * ks, (v.y * 0.75 - 0.05) * ks, v.z * ks);
     }
+    // shade with the broad lumps only (the finer octave stays in the outline; no crumpled facets);
+    // the true normals (aGeoN) still pick the texture projections
     g.computeVertexNormals();
+    g.setAttribute('aGeoN', g.getAttribute('normal').clone());
+    sm.computeVertexNormals();
+    g.setAttribute('normal', sm.getAttribute('normal'));
     paint(g, (x, y) => [_c.setRGB(1, 1, 1).multiplyScalar(lerp(0.7, 1.05, clamp(y * 1.4, 0, 1))).clone(), 0.5 + y * 0.5]);
     return g;
   })();
   const moundMat = stdMat(W, { vertexColors: true, roughness: 0.7 }, { key: 'mound' });
-  addDetail(moundMat, W, { glsl: POLYP_GLSL, space: 'object', bump: 1, key: 'mound' });
+  // night glow follows the texture too (corallite rims light up, cups stay dark), not a flat blob
+  addTriplanar(moundMat, W, { tex: cupsTex(), tile: 0.11, bump: 0.9, key: 'mound', geoNormal: true, color: 'diffuseColor.rgb *= tpT.b * 2.0 * 0.88;', emissive: 'totalEmissiveRadiance += uFluorCol * vFluor * uFluor * (tpT.b * 2.0 - 0.85) * 1.2;' });
   addFluor(moundMat, W, '#36ffd0', 0.35, 'mound');
   const moundCols = [C('#c8a060'), C('#b89a50'), C('#9a8a5a'), C('#a8b060'), C('#c09080'), C('#9a7aa8'), C('#7a9ab0'), C('#d0b070'), C('#e0906a'), C('#b88cc8')];
   const mounds = [];
@@ -843,8 +957,9 @@ export function buildReef(ctx) {
   group.add(instanced(moundG, moundMat, mounds));
 
   /* ---- tube sponges ---- */
-  const spongeMat = stdMat(W, { vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }, { key: 'sponge' });
-  addDetail(spongeMat, W, { glsl: SPONGE_GLSL, space: 'object', bump: 1, key: 'sponge' });
+  // closed tubes now (outer wall, lip, inner wall), so single-sided; pores from the cups texture
+  const spongeMat = stdMat(W, { vertexColors: true, roughness: 0.85 }, { key: 'sponge' });
+  addTriplanar(spongeMat, W, { tex: cupsTex(), tile: 0.12, bump: 1.0, key: 'sponge', color: 'diffuseColor.rgb *= tpT.b * 2.0;' });
   const spongeGeos = [spongeGeo(rng.fork('sp1'), C('#8a3fa8')), spongeGeo(rng.fork('sp2'), C('#e08a2c')), spongeGeo(rng.fork('sp3'), C('#d8c838'))];
   const spongeLists = spongeGeos.map(() => []);
   for (let i = N(16); i > 0; i--) {
@@ -895,10 +1010,25 @@ export function buildReef(ctx) {
   /* ---- anemones ---- */
   const tentLen = 0.34;
   const tentG = anemoneTentacleGeo(tentLen);
-  paint(tentG, (x, y) => { const t = clamp(y / tentLen, 0, 1); return [_c.copy(C('#c8b45a')).lerp(C('#ff4fa8'), smoothstep(0.6, 1, t)).clone(), smoothstep(0.5, 1, t)]; });
-  const tentMat = stdMat(W, { vertexColors: true, roughness: 0.45, envMapIntensity: 0.6 }, { key: 'tent' });
+  // soft gradient: olive-tan at the disc, creamy along the tube, a pale band under the bulb, pink bulb,
+  // a deeper pink tip
+  {
+    const tUv = tentG.getAttribute('uv');
+    const cBase = C('#a39552'), cMid = C('#cdbf6e'), cBand = C('#ece2bc'), cBulb = C('#ff70b2'), cTip = C('#e5469a');
+    paint(tentG, (x, y, z, i) => {
+      const t = tUv.getY(i);
+      _c.copy(cBase).lerp(cMid, smoothstep(0.0, 0.45, t));
+      _c.lerp(cBand, smoothstep(0.5, 0.7, t) * 0.5);
+      _c.lerp(cBulb, smoothstep(0.7, 0.9, t));
+      _c.lerp(cTip, smoothstep(0.93, 1.0, t) * 0.65);
+      return [_c.clone(), smoothstep(0.66, 0.95, t)];   // night glow sits in the bulbs
+    });
+    strip(tentG);
+  }
+  const tentMat = stdMat(W, { vertexColors: true, roughness: 0.42, envMapIntensity: 0.6 }, { key: 'tent' });
   addSway(tentMat, W, { height: tentLen, amount: 0.07, stiff: 1.5, flutter: 0.045, key: 'tent' });
-  addFluor(tentMat, W, '#7dff3a', 1.4, 'tent');
+  addFluor(tentMat, W, '#7dff3a', 1.15, 'tent');
+  addTranslucency(tentMat, W, { amount: 0.35, ambient: 0.08, key: 'tent' });
   const tents = [], baseList = [];
   const tentCols = [C('#ffffff'), C('#d8ffb0'), C('#ffe8a8'), C('#ffd0f0')];
   anemones.forEach((a, ai) => {
@@ -918,10 +1048,29 @@ export function buildReef(ctx) {
     baseList.push({ pos: a.pos.clone(), quat: new THREE.Quaternion(), scale: new THREE.Vector3(a.r, 1, a.r), color: rng.pick([C('#8a1f3a'), C('#c0602a'), C('#5a2a8a')]) });
   });
   group.add(instanced(tentG, tentMat, tents, { shadow: false, pad: 0.15 }));
-  const anBaseG = strip(new THREE.CylinderGeometry(0.62, 0.48, 0.16, 28, 2, false));
-  anBaseG.translate(0, 0.06, 0);
-  paint(anBaseG, () => [C('#ffffff'), 0.2]);
-  group.add(instanced(anBaseG, stdMat(W, { vertexColors: true, roughness: 0.5 }, { key: 'anbase' }), baseList));
+  // the anemone's body: a soft column with a rounded rim and a slightly domed oral disc (it was a
+  // hard-edged cylinder), same footprint
+  const anBaseG = strip(new THREE.LatheGeometry([
+    [0.0, 0.142], [0.06, 0.146], [0.2, 0.152], [0.4, 0.156], [0.52, 0.152], [0.585, 0.14], [0.615, 0.12],
+    [0.62, 0.095], [0.6, 0.065], [0.56, 0.035], [0.51, 0.008], [0.485, -0.02],
+  ].reverse().map(([r, y]) => new THREE.Vector2(r, y)), 64)); // LatheGeometry wants bottom -> top
+  {
+    const nn = createNoise(env.seed ^ 0xa11e);
+    paint(anBaseG, (x, y, z) => {
+      const r = Math.hypot(x, z), a = Math.atan2(z, x);
+      // darker down the column, radial furrows on the disc and vertical ones on the column, mottling,
+      // a paler lip round the dark mouth
+      let k = lerp(0.42, 0.8, smoothstep(-0.02, 0.13, y));
+      k *= 1 - 0.22 * smoothstep(0.12, 0.5, r) * (0.5 + 0.5 * Math.cos(a * 16));
+      k *= 0.88 + 0.24 * (nn.noise2(x * 9, z * 9) * 0.5 + 0.5);
+      k *= 1 + 0.3 * (1 - smoothstep(0.03, 0.09, r)) * smoothstep(0.0, 0.03, r) - 0.4 * (1 - smoothstep(0.0, 0.025, r));
+      return [_c.setRGB(k, k, k).clone(), 0.2];
+    });
+  }
+  // soft, slightly matte skin with small verrucae (it shaded like a glossy plastic bowl)
+  const anBaseMat = stdMat(W, { vertexColors: true, roughness: 0.66 }, { key: 'anbase' });
+  addTriplanar(anBaseMat, W, { tex: cupsTex(), tile: 0.09, bump: 0.6, key: 'anbase', color: 'diffuseColor.rgb *= mix(1.0, tpT.b * 2.0, 0.6);' });
+  group.add(instanced(anBaseG, anBaseMat, baseList));
 
   /* ---- seagrass meadows on the sand apron ---- */
   const bladeG = new THREE.PlaneGeometry(0.05, 1, 1, 5);

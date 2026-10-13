@@ -8,14 +8,14 @@ import { GLSL, patchMaterial } from '../../lib/util.js';
 /* ------------------------------------------------------------------ */
 export function createWaterUniforms(surfY, refY) {
   return {
-    uTime: { value: 0 },
     // Wrapped clocks (see setWaterTime): float32 shader time loses precision after hours of uptime,
     // so periodic motion runs on clocks that wrap exactly at a common period of their frequencies.
+    // No shader gets the raw, unbounded world time.
     uTimeS: { value: 0 },   // sway, shaft drift, snow wobble, jelly pulse: every frequency a multiple of 0.01 rad/s
     uTimeC: { value: 0 },   // caustics (already scaled by CAUSTIC_SPEED): frequencies multiples of 1/80 rad/s
-    uTimeW: { value: 0 },   // surface normal-map scroll: whole texture repeats every 2000 s
-    uTimeHi: { value: 0 },  // uTime split as hi + lo (hi a multiple of 1024 s) for linear drifts
-    uTimeLo: { value: 0 },
+    uTimeW: { value: 0 },   // surface normal-map scroll and shaft streaks: both repeat every 2000 s
+    uTimeHi: { value: 0 },  // world time split as hi + lo (hi a multiple of 1024 s) for linear drifts; the
+    uTimeLo: { value: 0 },  // hi part reaches snow and bubbles as exact per-particle offsets (syncHi)
     uSurfY: { value: surfY },
     uRefY: { value: refY },
     uSigma: { value: new THREE.Vector3(0.085, 0.05, 0.042) },  // extinction per metre (r, g, b)
@@ -35,7 +35,6 @@ const CAUSTIC_SPEED = 0.6;
 const PERIOD_S = 200 * Math.PI, PERIOD_C = 160 * Math.PI, PERIOD_W = 2000;
 /** Advance the shared clocks. `time` is the world's unbounded seconds counter (kept in double precision). */
 export function setWaterTime(W, time) {
-  W.uTime.value = time;
   W.uTimeS.value = time % PERIOD_S;
   W.uTimeC.value = (time * CAUSTIC_SPEED) % PERIOD_C;
   W.uTimeW.value = time % PERIOD_W;
@@ -45,7 +44,6 @@ export function setWaterTime(W, time) {
 }
 
 const DECL = /* glsl */`
-uniform float uTime;
 uniform float uTimeS;
 uniform float uTimeC;
 uniform float uTimeW;
@@ -455,10 +453,20 @@ export function createShafts(W, rng, { count = 32, radius = 26, center = new THR
     fragmentShader: UW_FRAG + NOISE_GLSL + /* glsl */`
       uniform vec3 uShaftCol; uniform float uShaftI;
       varying vec2 vUv; varying float vI, vPh, vFace; varying vec3 vWp;
+      // Value noise whose lattice repeats every 100 cells along y. The streaks scroll 0.05 cells/s on
+      // the 2000-s clock (= 100 cells per wrap), so the wrap is seamless and the scroll never runs on raw,
+      // ever-growing float32 time (which made the streaks step after many hours). Cell indices are
+      // wrapped with +0.5 so the float mod lands on exact integers.
+      float vnoiseWrapY(vec2 p){
+        vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+        float y0 = floor(mod(i.y + 0.5, 100.0)), y1 = floor(mod(i.y + 1.5, 100.0));
+        return mix(mix(hash12(vec2(i.x, y0)), hash12(vec2(i.x + 1.0, y0)), u.x),
+                   mix(hash12(vec2(i.x, y1)), hash12(vec2(i.x + 1.0, y1)), u.x), u.y);
+      }
       void main(){
         float x = vUv.x * 2.0;
         float prof = exp(-x * x * 2.6) - 0.074;
-        float st = vnoise(vec2(vUv.x * 5.0 + vPh * 40.0, vUv.y * 0.6 - uTime * 0.05 + vPh * 9.0));
+        float st = vnoiseWrapY(vec2(vUv.x * 5.0 + vPh * 40.0, vUv.y * 0.6 - uTimeW * 0.05 + vPh * 9.0));
         st = 0.35 + 0.9 * st * st;
         float t = vUv.y;
         float vf = smoothstep(0.0, 0.12, t) * pow(max(1.0 - t, 0.0), 1.7);
@@ -533,6 +541,10 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   g.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 4));
+  // drift * hi (mod box) per particle, in double precision (see syncHi)
+  const hiOff = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+  hiOff.setUsage(THREE.DynamicDrawUsage);
+  g.setAttribute('aHi', hiOff);
   const u = { ...W, uBox: { value: box }, uScale: { value: 800 }, uSnowI: { value: 1 }, uBio: { value: 0 } };
   const mat = new THREE.ShaderMaterial({
     uniforms: u,
@@ -541,12 +553,15 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
     blending: THREE.AdditiveBlending,
     vertexShader: UW_VERT + /* glsl */`
       attribute vec4 aSeed;
+      attribute vec3 aHi;
       uniform float uBox, uScale, uBio;
       varying float vA, vTw, vBio; varying vec3 vWp;
       void main(){
         float s = aSeed.w;
         vec3 drift = vec3(0.06, -0.035 - s * 0.03, 0.045) * (0.4 + s);
-        vec3 p = aSeed.xyz * uBox + mod(drift * uTimeHi, uBox) + drift * uTimeLo;
+        // aHi = drift * hi (mod box), exact at any uptime; float32 drift * uTimeHi lost millimetres
+        // per 1024-s step after days, which made the specks hop
+        vec3 p = aSeed.xyz * uBox + aHi + drift * uTimeLo;
         p += 0.35 * vec3(sin(uTimeS * 0.31 + s * 40.0), sin(uTimeS * 0.23 + s * 23.0), cos(uTimeS * 0.27 + s * 31.0));
         vec3 c = cameraPosition - uBox * 0.5;
         p = c + mod(p - c, uBox);
@@ -578,7 +593,8 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
         if (r > 1.0) discard;
         float a = exp(-r * 3.5) * vA;
         vec3 lit = uwLc(vWp.y) * 3.2 * uSnowI + vec3(0.55, 0.65, 0.6) * uSnowI * 0.08;
-        vec3 glow = vec3(0.25, 0.95, 1.3) * vTw * uBio * 6.0 + vec3(0.1, 0.5, 0.8) * vBio * uBio * 0.08;
+        // night: twinkles plus a faint steady glow of the luminous plankton (steady, so no flicker)
+        vec3 glow = vec3(0.25, 0.95, 1.3) * vTw * uBio * 6.0 + vec3(0.1, 0.5, 0.8) * vBio * uBio * 0.13;
         vec3 col = (lit + glow) * a;
         gl_FragColor = vec4(uwAtten(col, vWp), 1.0);
       }`,
@@ -586,7 +602,20 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
   const pts = new THREE.Points(g, mat);
   pts.frustumCulled = false;
   pts.renderOrder = 6;
-  return { mesh: pts, u };
+  let hiLast = 0;
+  /** Call every frame with W.uTimeHi.value: refreshes the per-particle drift offsets when it steps. */
+  const syncHi = hi => {
+    if (hi === hiLast) return;
+    hiLast = hi;
+    const a = hiOff.array;
+    for (let i = 0; i < count; i++) {
+      const s = seeds[i * 4 + 3], k = 0.4 + s;
+      const d = [0.06 * k, (-0.035 - s * 0.03) * k, 0.045 * k];
+      for (let c = 0; c < 3; c++) a[i * 3 + c] = (((d[c] * hi) % box) + box) % box;
+    }
+    hiOff.needsUpdate = true;
+  };
+  return { mesh: pts, u, syncHi };
 }
 
 /* ------------------------------------------------------------------ */
@@ -610,6 +639,10 @@ export function createBubbles(W, rng, emitters, perEmitter = 36) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(base, 3));
   g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  // hi * speed (mod cycle) per bubble, in double precision (see syncHi)
+  const hiOff = new THREE.BufferAttribute(new Float32Array(n), 1);
+  hiOff.setUsage(THREE.DynamicDrawUsage);
+  g.setAttribute('aHi', hiOff);
   const u = { ...W, uScale: { value: 800 }, uBubI: { value: 1 } };
   const mat = new THREE.ShaderMaterial({
     uniforms: u,
@@ -618,13 +651,15 @@ export function createBubbles(W, rng, emitters, perEmitter = 36) {
     blending: THREE.AdditiveBlending,
     vertexShader: UW_VERT + /* glsl */`
       attribute vec4 aSeed;
+      attribute float aHi;
       uniform float uScale;
       varying float vA, vSmall; varying vec3 vWp;
       void main(){
         float H = max(uSurfY - position.y, 1.0);
         float spd = 0.55 * aSeed.z;
         float cyc = H * 1.6;
-        float h = mod(mod(uTimeHi * spd, cyc) + uTimeLo * spd + aSeed.x * cyc, cyc);
+        // aHi = uTimeHi * spd (mod cyc), exact at any uptime (see syncHi)
+        float h = mod(aHi + uTimeLo * spd + aSeed.x * cyc, cyc);
         vec3 p = position;
         float wob = 0.03 + h * 0.012;
         // wobble keyed to the height risen (same 7 and 6.3 rad/s at 0.55 m/s), precise at any uptime
@@ -662,7 +697,20 @@ export function createBubbles(W, rng, emitters, perEmitter = 36) {
   const pts = new THREE.Points(g, mat);
   pts.frustumCulled = false;
   pts.renderOrder = 7;
-  return { mesh: pts, u };
+  let hiLast = 0;
+  const surfY = W.uSurfY.value;
+  /** Call every frame with W.uTimeHi.value: refreshes the per-bubble rise offsets when it steps. */
+  const syncHi = hi => {
+    if (hi === hiLast) return;
+    hiLast = hi;
+    const a = hiOff.array;
+    for (let i = 0; i < n; i++) {
+      const spd = 0.55 * seed[i * 4 + 2], cyc = Math.max(surfY - base[i * 3 + 1], 1) * 1.6;
+      a[i] = (hi * spd) % cyc;
+    }
+    hiOff.needsUpdate = true;
+  };
+  return { mesh: pts, u, syncHi };
 }
 
 /* ------------------------------------------------------------------ */

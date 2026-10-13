@@ -5,6 +5,16 @@ import { TAU, clamp, lerp, smoothstep, invLerp, makeRng, patchMaterial } from '.
 
 export const CLOUD_TOP = -26;          // nominal height of the cloud-sea tops (billows rise ~10 m above)
 
+// The shared shader clock (uTime) wraps every CLOCK_PERIOD seconds, and the wrap is seamless because every
+// effect that reads it completes whole cycles in that time: texture scrolls move a whole number of repeats
+// (speed * CLOCK_PERIOD is an integer), oscillators turn whole periods (angQ / CLOCK_K below). Raw scene time
+// in float32 steps by ~8 ms after a day and ~60 ms after a fortnight, so twinkles, petals and motes would judder.
+export const CLOCK_PERIOD = 10000;
+/** The nearest angular frequency (rad/s) to w that completes whole cycles in CLOCK_PERIOD. */
+export const angQ = w => Math.round(w * CLOCK_PERIOD / TAU) * TAU / CLOCK_PERIOD;
+/** GLSL literal K = CLOCK_PERIOD / 2π: floor(w * K + 0.5) / K quantises a per-element frequency w the same way. */
+export const CLOCK_K = (CLOCK_PERIOD / TAU).toFixed(6);
+
 /* ------------------------------------------------------------------ */
 /* Palette (Journey / Sky: peach, rose, gold, lavender, indigo)         */
 /* ------------------------------------------------------------------ */
@@ -62,7 +72,7 @@ function makePal() { const o = { li: 0, ai: 0, bi: 0, sky: 1, fog: 0.001 }; for 
 /* ------------------------------------------------------------------ */
 export function createShared() {
   return {
-    uTime: { value: 0 },
+    uTime: { value: 0 },               // scene time wrapped at CLOCK_PERIOD (see above)
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
     uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
     uLightDir: { value: new THREE.Vector3(0, 1, 0) },

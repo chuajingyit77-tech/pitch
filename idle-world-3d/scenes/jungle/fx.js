@@ -1,7 +1,7 @@
 // Sky dome, volumetric light shafts, floating motes, fireflies, glowing spores, rain and low mist.
 import * as THREE from 'three';
 import { TAU, clamp, lerp, makeRng, GLSL } from '../../lib/util.js';
-import { JG_GLSL } from './shading.js';
+import { JG_GLSL, JG_PNOISE, JG_FBMP, JG_PERIOD } from './shading.js';
 
 /* ------------------------------------------------------------------ */
 /* Sky                                                                  */
@@ -11,7 +11,7 @@ export function buildSky(shared) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, 1, 0) },
-      uSunCol: { value: new THREE.Color() }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uNight: shared.uNight, uTime: shared.uTime,
+      uSunCol: { value: new THREE.Color() }, uMoonDir: { value: new THREE.Vector3(0, 1, 0) }, uNight: shared.uNight, uSimplexDrift: shared.uSimplexDrift,
       uOvercast: { value: 0 }, uFogColor: shared.uFogColor, uDay: { value: 1 }, uStarPh: { value: 0 },
     },
     vertexShader: /* glsl */`
@@ -19,8 +19,10 @@ export function buildSky(shared) {
       void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
     fragmentShader: /* glsl */`
       ${GLSL.noise}
+      ${JG_FBMP}
       uniform vec3 uZenith, uHorizon, uSunDir, uSunCol, uMoonDir, uFogColor;
-      uniform float uNight, uTime, uOvercast, uDay, uStarPh;
+      uniform vec4 uSimplexDrift; // .x cloud drift, .y cloud evolution (wrapped to 867, the noise's period)
+      uniform float uNight, uOvercast, uDay, uStarPh;
       varying vec3 vDir;
       void main(){
         vec3 d = normalize(vDir);
@@ -31,8 +33,8 @@ export function buildSky(shared) {
         float sd = max(dot(d, uSunDir), 0.0);
         col += uSunCol * (pow(sd, 900.0) * 30.0 + pow(sd, 12.0) * 0.6 + pow(sd, 3.0) * 0.12) * (1.0 - uOvercast * 0.85) * uDay;
         // clouds
-        vec2 cp = d.xz / max(d.y + 0.15, 0.05) * 1.3 + vec2(uTime * 0.004, 0.0);
-        float c = smoothstep(0.42, 0.85, fbm3(vec3(cp, uTime * 0.01)) * 0.5 + 0.5 + uOvercast * 0.45);
+        vec2 cp = d.xz / max(d.y + 0.15, 0.05) * 1.3 + vec2(uSimplexDrift.x, 0.0);
+        float c = smoothstep(0.42, 0.85, fbmP(vec3(cp, uSimplexDrift.y)) * 0.5 + 0.5 + uOvercast * 0.45);
         vec3 cloudCol = mix(vec3(1.0, 0.98, 0.95) * (0.5 + uDay * 0.9), vec3(0.62, 0.66, 0.66) * (0.3 + uDay * 0.7), uOvercast);
         cloudCol = mix(cloudCol, vec3(0.08, 0.1, 0.16), uNight * 0.9);
         col = mix(col, cloudCol, c * smoothstep(0.02, 0.25, h) * (0.85 + uOvercast * 0.15));
@@ -107,16 +109,18 @@ export function buildGodRays(shared, anchors, rng) {
     fragmentShader: /* glsl */`
       ${JG_GLSL}
       ${GLSL.noise}
+      ${JG_PNOISE}
       uniform vec3 uRayCol; uniform float uRayAmt;
+      uniform vec4 uNoiseDrift; // drifts wrapped to 256, the noise's period
       varying vec2 vUv; varying float vSeed; varying float vK; varying float vAlong;
       void main(){
         if (vK < 0.002) discard;
         float x = vUv.x * 2.0 - 1.0;
-        float edgeN = vnoise(vec2(vAlong * 3.0 + vSeed * 30.0, uTime * 0.05)) * 0.35;
+        float edgeN = vnoiseP(vec2(vAlong * 3.0 + vSeed * 30.0, uNoiseDrift.x)) * 0.35;
         float across = pow(max(1.0 - x * x * (1.0 + edgeN), 0.0), 2.6);
         float ends = smoothstep(0.02, 0.3, vAlong) * (1.0 - smoothstep(0.35, 0.95, vAlong));
-        float streak = 0.6 + 0.4 * vnoise(vec2(x * 2.5 + vSeed * 50.0, vAlong * 1.5 - uTime * 0.04));
-        streak *= 0.75 + 0.25 * vnoise(vec2(x * 7.0 + uTime * 0.06, vSeed * 11.0));
+        float streak = 0.6 + 0.4 * vnoiseP(vec2(x * 2.5 + vSeed * 50.0, vAlong * 1.5 - uNoiseDrift.y));
+        streak *= 0.75 + 0.25 * vnoiseP(vec2(x * 7.0 + uNoiseDrift.z, vSeed * 11.0));
         vec3 V = normalize(vWorldP - cameraPosition);
         float fwd = mix(0.35, 1.0, pow(max(dot(V, -uLightDirW), 0.0), 2.0));
         float camFade = smoothstep(3.0, 9.0, length(vWorldP - cameraPosition));
@@ -143,16 +147,20 @@ function pointsMaterial(shared, sprite, kind) {
     vertexShader: /* glsl */`
       ${JG_GLSL}
       uniform float uScale, uAmt; uniform vec3 uAmb;
+      uniform vec4 uSimplexDrift; // .zw: firefly drifts, wrapped to 867 (simplex noise repeats there)
       attribute vec4 aPrm;
       varying float vA; varying vec3 vCol;
       ${GLSL.noise}
+      // per-particle rates snapped to whole cycles in the wrapped clock's period (rad/s: 1/200; cycles/s: 1/JG_PERIOD)
+      float radRate(float w) { return floor(w * 200.0 + 0.5) / 200.0; }
+      float cycRate(float r) { return floor(r * ${JG_PERIOD.toFixed(6)} + 0.5) / ${JG_PERIOD.toFixed(6)}; }
       void main(){
         vec3 p = position;
         float t = uTime;
         float ph = aPrm.x * 6.2831;
         float bright = 1.0;
         #if ${kind === 'motes' ? 1 : 0}
-          p += vec3(sin(t * 0.13 * aPrm.y + ph) * 1.2, sin(t * 0.09 + ph * 1.3) * 0.6 + fract(t * 0.01 * aPrm.y + aPrm.x) * 0.0, cos(t * 0.11 * aPrm.y + ph) * 1.2);
+          p += vec3(sin(t * radRate(0.13 * aPrm.y) + ph) * 1.2, sin(t * 0.09 + ph * 1.3) * 0.6, cos(t * radRate(0.11 * aPrm.y) + ph) * 1.2);
           p.y += sin(t * 0.21 + ph) * 0.25;
           vWorldP = p;
           float lit = jgCookie(p);
@@ -162,14 +170,14 @@ function pointsMaterial(shared, sprite, kind) {
           bright = 0.5 + 0.5 * sin(t * 1.7 + ph * 3.0);
           vA = (0.35 + 0.65 * bright) * uAmt;
         #elif ${kind === 'fireflies' ? 1 : 0}
-          p += vec3(snoise(vec3(aPrm.x * 10.0, t * 0.12, 0.0)) * 1.6, snoise(vec3(aPrm.x * 10.0, t * 0.1, 5.0)) * 0.7, snoise(vec3(aPrm.x * 10.0, t * 0.12, 9.0)) * 1.6);
-          float blink = pow(max(sin(t * (0.9 + aPrm.y * 0.8) + ph), 0.0), 6.0);
+          p += vec3(snoise(vec3(aPrm.x * 10.0, uSimplexDrift.z, 0.0)) * 1.6, snoise(vec3(aPrm.x * 10.0, uSimplexDrift.w, 5.0)) * 0.7, snoise(vec3(aPrm.x * 10.0, uSimplexDrift.z, 9.0)) * 1.6);
+          float blink = pow(max(sin(t * radRate(0.9 + aPrm.y * 0.8) + ph), 0.0), 6.0);
           blink = max(blink, 0.12 * (0.5 + 0.5 * sin(t * 3.1 + ph)));
           vCol = vec3(0.85, 1.0, 0.35) * 2.6;
           vA = blink * uAmt;
           vWorldP = p;
         #else
-          float life = fract(t * 0.035 * aPrm.y + aPrm.x);
+          float life = fract(t * cycRate(0.035 * aPrm.y) + aPrm.x);
           p += vec3(sin(t * 0.4 + ph) * 0.4 * life, life * 4.5, cos(t * 0.33 + ph) * 0.4 * life);
           vCol = vec3(0.3, 1.0, 0.9) * 2.2;
           vA = sin(life * 3.14159) * (0.6 + 0.4 * sin(t * 2.0 + ph)) * uAmt;
@@ -319,12 +327,13 @@ export function buildMistSheets(shared, rng, sheets) {
       ${JG_GLSL}
       ${GLSL.noise}
       uniform float uAmt; uniform vec3 uAmb;
+      uniform vec4 uMistScroll; // texture scrolls wrapped to 1 in JS (the cookie texture repeats)
       varying vec2 vUv; varying float vSeed;
       void main(){
         vec2 e = min(vUv, 1.0 - vUv);
         float edge = smoothstep(0.0, 0.3, e.x) * smoothstep(0.0, 0.3, e.y);
-        vec2 p = vWorldP.xz * 0.035 + vec2(uTime * 0.0035, uTime * 0.0012) + vSeed;
-        float n = texture2D(uCookieTex, p).b * 0.65 + texture2D(uCookieTex, p * 2.7 - vec2(uTime * 0.004, 0.0)).r * 0.35;
+        vec2 p = vWorldP.xz * 0.035 + vSeed;
+        float n = texture2D(uCookieTex, p + uMistScroll.xy).b * 0.65 + texture2D(uCookieTex, p * 2.7 + uMistScroll.zw).r * 0.35;
         float a = smoothstep(0.35, 0.85, n) * edge * uAmt;
         vec3 V = normalize(vWorldP - cameraPosition);
         float soft = smoothstep(1.0, 6.0, length(vWorldP - cameraPosition));

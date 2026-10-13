@@ -1,7 +1,7 @@
 // 云海 · sky dome (gradient, sun, crepuscular rays, cirrus, stars, moon), aurora ribbons and the
 // image-based lighting environment rendered from the same sky.
 import * as THREE from 'three';
-import { SHARED_GLSL, NOISE_GLSL } from './common.js';
+import { SHARED_GLSL, NOISE_GLSL, CLOCK_K, angQ } from './common.js';
 
 const SKY_VERT = /* glsl */`
 varying vec3 vDir;
@@ -55,6 +55,7 @@ void main(){
   vec3 sB = cross(sT, uSunDir);
   vec3 rel = d - uSunDir * mu;
   float ang = atan(dot(rel, sB), dot(rel, sT) + 1e-7);   // atan(0, 0) is undefined at the sun's centre
+  // (uTime wraps at CLOCK_PERIOD = 10000 s: 21 and 13 whole texture repeats, seamless)
   float r1 = texture2D(tNoise, vec2(ang / 6.2831853 * 2.0, uTime * 0.0021)).r;
   float r2 = texture2D(tNoise, vec2(ang / 6.2831853 * 4.0, 0.37 - uTime * 0.0013)).g;
   float rays = smoothstep(0.4, 0.75, r1 * 0.7 + r2 * 0.4);
@@ -71,9 +72,12 @@ void main(){
 
   // cirrus: fibrous high veils, lit pink-gold from below at dusk, silver in the moonlight
   if (y > 0.0) {
-    vec2 cp = d.xz / (y + 0.07) * 0.16 + vec2(uTime * 0.0012, uTime * 0.0005);
+    // scrolls in whole texture repeats per 10000 s clock wrap: (12, 5) for the fibres, (4, 2) for the coverage
+    // (it used to drift at 0.31x the fibres, 3.72 / 1.55 repeats, which would have jumped at the wrap)
+    vec2 cb = d.xz / (y + 0.07) * 0.16;
+    vec2 cp = cb + vec2(uTime * 0.0012, uTime * 0.0005);
     vec4 c1 = texture2D(tCirrus, cp);
-    vec4 c2 = texture2D(tCirrus, cp * 0.31 + vec2(0.3, 0.7));
+    vec4 c2 = texture2D(tCirrus, cb * 0.31 + vec2(0.3, 0.7) + vec2(uTime * 0.0004, uTime * 0.0002));
     float cov = smoothstep(0.38, 0.72, c2.b);
     float fib = smoothstep(0.48, 0.86, c1.r) * 0.85 + smoothstep(0.52, 0.9, c1.g) * 0.45;
     float dens = clamp(fib * cov, 0.0, 1.0) * smoothstep(0.0, 0.22, y) * uCirrusAmt;
@@ -92,7 +96,8 @@ void main(){
       vec3 c = 0.25 + 0.5 * hash33(cell + 7.13);
       float dist = length(f - c);
       float sz = 0.05 + 0.1 * rnd.y * rnd.y;
-      float tw = 0.65 + 0.35 * sin(uTime * (1.3 + rnd.z * 3.0) + rnd.y * 40.0);
+      // twinkle rate rounded to whole cycles per clock wrap
+      float tw = 0.65 + 0.35 * sin(uTime * (floor((1.3 + rnd.z * 3.0) * ${CLOCK_K} + 0.5) / ${CLOCK_K}) + rnd.y * 40.0);
       stars = smoothstep(sz, 0.0, dist) * tw * (0.35 + 2.5 * pow(rnd.z, 6.0));
     }
     vec3 mwN = normalize(vec3(0.42, 0.62, -0.66));
@@ -157,9 +162,10 @@ void main(){
   vec4 R = uRib[int(aRib.w)];
   float t = aRib.x, v = aRib.y, sd = aRib.z;
   float x = (t - 0.5) * R.z;
-  float z = sin(t * 4.2 + uTime * 0.045 + sd) * R.z * 0.09 + sin(t * 11.0 - uTime * 0.07 + sd * 2.0) * R.z * 0.025;
-  float yb = R.w * 0.55 + sin(t * 6.0 + uTime * 0.06 + sd) * R.w * 0.08;
-  float y = yb + v * R.w * (0.75 + 0.25 * sin(t * 9.0 + uTime * 0.11 + sd));
+  // (rates rounded to whole cycles per clock wrap; the texture scrolls below are whole repeats: 40, 60, 20)
+  float z = sin(t * 4.2 + uTime * ${angQ(0.045).toFixed(7)} + sd) * R.z * 0.09 + sin(t * 11.0 - uTime * ${angQ(0.07).toFixed(7)} + sd * 2.0) * R.z * 0.025;
+  float yb = R.w * 0.55 + sin(t * 6.0 + uTime * ${angQ(0.06).toFixed(7)} + sd) * R.w * 0.08;
+  float y = yb + v * R.w * (0.75 + 0.25 * sin(t * 9.0 + uTime * ${angQ(0.11).toFixed(7)} + sd));
   float c = cos(R.x), s = sin(R.x);
   vec3 p = vec3(x * c - (z - R.y) * s, y, x * s + (z - R.y) * c);
   vUv = vec2(t, v); vSeed = sd;

@@ -4,7 +4,7 @@
 // a vermilion arched bridge, a snow-viewing lantern, a cherry tree shedding petals on the water,
 // water lilies that open by day and close at night, a bamboo spout and a bamboo grove.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   TAU, clamp, lerp, smoothstep, damp, makeRng, createNoise, canvasTexture, normalMapFromHeight,
   makeCanvas, noiseCanvas, GLSL, patchMaterial, createWind, addWind, softDiscTexture,
@@ -130,22 +130,262 @@ function taperedTube(points, r0, r1, radial = 7, rng = null, wobble = 0) {
   return g;
 }
 
-/** Lumpy rock: displaced icosphere, flattened. */
-function rockGeometry(rng, noise, detail = 3) {
-  const g = new THREE.IcosahedronGeometry(1, detail);
-  const p = g.attributes.position;
+const STONE_STRETCH = [0.9, 1.1, 1.3]; // x stretches the stones are drawn with (buildRocks: s × 0.9–1.3 in x, s in z)
+
+/**
+ * Lumpy garden stone: the old displaced, flattened icosphere, now welded and smooth-shaded at a finer
+ * tessellation, with a few weathered joint faces and fine relief. Its height is fitted back to the old stone's
+ * (the low-poly one this tier used to draw: `footprintDetail`, else detail 3) and it never reaches wider than the
+ * old stone did, so footprints (the koi steer round the stones in the pond) stay put.
+ * Crease, underside and foot occlusion are baked into `color`. Uses the rng exactly as before (one value).
+ */
+function rockGeometry(rng, noise, detail = 5, footprintDetail = 0) {
   const off = rng.range(0, 100);
-  for (let i = 0; i < p.count; i++) {
-    _v.fromBufferAttribute(p, i);
-    const n = noise.fbm3(_v.x * 1.1 + off, _v.y * 1.1, _v.z * 1.1, 4);
-    const ridge = Math.abs(noise.noise3(_v.x * 2.3 + off, _v.y * 2.3, _v.z * 2.3));
-    const s = 1 + n * 0.32 - ridge * 0.1;
-    _v.multiplyScalar(s);
-    if (_v.y < -0.2) _v.y = -0.2 + (_v.y + 0.2) * 0.3; // flatter bottom
-    p.setXYZ(i, _v.x, _v.y, _v.z);
+  const shape = (x, y, z, out) => {
+    const n = noise.fbm3(x * 1.1 + off, y * 1.1, z * 1.1, 4);
+    const ridge = Math.abs(noise.noise3(x * 2.3 + off, y * 2.3, z * 2.3));
+    const k = 1 + n * 0.32 - ridge * 0.1;
+    out.set(x * k, y * k, z * k);
+    if (out.y < -0.2) out.y = -0.2 + (out.y + 0.2) * 0.3; // flatter bottom
+    return out;
+  };
+  // the old low-poly stone, vertex for vertex (icosphere detail 3, or 2 where that tier used it: footprintDetail):
+  // its height and widest reach are kept below, and obstacle footprints are measured on it
+  const ref = new THREE.IcosahedronGeometry(1, footprintDetail || 3), rp = ref.attributes.position;
+  let yLo = Infinity, yHi = -Infinity;
+  const rOld = [0, 0, 0];
+  for (let i = 0; i < rp.count; i++) {
+    shape(rp.getX(i), rp.getY(i), rp.getZ(i), _v);
+    rp.setXYZ(i, _v.x, _v.y, _v.z);
+    yLo = Math.min(yLo, _v.y); yHi = Math.max(yHi, _v.y);
+    for (let a = 0; a < 3; a++) rOld[a] = Math.max(rOld[a], Math.hypot(_v.x * STONE_STRETCH[a], _v.z));
   }
+  let g = new THREE.IcosahedronGeometry(1, detail);
+  g.deleteAttribute('normal'); g.deleteAttribute('uv');
+  g = mergeVertices(g);
+  const p = g.attributes.position, N = p.count, pos = p.array;
+  for (let i = 0; i < N; i++) { shape(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2], _v); pos[i * 3] = _v.x; pos[i * 3 + 1] = _v.y; pos[i * 3 + 2] = _v.z; }
+  const r = makeRng(Math.floor(off * 1000) + 23);
+  // weathered joint faces: planes shave the bulges partway flat, edges stay rounded
+  const dir = (el, az) => _v2.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).clone();
+  const planes = [{ n: dir(Math.PI / 2 - r.range(0.05, 0.4), r.range(0, TAU)), depth: r.range(0.06, 0.12) }];
+  const az0 = r.range(0, TAU);
+  for (let k = 0; k < 5; k++) planes.push({ n: dir(r.range(-0.05, 0.6), az0 + (k + r.range(-0.3, 0.3)) / 5 * TAU), depth: r.range(0.04, 0.09) });
+  for (const pl of planes) {
+    let hi = -Infinity, lo = Infinity;
+    for (let i = 0; i < N; i++) { const d = pos[i * 3] * pl.n.x + pos[i * 3 + 1] * pl.n.y + pos[i * 3 + 2] * pl.n.z; hi = Math.max(hi, d); lo = Math.min(lo, d); }
+    const o = hi - pl.depth * (hi - lo);
+    for (let i = 0; i < N; i++) {
+      const d = pos[i * 3] * pl.n.x + pos[i * 3 + 1] * pl.n.y + pos[i * 3 + 2] * pl.n.z - o;
+      if (d > 0) { pos[i * 3] -= pl.n.x * d * 0.8; pos[i * 3 + 1] -= pl.n.y * d * 0.8; pos[i * 3 + 2] -= pl.n.z * d * 0.8; }
+    }
+  }
+  // fine relief, biased inward so the stone never grows past its old outline
+  const ra = r.range(0, 50), rb = r.range(0, 50);
+  for (let i = 0; i < N; i++) {
+    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+    const k = 1 + Math.sin(x * 7.1 + ra) * Math.sin(y * 6.3 + 1.7) * Math.sin(z * 6.7 + rb) * 0.02 + Math.sin(x * 13.3 + 2.1) * Math.sin(y * 12.1 + ra) * Math.sin(z * 14.2 + 0.4) * 0.008 - 0.012;
+    pos[i * 3] *= k; pos[i * 3 + 1] *= k; pos[i * 3 + 2] *= k;
+  }
+  // the old height, bottom kept in place, and never wider than the old stone's widest reach (the finer mesh can
+  // catch a bulge between the old vertices), so the stone stays inside its old footprint
+  let nl = Infinity, nh = -Infinity;
+  const rNew = [0, 0, 0];
+  for (let i = 0; i < N; i++) {
+    nl = Math.min(nl, pos[i * 3 + 1]); nh = Math.max(nh, pos[i * 3 + 1]);
+    for (let a = 0; a < 3; a++) rNew[a] = Math.max(rNew[a], Math.hypot(pos[i * 3] * STONE_STRETCH[a], pos[i * 3 + 2]));
+  }
+  let kr = 1;
+  for (let a = 0; a < 3; a++) kr = Math.min(kr, rOld[a] / Math.max(rNew[a], 1e-6));
+  for (let i = 0; i < N; i++) {
+    pos[i * 3 + 1] = yLo + (pos[i * 3 + 1] - nl) * (yHi - yLo) / Math.max(nh - nl, 1e-6);
+    pos[i * 3] *= kr; pos[i * 3 + 2] *= kr;
+  }
+  p.needsUpdate = true;
   g.computeVertexNormals();
+  // occlusion: creases (curvature from the neighbour ring), the underside, and the foot
+  const nr = g.attributes.normal.array, idx = g.index.array;
+  const sum = new Float32Array(N * 3), cnt = new Float32Array(N), edge = new Float32Array(N);
+  for (let t = 0; t < idx.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = idx[t + e], b = idx[t + (e + 1) % 3];
+      for (const [u, w] of [[a, b], [b, a]]) {
+        sum[u * 3] += pos[w * 3]; sum[u * 3 + 1] += pos[w * 3 + 1]; sum[u * 3 + 2] += pos[w * 3 + 2]; cnt[u]++;
+        edge[u] += Math.hypot(pos[w * 3] - pos[u * 3], pos[w * 3 + 1] - pos[u * 3 + 1], pos[w * 3 + 2] - pos[u * 3 + 2]);
+      }
+    }
+  }
+  const col = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const c = Math.max(cnt[i], 1), el = Math.max(edge[i] / c, 1e-6);
+    const curv = ((sum[i * 3] / c - pos[i * 3]) * nr[i * 3] + (sum[i * 3 + 1] / c - pos[i * 3 + 1]) * nr[i * 3 + 1] + (sum[i * 3 + 2] / c - pos[i * 3 + 2]) * nr[i * 3 + 2]) / (el * el);
+    let ao = 1 - clamp((curv + 0.5) * 0.12, -0.12, 0.42);
+    ao *= lerp(0.7, 1, smoothstep(-0.8, 0.3, nr[i * 3 + 1]));
+    ao *= lerp(0.6, 1, smoothstep(yLo, yLo + (yHi - yLo) * 0.35, pos[i * 3 + 1]));
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  // height within the stone, 0 at its foot (the shader darkens and dampens the foot with it)
+  const hf = new Float32Array(N);
+  for (let i = 0; i < N; i++) hf[i] = clamp((pos[i * 3 + 1] - yLo) / Math.max(yHi - yLo, 1e-6), 0, 1);
+  g.setAttribute('aRockH', new THREE.BufferAttribute(hf, 1));
+  // obstacle footprints are measured on the old stone's vertices, so the koi steer round exactly the same
+  // footprints as before
+  if (footprintDetail) g.userData.footprint = rp;
+  else ref.dispose();
   return g;
+}
+
+/* ------------------------------------------------------------------ */
+/* Garden-stone surface: tileable granite + moss cushions              */
+/* ------------------------------------------------------------------ */
+/** Gradient noise in about [-1, 1], periodic with p cells (p ≤ 256) in x and y. */
+function periodicNoise(seed) {
+  const rng = makeRng(seed);
+  const perm = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) perm[i] = i;
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); const t = perm[i]; perm[i] = perm[j]; perm[j] = t; }
+  const gx = new Float32Array(256), gy = new Float32Array(256);
+  for (let i = 0; i < 256; i++) { const a = rng.next() * TAU; gx[i] = Math.cos(a); gy[i] = Math.sin(a); }
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  return (x, y, p) => {
+    const xf = Math.floor(x), yf = Math.floor(y), fx = x - xf, fy = y - yf;
+    const x0 = ((xf % p) + p) % p, y0 = ((yf % p) + p) % p, x1 = (x0 + 1) % p, y1 = (y0 + 1) % p;
+    const h00 = perm[(perm[x0] + y0) & 255], h10 = perm[(perm[x1] + y0) & 255], h01 = perm[(perm[x0] + y1) & 255], h11 = perm[(perm[x1] + y1) & 255];
+    const u = fade(fx), v = fade(fy);
+    return 1.4 * lerp(lerp(gx[h00] * fx + gy[h00] * fy, gx[h10] * (fx - 1) + gy[h10] * fy, u), lerp(gx[h01] * fx + gy[h01] * (fy - 1), gx[h11] * (fx - 1) + gy[h11] * (fy - 1), u), v);
+  };
+}
+/** fbm of periodic noise; odd octaves on a 45°-turned lattice ((u+v, u−v) keeps the period), so no grid shows. */
+function pfbm(n, u, v, p, oct) {
+  let s = 0, a = 0.5, f = p;
+  for (let o = 0; o < oct; o++) { s += a * (o & 1 ? n((u + v) * f + 0.31, (u - v) * f + 0.67, f) : n(u * f, v * f, f)); f *= 2; a *= 0.5; }
+  return s;
+}
+/** Anti-aliased soft disc added into a wrapped S×S float image. */
+function splatDisc(arr, S, cx, cy, r, amount, edge = 1) {
+  for (let y = Math.floor(cy - r - edge); y <= Math.ceil(cy + r + edge); y++) for (let x = Math.floor(cx - r - edge); x <= Math.ceil(cx + r + edge); x++) {
+    const c = clamp((r - Math.hypot(x + 0.5 - cx, y + 0.5 - cy)) / edge + 0.5, 0, 1);
+    if (c > 0) arr[(((y % S) + S) % S) * S + (((x % S) + S) % S)] += amount * c;
+  }
+}
+/**
+ * Pale granite with dark mica specks, pits, hairline cracks and lichen; moss cushion pattern in alpha.
+ * Packed RGBA, linear (WebGL 1 turns mipmaps off for sRGB textures): RG = height slope, B = albedo (gamma,
+ * decoded as B²), A = moss cushions. One tile = 1 / uRkScale metres.
+ */
+function graniteTexture(seed, S = 512) {
+  const rng = makeRng(seed);
+  const nA = periodicNoise(seed), nB = periodicNoise(seed + 1), nC = periodicNoise(seed + 2);
+  const H = new Float32Array(S * S), L = new Float32Array(S * S), M = new Float32Array(S * S);
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const u = i / S, v = j / S, k = j * S + i;
+    const wx = pfbm(nB, u, v, 3, 1) * 0.03, wy = pfbm(nC, u, v, 3, 1) * 0.03;
+    const big = pfbm(nA, u + wx, v + wy, 4, 5);
+    const fine = pfbm(nB, u + 0.5, v + 0.25, 32, 2);
+    H[k] = big * 0.45 + fine * 0.05;
+    L[k] = 0.68 + big * 0.16 + fine * 0.05;
+    // moss cushions: broad clumps (a few per tile) with a lumpy margin
+    M[k] = clamp(0.5 + pfbm(nC, u + wy, v + wx, 2, 4) * 1.5 + pfbm(nA, u + 0.3, v + 0.6, 12, 2) * 0.35 + fine * 0.2, 0, 1);
+  }
+  const grainD = new Float32Array(S * S), grainP = new Float32Array(S * S), pits = new Float32Array(S * S), crack = new Float32Array(S * S);
+  const G = Math.round(S / 3.2);
+  for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+    if (rng.next() > 0.5) continue;
+    const cx = (gx + rng.next()) * S / G, cy = (gy + rng.next()) * S / G, r = rng.range(0.45, 1.2);
+    if (rng.next() < 0.45) splatDisc(grainD, S, cx, cy, r, rng.range(0.6, 1)); else splatDisc(grainP, S, cx, cy, r, rng.range(0.5, 1));
+  }
+  for (let i = 0; i < Math.round(S * S / 1100); i++) splatDisc(pits, S, rng.next() * S, rng.next() * S, rng.range(0.7, 2.2), rng.range(0.5, 1), 1.2);
+  const drawCrack = (x, y, a, len, w, depth) => {
+    for (let d = 0; d < len; d += 0.8) {
+      const t = d / len;
+      splatDisc(crack, S, x, y, w * (1 - t * 0.8), 0.35 * (1 - t * 0.5), 0.9);
+      a += rng.range(-0.11, 0.11) + (rng.next() < 0.03 ? rng.range(-0.6, 0.6) : 0);
+      x += Math.cos(a) * 0.8; y += Math.sin(a) * 0.8;
+      if (depth < 2 && rng.next() < 0.006) drawCrack(x, y, a + rng.sign() * rng.range(0.5, 1.1), len * (1 - t) * rng.range(0.3, 0.6), w * 0.8, depth + 1);
+    }
+  };
+  for (let c = 0; c < 9; c++) drawCrack(rng.next() * S, rng.next() * S, rng.range(0, TAU), rng.range(0.12, 0.32) * S, rng.range(0.7, 1.1), 0);
+  // pale lichen rosettes
+  const lich = new Float32Array(S * S);
+  for (let c = 0; c < Math.round(S * S / 9000); c++) {
+    const cx = rng.next() * S, cy = rng.next() * S, R = rng.range(4, 18) * S / 512;
+    const h1 = [rng.range(0.04, 0.11), rng.int(2, 4), rng.range(0, TAU)], h2 = [rng.range(0.03, 0.07), rng.int(5, 8), rng.range(0, TAU)];
+    for (let y = Math.floor(cy - R * 1.2 - 2); y <= Math.ceil(cy + R * 1.2 + 2); y++) for (let x = Math.floor(cx - R * 1.2 - 2); x <= Math.ceil(cx + R * 1.2 + 2); x++) {
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy, a = Math.atan2(dy, dx);
+      const rr = R * (1 + h1[0] * Math.sin(a * h1[1] + h1[2]) + h2[0] * Math.sin(a * h2[1] + h2[2]));
+      const cov = clamp((rr - Math.hypot(dx, dy)) / 1.3 + 0.5, 0, 1);
+      if (cov > 0) { const k = (((y % S) + S) % S) * S + (((x % S) + S) % S); lich[k] = Math.max(lich[k], cov); }
+    }
+  }
+  const data = new Uint8Array(S * S * 4);
+  for (let k = 0; k < S * S; k++) {
+    const gd = Math.min(grainD[k], 1), gp = Math.min(grainP[k], 1), pt = Math.min(pits[k], 1), cr = Math.min(crack[k], 1);
+    H[k] += -gd * 0.012 + gp * 0.01 - pt * 0.05 - cr * 0.22 + lich[k] * 0.02;
+    L[k] = clamp(L[k] - gd * 0.3 + gp * 0.1 - pt * 0.14 - cr * 0.36 + lich[k] * 0.1, 0.06, 1);
+  }
+  const K = S / 8;
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const k = j * S + i;
+    const dx = (H[j * S + ((i + 1) % S)] - H[j * S + ((i - 1 + S) % S)]) * 0.5 * K, dy = (H[((j + 1) % S) * S + i] - H[((j - 1 + S) % S) * S + i]) * 0.5 * K;
+    data[k * 4] = Math.round((clamp(dx, -1, 1) * 0.5 + 0.5) * 255);
+    data[k * 4 + 1] = Math.round((clamp(dy, -1, 1) * 0.5 + 0.5) * 255);
+    data[k * 4 + 2] = Math.round(L[k] * 255);
+    data[k * 4 + 3] = Math.round(M[k] * 255);
+  }
+  const tex = new THREE.DataTexture(data, S, S, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true;
+  tex.anisotropy = 4; tex.colorSpace = THREE.NoColorSpace; tex.needsUpdate = true;
+  return tex;
+}
+/**
+ * Garden-stone shading: world-space triplanar granite (3 texture reads), moss cushions on the upper faces that
+ * follow the stone's form (no streaks on slopes), softer relief under the moss, a damp, darker foot above the water
+ * line (aRockH: height within the stone), and the baked occlusion.
+ */
+function stoneSurface(material, tex, U) {
+  material.userData.rockU = { tRock: { value: tex }, uRkScale: { value: 1.05 }, uRkBump: { value: 0.5 }, uRkTint: { value: new THREE.Color('#c9c4b8') } };
+  return patchMaterial(material, {
+    key: 'koiStone',
+    uniforms: { ...material.userData.rockU, uRkMoss: U.uMoss }, // the pond's moss colour (shared value)
+    vertexHeader: 'attribute float aRockH;\nvarying vec3 vRkW; varying float vRkH;',
+    fragmentHeader: /* glsl */`
+      varying vec3 vRkW; varying float vRkH;
+      uniform sampler2D tRock;
+      uniform float uRkScale, uRkBump;
+      uniform vec3 uRkTint, uRkMoss;`,
+    vertex: { '#include <fog_vertex>': '$&\n vRkW = (mvPosition.xyz - viewMatrix[3].xyz) * mat3(viewMatrix); vRkH = aRockH;' },
+    fragment: {
+      '#include <map_fragment>': /* glsl */`
+        vec3 rkN = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
+        vec3 rkB = rkN * rkN; rkB *= rkB; rkB /= (rkB.x + rkB.y + rkB.z);
+        vec3 rkP = vRkW * uRkScale;
+        vec4 rkX = texture2D(tRock, rkP.zy);
+        vec4 rkY = texture2D(tRock, rkP.xz + vec2(0.37, 0.61));
+        vec4 rkZ = texture2D(tRock, rkP.xy + vec2(0.73, 0.0));
+        float rkL = rkX.b * rkB.x + rkY.b * rkB.y + rkZ.b * rkB.z;
+        float rkM = rkX.a * rkB.x + rkY.a * rkB.y + rkZ.a * rkB.z;
+        vec3 rkCol = uRkTint * (rkL * rkL) * 1.15;
+        // moss cushions on the upper faces: the cushion pattern decides where (patchy, not a cap), the margin
+        // follows it, and the moss stops at the water line
+        float rkMo = smoothstep(0.48, 0.66, rkN.y * 0.72 + (rkM - 0.5) * 0.8) * smoothstep(-0.04, 0.05, vRkW.y);
+        vec3 mossC = mix(uRkMoss, vec3(0.2, 0.26, 0.05), smoothstep(0.55, 0.95, rkM) * 0.6) * (0.75 + 0.5 * rkL);
+        rkCol = mix(rkCol, mossC, rkMo);
+        // the damp foot above the water line: darker, faintly green with algae
+        float rkDp = (1.0 - smoothstep(0.0, 0.3, vRkH)) * smoothstep(-0.06, 0.02, vRkW.y);
+        rkCol = mix(rkCol, rkCol * vec3(0.5, 0.55, 0.46), rkDp * 0.85);
+        diffuseColor.rgb *= rkCol;`,
+      '#include <roughnessmap_fragment>': '$&\n roughnessFactor = mix(clamp(roughnessFactor + (0.6 - rkL) * 0.12 + rkMo * 0.12, 0.55, 1.0), 0.45, rkDp * (1.0 - rkMo));',
+      '#include <normal_fragment_maps>': /* glsl */`
+        {
+          vec2 gX = rkX.rg * 2.0 - 1.0, gY = rkY.rg * 2.0 - 1.0, gZ = rkZ.rg * 2.0 - 1.0;
+          vec3 G = vec3(gY.x * rkB.y + gZ.x * rkB.z, gX.y * rkB.x + gZ.y * rkB.z, gX.x * rkB.x + gY.y * rkB.y);
+          G -= rkN * dot(G, rkN);
+          normal = normalize((viewMatrix * vec4(normalize(rkN - G * uRkBump * (1.0 - 0.6 * rkMo)), 0.0)).xyz);
+        }`,
+    },
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -662,13 +902,16 @@ class KoiPond {
   /* ---------- rocks ---------- */
   buildRocks() {
     const r = this.rng.fork('rocks');
-    const tex = stoneTexture(this.env.seed + 11);
-    tex.map.repeat.set(2, 2); tex.normal.repeat.set(2, 2);
-    const mat = new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normal, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.88 });
-    addUnderwater(mat, this.U, { caustic: 0.8, tint: 1, moss: 0.85, key: 'rock' });
+    // smooth weathered granite with moss cushions (world-space triplanar surface, see stoneSurface)
+    const tex = graniteTexture((this.env.seed % 1000) + 11);
+    this.disposables.push(tex);
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
+    stoneSurface(mat, tex, this.U);
+    addUnderwater(mat, this.U, { caustic: 0.8, tint: 1, moss: 0, key: 'rock' });
     this.rockMat = mat;
     const variants = [];
-    for (let i = 0; i < 6; i++) variants.push(rockGeometry(r, this.noise, this.q >= 0.6 ? 3 : 2));
+    // variant 0 also makes the island stone in the pond, seen closest: a finer mesh
+    for (let i = 0; i < 6; i++) variants.push(rockGeometry(r, this.noise, i === 0 ? 6 : 5, this.q >= 0.6 ? 3 : 2));
     const placements = variants.map(() => []);
     // shoreline stones
     const n = Math.round(lerp(34, 60, this.q));
@@ -702,7 +945,7 @@ class KoiPond {
       const list = placements[vi];
       if (!list.length) return;
       const im = new THREE.InstancedMesh(geo, mat, list.length);
-      const gp = geo.attributes.position;
+      const gp = geo.userData.footprint; // the old stone's vertices (see rockGeometry)
       list.forEach((p, i) => {
         _m.compose(_v.set(p.x, p.y, p.z), _q.setFromEuler(_e.set(r.range(-0.15, 0.15), p.rot, r.range(-0.15, 0.15))), _s.set(p.s * r.range(0.9, 1.3), p.s * p.sy, p.s));
         im.setMatrixAt(i, _m);
@@ -843,7 +1086,10 @@ class KoiPond {
       if (sc > best) { best = sc; spot = new THREE.Vector3(x, this.height(x, z), z); }
     }
     spot = spot || new THREE.Vector3(this.lobes[0].x, 0.1, this.lobes[0].z + this.lobes[0].r);
-    const stone = new THREE.MeshStandardMaterial({ map: this.rockMat.map, normalMap: this.rockMat.normalMap, normalScale: new THREE.Vector2(1, 1), color: '#b9b4a6', roughness: 0.9 });
+    const ltex = stoneTexture(this.env.seed + 11);
+    ltex.map.repeat.set(2, 2); ltex.normal.repeat.set(2, 2);
+    this.disposables.push(ltex.map, ltex.normal);
+    const stone = new THREE.MeshStandardMaterial({ map: ltex.map, normalMap: ltex.normal, normalScale: new THREE.Vector2(1, 1), color: '#b9b4a6', roughness: 0.9 });
     addUnderwater(stone, this.U, { caustic: 0.6, tint: 1, moss: 0.9, key: 'lantern' });
     // Kasuga-style lantern: base, pole with ring, platform, light box, hexagonal roof with curled corners, jewel
     const g = new THREE.Group();
@@ -1151,7 +1397,7 @@ class KoiPond {
         rim.setMatrixAt(i, _m);
       }
       this.scene.add(rim);
-      const rock = rockGeometry(r, this.noise, 3);
+      const rock = rockGeometry(r, this.noise, 6);
       const fr = new THREE.Mesh(rock, this.rockMat);
       fr.position.set(best.x, this.height(best.x, best.z) + 0.1, best.z);
       fr.scale.set(0.5, 0.42, 0.42);
@@ -1247,7 +1493,8 @@ class KoiPond {
     const gmat = new THREE.MeshStandardMaterial({ color: '#7d9a3c', side: THREE.DoubleSide, roughness: 0.8 });
     addWind(gmat, this.wind, { height: 0.3, amount: 0.1, stiffness: 1.6, key: 'tuft' });
     const nb = Math.round(lerp(1500, 4000, this.q));
-    const grass = new THREE.InstancedMesh(blade, gmat, nb);
+    const nFoot = this.stones ? this.stones.length * 9 : 0; // extra blades gathered at the bank stones' feet
+    const grass = new THREE.InstancedMesh(blade, gmat, nb + nFoot);
     let gi = 0;
     for (let i = 0; i < nb * 4 && gi < nb; i++) {
       const a = r.range(0, TAU), rr = Math.sqrt(r.next()) * 14;
@@ -1262,6 +1509,25 @@ class KoiPond {
       col.setHSL(r.range(0.2, 0.27), r.range(0.4, 0.6), r.range(0.3, 0.45));
       grass.setColorAt(gi, col);
       gi++;
+    }
+    // small tufts nestled at the feet of the bank stones, on the land side (own rng: the blades above are unchanged)
+    if (nFoot) {
+      const fr = this.rng.fork('stoneTufts');
+      for (const st of this.stones) {
+        for (let c = 0; c < 3; c++) {
+          const a = fr.range(0, TAU), rr = st.s * fr.range(0.95, 1.25);
+          const cx = st.x + Math.cos(a) * rr, cz = st.z + Math.sin(a) * rr;
+          if (this.sdf(cx, cz) < 0.2 || this.nearBridge(cx, cz, 0.2)) continue;
+          for (let b = 0; b < 3; b++) {
+            const x = cx + fr.range(-0.06, 0.06), z = cz + fr.range(-0.06, 0.06);
+            _m.compose(_v.set(x, this.height(x, z) - 0.01, z), _q.setFromEuler(_e.set(fr.range(-0.3, 0.3), fr.range(0, TAU), fr.range(-0.3, 0.3))), _s.set(1, fr.range(0.45, 0.95), 1));
+            grass.setMatrixAt(gi, _m);
+            col.setHSL(fr.range(0.2, 0.26), fr.range(0.45, 0.6), fr.range(0.26, 0.38));
+            grass.setColorAt(gi, col);
+            gi++;
+          }
+        }
+      }
     }
     grass.count = gi;
     grass.receiveShadow = true;

@@ -3,7 +3,7 @@
 // red-crowned cranes and flocks of little blue spirit birds. Feed them glowing peaches (蟠桃).
 import * as THREE from 'three';
 import { createWind, clamp, lerp, damp, smoothstep, TAU } from '../lib/util.js';
-import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, makeRockTexture, CLOUD_TOP } from './cloudsea/common.js';
+import { createShared, createTimeOfDay, makeBillowTexture, makeDetailTexture, makeCirrusTexture, makeNoiseTexture, makeRockTexture, CLOUD_TOP, CLOCK_PERIOD } from './cloudsea/common.js';
 import { createSky, createEnvironment } from './cloudsea/sky.js';
 import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './cloudsea/clouds.js';
 import { createGarden } from './cloudsea/garden.js';
@@ -127,7 +127,7 @@ export default {
     /* ---- effects ---- */
     const fx = { sparkles: createSparkles(q >= 0.7 ? 900 : 500) };
     scene.add(fx.sparkles.points);
-    const petals = createPetals(shared, garden.tree.clusters.map(c => c.c), Math.round(220 * q + 80), new THREE.Vector2(0.8, 0.4));
+    const petals = createPetals(shared, garden.tree.clusters, Math.round(300 * q + 150), new THREE.Vector2(0.8, 0.4));
     scene.add(petals.points);
     const tp = garden.tree.top;
     const motes = createMotes(shared, [{ x: 0, y: 0.3, z: 0, r: 12, h: 7 }, { x: tp.x, y: tp.y - 1, z: tp.z, r: 6, h: 6 }, { x: garden.A.x, y: garden.A.y, z: garden.A.z, r: 7, h: 6 }], Math.round(170 * q + 60));
@@ -330,7 +330,8 @@ export default {
     scene.environment = envMap.texture;
 
     function update(dt, t) {
-      shared.uTime.value = t;
+      // wrapped: every shader that reads uTime completes whole cycles in CLOCK_PERIOD (common.js), so this is seamless
+      shared.uTime.value = t % CLOCK_PERIOD;
       shared.uMistT.value = t % 31.25;
       tod.update(false, dt);
       wind.update(dt);
@@ -458,6 +459,7 @@ export default {
       dispose() {
         envMap.dispose();
         creatures.dispose();
+        garden.dispose();
         for (const k of ['billow', 'detail']) tex[k].tex.dispose();
         tex.cirrus.dispose(); tex.noise.dispose(); tex.rock.dispose();
       },
