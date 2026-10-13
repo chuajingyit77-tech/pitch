@@ -14,14 +14,19 @@ import { buildPond, buildWaterfall, buildMist, buildSplash, fallT } from './jung
 import { buildSky, buildGodRays, buildPoints, buildRain, buildMistSheets } from './jungle/fx.js';
 import { createFrogMesh } from './jungle/frog.js';
 import { loadMacawKit, Macaw } from './jungle/macaw.js';
-import { makeWingAtlas, createButterflyMesh, Butterfly, createDragonflyMesh, Dragonfly } from './jungle/insects.js';
+import { makeWingAtlas, createButterflyMesh, Butterfly, createDragonflyMesh, Dragonfly, turnToward } from './jungle/insects.js';
 import { FruitSystem, FRUIT_KINDS } from './jungle/fruit.js';
 
 /* ------------------------------------------------------------------ */
 /* Weather schedule (shared by the scene and the ambience helper)       */
 /* ------------------------------------------------------------------ */
 let RAIN_SALT = 0;
-function dayIndex() { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / 864e5); }
+const dayCache = { at: -1e12, v: 0 };
+function dayIndex() {
+  const now = Date.now();
+  if (Math.abs(now - dayCache.at) > 1e4) { const d = new Date(now); dayCache.at = now; dayCache.v = Math.floor((now - d.getTimezoneOffset() * 6e4) / 864e5); }
+  return dayCache.v;
+}
 /** 0..1 rain intensity for an hour of the local day: afternoon shower 15:00–16:30 daily, some nights 1:30–3:00. */
 export function rainAmount(h) {
   let r = 0;
@@ -157,6 +162,9 @@ export default {
       scene.add(m);
       return m;
     });
+    // rocks standing in the pond, for the fish to swim round (horizontal radius ~1.1 s, see buildBoulder)
+    const pondRocks = [];
+    boulderList.forEach((list, k) => { for (const b of list) if (L.pondD(b.x, b.z) < 1.25) pondRocks.push({ x: b.x, z: b.z, r: b.s * 1.1, top: b.y + b.s * b.sy * (1 - [0.3, 0.45, 0.2][k]) }); });
 
     /* ---------------- trees ---------------- */
     const barkMat = new THREE.MeshStandardMaterial({ map: bark.map, normalMap: bark.normalMap, normalScale: new THREE.Vector2(1.3, 1.3), vertexColors: true, roughness: 0.9, envMapIntensity: 0.5 });
@@ -727,11 +735,15 @@ export default {
         do { x = POND.cx + rf.range(-4, 4); z = POND.cz + rf.range(-2.5, 3); } while (!L.inPond(x, z, 0.5) && guard++ < 40);
         const sw = new Swimmer({ pos: new THREE.Vector3(x, WATER_Y - 0.4, z), size: rf.range(0.22, 0.32), speed: 0.25, rng: rf });
         sw.home = new THREE.Vector3(x, 0, z); sw.wanderT = 0; sw.goal = sw.pos.clone(); sw.nibbleT = rf.range(1, 3);
+        // own seeded decisions, own pace, own reaction time to food
+        sw.rng = rf.fork(i); sw.cruise = sw.rng.range(0.24, 0.32); sw.foodSpeed = sw.rng.range(0.46, 0.6);
+        sw.food = null; sw.noticeT = sw.rng.range(0.3, 1.5); sw.slot = new THREE.Vector3(); sw.slotA = 0; sw.uturn = 0;
         fish.push(sw);
       }
       return { inst, fish };
     });
     fishGeo.dispose();
+    const allFish = fishSets.flatMap(s => s.fish);
 
     /* ---------------- residents ---------------- */
     const members = env.members;
@@ -759,7 +771,8 @@ export default {
     const dragonflies = [];
     const dfCols = [[0.75, 0.08, 0.05], [0.08, 0.35, 0.85], [0.1, 0.55, 0.3], [0.7, 0.1, 0.25], [0.1, 0.4, 0.8]];
     for (let i = 0; i < Math.round(5 * Math.max(q, 0.6)); i++) {
-      dragonflies.push(new Dragonfly(rd, { x0: POND.cx - 5, x1: POND.cx + 5, y0: WATER_Y + 0.3, y1: 1.6, z0: POND.cz - 2.5, z1: POND.cz + 3.5 }));
+      // each its own stream, so one dragonfly's choices never shift another's (they used to share one)
+      dragonflies.push(new Dragonfly(rd.fork('df' + i), { x0: POND.cx - 5, x1: POND.cx + 5, y0: WATER_Y + 0.3, y1: 1.6, z0: POND.cz - 2.5, z1: POND.cz + 3.5, floor: (x, z) => Math.max(L.groundH(x, z), WATER_Y) + 0.3 }));
       const c = dfCols[i % dfCols.length];
       dragonKit.col.setXYZW(i, c[0], c[1], c[2], rd.next());
     }
@@ -783,7 +796,6 @@ export default {
     perches.forEach(p => { p.camD = p.pos.distanceTo(camPos0); });
 
     const frogs = [], macaws = [], butterflies = [];
-    const wf = R('flutter');
     const homeB = new THREE.Vector3(POND.cx, 1.6, POND.cz + 3);
 
     class Frog {
@@ -801,31 +813,63 @@ export default {
         this.callT = this.rng.range(1, 6); this.call = 0;
         this.hop = null; this.food = null; this.flicks = 0; this.flickT = 0;
         this.swim = false;
+        this.pitch = 0;
+        this.yawGoal = null;     // eased turn on the spot
+        this.pending = null;     // a hop waiting for the frog to face its way
+        this.swimGoal = null; this.swimSpot = null; this.swimWet = false; this.swimSpeed = 0;
+        this.kick = 0; this.rippleT = this.rng.range(0.3, 0.8);
       }
       get scale() { return 0.36 * (0.85 + 0.15 * (this.member.size || 1)); }
+      /** Hop to a point. A frog that has to turn first pivots on the spot and then jumps: the heading used to
+       * snap round (up to 180°) in the frame the hop started. */
       hopTo(target, spot = null) {
+        if (spot) spot.taken = this; // reserved, so no other frog heads for it meanwhile
+        const yawT = Math.atan2(target.x - this.pos.x, target.z - this.pos.z);
+        this.yawGoal = null;
+        if (Math.abs(angleTo(this.yaw, yawT)) > 0.3) {
+          this.pending = { to: target.clone(), spot, yaw: yawT };
+          this.state = 'turn';
+          return;
+        }
+        this.launch(target, spot, yawT);
+      }
+      launch(target, spot, yawT) {
         const from = this.pos.clone();
         const dist = from.distanceTo(target);
-        this.hop = { from, to: target.clone(), t: 0, dur: 0.32 + dist * 0.12, h: 0.18 + dist * 0.28, spot };
-        this.yaw = Math.atan2(target.x - from.x, target.z - from.z);
+        this.hop = { from, to: target.clone(), t: 0, dur: 0.32 + dist * 0.12, h: 0.18 + dist * 0.28, spot, yaw: yawT };
         this.state = 'hop';
-        if (this.spot) { this.spot.taken = null; this.spot = null; }
+        this.call = 0;
+        if (this.spot && this.spot !== spot) this.spot.taken = null;
+        this.spot = null;
+      }
+      /** Paddle across the pond toward a point (and climb onto `spot` with a hop when near it). */
+      swimTo(goal, spot = null) {
+        this.swimGoal = (this.swimGoal || new THREE.Vector3()).copy(goal);
+        this.swimSpot = spot;
+        this.swimWet = !spot && L.inPond(goal.x, goal.z, 0.02);
+        if (spot) spot.taken = this;
       }
       update(dt, t) {
         const r = this.rng;
         this.breath = 0.5 + 0.5 * Math.sin(t * 2.4 + this.member.seed);
-        // calling (throat pulses) — more often at night
+        // calling (throat pulses) — more often at night; only while sitting
         this.callT -= dt;
         if (this.callT <= 0 && this.state === 'sit') { this.call = 1.2; this.callT = r.range(night > 0.5 ? 3 : 8, night > 0.5 ? 9 : 22); }
+        if (this.state !== 'sit') this.call = 0;
         if (this.call > 0) { this.call -= dt; this.throat = Math.max(0, Math.sin((1.2 - this.call) * 18)) * 0.9; } else this.throat = damp(this.throat, 0, 10, dt);
+        if (this.state !== 'hop') this.pitch = damp(this.pitch, 0, 10, dt);
         if (this.state === 'sit') {
-          this.leap = damp(this.leap, 0, 12, dt);
+          if (this.yawGoal !== null) {
+            this.yaw = turnToward(this.yaw, this.yawGoal, 5, 2.5, dt);
+            if (Math.abs(angleTo(this.yaw, this.yawGoal)) < 0.01) this.yawGoal = null;
+          }
           this.timer -= dt;
-          const f = this.food && !this.food.dead && this.food.bites > 0 ? this.food : null;
+          const f = this.food && !this.food.dead && !this.food.dying && this.food.bites > 0 && !this.food.heldBy ? this.food : null;
           if (!f) this.food = null;
           if (f) {
             const d = Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z);
-            if (d < 0.55 && f.pos.y - this.pos.y < 1.0 && f.pos.y - this.pos.y > -0.6) { this.state = 'eat'; this.flicks = 0; this.flickT = 0.3; this.yaw = Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z); }
+            // (the frog turns to the fruit in the eat state; it used to snap round here)
+            if (d < 0.55 && f.pos.y - this.pos.y < 1.0 && f.pos.y - this.pos.y > -0.6) { this.state = 'eat'; this.flicks = 0; this.flickT = 0.3; this.yawGoal = null; }
             else if (this.timer <= 0) this.stepToward(f.pos);
           } else if (this.timer <= 0 || (this.foodT = (this.foodT ?? 1) - dt) <= 0) {
             this.foodT = 1.5;
@@ -833,39 +877,78 @@ export default {
             if (food) { this.food = food; food.claims.push(this); this.timer = 0.2; }
             else if (this.timer <= 0) this.wander();
           }
+        } else if (this.state === 'turn') {
+          const P = this.pending;
+          this.yaw = turnToward(this.yaw, P.yaw, 12, 6, dt);
+          if (Math.abs(angleTo(this.yaw, P.yaw)) < 0.06) { this.pending = null; this.launch(P.to, P.spot, P.yaw); }
         } else if (this.state === 'hop') {
           const H = this.hop;
           H.t += dt / H.dur;
           const tt = Math.min(H.t, 1);
           this.pos.lerpVectors(H.from, H.to, tt);
           this.pos.y += 4 * H.h * tt * (1 - tt);
+          // legs kick out at take-off and tuck in for the landing (they used to flick back out to 0.3 at touch-down)
           this.leap = Math.pow(Math.sin(Math.PI * Math.min(tt * 1.15, 1)), 0.6);
+          // the body follows the arc: nose up on the way up, down as it comes in to land
+          this.pitch = -0.3 * Math.sin(TAU * tt);
+          this.yaw = turnToward(this.yaw, H.yaw, 14, 8, dt);
           if (H.t >= 1) {
             this.pos.copy(H.to);
-            this.leap = 0.3;
+            this.pitch = 0;
             if (H.spot) { this.spot = H.spot; H.spot.taken = this; }
             if (H.to.y <= WATER_Y + 0.05) pond.addRipple(H.to.x, H.to.z, 0.6, shared.uTime.value);
             this.swim = L.inPond(H.to.x, H.to.z, 0.02) && !(H.spot && H.spot.kind === 'pad');
-            this.state = this.swim ? 'swim' : 'sit';
+            this.state = this.swim && this.swimGoal ? 'swim' : 'sit';
+            if (this.state === 'swim') this.kick = 0;
             this.timer = this.food ? 0.25 : r.range(4, 14);
             this.hop = null;
           }
         } else if (this.state === 'swim') {
-          // paddle toward the next goal on the surface
-          const g = this.swimGoal || this.pos;
-          _v.subVectors(g, this.pos); _v.y = 0;
-          const d = _v.length();
+          // paddle toward the goal on the surface, turning first rather than sliding sideways or backwards
+          const f = this.food && !this.food.dead && !this.food.dying && this.food.bites > 0 && !this.food.heldBy ? this.food : null;
+          if (this.food && !f) { this.food = null; this.swimGoal = null; }
+          else if (f && this.swimGoal) { this.swimGoal.copy(f.pos); this.swimWet = f.state === 'float'; }
           this.pos.y = WATER_Y - 0.04;
-          this.leap = 0.5 + 0.5 * Math.sin(t * 7);
-          if (d > 0.05) { this.yaw = dampAngle(this.yaw, Math.atan2(_v.x, _v.z), 4, dt); this.pos.addScaledVector(_v.normalize(), Math.min(d, 0.45 * dt)); }
-          if (Math.random() < dt * 1.5) pond.addRipple(this.pos.x, this.pos.z, 0.25, shared.uTime.value);
-          if (d < 0.3 || !this.swimGoal) { this.state = 'sit'; this.swim = !this.swimGoal || L.inPond(this.pos.x, this.pos.z, 0.02); this.timer = 0.2; }
-          if (this.swimGoal && !L.inPond(this.pos.x, this.pos.z, 0.0)) { this.pos.y = L.groundH(this.pos.x, this.pos.z); this.state = 'sit'; this.swim = false; this.swimGoal = null; this.timer = 0.3; }
+          this.swimSpeed = 0;
+          const g = this.swimGoal;
+          if (!g) { this.state = 'sit'; this.swim = true; this.timer = 0.2; }
+          else {
+            _v.subVectors(g, this.pos); _v.y = 0;
+            const d = _v.length();
+            if (!this.swimWet && d < 1.3) {
+              // near a rock, log, pad or the shore: climb out with a hop (it used to paddle into rocks and logs
+              // and sit inside them, or pop up onto the bank)
+              const spot = this.swimSpot;
+              this.swimGoal = null; this.swimSpot = null;
+              this.state = 'sit'; this.swim = true; this.timer = 0.25;
+              if (spot) this.hopTo(spot.pos, spot); else this.stepToward(g);
+            } else if (this.swimWet && d < 0.3) {
+              this.swimGoal = null; this.swimSpot = null;
+              this.state = 'sit'; this.swim = true; this.timer = 0.2;
+            } else {
+              const yawT = Math.atan2(_v.x, _v.z);
+              this.yaw = turnToward(this.yaw, yawT, 4, 3, dt);
+              const align = Math.max(0, Math.cos(angleTo(this.yaw, yawT)));
+              const step = Math.min(d, 0.45 * align * align * dt);
+              const nx = this.pos.x + _v.x / d * step, nz = this.pos.z + _v.z / d * step;
+              if (!L.inPond(nx, nz, 0.0)) {
+                // the shore is in the way: hop out toward the goal
+                const spot = this.swimSpot;
+                this.swimGoal = null; this.swimSpot = null;
+                this.state = 'sit'; this.swim = true; this.timer = 0.3;
+                if (spot) { spot.taken = null; }
+                this.stepToward(g);
+              } else { this.pos.x = nx; this.pos.z = nz; this.swimSpeed = step / dt; }
+            }
+          }
         } else if (this.state === 'eat') {
           const f = this.food;
-          if (!f || f.dead || f.bites <= 0) { this.state = 'sit'; this.food = null; this.timer = r.range(2, 5); this.tongue = 0; }
+          if (!f || f.dead || f.dying || f.bites <= 0 || f.heldBy) { this.state = 'sit'; this.food = null; this.timer = r.range(2, 5); this.tongue = 0; }
           else {
-            this.yaw = dampAngle(this.yaw, Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z), 8, dt);
+            const yawT = Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z);
+            this.yaw = turnToward(this.yaw, yawT, 8, 6, dt);
+            // the tongue only shoots out once the frog faces the fruit
+            if (this.flickT > 0 && Math.abs(angleTo(this.yaw, yawT)) > 0.35) this.flickT = Math.max(this.flickT, 0.15);
             this.flickT -= dt;
             if (this.flickT <= 0 && this.flickT > -0.28) this.tongue = Math.sin((-this.flickT / 0.28) * Math.PI) * clamp(Math.hypot(f.pos.x - this.pos.x, f.pos.z - this.pos.z) / (this.scale * 0.95), 0.2, 1);
             else this.tongue = 0;
@@ -873,8 +956,20 @@ export default {
             if (this.flickT <= -0.28) { this.flickT = r.range(0.9, 1.6); this.flicks++; this.bit = false; if (this.flicks >= r.int(3, 5)) { this.state = 'sit'; this.food = null; this.timer = r.range(3, 8); } }
           }
         }
+        // swimming legs paddle at a rate that follows the speed, from wherever the legs were (the kick used to
+        // jump straight to a shared sin(7 t), in step for every frog)
+        if (this.state === 'swim') {
+          this.kick = (this.kick + dt * 7 * clamp(this.swimSpeed / 0.45, 0.15, 1)) % TAU;
+          this.leap = damp(this.leap, 0.5 - 0.5 * Math.cos(this.kick), 14, dt);
+          this.rippleT -= dt;
+          if (this.rippleT <= 0) { this.rippleT = r.range(0.45, 0.95); pond.addRipple(this.pos.x, this.pos.z, 0.25, shared.uTime.value); }
+        } else if (this.state !== 'hop') {
+          // a slight shift of the hind legs while it pivots, so it does not turn like a figure on a turntable
+          const pivot = this.state === 'turn' || (this.state === 'sit' && this.yawGoal !== null);
+          this.leap = damp(this.leap, pivot ? 0.12 : 0, 12, dt);
+        }
       }
-      stepToward(target) {
+      stepToward(target, spot = null) {
         _v.subVectors(target, this.pos); _v.y = 0;
         const d = _v.length();
         const stepLen = Math.min(d - 0.32, 1.5);
@@ -883,7 +978,7 @@ export default {
         const x = this.pos.x + _v.x * stepLen, z = this.pos.z + _v.z * stepLen;
         const pad = padSpots.find(p => Math.hypot(p.pos.x - x, p.pos.z - z) < 0.5 && !p.taken);
         if (pad) this.hopTo(pad.pos, pad);
-        else if (L.inPond(x, z, 0.02)) { this.swimGoal = target.clone(); this.hopTo(new THREE.Vector3(x, WATER_Y - 0.04, z)); }
+        else if (L.inPond(x, z, 0.02)) { this.swimTo(target, spot); this.hopTo(new THREE.Vector3(x, WATER_Y - 0.04, z)); }
         else {
           const y = Math.max(L.groundH(x, z), target.y - 0.02 > L.groundH(x, z) && d < 1.6 ? target.y - 0.05 : L.groundH(x, z));
           this.hopTo(new THREE.Vector3(x, y, z));
@@ -896,29 +991,34 @@ export default {
         if (cands.some(s => s.visible) && r.chance(0.75)) cands = cands.filter(s => s.visible);
         if (hungry) cands = cands.filter(s => s.camD < this.pos.distanceTo(camPos0) + 0.5);
         if (!cands.length || r.chance(0.25)) {
-          // just turn around on the spot (small hop in place)
-          this.yaw += r.range(-1.2, 1.2);
+          // just turn around on the spot (eased; it used to snap up to 70° in one frame)
+          this.yawGoal = this.yaw + r.range(-1.2, 1.2);
           this.timer = r.range(4, 10);
           return;
         }
         const s = cands[r.int(0, cands.length - 1)];
         const d = s.pos.distanceTo(this.pos);
-        if (d > 1.7 || (this.swim && s.kind !== 'pad')) {
-          if (L.inPond(s.pos.x, s.pos.z, 0.02) || this.swim) { this.swimGoal = s.pos.clone(); this.state = 'swim'; if (this.spot) { this.spot.taken = null; this.spot = null; } return; }
-          this.stepToward(s.pos); return;
+        if (this.swim) {
+          // in the water: hop up onto a spot within reach, otherwise paddle over to it first
+          if (d <= 1.3) this.hopTo(s.pos, s);
+          else { this.swimTo(s.pos, s); this.state = 'swim'; this.kick = 0; if (this.spot) { this.spot.taken = null; this.spot = null; } }
+          return;
         }
-        this.hopTo(s.pos, s);
+        // on land: hop there, or take a first hop toward it (into the water if that is the way); a frog sitting
+        // on a log or rock used to drop straight to the water surface and paddle off
+        if (d <= 1.7) this.hopTo(s.pos, s);
+        else this.stepToward(s.pos, s);
       }
       write(i) {
         const s = this.scale;
-        _e.set(this.state === 'hop' ? -0.35 * Math.sin(Math.PI * this.hop.t) : 0, this.yaw, 0, 'YXZ');
+        _e.set(this.pitch, this.yaw, 0, 'YXZ');
         _q.setFromEuler(_e);
         _m4.compose(this.pos, _q, _s.setScalar(s));
         frogKit.mesh.setMatrixAt(i, _m4);
         frogKit.pose.setXYZW(i, this.leap, this.throat, this.tongue, this.breath);
       }
     }
-    const dampAngle = (a, b, l, dt) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * (1 - Math.exp(-l * dt));
+    const angleTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
     const findFoodFor = (c) => {
       const list = fruits.alive();
@@ -947,17 +1047,17 @@ export default {
     const butterflyCtx = {
       pickTarget(b, out) {
         const hungry = b.member && env.fullness(b.member) < 0.3;
-        if (!b.food) { const f = findFoodFor(b); if (f && (hungry || wf.chance(0.6))) { const claims = f.claims.filter(x => x.food === f).length; if (claims < 4) { b.food = f; f.claims.push(b); return; } } }
-        if (wf.chance(rainNow > 0.3 ? 0.85 : 0.18)) {
+        if (!b.food) { const f = findFoodFor(b); if (f && (hungry || b.rng.chance(0.6))) { const claims = f.claims.filter(x => x.food === f).length; if (claims < 4) { b.food = f; f.claims.push(b); return; } } }
+        if (b.rng.chance(rainNow > 0.3 ? 0.85 : 0.18)) {
           const spots = [...boulderSpots.filter(s => s.pos.y > WATER_Y + 0.1), ...logSpots];
-          const s = spots[wf.int(0, spots.length - 1)];
-          b.restSpot = s.pos.clone().add(_v.set(wf.range(-0.1, 0.1), 0.02, wf.range(-0.1, 0.1)));
+          const s = spots[b.rng.int(0, spots.length - 1)];
+          b.restSpot = s.pos.clone().add(_v.set(b.rng.range(-0.1, 0.1), 0.02, b.rng.range(-0.1, 0.1)));
           out.copy(b.restSpot);
           return;
         }
-        if (hungry) out.set(camera.position.x * 0.55 + wf.range(-2.5, 2.5), wf.range(1.2, 3.2), lerp(VIEW_TARGET.z, camera.position.z, 0.62) + wf.range(-1.5, 1.5));
-        else if (b.kind === 0) out.set(POND.cx + wf.range(-5, 5), wf.range(0.9, 3.6), POND.cz + wf.range(-1, 6.5));
-        else out.set(POND.cx + wf.range(-8, 8), wf.range(0.6, 4.5), POND.cz + wf.range(-5, 7));
+        if (hungry) out.set(camera.position.x * 0.55 + b.rng.range(-2.5, 2.5), b.rng.range(1.2, 3.2), lerp(VIEW_TARGET.z, camera.position.z, 0.62) + b.rng.range(-1.5, 1.5));
+        else if (b.kind === 0) out.set(POND.cx + b.rng.range(-5, 5), b.rng.range(0.9, 3.6), POND.cz + b.rng.range(-1, 6.5));
+        else out.set(POND.cx + b.rng.range(-8, 8), b.rng.range(0.6, 4.5), POND.cz + b.rng.range(-5, 7));
       },
       foodTarget(b, out) {
         const f = b.food;
@@ -972,44 +1072,54 @@ export default {
     const macawCtx = {
       wantsFood(m) {
         const f = fruits.alive().find(f => !f.heldBy && !macaws.some(o => o.target === f));
-        return !!f && (env.fullness(m.member) < 0.6 || wf.chance(0.35));
+        return !!f && (env.fullness(m.member) < 0.6 || m.rng.chance(0.35));
       },
       decide(m) {
         const hungry = env.fullness(m.member) < 0.3;
         const f = fruits.alive().find(f => !f.heldBy && !macaws.some(o => o.target === f));
-        if (f && (hungry || wf.chance(0.7))) {
+        if (f && (hungry || m.rng.chance(0.7))) {
           m.target = f;
-          const land = f.pos.clone().add(_v.set(0, f.state === 'float' ? 0.35 : 0.12, 0));
-          m.flyTo(land, { land: true, speed: 6, arrive: mm => { mm.state = 'grab'; mm.timer = 0.8; if (f.state === 'float') pond.addRipple(f.pos.x, f.pos.z, 0.8, shared.uTime.value); } });
+          // hover high enough that the tail (it hangs ~0.3 m below the body in the hover) clears the ground or
+          // the water; it used to hover 12 cm over the fruit with its tail in the soil
+          const land = f.pos.clone();
+          land.y = Math.max(f.pos.y, f.state === 'float' ? WATER_Y : L.groundH(f.pos.x, f.pos.z)) + 0.38;
+          m.flyTo(land, { land: true, speed: 6, flare: -0.35, follow: f, arrive: mm => {
+            mm.hover(0.8);
+            // pick the fruit up during the hover: it rises to the beak (it used to jump there at take-off)
+            if (!f.dead && !f.dying && f.bites > 0 && !f.heldBy) {
+              if (f.state === 'float') pond.addRipple(f.pos.x, f.pos.z, 0.8, shared.uTime.value);
+              f.heldBy = mm; mm.carry = f; f.state = 'held'; mm.biteT = 1.2;
+              f.holdK = 0; (f.grabFrom || (f.grabFrom = new THREE.Vector3())).copy(f.pos);
+            }
+          } });
           return;
         }
-        if (wf.chance(0.25)) {
-          // scenic pass across the clearing, then back to a perch
-          const p = choosePerch(m);
-          const mid = new THREE.Vector3(wf.range(-6, 6), wf.range(5, 9), wf.range(-6, 2));
-          m.flyTo(mid, { land: false, speed: 6.5, arrive: mm => { mm.flyTo(p.pos, { land: true, arrive: m3 => m3.placeAt(p) }); p.taken = mm; } });
-          return;
-        }
+        // perches are reserved when chosen, and flights end where the bird sits (perchPoint)
         const p = choosePerch(m);
         p.taken = m;
-        m.flyTo(p.pos, { land: true, arrive: mm => mm.placeAt(p) });
+        if (m.rng.chance(0.25)) {
+          // scenic pass across the clearing, then back to a perch
+          const mid = new THREE.Vector3(m.rng.range(-6, 6), m.rng.range(5, 9), m.rng.range(-6, 2));
+          m.flyTo(mid, { land: false, speed: 6.5, arrive: mm => { p.taken = mm; mm.flyTo(mm.perchPoint(p, _v), { land: true, arrive: m3 => m3.placeAt(p) }); } });
+          return;
+        }
+        m.flyTo(m.perchPoint(p, _v), { land: true, arrive: mm => mm.placeAt(p) });
       },
       afterGrab(m) {
-        const f = m.target;
         m.target = null;
-        if (f && !f.dead && f.bites > 0 && !f.heldBy) { f.heldBy = m; m.carry = f; f.state = 'held'; m.biteT = 1.2; }
         const p = choosePerch(m);
         p.taken = m;
-        m.flyTo(p.pos, { land: true, speed: 5, arrive: mm => mm.placeAt(p) });
+        // climb away from the water or the ground (a take-off dip would take it through them)
+        m.flyTo(m.perchPoint(p, _v), { land: true, speed: 5, dip: -1.0, arrive: mm => mm.placeAt(p) });
       },
       bite: (m, f) => { bite(m, f); if (f.bites <= 0) { f.heldBy = null; } },
     };
     const choosePerch = (m) => {
       const hungry = env.fullness(m.member) < 0.3;
-      let free = perches.filter(p => !p.taken || p.taken === m);
-      if (!hungry && wf.chance(0.6) && free.some(p => p.low)) free = free.filter(p => p.low);
+      let free = perches.filter(p => (!p.taken || p.taken === m) && p !== m.perch);
+      if (!hungry && m.rng.chance(0.6) && free.some(p => p.low)) free = free.filter(p => p.low);
       if (hungry) { free.sort((a, b) => a.camD - b.camD); free = free.slice(0, Math.max(2, Math.ceil(free.length / 3))); }
-      return free.length ? free[wf.int(0, free.length - 1)] : perches[0];
+      return free.length ? free[m.rng.int(0, free.length - 1)] : perches[0];
     };
 
     const spawnMember = (member) => {
@@ -1018,7 +1128,7 @@ export default {
         const m = new Macaw(macawKit, member, R('macaw' + member.id), { shadows: env.shadows });
         let free = perches.filter(p => !p.taken && p.low);
         if (!free.length) free = perches.filter(p => !p.taken);
-        m.placeAt(free.length ? free[R('mp' + member.id).int(0, free.length - 1)] : perches[0]);
+        m.placeAt(free.length ? free[R('mp' + member.id).int(0, free.length - 1)] : perches[0], true);
         m.timer = m.rng.range(3, 12);
         scene.add(m.mesh);
         macaws.push(m);
@@ -1051,13 +1161,23 @@ export default {
         _v.set(f.pos.x - plunge.x, 0, f.pos.z - plunge.z);
         const d = _v.length();
         if (d < 4) f.vel.addScaledVector(_v.normalize(), dt * 0.25 * (4 - d));
-        if (!L.inPond(f.pos.x + f.vel.x * 0.5, f.pos.z + f.vel.z * 0.5, 0.25)) f.vel.multiplyScalar(-0.5);
+        // near the bank: ease back toward open water (flipping the velocity made it shiver at the edge)
+        if (!L.inPond(f.pos.x + f.vel.x * 0.5, f.pos.z + f.vel.z * 0.5, 0.25)) {
+          _v.set(POND.cx - f.pos.x, 0, POND.cz - f.pos.z).normalize();
+          const out = -(f.vel.x * _v.x + f.vel.z * _v.z);
+          if (out > 0) f.vel.addScaledVector(_v, out * (1 - Math.exp(-4 * dt)));
+          f.vel.addScaledVector(_v, 0.15 * dt);
+        }
         f.vel.x += Math.sin(shared.uTime.value * 0.3 + f.bob) * 0.01 * dt;
       },
-      held: f => {
+      held: (f, dt) => {
         const m = f.heldBy;
         if (!m) return;
-        m.beak(f.pos);
+        // rises from where it lay to the beak over ~0.35 s, then rides in it
+        m.beak(_v);
+        f.holdK = Math.min(1, (f.holdK ?? 1) + dt / 0.35);
+        if (f.holdK < 1 && f.grabFrom) f.pos.lerpVectors(f.grabFrom, _v, smoothstep(0, 1, f.holdK));
+        else f.pos.copy(_v);
       },
     };
 
@@ -1107,7 +1227,9 @@ export default {
     function applyTime(dt, force) {
       const hRaw = env.hours();
       const h = smoothHour(hRaw, dt, force);
-      if (h !== tod.sH) { tod.sH = h; tod.s = sunState(h, sunOpts); } // cached: no per-frame allocation once settled
+      // cached: sunState allocates, and the hour glides for ~30 s after every minute tick, so it is refreshed in
+      // steps of 2e-4 h (0.7 s of sun movement, invisible) rather than every frame
+      if (force || tod.sH === null || Math.abs(h - tod.sH) > 2e-4) { tod.sH = h; tod.s = sunState(h, sunOpts); }
       const s = tod.s;
       const rainA = rainAmount(h);
       rainNow = rainA;
@@ -1229,7 +1351,7 @@ export default {
     /* ---------------- update ---------------- */
     let simT = 0;
     const floating = [];
-    const fishGoal = new THREE.Vector3();
+    const FISH_EATER = { member: null };
     function update(dt, t) {
       if (compileRTLive && simT > 0) {
         compileRTLive = false;
@@ -1252,50 +1374,129 @@ export default {
       rain.material.uniforms.uPxK.value = 2 * Math.tan(camera.fov * Math.PI / 360) / Math.max(1, _px2.y);
       wind.update(dt);
       applyTime(dt, simT < 0.2);
-      // fruit
-      fruits.update(dt, t, fruitHooks);
       // frogs
-      frogs.forEach((f, i) => { f.update(dt, t); f.write(i); });
+      for (let i = 0; i < frogs.length; i++) { frogs[i].update(dt, t); frogs[i].write(i); }
       frogKit.mesh.count = frogs.length;
       frogKit.mesh.instanceMatrix.needsUpdate = true;
       frogKit.pose.needsUpdate = true;
       // macaws
-      for (const m of macaws) m.update(dt, t, macawCtx);
+      for (let i = 0; i < macaws.length; i++) macaws[i].update(dt, t, macawCtx);
+      // fruit: after the macaws, so a carried fruit sits in this frame's beak (it trailed a frame behind:
+      // 10 cm at 60 fps, 20 cm at 30 fps)
+      fruits.update(dt, t, fruitHooks);
       // butterflies
-      butterflies.forEach((b, i) => { b.update(dt, t, butterflyCtx); b.write(butterflyKit.mesh, butterflyKit.wing, i); });
+      for (let i = 0; i < butterflies.length; i++) { const b = butterflies[i]; b.update(dt, t, butterflyCtx); b.write(butterflyKit.mesh, butterflyKit.wing, i); }
       butterflyKit.mesh.count = butterflies.length;
       butterflyKit.mesh.instanceMatrix.needsUpdate = true;
       butterflyKit.wing.needsUpdate = true;
       // dragonflies
-      dragonflies.forEach((d, i) => { d.update(dt, t); d.write(dragonKit.mesh, i, 0.22); });
+      for (let i = 0; i < dragonflies.length; i++) { dragonflies[i].update(dt, t); dragonflies[i].write(dragonKit.mesh, i, 0.22); }
       dragonKit.mesh.instanceMatrix.needsUpdate = true;
-      // fish
+      // fish: they wander the pond; floating fruit is noticed by each fish in its own time (sooner when near) and
+      // they gather round it, each in its own spot, instead of all converging on one point together. They turn in
+      // arcs, keep a little apart, go round the rocks and stay off the floor. Decisions use each fish's own seeded
+      // rng (Math.random made them differ from run to run and between frame rates).
       floating.length = 0;
-      for (const f of fruits.items) if (!f.dead && f.state === 'float' && f.bites > 0) floating.push(f);
-      for (const set of fishSets) {
-        set.inst.begin();
-        for (const sw of set.fish) {
+      for (const f of fruits.items) if (!f.dead && !f.dying && f.state === 'float' && f.bites > 0) floating.push(f);
+      for (let i = 0; i < allFish.length; i++) {
+        const sw = allFish[i], rr = sw.rng;
+        let fr = sw.food;
+        if (fr && (fr.dead || fr.dying || fr.state !== 'float' || fr.bites <= 0)) {
+          fr = sw.food = null;
+          sw.noticeT = rr.range(0.4, 1.4);
+          sw.wanderT = Math.min(sw.wanderT, rr.range(0.3, 1.5));
+        }
+        if (!fr && floating.length) {
+          sw.noticeT -= dt;
+          let best = null, bs = Infinity, bd = 0;
+          for (const f of floating) {
+            const d = Math.hypot(f.pos.x - sw.pos.x, f.pos.z - sw.pos.z);
+            let n = 0;
+            for (const o of allFish) if (o.food === f) n++;
+            if (d + n * 1.2 < bs) { bs = d + n * 1.2; best = f; bd = d; }
+          }
+          if (best && sw.noticeT <= -0.15 * bd) {
+            // a place round the fruit on the side it comes from, as far as possible from the others' places
+            const a0 = Math.atan2(sw.pos.z - best.pos.z, sw.pos.x - best.pos.x) + rr.range(-0.25, 0.25);
+            let bestA = a0, bestGap = -1;
+            for (let c = 0; c < 7; c++) {
+              const a = a0 + (c - 3) * 0.55;
+              let gap = Math.PI;
+              for (const o of allFish) if (o !== sw && o.food === best) gap = Math.min(gap, Math.abs(angleTo(a, o.slotA)));
+              gap -= Math.abs(c - 3) * 0.08; // prefer the near side
+              if (gap > bestGap) { bestGap = gap; bestA = a; }
+            }
+            fr = sw.food = best;
+            sw.slotA = bestA;
+          }
+        }
+        let goal;
+        if (fr) goal = sw.slot.set(fr.pos.x + Math.cos(sw.slotA) * 0.26, WATER_Y - 0.12, fr.pos.z + Math.sin(sw.slotA) * 0.26);
+        else {
           sw.wanderT -= dt;
-          let goal = sw.goal;
-          const fr = floating.length ? floating[(set.fish.indexOf(sw) + fishSets.indexOf(set)) % floating.length] : null;
-          if (fr) { goal = fishGoal.set(fr.pos.x, WATER_Y - 0.12, fr.pos.z); }
-          else if (sw.wanderT <= 0) {
-            sw.wanderT = 3 + Math.random() * 5;
+          if (sw.wanderT <= 0) {
+            sw.wanderT = rr.range(3, 8);
             for (let k = 0; k < 8; k++) {
-              const x = POND.cx + (Math.random() - 0.5) * 10, z = POND.cz + (Math.random() - 0.5) * 7;
-              if (L.inPond(x, z, 0.45)) { sw.goal.set(x, Math.max(L.groundH(x, z) + 0.25, WATER_Y - 0.9 + Math.random() * 0.5), z); break; }
+              const x = POND.cx + rr.range(-5, 5), z = POND.cz + rr.range(-3.5, 3.5);
+              if (L.inPond(x, z, 0.45)) { sw.goal.set(x, Math.max(L.groundH(x, z) + 0.25, WATER_Y - 0.9 + rr.next() * 0.5), z); break; }
             }
           }
-          const des = sw.seek(goal, fr ? 0.55 : 0.28, 0.8, _v);
-          if (!L.inPond(sw.pos.x + sw.vel.x * 0.8, sw.pos.z + sw.vel.z * 0.8, 0.3)) des.add(_v2.set(POND.cx - sw.pos.x, 0, POND.cz - sw.pos.z).normalize().multiplyScalar(0.4));
-          sw.steer(des, dt).integrate(dt);
-          sw.pos.y = Math.min(sw.pos.y, WATER_Y - 0.08);
-          if (fr && fr.age > 8 && sw.pos.distanceTo(goal) < 0.25) {
-            sw.nibbleT -= dt;
-            if (sw.nibbleT <= 0) { sw.nibbleT = 4 + Math.random() * 4; bite({ member: null }, fr, 0.35); }
-          }
-          set.inst.push(sw);
+          goal = sw.goal;
         }
+        const des = sw.seek(goal, fr ? sw.foodSpeed : sw.cruise, 0.8, _v);
+        // at the food: a gentle pull toward the fruit, so each fish settles nose-first against it
+        if (fr) { _v2.set(fr.pos.x - sw.pos.x, 0, fr.pos.z - sw.pos.z); const d = _v2.length(); if (d > 1e-3) des.addScaledVector(_v2, 0.05 * clamp(1.2 - d, 0, 1) / d); }
+        // the bank
+        if (!L.inPond(sw.pos.x + sw.vel.x * 0.8, sw.pos.z + sw.vel.z * 0.8, 0.3)) des.add(_v2.set(POND.cx - sw.pos.x, 0, POND.cz - sw.pos.z).normalize().multiplyScalar(0.4));
+        // a little personal space (they used to swim through each other and stack up on the food)
+        for (const o of allFish) {
+          if (o === sw) continue;
+          const dx = sw.pos.x - o.pos.x, dz = sw.pos.z - o.pos.z, d2 = dx * dx + dz * dz;
+          if (d2 < 0.16 && d2 > 1e-6) { const d = Math.sqrt(d2), k = (0.4 - d) / 0.4 * 0.3 / d; des.x += dx * k; des.z += dz * k; }
+        }
+        // round the rocks standing in the pond (looking a little ahead)
+        const ax = sw.pos.x + sw.vel.x * 0.6, az = sw.pos.z + sw.vel.z * 0.6;
+        for (const rk of pondRocks) {
+          if (sw.pos.y > rk.top) continue;
+          const dx = ax - rk.x, dz = az - rk.z, d = Math.hypot(dx, dz), Rr = rk.r + 0.25;
+          if (d < Rr && d > 1e-4) { const k = (Rr - d) / Rr * 0.7 / d; des.x += dx * k; des.z += dz * k; }
+        }
+        // turn in an arc instead of braking into a reverse: a U-turn used to stall the fish and spin it on the spot
+        // (and the heading could swing over the top)
+        const dl = Math.hypot(des.x, des.z);
+        if (dl > 1e-3) {
+          const a = Math.atan2(sw.fwd.z, sw.fwd.x), dd = angleTo(a, Math.atan2(des.z, des.x));
+          if (Math.abs(dd) > 1.9) {
+            if (!sw.uturn) sw.uturn = Math.sign(dd) || 1;
+            const c = a + sw.uturn * 1.9;
+            des.x = Math.cos(c) * dl; des.z = Math.sin(c) * dl;
+          } else sw.uturn = 0;
+        }
+        // keep off the pond floor
+        const floor = L.groundH(sw.pos.x, sw.pos.z) + 0.12;
+        if (sw.pos.y < floor + 0.15) des.y += (floor + 0.15 - sw.pos.y) * 1.5;
+        const hx = sw.fwd.x, hy = sw.fwd.y, hz = sw.fwd.z, hRate = sw.yawRate, hRoll = sw.roll, hTurn = sw.turn;
+        sw.steer(des, dt).integrate(dt);
+        sw.pos.y = Math.min(Math.max(sw.pos.y, floor), WATER_Y - 0.08);
+        // A nearly stopped fish holds its heading, as a hovering koi does: the Swimmer turns the body toward the
+        // direction of even a 1 cm/s drift (at 1 rad/s or more), so fish parked at the food kept swivelling.
+        // Bank and body bend relax with the (now small) turn rate, using the Swimmer's own constants.
+        const hold = 1 - smoothstep(0.025, 0.08, sw.vel.length());
+        if (hold > 1e-3) {
+          sw.fwd.lerp(_v2.set(hx, hy, hz), hold).normalize();
+          sw.yawRate = lerp(sw.yawRate, hRate * Math.exp(-8 * dt), hold);
+          sw.roll = lerp(sw.roll, hRoll + (clamp(-sw.yawRate * 0.12, -0.45, 0.45) - hRoll) * (1 - Math.exp(-4 * dt)), hold);
+          sw.turn = lerp(sw.turn, hTurn + (clamp(-sw.yawRate * 0.06, -0.22, 0.22) - hTurn) * (1 - Math.exp(-6 * dt)), hold);
+          fishQuat(sw.quat, sw.fwd, sw.roll);
+        }
+        if (fr && fr.age > 8 && sw.pos.distanceTo(goal) < 0.3) {
+          sw.nibbleT -= dt;
+          if (sw.nibbleT <= 0) { sw.nibbleT = rr.range(4, 8); bite(FISH_EATER, fr, 0.35); }
+        }
+      }
+      for (const set of fishSets) {
+        set.inst.begin();
+        for (const sw of set.fish) set.inst.push(sw);
         set.inst.end(t);
       }
     }
@@ -1305,7 +1506,7 @@ export default {
     const compileRT = new THREE.WebGLRenderTarget(1, 1);
     renderer.setRenderTarget(compileRT);
     let compileRTLive = true;
-    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, post, view, L };
+    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, dragonflies, allFish, pondRocks, boulderSpots, post, view, L };
     // initial pose
     update(1 / 60, 0);
 
@@ -1355,10 +1556,12 @@ export default {
       },
       addMember(member) { spawnMember(member); },
       creatures() {
+        // live positions (as in the other worlds), so a name tag follows its creature instead of staying where it
+        // was when the pointer last moved
         pickPool.length = 0;
-        for (const f of frogs) pickPool.push({ member: f.member, pos: f.pos.clone().add(_v.set(0, 0.1, 0)), radius: 0.35 });
-        for (const m of macaws) pickPool.push({ member: m.member, pos: m.mesh.position.clone(), radius: 0.7 });
-        for (const b of butterflies) if (b.member) pickPool.push({ member: b.member, pos: b.pos.clone(), radius: 0.35 });
+        for (const f of frogs) pickPool.push({ member: f.member, pos: f.pos, radius: 0.45 });
+        for (const m of macaws) pickPool.push({ member: m.member, pos: m.mesh.position, radius: 0.7 });
+        for (const b of butterflies) if (b.member) pickPool.push({ member: b.member, pos: b.pos, radius: 0.35 });
         return pickPool;
       },
       resize(w, h) {
@@ -1383,6 +1586,24 @@ export default {
     };
   },
 };
+
+/** Fish orientation from heading and roll (as quatFromForward in lib/util.js, without its per-call allocation). */
+const _fqx = new THREE.Vector3(), _fqy = new THREE.Vector3(), _fqz = new THREE.Vector3(), _fqt = new THREE.Vector3(), _fqm = new THREE.Matrix4();
+function fishQuat(q, forward, roll) {
+  _fqx.copy(forward).normalize();
+  _fqz.crossVectors(_fqx, UP);
+  if (_fqz.lengthSq() < 1e-6) _fqz.set(0, 0, 1);
+  _fqz.normalize();
+  _fqy.crossVectors(_fqz, _fqx).normalize();
+  if (roll) {
+    const c = Math.cos(roll), s = Math.sin(roll);
+    _fqt.copy(_fqy).multiplyScalar(c).addScaledVector(_fqz, s);
+    _fqz.multiplyScalar(c).addScaledVector(_fqy, -s);
+    _fqy.copy(_fqt);
+  }
+  _fqm.makeBasis(_fqx, _fqy, _fqz);
+  return q.setFromRotationMatrix(_fqm);
+}
 
 /** Canopy clump with UVs mapped onto an atlas rect. */
 function buildClumpOnAtlas(atlas, rect, seed, cards) {

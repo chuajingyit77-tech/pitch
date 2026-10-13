@@ -1,6 +1,6 @@
 // Tropical fruit for feeding: mango, papaya slice, halved passion fruit, berry cluster.
 import * as THREE from 'three';
-import { TAU, clamp, lerp, makeRng } from '../../lib/util.js';
+import { TAU, clamp, lerp, damp, smoothstep, makeRng } from '../../lib/util.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { jungleMaterial } from './shading.js';
 import { WATER_Y } from './terrain.js';
@@ -100,11 +100,13 @@ export const FRUIT_KINDS = [
 export class FruitSystem {
   constructor(shared, maxPer = 8, shadows = false) {
     this.items = [];
+    // room for the recycled fruit that are still fading out next to the new ones
+    this.cap = maxPer * 2;
     this.meshes = FRUIT_KINDS.map(k => {
       const g = k.build();
       const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.42, clearcoat: 0.45, clearcoatRoughness: 0.3 });
       jungleMaterial(mat, shared, { translucent: 0.2 });
-      const m = new THREE.InstancedMesh(g, mat, maxPer);
+      const m = new THREE.InstancedMesh(g, mat, this.cap);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.count = 0; m.castShadow = shadows; m.frustumCulled = false;
       return m;
@@ -112,23 +114,23 @@ export class FruitSystem {
     this.maxPer = maxPer;
   }
   spawn(kindIndex, pos, onWater, rng) {
-    const perKind = this.items.filter(f => f.kind === kindIndex && !f.dead).length;
+    const perKind = this.items.filter(f => f.kind === kindIndex && !f.dead && !f.dying).length;
     if (perKind >= this.maxPer) {
-      // recycle the oldest of this kind
-      const old = this.items.find(f => f.kind === kindIndex && !f.dead);
-      if (old) old.dead = true;
+      // recycle the oldest of this kind: it fades out (it used to vanish in one frame)
+      const old = this.items.find(f => f.kind === kindIndex && !f.dead && !f.dying && !f.heldBy) || this.items.find(f => f.kind === kindIndex && !f.dead && !f.dying);
+      if (old) { old.dying = true; if (old.heldBy) old.heldBy = null; }
     }
     const K = FRUIT_KINDS[kindIndex];
     const f = {
       kind: kindIndex, pos: pos.clone().add(new THREE.Vector3(0, 2.6, 0)), rest: pos.clone(), vel: new THREE.Vector3(rng.range(-0.3, 0.3), 0, rng.range(-0.3, 0.3)),
       quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng.next() * TAU), spin: rng.range(-3, 3),
       state: 'fall', onWater, bites: K.bites, maxBites: K.bites, scale: K.scale, r: K.r, age: 0, dead: false, fade: 1,
-      claims: [], heldBy: null, bob: rng.next() * TAU, landed: false,
+      claims: [], heldBy: null, bob: rng.next() * TAU, landed: false, grow: 0, sz: K.scale, splashT: -1,
     };
     this.items.push(f);
     return f;
   }
-  alive() { return this.items.filter(f => !f.dead && f.state !== 'fall' && f.bites > 0); }
+  alive() { return this.items.length ? this.items.filter(f => !f.dead && !f.dying && f.state !== 'fall' && f.bites > 0) : NONE; }
   bite(f, amount = 1) {
     f.bites -= amount;
     if (f.bites <= 0) { f.bites = 0; f.dying = true; }
@@ -141,38 +143,54 @@ export class FruitSystem {
       if (f.dead) continue;
       f.age += dt;
       if (f.state === 'fall') {
-        f.vel.y -= 9.8 * dt;
+        // exact ballistic step (the explicit one fell a few per cent faster at 30 fps than at 60)
         f.pos.addScaledVector(f.vel, dt);
+        f.pos.y -= 4.9 * dt * dt;
+        f.vel.y -= 9.8 * dt;
         const floor = f.onWater ? WATER_Y - 0.05 : f.rest.y;
         if (f.pos.y <= floor) {
           f.pos.y = floor;
-          if (f.onWater) { f.state = 'float'; hooks.splash(f); }
-          else if (!f.landed && Math.abs(f.vel.y) > 2) { f.landed = true; f.vel.set(f.vel.x * 0.4, -f.vel.y * 0.22, f.vel.z * 0.4); hooks.thud(f); }
+          if (f.onWater) {
+            f.state = 'float'; f.splashT = 0;
+            // bob phase chosen so the float starts exactly where the fall ended (it hopped by up to 2 cm)
+            f.bob = -0.985 / 1.6;
+            hooks.splash(f);
+          } else if (!f.landed && Math.abs(f.vel.y) > 2) { f.landed = true; f.vel.set(f.vel.x * 0.4, -f.vel.y * 0.22, f.vel.z * 0.4); f.spin *= 0.4; hooks.thud(f); }
           else { f.state = 'rest'; f.vel.set(0, 0, 0); }
         }
-        f.quat.multiply(_q.setFromAxisAngle(_ax.set(0.3, 1, 0.2).normalize(), f.spin * dt));
       } else if (f.state === 'float') {
         f.bob += dt;
-        f.pos.y = WATER_Y - 0.04 + Math.sin(f.bob * 1.6) * 0.012;
+        // after the splash it dips a few centimetres and comes back up (critically damped), then bobs
+        f.splashT += dt;
+        const dip = -0.6 * f.splashT * Math.exp(-8 * f.splashT);
+        f.pos.y = WATER_Y - 0.04 + Math.sin(f.bob * 1.6) * 0.012 + dip;
         f.pos.x += f.vel.x * dt; f.pos.z += f.vel.z * dt;
         f.vel.multiplyScalar(Math.exp(-0.3 * dt));
         hooks.drift(f, dt);
       }
-      if (f.heldBy) hooks.held(f);
+      // the tumble slows to a stop on the ground or the water instead of freezing at touch-down
+      if (f.state !== 'fall') f.spin *= Math.exp(-6 * dt);
+      if (Math.abs(f.spin) > 1e-3) f.quat.multiply(_q.setFromAxisAngle(_ax.set(0.3, 1, 0.2).normalize(), f.spin * dt));
+      if (f.heldBy) hooks.held(f, dt);
       if (f.dying || f.age > 240) {
         f.fade -= dt * 2.5;
         if (f.fade <= 0) { f.dead = true; continue; }
       }
-      const K = FRUIT_KINDS[f.kind];
-      const s = f.scale * (0.5 + 0.5 * f.bites / f.maxBites) * Math.max(0, f.fade) * (f.dying ? 1 : 1);
+      // appears with a quick grow instead of popping in, and shrinks smoothly with each bite (a bite used to
+      // take a step of up to 8 % off its size in one frame)
+      f.grow = Math.min(1, f.grow + dt / 0.15);
+      f.sz = damp(f.sz, f.scale * (0.5 + 0.5 * f.bites / f.maxBites), 6, dt);
+      const s = f.sz * Math.max(0, f.fade) * smoothstep(0, 1, f.grow);
+      if (counts[f.kind] >= this.cap) continue;
       m4.compose(f.pos, f.quat, _sv.setScalar(Math.max(s, 1e-4)));
       const mesh = this.meshes[f.kind];
       mesh.setMatrixAt(counts[f.kind]++, m4);
     }
-    this.meshes.forEach((m, k) => { m.count = counts[k]; m.instanceMatrix.needsUpdate = true; });
+    for (let k = 0; k < this.meshes.length; k++) { this.meshes[k].count = counts[k]; this.meshes[k].instanceMatrix.needsUpdate = true; }
     // prune
     if (this.items.length > 40) this.items = this.items.filter(f => !f.dead);
   }
   dispose() { this.meshes.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); }
 }
 const _q = new THREE.Quaternion(), _ax = new THREE.Vector3(), _sv = new THREE.Vector3(), _m4 = new THREE.Matrix4();
+const NONE = Object.freeze([]);

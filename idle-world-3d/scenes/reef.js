@@ -54,11 +54,13 @@ export default {
 
     /* ---------------- water volume ---------------- */
     const bg = createBackground(W);
+    bg.name = 'waterDome';
     scene.add(bg);
     const n1 = env.loadTexture('textures/Water_1_M_Normal.jpg', { srgb: false, repeat: true });
     const n2 = env.loadTexture('textures/Water_2_M_Normal.jpg', { srgb: false, repeat: true });
     disposeList.push(n1, n2);
     const surface = createSurface(W, n1, n2);
+    surface.name = 'surface';
     scene.add(surface);
     const shafts = createShafts(W, rng.fork('shafts'), { count: Math.round(34 * Math.max(0.5, env.q)), radius: 24, center });
     scene.add(shafts.mesh);
@@ -92,12 +94,16 @@ export default {
     /* ---------------- life ---------------- */
     const tod = { hours: -99, envHours: -99, sunW: new THREE.Vector3(0, 1, 0), axis: new THREE.Vector3(0, -1, 0), night: 0, day: 1, golden: 0 };
     const life = await createLife({ W, env, hm, scene, anemones: reef.anemones, bommies: rocks.bommies, surfY: SURF_Y, camera, center, thickets: reef.thickets, tod });
+    life.group.name = 'life';
     scene.add(life.group);
     const manta = new Manta(W, rng.fork('manta'), center);
+    manta.mesh.name = 'manta';
     scene.add(manta.mesh);
     const eagle = new Manta(W, rng.fork('eagle'), center, { eagle: true });
+    eagle.mesh.name = 'eagleRay';
     scene.add(eagle.mesh);
     const jellies = new Jellies(W, rng.fork('jelly'), Math.round(9 * Math.max(0.5, env.q)), center);
+    jellies.group.name = 'jellies';
     scene.add(jellies.group);
 
     /* ---------------- time of day ---------------- */

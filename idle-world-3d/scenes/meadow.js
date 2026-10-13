@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture, sunState } from '../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, damp, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
 import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
 import { buildTorii, buildHokora, buildLantern, buildRocks, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
@@ -13,9 +13,17 @@ import { createFx } from './meadow/fx.js';
 import { applyFoxPose, findFoxBones } from './meadow/foxpose.js';
 
 const FOX_SCALE = 0.0078;     // ≈1.2 m nose to tail
-const WALK_REF = 115;         // stride speed of the Walk clip in model units / s
-const RUN_REF = 240;
+const WALK_REF = 115;         // walking ground speed in model units / s (× scale = m/s)
+const RUN_REF = 240;          // running ground speed / 1.45
 const CLIPS = ['Survey', 'Walk', 'Run'];
+// Ground speed of each locomotion clip at timeScale 1 (model units / s): the backward speed of its planted paws,
+// measured from Fox.glb (Walk 94-117 depending on how strictly "planted" is taken; Run 194-215 for the hind paws,
+// its forepaws never plant cleanly). Playback rates are derived from these so the paws stay planted.
+const WALK_GROUND = 115;
+const RUN_GROUND = 210;
+const RUN_PHASE = 0.15;       // Run cycle offset against Walk so the hind paws land together in a walk/run blend
+const PAW_ARM = 27;           // paws' distance from the turning pivot (model units): turning on the spot steps the legs
+const AVOID_CLEAR = 0.45;     // clearance kept around props when walking past them (m)
 
 export default {
   id: 'meadow',
@@ -99,14 +107,25 @@ export default {
       const side = lay.sign();
       rockList.push({ x: p.x + side * lay.range(0.75, 1.1), z: p.z + lay.range(-0.3, 0.3), s: lay.range(0.1, 0.22) });
     }
-    // obstacles for fox steering
+    // obstacles for fox steering (the shrine circle also covers the two stone-fox pedestals beside it)
     const obstacles = [
       { x: -1.375, z: 0, r: 0.42 }, { x: 1.375, z: 0, r: 0.42 },
       { x: LANTERNS[0].x, z: LANTERNS[0].z, r: 0.5 }, { x: LANTERNS[1].x, z: LANTERNS[1].z, r: 0.5 },
-      { x: SHRINE.x, z: SHRINE.z, r: 0.95 },
+      { x: SHRINE.x, z: SHRINE.z + 0.3, r: 1.55 },
       ...treeSpots.map(t => ({ x: t.x, z: t.z, r: 0.45 })),
       ...rockList.filter(r => r.s > 0.3).map(r => ({ x: r.x, z: r.z, r: r.s * 1.1 })),
     ];
+    /** Push a ground point radially out of every prop (goals and offerings must be reachable and visible). */
+    function clearOfObstacles(p, margin) {
+      for (let pass = 0; pass < 3; pass++) {
+        for (const o of obstacles) {
+          const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz), R = o.r + margin;
+          if (d >= R) continue;
+          if (d > 1e-4) { p.x = o.x + dx / d * R; p.z = o.z + dz / d * R; } else p.z = o.z + R;
+        }
+      }
+      return p;
+    }
 
     function grassFactor(x, z) {
       if (x * x + z * z > 3600) return 1;
@@ -464,6 +483,18 @@ export default {
       }
     }
 
+    // One hidden, never-animated clone per fox material: the shell compiles both skinned programs at world entry,
+    // so the first white (or red) fox added later as a resident does not stall the frame on a shader compile.
+    for (const m of [foxMat, whiteMat]) {
+      const pre = SkeletonUtils.clone(foxG.scene);
+      pre.traverse(o => { if (o.isMesh) { o.geometry = foxGeo; o.material = m; o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+      pre.scale.setScalar(FOX_SCALE);
+      pre.position.set(0, -50, 0);
+      pre.visible = false;
+      pre.name = 'foxPrewarm';
+      scene.add(pre);
+    }
+
     const foxes = [];
     const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1);
     const foods = [];
@@ -489,24 +520,39 @@ export default {
           a.play(); a.setEffectiveWeight(this.w[n]); a.time = this.rng.range(0, a.getClip().duration);
           this.act[n] = a;
         }
+        // Walk and Run are posed from one gait phase (set every frame, see update), so their own clocks stand still
+        this.walkDur = this.act.Walk.getClip().duration;
+        this.runDur = this.act.Run.getClip().duration;
+        this.gait = this.act.Walk.time / this.walkDur;
+        this.act.Walk.timeScale = this.act.Run.timeScale = 0;
         this.bones = findFoxBones(this.root);
         this.poseW = { eat: 0, rest: 0, sit: 0 };
         this.pos = new THREE.Vector3();
         this.goal = new THREE.Vector3();
         this.heading = this.rng.range(0, TAU);
+        this.turnV = 0;            // angular velocity (rad/s): turns ease in and out instead of snapping
         this.pitch = 0;
         this.speed = 0;
         this.state = 'idle';
         this.timer = this.rng.range(0.5, 3);
         this.food = null;
+        this.foodCool = 0;
+        this.bestD = 1e9; this.stuckT = 0;
+        this.detour = null; this.detourSide = 1;
         this.eatT = 0; this.bites = 0;
         this.labelPos = new THREE.Vector3();
+        this.obj.name = this.white ? 'whiteFox' : 'fox';
         this.applyScale();
         if (spawnAtEdge) {
-          const a = this.rng.range(-1.2, 1.2);
-          this.pos.set(Math.sin(a) * 22, 0, -Math.cos(a) * 18 - 2);
-          this.state = 'walk';
+          // a new resident walks in from the field's rim, at a spot the camera cannot see (no popping into view)
+          for (let k = 0; k < 16; k++) {
+            const a = this.rng.range(-1.2, 1.2) * (k < 8 ? 1 : 1.8);
+            this.pos.set(Math.sin(a) * 22, 0, -Math.cos(a) * 18 - 2);
+            tmpV.set(this.pos.x, heightAt(this.pos.x, this.pos.z) + 0.4, this.pos.z).project(camera);
+            if (Math.abs(tmpV.x) > 1.1 || tmpV.z > 1) break;
+          }
           this.pickGoal(true);
+          this.setState('walk', 30);
         } else {
           const t = this.rng.range(0.02, 0.28);
           pathPoint(t, this.pos);
@@ -544,15 +590,54 @@ export default {
           else { this.goal.set(r.range(-9, 10), 0, r.range(-7, 8.5)); }
           this.wantRest = false;
         }
+        // never a spot inside a rock, lantern or the shrine (the fox used to circle it until its walk timed out),
+        // and not on top of another fox's spot (they would settle into each other)
+        clearOfObstacles(this.goal, 0.6);
+        for (const f2 of foxes) {
+          if (f2 === this) continue;
+          const dx = this.goal.x - f2.goal.x, dz = this.goal.z - f2.goal.z, d = Math.hypot(dx, dz);
+          if (d < 0.9) { const k = d > 1e-3 ? 0.9 / d : 0; if (k) { this.goal.x = f2.goal.x + dx * k; this.goal.z = f2.goal.z + dz * k; } else this.goal.x += 0.9; }
+        }
+        clearOfObstacles(this.goal, 0.6);
         this.goal.y = heightAt(this.goal.x, this.goal.z);
       }
-      setState(s, timer = 0) { this.state = s; this.timer = timer; }
+      setState(s, timer = 0) {
+        this.state = s; this.timer = timer;
+        if (s === 'toFood') { this.bestD = 1e9; this.stuckT = 0; }
+      }
+      /**
+       * Heading toward `goal` (distance d) that walks around props instead of into them. The nearest prop blocking
+       * the straight line is passed along its tangent, on the side chosen when it first blocked (no flip-flopping).
+       * The old attraction + repulsion sum had dead spots behind rocks where a fox spun on the spot for 30 s.
+       */
+      steerHeading(goal, d) {
+        const px = this.pos.x, pz = this.pos.z;
+        const gx = (goal.x - px) / d, gz = (goal.z - pz) / d;
+        let block = null, bt = 1e9;
+        for (const o of obstacles) {
+          const R = o.r + AVOID_CLEAR;
+          const cx = o.x - px, cz = o.z - pz;
+          const along = cx * gx + cz * gz;
+          if (along < 0 || along > d + R * 0.5) continue;            // behind the fox / beyond the goal
+          if (Math.abs(cx * gz - cz * gx) >= R) continue;             // the straight line misses it
+          if (Math.hypot(goal.x - o.x, goal.z - o.z) < R) continue;   // goal right beside it: walk straight in
+          if (along < bt) { bt = along; block = o; }
+        }
+        const toG = Math.atan2(gx, gz);
+        if (!block) { this.detour = null; return toG; }
+        const cx = block.x - px, cz = block.z - pz, cd = Math.hypot(cx, cz), R = block.r + AVOID_CLEAR;
+        const toC = Math.atan2(cx, cz);
+        if (this.detour !== block) { this.detour = block; this.detourSide = angleDelta(toC, toG) >= 0 ? 1 : -1; }
+        return toC + this.detourSide * (cd > R ? Math.asin(R / cd) : Math.PI / 2);
+      }
       update(dt, t) {
         const r = this.rng;
+        const pw = this.poseW;
         this.timer -= dt;
+        if (this.foodCool > 0) this.foodCool -= dt;
         // food has priority
         if (this.food && this.food.dead) { this.food = null; if (this.state === 'toFood' || this.state === 'notice') this.setState('idle', r.range(0.6, 1.4)); }
-        let targetSpeed = 0, steer = false, lookAt = null;
+        let targetSpeed = 0, steer = false, lookAt = null, goalD = 1;
         switch (this.state) {
           case 'idle':
             if (this.timer <= 0) {
@@ -565,8 +650,9 @@ export default {
             break;
           case 'walk': {
             steer = true;
-            targetSpeed = this.walkSpeed * (this.hungry() ? 1.15 : 1);
-            const d = Math.hypot(this.goal.x - this.pos.x, this.goal.z - this.pos.z);
+            const d = goalD = Math.hypot(this.goal.x - this.pos.x, this.goal.z - this.pos.z);
+            // slow down into the goal instead of stopping dead on it
+            targetSpeed = this.walkSpeed * (this.hungry() ? 1.15 : 1) * clamp(d / 1.1, 0.35, 1);
             if (d < 0.35 || this.timer <= 0) {
               if (this.wantRest) { this.restNight = true; this.setState('rest', r.range(25, 70)); }
               else this.setState('idle', r.range(2.5, 7) * (this.hungry() ? 1.6 : 1));
@@ -579,11 +665,19 @@ export default {
             break;
           case 'toFood': {
             steer = true;
-            this.goal.copy(this.food.pos);
-            const d = Math.hypot(this.goal.x - this.pos.x, this.goal.z - this.pos.z);
+            const f = this.food;
+            this.goal.copy(f.pos);
+            const d = goalD = Math.hypot(this.goal.x - this.pos.x, this.goal.z - this.pos.z);
             targetSpeed = d > 2.2 ? this.runSpeed : lerp(this.walkSpeed * 0.6, this.runSpeed, clamp((d - 0.6) / 1.6, 0, 1));
-            if (d < this.mouthDist() + 0.05 && this.food.landed) { this.setState('eat', 2.6); this.eatT = 0; this.bites = 0; }
-            if (this.timer <= 0) { this.food.claimed = null; this.food = null; this.setState('idle', 1); }
+            // close by while the tofu is still falling: wait and watch it land rather than run past it
+            if (!f.landed) targetSpeed *= smoothstep(0.55, 1.5, d);
+            if (d < this.mouthDist() + 0.05 && f.landed) { this.setState('eat', 2.6); this.eatT = 0; this.bites = 0; break; }
+            // no progress for 3 s (blocked): eat from here if it is within reach, otherwise leave it for a while
+            if (d < this.bestD - 0.05) { this.bestD = d; this.stuckT = 0; } else this.stuckT += dt;
+            if (this.stuckT > 3 && f.landed) {
+              if (d < this.mouthDist() + 0.45) { this.setState('eat', 2.6); this.eatT = 0; this.bites = 0; }
+              else { f.claimed = null; this.food = null; this.foodCool = 6; this.setState('idle', 1); }
+            } else if (this.timer <= 0) { f.claimed = null; this.food = null; this.setState('idle', 1); }
             break;
           }
           case 'eat': {
@@ -601,18 +695,19 @@ export default {
         // steering
         let desired = this.heading;
         if (steer) {
-          let dx = this.goal.x - this.pos.x, dz = this.goal.z - this.pos.z;
-          const dl = Math.hypot(dx, dz) || 1;
-          dx /= dl; dz /= dl;
+          const h = this.steerHeading(this.goal, Math.max(goalD, 1e-3));
+          let dx = Math.sin(h), dz = Math.cos(h);
+          // too close to a prop: ease back out
           for (const o of obstacles) {
-            const ox = this.pos.x - o.x, oz = this.pos.z - o.z, od = Math.hypot(ox, oz);
-            const rr = o.r + 0.45;
-            if (od < rr + 0.8 && od > 1e-4) { const k = (rr + 0.8 - od) / 0.8; dx += (ox / od) * k * 1.2; dz += (oz / od) * k * 1.2; }
+            const ox = this.pos.x - o.x, oz = this.pos.z - o.z, od = Math.hypot(ox, oz), rr = o.r + 0.35;
+            if (od < rr && od > 1e-4) { const k = (rr - od) / 0.15; dx += (ox / od) * k; dz += (oz / od) * k; }
           }
+          // keep apart from the others while walking, but let them crowd in at their own offering
+          const sepW = this.state === 'toFood' ? clamp(goalD / 1.5, 0.2, 1) : 1;
           for (const f2 of foxes) {
             if (f2 === this) continue;
             const ox = this.pos.x - f2.pos.x, oz = this.pos.z - f2.pos.z, od = Math.hypot(ox, oz);
-            if (od < 1.0 && od > 1e-3) { dx += (ox / od) * (1.0 - od) * 1.5; dz += (oz / od) * (1.0 - od) * 1.5; }
+            if (od < 1.0 && od > 1e-3) { const k = (1.0 - od) * 1.5 * sepW; dx += (ox / od) * k; dz += (oz / od) * k; }
           }
           desired = Math.atan2(dx, dz);
         } else if (lookAt) {
@@ -620,13 +715,27 @@ export default {
         } else if (this.state === 'idle' && this.hungry()) {
           desired = Math.atan2(camera.position.x - this.pos.x, camera.position.z - this.pos.z);
         }
-        const turnRate = this.state === 'toFood' ? 5 : 2.6;
-        this.heading = dampAngle(this.heading, desired, turnRate, dt);
-        const err = Math.abs(angleDelta(this.heading, desired));
-        if (steer) targetSpeed *= clamp(1.25 - err / 1.3, 0.12, 1);
+        // Turning has momentum and a top speed (rad/s): the angular velocity eases in and out, so the body never
+        // snaps round or spins; a running fox turns in wider arcs, a seated one stands up before it turns.
+        const err = angleDelta(this.heading, desired);
+        const urgent = this.state === 'toFood' || this.state === 'notice';
+        const runK = clamp((this.speed - this.walkSpeed) / Math.max(this.runSpeed - this.walkSpeed, 1e-3), 0, 1);
+        const wMax = lerp(urgent ? 4.2 : 2.8, 2.3, runK) * clamp(1 - pw.sit * 1.6, 0.08, 1);
+        this.turnV = damp(this.turnV, clamp(err * (urgent ? 5 : 2.6), -wMax, wMax), 9, dt);
+        this.heading += this.turnV * dt;
+        if (this.heading > Math.PI) this.heading -= TAU; else if (this.heading < -Math.PI) this.heading += TAU;
+        if (steer) targetSpeed *= clamp(1.25 - Math.abs(err) / 1.3, 0.12, 1);
+        // stand up fully before walking off (legs folded under a moving body read as sliding)
+        targetSpeed *= clamp(1 - pw.sit * 2.5, 0, 1);
         this.speed = damp(this.speed, targetSpeed, targetSpeed > this.speed ? 2.6 : 5, dt);
         this.pos.x += Math.sin(this.heading) * this.speed * dt;
         this.pos.z += Math.cos(this.heading) * this.speed * dt;
+        // bodies never interpenetrate: an overlapping pair eases apart (each fox takes its half)
+        for (const f2 of foxes) {
+          if (f2 === this) continue;
+          const ox = this.pos.x - f2.pos.x, oz = this.pos.z - f2.pos.z, od = Math.hypot(ox, oz);
+          if (od < 0.5 && od > 1e-4) { const k = (0.5 - od) * 0.5 * (1 - Math.exp(-6 * dt)); this.pos.x += ox / od * k; this.pos.z += oz / od * k; }
+        }
         // hard collision with props
         for (const o of obstacles) {
           const ox = this.pos.x - o.x, oz = this.pos.z - o.z, od = Math.hypot(ox, oz), rr = o.r + 0.2;
@@ -641,23 +750,35 @@ export default {
         this.obj.rotation.set(0, 0, 0);
         this.obj.rotateY(this.heading);
         this.obj.rotateX(this.pitch);
-        // animation weights
+        // ---- locomotion clips ----
+        // The legs cover the ground speed plus the arc the paws sweep when the body turns, so turning on the spot
+        // steps instead of sliding round. Below ~0.5 m/s the Walk is only partly blended in (short steps).
         const sp = this.speed;
+        const fs = Math.hypot(sp, this.turnV * PAW_ARM * this.s);
+        const G = WALK_GROUND * this.s;
+        const xm = fs / (0.65 * G);
+        const wMove = xm >= 1 ? 1 : xm * (2 - xm);
         const wRun = smoothstep(this.walkSpeed * 1.25, this.runSpeed * 0.75, sp);
-        const wMove = smoothstep(0.03, this.walkSpeed * 0.45, sp);
         const tg = this.tgtW;
         tg.Survey = 1 - wMove; tg.Walk = wMove * (1 - wRun); tg.Run = wMove * wRun;
         for (const n of CLIPS) {
-          this.w[n] = damp(this.w[n], tg[n], 7, dt);
+          this.w[n] = damp(this.w[n], tg[n], 10, dt);
           this.act[n].setEffectiveWeight(this.w[n]);
         }
-        this.act.Walk.timeScale = clamp(sp / Math.max(this.walkSpeed, 1e-3), 0.5, 2.2);
-        this.act.Run.timeScale = clamp(sp / Math.max(RUN_REF * this.s, 1e-3), 0.6, 2.2);
-        this.act.Survey.timeScale = this.state === 'eat' ? 0.25 : this.state === 'rest' ? 0.45 : 1;
+        // One gait phase poses both Walk and Run (Run offset so the hind paws land together), advancing at the
+        // rate that keeps the planted paws still: speed / (clip stride speed x its share of the blend). The old
+        // per-clip timeScales (clamped to >= 0.5) skated the paws at low speed and blended out-of-step cycles.
+        const mw = Math.max(this.w.Walk + this.w.Run, 0.15);
+        const rs = this.w.Run / Math.max(this.w.Walk + this.w.Run, 1e-4);
+        const tsW = Math.min(fs / (G * mw), 2.4), tsR = Math.min(fs / (RUN_GROUND * this.s * mw), 2.4);
+        this.gait = (this.gait + ((1 - rs) * tsW / this.walkDur + rs * tsR / this.runDur) * dt) % 1;
+        this.act.Walk.time = this.gait * this.walkDur;
+        this.act.Run.time = ((this.gait + RUN_PHASE) % 1) * this.runDur;
+        this.act.Survey.timeScale = damp(this.act.Survey.timeScale, this.state === 'eat' ? 0.25 : this.state === 'rest' ? 0.45 : 1, 3, dt);
         this.mixer.update(dt);
-        const pw = this.poseW;
         pw.eat = damp(pw.eat, this.state === 'eat' ? 1 : 0, 6, dt);
-        pw.sit = damp(pw.sit, this.state === 'rest' && this.speed < 0.05 ? 1 : 0, 2.2, dt);
+        const sitT = this.state === 'rest' && this.speed < 0.05 ? 1 : 0;
+        pw.sit = damp(pw.sit, sitT, sitT > pw.sit ? 2.2 : 4.5, dt);
         pw.rest = 0;
         const drop = applyFoxPose(this.bones, this.root, pw, t);
         this.root.position.y = -drop * this.s;
@@ -667,13 +788,18 @@ export default {
           const vis = world.night > 0.35 || world.dusk > 0.5;
           const a = smoothstep(0.35, 0.9, Math.max(world.night, world.dusk * 0.6));
           whiteU.uGlow.value = 0.5 * a;
-          this.wisps.forEach((s, i) => {
-            s.visible = vis;
+          const kTrail = 1 - Math.exp(-5 * dt);
+          for (let i = 0; i < this.wisps.length; i++) {
+            const s = this.wisps[i];
             const ang = t * 0.7 + i * TAU / 3;
-            s.position.set(this.pos.x + Math.cos(ang) * 0.75, this.pos.y + 0.75 + Math.sin(t * 1.3 + i * 2) * 0.15, this.pos.z + Math.sin(ang) * 0.75);
-            s.material.opacity = a * (0.5 + 0.3 * Math.sin(t * 5.3 + i * 3) + 0.2 * Math.sin(t * 13.1 + i));
-            s.scale.setScalar(0.18 + 0.06 * Math.sin(t * 4.1 + i * 2));
-          });
+            tmpV2.set(this.pos.x + Math.cos(ang) * 0.75, this.pos.y + 0.75 + Math.sin(t * 1.3 + i * 2) * 0.15, this.pos.z + Math.sin(ang) * 0.75);
+            // fox-fire drifts after the fox (a little lag when it runs) instead of being bolted to it
+            if (vis && s.visible) s.position.lerp(tmpV2, kTrail); else s.position.copy(tmpV2);
+            s.visible = vis;
+            // a slow, breathing flicker (was 13 rad/s, which read as flashing)
+            s.material.opacity = a * (0.55 + 0.28 * Math.sin(t * 2.9 + i * 3) + 0.17 * Math.sin(t * 6.1 + i));
+            s.scale.setScalar(0.18 + 0.05 * Math.sin(t * 2.3 + i * 2));
+          }
         }
       }
       mouthDist() { return 0.43 * this.s / FOX_SCALE; }
@@ -732,12 +858,17 @@ export default {
         o.traverse(m => { if (m.isMesh) { m.name = 'craneBody'; m.material = cmat; m.castShadow = false; m.frustumCulled = false; } });
         o.scale.setScalar(0.0135);
         scene.add(o);
+        o.name = 'crane' + i;
         const mixer = new THREE.AnimationMixer(o);
         const a = mixer.clipAction(flapClip);
-        a.play(); a.time = crng.range(0, 1.2); a.timeScale = crng.range(0.75, 0.9);
-        cranes.push({ o, mixer, act: a, off: new THREE.Vector3(-i * 3.2 * (i % 2 ? 1 : -1) * 0.5, crng.range(-1.5, 1.5), i * 3.5), phase: crng.range(0, 0.15), center, rx: crng.range(34, 44), rz: crng.range(14, 20), glide: crng.range(0, 6), prev: new THREE.Vector3() });
+        // the flap clock is driven by hand (see updateCranes), so the action's own clock stands still
+        const t0 = crng.range(0, 1.2), rate = crng.range(0.75, 0.9);
+        a.play(); a.time = t0; a.timeScale = 0;
+        cranes.push({ o, mixer, act: a, off: new THREE.Vector3(-i * 3.2 * (i % 2 ? 1 : -1) * 0.5, crng.range(-1.5, 1.5), i * 3.5), phase: crng.range(0, 0.15), center, rx: crng.range(34, 44), rz: crng.range(14, 20), glide: crng.range(0, 6), prev: new THREE.Vector3(), ft: t0, rate, rs: rate, dur: flapClip.duration });
       }
     }
+    // Stork flap keyframes with the wings spread level (0.7 s and the loop point 1.3 s = 0 s): a glide holds one
+    const CRANE_SPREAD = 0.7;
 
     /* ================================================================ */
     /* Food                                                              */
@@ -746,10 +877,16 @@ export default {
     own(tofuMaps.map); own(tofuMaps.bumpMap);
     const tofuF = makeTofuFactory({ maps: tofuMaps, fogU });
     own(tofuF.geo);
+    // Tofu meshes are built up front, hidden, and reused: the shell compiles every material in the scene graph at
+    // world entry, so the first offering no longer compiles its shader mid-play (a 100+ ms stall on WebGL 1 Safari).
+    const tofuPool = [], fadingFoods = [];
+    for (let i = 0; i < 6; i++) { const m = tofuF.make(); m.visible = false; m.name = 'tofu'; scene.add(m); tofuPool.push(m); }
     class Food {
       constructor(pos) {
         this.pos = pos.clone();
-        this.mesh = tofuF.make();
+        this.mesh = tofuPool.pop() || tofuF.make();
+        this.mesh.visible = true;
+        this.mesh.scale.setScalar(1);
         this.mesh.position.set(pos.x, pos.y + 2.2, pos.z);
         this.mesh.rotation.set(0.3, Math.random() * TAU, 0.2);
         this.vy = 0;
@@ -758,25 +895,50 @@ export default {
         this.claimed = null;
         this.scale = 1;
         this.age = 0;
+        this.glowK = 0; this.fadeT = 0;
+        this.slot = -1;   // grass-press slot (see updateWind)
         this.glow = fx.glow('#ffd49a', 1.1, 0.9);
         this.glow.material.depthTest = false;
         this.glow.renderOrder = 9;
         this.glow.position.copy(pos).y += 0.25;
-        scene.add(this.mesh, this.glow);
+        if (!this.mesh.parent) scene.add(this.mesh);
+        scene.add(this.glow);
       }
       bite(fox, n) {
         this.scale = n === 1 ? 0.55 : 0;
         tmpV.copy(this.pos).y += 0.08;
         fx.puff(tmpV, 16, true);
         env.onEat(fox ? fox.member : null, tmpV);
-        if (n === 2) this.kill();
+        if (n === 2) this.kill(true);
       }
-      kill() { this.dead = true; scene.remove(this.mesh, this.glow); this.glow.material.dispose(); }
+      /** soft: the last morsel shrinks away and its glow fades for a moment (it used to vanish in one frame). */
+      kill(soft = false) {
+        if (this.dead) return;
+        this.dead = true;
+        this.scale = 0;
+        if (soft) { this.fadeT = 0; fadingFoods.push(this); } else this.release();
+      }
+      release() {
+        this.mesh.visible = false; tofuPool.push(this.mesh);
+        scene.remove(this.glow); this.glow.material.dispose();
+      }
+      /** after kill(true): returns true once released */
+      fade(dt) {
+        this.fadeT += dt;
+        this.mesh.scale.setScalar(Math.max(damp(this.mesh.scale.x, 0, 10, dt), 0.001));
+        this.glowK = damp(this.glowK, 0, 8, dt);
+        this.glow.material.opacity = 0.5 * this.glowK;
+        if (this.fadeT < 0.5) return false;
+        this.release();
+        return true;
+      }
       update(dt, t) {
         this.age += dt;
         if (!this.landed) {
+          // exact constant-gravity step: the drop and its bounces play out the same at 30 and 60 fps
+          const vy0 = this.vy;
           this.vy -= 9.8 * dt;
-          this.mesh.position.y += this.vy * dt;
+          this.mesh.position.y += (vy0 + this.vy) * 0.5 * dt;
           this.mesh.rotation.x = damp(this.mesh.rotation.x, 0, 3, dt);
           this.mesh.rotation.z = damp(this.mesh.rotation.z, 0, 3, dt);
           if (this.mesh.position.y <= this.pos.y + 0.06) {
@@ -786,10 +948,12 @@ export default {
         }
         const s = damp(this.mesh.scale.x, this.scale, 10, dt);
         this.mesh.scale.setScalar(Math.max(s, 0.001));
-        const eaten = this.claimed && this.claimed.state === 'eat' ? 0.35 : 1;
-        this.glow.material.opacity = (0.5 + 0.18 * Math.sin(t * 3)) * (this.landed ? 1 : 0.6) * eaten;
+        // glow strength eases between falling / landed / being eaten (and in at spawn) instead of stepping
+        const gk = (this.landed ? 1 : 0.6) * (this.claimed && this.claimed.state === 'eat' ? 0.35 : 1);
+        this.glowK = damp(this.glowK, gk, 5, dt);
+        this.glow.material.opacity = (0.5 + 0.18 * Math.sin(t * 3)) * this.glowK;
         this.glow.position.set(this.pos.x, this.pos.y + 0.22 + Math.sin(t * 2) * 0.03, this.pos.z);
-        if (this.age > 90 && !this.claimed) this.kill();
+        if (this.age > 90 && !this.claimed) this.kill(true);
       }
     }
     const guide = { w: 0, t: 99, dir: new THREE.Vector2(), pos: new THREE.Vector3() };
@@ -813,6 +977,10 @@ export default {
       return null;
     }
     function spawnFood(p) {
+      // an offering that would land inside a rock, lantern or the shrine is set down just beside it, where it can
+      // be seen and a fox can reach it (no tofu hidden in stone, no fox circling it)
+      clearOfObstacles(p, 0.5);
+      p.y = heightAt(p.x, p.z);
       const f = new Food(p);
       foods.push(f);
       env.sfx('drop');
@@ -831,7 +999,7 @@ export default {
         if (f.dead || f.claimed) continue;
         let best = null, bd = 1e9;
         for (const fox of foxes) {
-          if (fox.food) continue;
+          if (fox.food || fox.foodCool > 0) continue;
           const d = fox.pos.distanceTo(f.pos) - (fox.hungry() ? 4 : 0);
           if (d < bd) { bd = d; best = fox; }
         }
@@ -888,10 +1056,27 @@ export default {
       else hS = (((hS + d * (1 - Math.exp(-1.6 * dt))) % 24) + 24) % 24;
       return hS;
     }
+    // The fields of util's sunState() this world reads, computed in place: during every minute's glide the sun is
+    // re-evaluated each frame, and sunState() allocates vectors and parses colours on every call (GC on the iPad).
+    const sunS = { dir: new THREE.Vector3(0, 1, 0), elevationDeg: 0, day: 1, night: 0, golden: 0 };
+    const LAT = THREE.MathUtils.degToRad(25);
+    function sunLite(hours) {
+      const H = THREE.MathUtils.degToRad((hours - 12) * 15);
+      const elevation = Math.asin(clamp(Math.cos(LAT) * Math.cos(H), -1, 1));
+      const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(LAT)) + sunOpts.azimuthOffset;
+      const ce = Math.cos(elevation);
+      sunS.dir.set(-Math.sin(az) * ce, Math.sin(elevation), Math.cos(az) * ce).normalize();
+      const e = THREE.MathUtils.radToDeg(elevation);
+      sunS.elevationDeg = e;
+      sunS.day = smoothstep(-4, 6, e);
+      sunS.night = 1 - smoothstep(-10, -2, e);
+      sunS.golden = smoothstep(-3, 2, e) * (1 - smoothstep(6, 20, e));
+      return sunS;
+    }
     let sunCache = null, sunCacheH = -1;
     function updateTimeOfDay(dt, t) {
       const hours = easedHours(dt);
-      if (!sunCache || Math.abs(hours - sunCacheH) > 1 / 36000) { sunCache = sunState(hours, sunOpts); sunCacheH = hours; }
+      if (!sunCache || Math.abs(hours - sunCacheH) > 1 / 36000) { sunCache = sunLite(hours); sunCacheH = hours; }
       const s = sunCache;
       const el = s.elevationDeg;
       const morning = hours < 12;
@@ -963,9 +1148,9 @@ export default {
       }
       // lanterns / shrine glow
       const lampOn = smoothstep(-1, -7, el);
-      lanternLights.forEach(l => { l.intensity = 9 * lampOn * (0.92 + 0.08 * Math.sin(t * 9.0 + l.position.x)); });
+      for (let i = 0; i < lanternLights.length; i++) { const l = lanternLights[i]; l.intensity = 9 * lampOn * (0.92 + 0.08 * Math.sin(t * 9.0 + l.position.x)); }
       windowMat.emissiveIntensity = 3.2 * lampOn;
-      lanternGlows.forEach((g, i) => { g.material.opacity = lampOn * (0.85 + 0.15 * Math.sin(t * 7 + i)); g.visible = lampOn > 0.01; });
+      for (let i = 0; i < lanternGlows.length; i++) { const g = lanternGlows[i]; g.material.opacity = lampOn * (0.85 + 0.15 * Math.sin(t * 7 + i)); g.visible = lampOn > 0.01; }
       shrineGlow.material.opacity = lampOn * 0.6; shrineGlow.visible = lampOn > 0.01;
       hokora.userData.doorMat.emissiveIntensity = lampOn * 0.6;
       // grass tuning per time of day
@@ -1032,14 +1217,24 @@ export default {
       wind.update(dt);
       // the tree wind's rates (1.7, 3.1, 8, 9 rad/s) all complete whole cycles in 20π s, so its clock wraps seamlessly
       wind.uniforms.uWindTime.value %= 20 * Math.PI;
-      // press grass around food so the offering stays visible
+      // press grass around food so the offering stays visible. Each offering keeps its own slot: the slots used to
+      // be re-dealt by recency every frame, so when one was eaten every press shifted and the grass where it lay
+      // sprang upright in a single frame (and a new one flattened its grass at once, before the tofu had landed).
+      // A slot only moves to a new offering once its grass has eased back up.
       const press = windU.uPress.value;
-      for (let i = 0; i < 4; i++) {
-        const f = foods[foods.length - 1 - i];
-        if (f && !f.dead) press[i].set(f.pos.x, f.pos.y, f.pos.z, damp(press[i].w, 0.9, 3, dt));
-        else press[i].w = damp(press[i].w, 0, 2, dt);
+      for (let i = 0; i < 4; i++) pressHeld[i] = false;
+      for (const f of foods) if (!f.dead && f.slot >= 0) pressHeld[f.slot] = true;
+      for (const f of foods) {
+        if (f.dead || f.slot >= 0) continue;
+        for (let i = 0; i < 4; i++) {
+          if (pressHeld[i] || press[i].w > 0.02) continue;
+          f.slot = i; pressHeld[i] = true; press[i].set(f.pos.x, f.pos.y, f.pos.z, press[i].w);
+          break;
+        }
       }
+      for (let i = 0; i < 4; i++) press[i].w = pressHeld[i] ? damp(press[i].w, 0.9, 3, dt) : damp(press[i].w, 0, 2, dt);
     }
+    const pressHeld = [false, false, false, false];
 
     function updateCranes(dt, t) {
       // fade the flock over dusk / dawn instead of popping it in or out
@@ -1050,12 +1245,28 @@ export default {
         c.o.visible = vis;
         if (!vis) continue;
         const a = t * 0.045 + c.phase;
-        c.o.position.set(c.center.x + Math.cos(a) * c.rx + c.off.x, c.center.y + Math.sin(a * 2) * 3 + c.off.y, c.center.z + Math.sin(a) * c.rz + c.off.z);
-        // heading from the path's analytic tangent (no stale previous position after being hidden)
-        c.o.rotation.set(0, Math.atan2(-Math.sin(a) * c.rx, Math.cos(a) * c.rz), -Math.cos(a) * 0.25);
+        const sa = Math.sin(a), ca = Math.cos(a);
+        c.o.position.set(c.center.x + ca * c.rx + c.off.x, c.center.y + Math.sin(a * 2) * 3 + c.off.y, c.center.z + sa * c.rz + c.off.z);
+        // heading, pitch and bank from the path's analytic derivatives (no stale previous position after being
+        // hidden). The loop always turns right, so the bank leans right everywhere, most where the turn is tightest
+        // (it used to follow -cos(a) and leaned out of the turn on half of the loop); pitch follows the climb.
+        const vx = -sa * c.rx, vz = ca * c.rz, vh2 = vx * vx + vz * vz;
+        const bank = 0.25 * (c.rx * c.rz / vh2) / (c.rx / c.rz);
+        c.o.rotation.set(-Math.atan2(6 * Math.cos(2 * a), Math.sqrt(vh2)), Math.atan2(vx, vz), bank, 'YXZ');
+        // flap / glide. A glide finishes the stroke into the next spread-wing keyframe and holds it (the old
+        // timeScale 0.08 froze the wings wherever they were, often raised in a V); flapping then resumes gently,
+        // each crane at its own rate (they all used to converge on the same one).
         c.glide -= dt;
         if (c.glide < -5) c.glide = 4 + Math.random() * 3;
-        c.act.timeScale = damp(c.act.timeScale, c.glide > 0 ? 0.08 : 0.85, 2, dt);
+        let rate = c.rate, stop = Infinity;
+        if (c.glide > 0) {
+          stop = c.ft <= CRANE_SPREAD + 1e-4 ? CRANE_SPREAD : c.dur;
+          rate = c.rate * clamp((stop - c.ft) / 0.25, 0, 1);
+        }
+        c.rs = damp(c.rs, rate, c.glide > 0 ? 10 : 2.5, dt);
+        c.ft = Math.min(c.ft + c.rs * dt, stop);
+        if (c.ft > c.dur) c.ft -= c.dur;
+        c.act.time = c.ft;
         c.mixer.update(dt);
       }
     }
@@ -1067,8 +1278,14 @@ export default {
         lastT = t;
         const tod = updateTimeOfDay(dt, t);
         updateWind(dt, t);
-        for (let i = foods.length - 1; i >= 0; i--) { const f = foods[i]; if (!f.dead) f.update(dt, t); if (f.dead) foods.splice(i, 1); }
-        if (foods.some(f => !f.claimed && !f.dead)) assignFoxes();
+        let unclaimed = false;
+        for (let i = foods.length - 1; i >= 0; i--) {
+          const f = foods[i];
+          if (!f.dead) f.update(dt, t);
+          if (f.dead) foods.splice(i, 1); else if (!f.claimed) unclaimed = true;
+        }
+        if (unclaimed) assignFoxes();
+        for (let i = fadingFoods.length - 1; i >= 0; i--) if (fadingFoods[i].fade(dt)) fadingFoods.splice(i, 1);
         for (const f of foxes) f.update(dt, t);
         updateCranes(dt, t);
         fx.updateBirds(dt, t, world.day * (1 - world.night));
@@ -1120,6 +1337,7 @@ export default {
         foxes.forEach(f => f.dispose());
         cranes.forEach(c => { c.mixer.stopAllAction(); c.mixer.uncacheRoot(c.o); });
         foods.forEach(f => f.kill());
+        fadingFoods.forEach(f => f.release());
         scene.traverse(o => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
         sunLight.dispose();
         lanternLights.forEach(l => l.dispose());
@@ -1130,6 +1348,11 @@ export default {
       },
     };
     void lastT; void tmpV2;
+    // Set the time of day once now, environment map included: the shell compiles every material right after
+    // create(), and a PBR material compiled before scene.environment exists gets a program without the env map.
+    // Hidden objects (the tofu pool, the fox pre-warm clones) are not drawn in the warm-up frames, so they kept
+    // that variant and recompiled on their first visible frame, e.g. the first offering.
+    updateTimeOfDay(0, 0);
     return inst;
   },
 };

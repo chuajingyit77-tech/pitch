@@ -83,6 +83,7 @@ export default {
     const SUN_SHIFT = 0.32;
     const sunYaw = viewYaw + 0.38;
     const SUN_AZ = Math.atan2(Math.cos(sunYaw), Math.sin(sunYaw));
+    const SUN_OPTS = { azimuthOffset: SUN_AZ };
     // The moon hangs low over the sea in front of the opening view so its path glitters behind the island.
     const moonYaw = viewYaw - 0.3;
     const moonFlat = new THREE.Vector2(-Math.sin(moonYaw), -Math.cos(moonYaw));
@@ -100,6 +101,8 @@ export default {
       sunCol: new THREE.Color(), moon: new THREE.Color('#9fb6ff'), tmp: new THREE.Color(), tmp2: new THREE.Color(),
       deepDay: new THREE.Color(0.0045, 0.042, 0.105), deepGold: new THREE.Color(0.012, 0.035, 0.08), deepNight: new THREE.Color(0.0012, 0.006, 0.02),
       horizon: new THREE.Color(), seaEnv: new THREE.Color(),
+      // parsed once: applyTime runs every frame while the clock glides to each new minute
+      artZen: new THREE.Color('#1f6fd6'), artHor: new THREE.Color('#6cb8ec'), sand: new THREE.Color('#e2cfa0'),
     };
     const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3(), keyDir = new THREE.Vector3();
     // The key light is one shadow-casting DirectionalLight: the sun by day, the moon by night. It may only
@@ -127,10 +130,10 @@ export default {
     function applyTime(force = false, h = env.hours(), hKey = h) {
       if (!force && h === tod.hours && hKey === tod.keyHours) return;
       tod.hours = h; tod.keyHours = hKey;
-      const s = sunState(h - SUN_SHIFT, { azimuthOffset: SUN_AZ });
+      const s = sunState(h - SUN_SHIFT, SUN_OPTS);
       sunDir.copy(s.dir);
       moonDirAt(h, moonDir);
-      const sKey = hKey === h ? s : sunState(hKey - SUN_SHIFT, { azimuthOffset: SUN_AZ });
+      const sKey = hKey === h ? s : sunState(hKey - SUN_SHIFT, SUN_OPTS);
       tod.elev = s.elevationDeg; tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       const day = s.day, night = s.night, golden = s.golden;
       tod.dusk = smoothstep(-6, 1, s.elevationDeg) * (1 - smoothstep(9, 16, s.elevationDeg));
@@ -148,8 +151,8 @@ export default {
       su.uSunGlow.value.copy(C.sunCol).multiplyScalar(golden * 0.3);
       su.uSkyGain.value = lerp(0.46, 0.6, golden);
       su.uLowTint.value.setRGB(1, 1, 1).lerp(C.tmp.setRGB(1.25, 0.95, 1.05), golden * 0.6);
-      su.uArtZen.value.copy(s.zenith).lerp(C.tmp.set('#1f6fd6'), 0.45 * day * (1 - golden));
-      su.uArtHor.value.copy(s.horizon).lerp(C.tmp.set('#6cb8ec'), 0.75 * day * (1 - golden));
+      su.uArtZen.value.copy(s.zenith).lerp(C.artZen, 0.45 * day * (1 - golden));
+      su.uArtHor.value.copy(s.horizon).lerp(C.artHor, 0.75 * day * (1 - golden));
       su.uArtSun.value.copy(C.sunCol).multiplyScalar(1.1);
       const twi = smoothstep(2, -4, s.elevationDeg);
       su.uArtMix.value = lerp(lerp(0.84, 0.5, golden), 0.88, twi);
@@ -175,7 +178,7 @@ export default {
       }
       sun.position.copy(keyDir).multiplyScalar(80);
       hemi.color.copy(s.skyAmbient);
-      hemi.groundColor.copy(s.groundAmbient).lerp(C.tmp.set('#e2cfa0'), 0.35 * day);
+      hemi.groundColor.copy(s.groundAmbient).lerp(C.sand, 0.35 * day);
       hemi.intensity = s.ambientIntensity * lerp(0.75, 0.45, day);
 
       // water volume (shared by every submerged material)
@@ -286,6 +289,7 @@ export default {
 
     /* ---------------- per-frame ---------------- */
     let todTimer = 0, hEased = env.hours();
+    const faunaInfo = { dusk: 0, night: 0, timeJump: false }, fxInfo = { night: 0 }; // reused every frame
     function update(dt, t) {
       waterUniforms.uWTime.value = t;
       sky.uniforms.uTime.value = t;
@@ -311,8 +315,10 @@ export default {
       b.rotation.z = Math.sin(t * 1.1) * 0.035;
       b.rotation.x = Math.sin(t * 0.9 + 1) * 0.03;
       b.rotation.y = bb.yaw + Math.sin(t * 0.21) * 0.06;
-      fauna.update(dt, t, { dusk: tod.dusk, night: tod.night, timeJump });
-      fx.update(dt, t, { night: smoothstep(0.4, 0.95, tod.night) });
+      faunaInfo.dusk = tod.dusk; faunaInfo.night = tod.night; faunaInfo.timeJump = timeJump;
+      fauna.update(dt, t, faunaInfo);
+      fxInfo.night = smoothstep(0.4, 0.95, tod.night);
+      fx.update(dt, t, fxInfo);
     }
 
     return {
@@ -323,7 +329,7 @@ export default {
       addMember: m => fauna.addMember(m),
       creatures: () => fauna.creatures(),
       resize() { water.resize(); },
-      _debug: { terrain, props, fx, fauna, water, sky },
+      _debug: { terrain, props, fx, fauna, water, sky, flora },
       dispose() {
         water.dispose(); sky.dispose(); terrain.dispose(); flora.dispose(); props.dispose(); fx.dispose(); fauna.dispose();
         normalTex.dispose();

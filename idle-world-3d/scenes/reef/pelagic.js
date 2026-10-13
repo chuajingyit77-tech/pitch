@@ -324,13 +324,20 @@ export class Jellies {
     for (let i = 0; i < this.count; i++) {
       const it = this.items[i];
       const pulse = Math.pow(Math.max(Math.sin(time * 1.25 + it.ph), 0), 2);
-      it.vel.y = lerp(it.vel.y, -0.035 + pulse * 0.16, 1 - Math.exp(-2 * dt));
+      // Soft floor and ceiling. The bell used to be set onto floor + 1.5 m in one frame (a pop of up to a
+      // metre where it drifted over a coral head) and pushed down 2 cm per frame above the ceiling (a
+      // judder, twice as hard at 60 fps as at 30). Now the pulse thrust fades under the ceiling, the bell
+      // swims up when low, looking ahead along its drift, and any remaining overlap eases out.
+      const ceil = this.center.y + 8.5;
+      const floor = Math.max(floorAt(it.pos.x, it.pos.z), floorAt(it.pos.x + it.drift.x * 10, it.pos.z + it.drift.z * 10)) + 1.5;
+      const low = smoothstep(floor + 0.8, floor, it.pos.y);
+      it.vel.y = lerp(it.vel.y, -0.035 * (1 - low) + pulse * 0.16 * (1 - smoothstep(ceil - 1.2, ceil, it.pos.y)) + low * 0.12, 1 - Math.exp(-2 * dt));
       it.pos.addScaledVector(it.vel, dt).addScaledVector(it.drift, dt);
-      const floor = floorAt(it.pos.x, it.pos.z) + 1.5;
-      if (it.pos.y < floor) it.pos.y = floor;
-      if (it.pos.y > this.center.y + 8.5) it.pos.y -= 0.02;
+      if (it.pos.y < floor) it.pos.y = lerp(it.pos.y, floor, 1 - Math.exp(-3 * dt));
+      if (it.pos.y > ceil) it.pos.y = lerp(it.pos.y, ceil, 1 - Math.exp(-1.5 * dt));
+      // turn the drift back toward the reef gradually instead of reversing it in one frame
       const dx = it.pos.x - this.center.x, dz = it.pos.z - this.center.z;
-      if (dx * dx + dz * dz > 15 * 15) { it.drift.x = -dx * 0.004; it.drift.z = -dz * 0.004; }
+      if (dx * dx + dz * dz > 15 * 15) { const k = 1 - Math.exp(-0.5 * dt); it.drift.x += (-dx * 0.004 - it.drift.x) * k; it.drift.z += (-dz * 0.004 - it.drift.z) * k; }
       this._q.setFromEuler(this._e.set(it.tilt * Math.sin(time * 0.2 + it.ph), it.spin + time * 0.05, it.tilt * Math.cos(time * 0.17 + it.ph)));
       this._s.setScalar(it.scale);
       this._m.compose(it.pos, this._q, this._s);

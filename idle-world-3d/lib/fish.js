@@ -867,14 +867,16 @@ export class FishInstances {
     this.swim.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     const u = this.mesh.material.userData.swimUniforms;
-    if (u && time !== undefined) u.uFishTime.value = time;
+    // the fin-flutter rates (5.5 and 3.7 rad/s) complete whole cycles every 20π s, so the clock wraps there
+    // seamlessly; the GPU gets it as float32, and an unwrapped clock would step by ~8 ms after a day
+    if (u && time !== undefined) u.uFishTime.value = time % (20 * Math.PI);
   }
 }
 
 /* ------------------------------------------------------------------ */
 /* Steering                                                            */
 /* ------------------------------------------------------------------ */
-const _tmp = new THREE.Vector3(), _fw = new THREE.Vector3(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
+const _tmp = new THREE.Vector3();
 
 /**
  * A swimming body with smooth heading, tail-beat synced to speed, body curvature on turns and
@@ -912,21 +914,25 @@ export class Swimmer {
     this.pos.addScaledVector(this.vel, dt);
     const speed = this.vel.length();
     if (speed > 1e-4) {
-      _fw.copy(this.vel).divideScalar(speed);
-      const maxY = this.maxPitch;
-      _fw.y = clamp(_fw.y, -maxY, maxY);
-      _fw.normalize();
+      // Turn the body toward the direction of travel. Yaw turns in the horizontal plane (following at 8/s, so
+      // a fish turning at 1 rad/s trails its path by ~7°; never slower than ~1 rad/s, never faster than ~3.5) and pitch follows separately, so a
+      // reversing fish swings round level instead of over the top (a straight vector lerp stalled, and a
+      // great-circle turn went through vertical). A fish that has all but stopped holds its heading
+      // instead of swivelling after centimetre drifts.
+      const body = Math.max(this.size, 0.05), hSpeed = Math.hypot(this.vel.x, this.vel.z);
+      const hold = smoothstep(0.04, 0.15, speed / body);
       const prevYaw = Math.atan2(this.fwd.z, this.fwd.x);
-      // turn the body toward the direction of travel along the arc, quickly at first and never slower
-      // than ~1 rad/s: a straight vector lerp all but stalls when the fish reverses, and it would swim
-      // backwards or sideways for seconds
-      const ang = this.fwd.angleTo(_fw);
-      if (ang > 1e-5) {
-        const step = Math.min(ang, Math.max(ang * (1 - Math.exp(-5 * dt)), 1.0 * dt));
-        _qa.setFromUnitVectors(this.fwd, _fw);
-        this.fwd.applyQuaternion(_qb.identity().slerp(_qa, step / ang)).normalize();
+      let yaw = prevYaw, pitch = Math.asin(clamp(this.fwd.y, -1, 1));
+      if (hSpeed > 1e-5) {
+        // yaw follows the horizontal part of the motion only when there is enough of it to mean something
+        // (a fish rising or sinking steeply must not chase the noise in its tiny horizontal drift)
+        const d = angleDelta(prevYaw, Math.atan2(this.vel.z, this.vel.x)), a = Math.abs(d);
+        yaw += Math.sign(d) * Math.min(a, Math.max(a * (1 - Math.exp(-8 * dt)), 1.0 * dt), 3.5 * dt) * smoothstep(0.04, 0.15, hSpeed / body);
       }
-      const yaw = Math.atan2(this.fwd.z, this.fwd.x);
+      const tp = Math.asin(clamp(this.vel.y / speed, -this.maxPitch, this.maxPitch));
+      pitch += (tp - pitch) * (1 - Math.exp(-4 * dt)) * hold;
+      const cp = Math.cos(pitch);
+      this.fwd.set(cp * Math.cos(yaw), Math.sin(pitch), cp * Math.sin(yaw));
       const rate = -angleDelta(prevYaw, yaw) / Math.max(dt, 1e-4); // + = turning left seen from above
       this.yawRate = lerp(this.yawRate, rate, 1 - Math.exp(-8 * dt));
     }

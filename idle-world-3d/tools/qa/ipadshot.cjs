@@ -2,6 +2,7 @@
 // Screenshot of play.html as Safari 14 on an iPad Air 3 (WebGL 1, 1112×834 CSS px at 2×), at a fixed hour and seed.
 // NODE_PATH=$(npm root -g) node ipadshot.cjs <out.png> <world> [hours=16.5] [dprOverride]
 // dprOverride emulates a smaller drawing buffer (0.734 ≈ the old 0.5-megapixel "lite" picture).
+// env VIEW='{"dist":0,"yaw":0.3}' moves the camera (clamped to the ranges a viewer can reach; dist 0 = closest).
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -45,6 +46,8 @@ const srv = http.createServer((req, res) => {
   await page.evaluate(() => window.__idle.ready);
   await page.waitForFunction(w => window.__idle.sceneId === w || window.__idle.error, WORLD);
   await page.evaluate(() => window.__idle.simulate(3));
+  // VIEW='{"dist":0}' etc.: the camera rig clamps to what a viewer can reach (dist 0 = closest zoom)
+  if (process.env.VIEW) await page.evaluate(v => { window.__idle.setView(v); window.__idle.simulate(3); }, JSON.parse(process.env.VIEW));
   await page.waitForTimeout(4000);
   const buf = await page.evaluate(() => { const gl = window.__idle.renderer.getContext(); return [gl.drawingBufferWidth, gl.drawingBufferHeight]; });
   await page.screenshot({ path: OUTPNG });

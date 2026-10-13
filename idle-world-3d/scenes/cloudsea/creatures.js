@@ -75,7 +75,10 @@ function ik2(root, mid, end, target, pole) {
   root.parent.updateWorldMatrix(true, false);
   root.updateWorldMatrix(false, false);
   const A = root.getWorldPosition(_pw);
-  const la = mid.position.length(), lb = end.position.length();
+  // bone lengths in world units: the meshes are scaled (x1.25..2.1) and the targets are world points (with the
+  // local lengths the limbs over-reached: the tortoise's feet ended ~9 cm inside the ground)
+  const me = root.parent.matrixWorld.elements, ws = Math.hypot(me[0], me[1], me[2]);   // uniform scale
+  const la = mid.position.length() * ws, lb = end.position.length() * ws;
   _d.subVectors(target, A);
   let dist = _d.length();
   const dir = _d.multiplyScalar(1 / Math.max(dist, 1e-5));
@@ -234,6 +237,49 @@ function tortoiseRig() {
   return R;
 }
 
+const _fh = [V(), V()], _w1 = V(), _w2 = V(), _w3 = V();
+const _qh = new THREE.Quaternion(), _qk = new THREE.Quaternion(), _qh2 = new THREE.Quaternion(), _qk2 = new THREE.Quaternion();
+const easeStep = s => s * s * (3 - 2 * s);
+/** Follow the ground height gy with an exact critically damped spring (p.y, velocity o.vyG): a step off the terrace eases
+ *  down instead of dropping with an instant ~3 m/s (an exponential damp starts at full speed). */
+function groundSpring(o, p, gy, w, dt) {
+  const x0 = p.y - gy, c = o.vyG + w * x0, e = Math.exp(-w * dt);
+  p.y = gy + (x0 + c * dt) * e;
+  o.vyG = (o.vyG - w * c * dt) * e;
+}
+
+/**
+ * Two feet planted in world space. Each frame the walker passes the spots under its hips (world, on the ground);
+ * a foot that the body has carried away lifts and swings to its spot while the other stays planted, so feet never
+ * slide, also when the walker starts, stops or turns on the spot.
+ */
+class Stepper {
+  constructor() { this.F = [0, 1].map(() => ({ p: V(), from: V(), s: 0, swing: false })); this.ready = false; this.last = 1; this.ph = 0; this.w = 0; this.idleT = 0; }
+  /** homes: [Vector3, Vector3]; thr / idleThr: step distances when moving / settling; dur: swing time (s) */
+  update(dt, homes, moving, thr, idleThr, dur, lift) {
+    const F = this.F;
+    if (!this.ready) { F[0].p.copy(homes[0]); F[1].p.copy(homes[1]); F[0].swing = F[1].swing = false; this.ready = true; }
+    this.idleT = moving ? 0 : this.idleT + dt;
+    let sw = F[0].swing ? 0 : F[1].swing ? 1 : -1;
+    if (sw < 0) {
+      const e0 = Math.hypot(F[0].p.x - homes[0].x, F[0].p.z - homes[0].z), e1 = Math.hypot(F[1].p.x - homes[1].x, F[1].p.z - homes[1].z);
+      const k = e0 > e1 * 1.2 ? 0 : e1 > e0 * 1.2 ? 1 : 1 - this.last;
+      if ((k ? e1 : e0) > (moving ? thr : this.idleT > 0.4 ? idleThr : 1e9)) { sw = k; F[k].swing = true; F[k].s = 0; F[k].from.copy(F[k].p); this.last = k; }
+    }
+    if (sw >= 0) {
+      const f = F[sw], h = homes[sw];
+      f.s = Math.min(1, f.s + dt / dur);
+      const e = easeStep(f.s), dist = Math.hypot(h.x - f.from.x, h.z - f.from.z);
+      f.p.x = lerp(f.from.x, h.x, e); f.p.z = lerp(f.from.z, h.z, e);
+      f.p.y = lerp(f.from.y, h.y, e) + Math.sin(Math.PI * f.s) * Math.min(lift, lift * 0.3 + dist * 0.5);
+      if (f.s >= 1) f.swing = false;
+      // continuous gait phase for body sway and arm swing: left foot in the air on 0..π, right on π..2π
+      this.ph = (sw ? Math.PI : 0) + Math.PI * f.s;
+    }
+    this.w = damp(this.w, sw >= 0 ? 1 : 0, 6, dt);
+  }
+}
+
 class Tortoise {
   constructor(sys, member, rigDef, geo, index) {
     this.sys = sys; this.member = member; this.kind = 'tortoise';
@@ -249,45 +295,64 @@ class Tortoise {
     this.state = 'taichi';
     this.phase = sys.rng.range(0, TAU);
     this.form = 0; this.formT = 0; this.formBlend = 0;
-    this.walkPh = 0; this.food = null; this.timer = 0; this.glow = 0; this.eatHand = 1;
-    this.headLook = new THREE.Vector3();
-    this.handT = [V(), V()]; this.footT = [V(), V()];
+    this.food = null; this.timer = 0; this.glow = 0; this.eatHand = 1;
+    this.handT = [V(), V()];
     this.radius = 1.0;
     this.tmpPos = V();
+    // Locomotion: an eased ground speed and a capped, eased turn rate (the old dampAngle spun a 180° turn at up
+    // to 400°/s). The feet are planted in world space and step when the body has carried their spot away, so
+    // they never slide, also when the tortoise turns on the spot (they used to swing backwards in the air and
+    // slide forwards on the ground: a moonwalk).
+    this.spd = 0; this.turnRate = 0; this.walkGoal = this.pos.clone(); this.afterWalk = 'taichi'; this.vyG = 0;
+    this.steps = new Stepper();
+    // pose blends: the tai-chi stance, the munching bow and the eating hand ease in and out instead of snapping
+    this.taiW = 1; this.bendS = 0; this.crouchS = 0; this.eatW = 0; this.eatFrom = V(); this.eatLast = V();
+    this.lookYaw = 0; this.lookPitch = 0;
   }
   get headPos() { return this.B.head.getWorldPosition(this.tmpPos); }
   wantsFood(f) { return this.state === 'taichi' && f.onMain && f.state !== 'float' && this.pos.distanceTo(f.pos) < 13; }
+  /** Feet: home spots under the hips (wider in the tai-chi stance, a little ahead when walking). */
+  stepFeet(dt, stanceW) {
+    const W = this.sys.world, S = this.scale;
+    const stance = lerp(0.23, 0.27, stanceW), lead = 0.22 * this.spd;
+    const fx = Math.sin(this.yaw) * lead, fz = Math.cos(this.yaw) * lead;
+    for (let k = 0; k < 2; k++) {
+      const h = this.mesh.localToWorld(_fh[k].set(k ? -stance : stance, 0.08, 0.07));
+      h.x += fx; h.z += fz;
+      const g = W.mainGround(h.x, h.z);
+      h.y = (g === null ? this.pos.y : g) + 0.08 * S;
+    }
+    // walking: step once a foot is 8 cm (x scale) behind; standing: settle a foot that is 4 cm off
+    this.steps.update(dt, _fh, this.spd > 0.04 || Math.abs(this.turnRate) > 0.08, 0.08 * S, 0.04 * S, this.spd > 0.12 ? 0.42 : 0.5, 0.1 * S);
+  }
   update(dt, t) {
-    const sys = this.sys, B = this.B, R = this.rest;
+    const sys = this.sys, B = this.B, R = this.rest, W = sys.world, S = this.scale;
     if (this.member) { const s = 1.42 * (this.member.size || 1); if (s !== this.scale) { this.scale = s; this.mesh.scale.setScalar(s); } }
     this.glow = Math.max(0, this.glow - dt * 0.12);
     this.uniforms.uGlowAmt.value = this.glow * 0.8;
     this.uniforms.uShellGlow.value = lerp(0.03, 0.5, sys.tod.night) + this.glow * 0.6;
     // hunger: practise closer to the viewer
     const hungry = this.member && sys.env.fullness(this.member) < 0.3;
-    let speed = 0, bend = 0, crouch = 0;
-    let taiW = 0;
+    let spT = 0, wantYaw = null, turnK = 2.0, bend = 0, crouch = 0;
     if (this.state === 'taichi') {
-      taiW = 1;
-      const goal = hungry ? sys.world.hungrySpot(this.home, sys.camera) : this.home;
+      const goal = hungry ? W.hungrySpot(this.home, sys.camera) : this.home;
       const dx = goal.p.x - this.pos.x, dz = goal.p.z - this.pos.z;
-      if (Math.hypot(dx, dz) > 0.6) { this.state = 'walk'; this.walkGoal = goal.p.clone(); this.afterWalk = 'taichi'; this.faceYaw = goal.yaw; }
-      else this.yaw = dampAngle(this.yaw, hungry ? Math.atan2(sys.camera.position.x - this.pos.x, sys.camera.position.z - this.pos.z) : goal.yaw, 0.6, dt);
+      // (the hungry spot follows the drifting camera: move in fewer, longer walks rather than a shuffle every few s)
+      if (Math.hypot(dx, dz) > (hungry ? 1.2 : 0.6)) { this.state = 'walk'; this.walkGoal.copy(goal.p); this.afterWalk = 'taichi'; }
+      else { wantYaw = hungry ? Math.atan2(sys.camera.position.x - this.pos.x, sys.camera.position.z - this.pos.z) : goal.yaw; turnK = 0.6; }
     }
     if (this.state === 'walk' || this.state === 'toFood') {
+      if (this.state === 'toFood' && (!this.food.alive || this.food.state === 'float')) { this.state = 'walk'; this.walkGoal.copy(this.home.p); this.food = null; }
       const g = this.state === 'toFood' ? this.food.pos : this.walkGoal;
       const dx = g.x - this.pos.x, dz = g.z - this.pos.z, d = Math.hypot(dx, dz);
-      const stop = this.state === 'toFood' ? 0.55 * this.scale : 0.15;
-      const want = Math.atan2(dx, dz);
-      this.yaw = dampAngle(this.yaw, want, 2.2, dt);
-      const facing = Math.cos(angleDelta(this.yaw, want));
-      speed = d > stop ? 0.42 * this.scale * smoothstep(0.2, 0.9, facing) * smoothstep(0, 0.5, d - stop + 0.2) : 0;
-      this.pos.x += Math.sin(this.yaw) * speed * dt; this.pos.z += Math.cos(this.yaw) * speed * dt;
-      const gy = sys.world.mainGround(this.pos.x, this.pos.z);
-      if (gy !== null) this.pos.y = damp(this.pos.y, gy, 8, dt);
-      if (this.state === 'toFood' && (!this.food.alive || this.food.state === 'float')) { this.state = 'walk'; this.walkGoal = this.home.p.clone(); this.food = null; }
-      else if (d <= stop + 0.02) {
-        if (this.state === 'toFood') { this.state = 'reach'; this.timer = 0; this.eatHand = this.food.pos.clone().sub(this.pos).dot(_a.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw))) > 0 ? 0 : 1; }
+      const stop = this.state === 'toFood' ? 0.55 * S : 0.15;
+      // round the trunk, the stone lanterns, the pond and the pavilion instead of walking through them
+      wantYaw = d > 0.05 ? W.walkHeading(this.pos.x, this.pos.z, g.x, g.z, 0.45 * S, sys.dyn, this) : this.yaw;
+      const facing = Math.cos(angleDelta(this.yaw, wantYaw));
+      // turn toward the goal before setting off, slow down on arrival
+      spT = d > stop ? 0.42 * S * smoothstep(0.3, 0.95, facing) * smoothstep(0, 0.5, d - stop + 0.2) : 0;
+      if (d <= stop + 0.02) {
+        if (this.state === 'toFood') { this.state = 'reach'; this.timer = 0; this.eatHand = _w1.copy(this.food.pos).sub(this.pos).dot(_w2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw))) > 0 ? 0 : 1; }
         else { this.state = this.afterWalk || 'taichi'; }
       }
     }
@@ -296,7 +361,8 @@ class Tortoise {
       const f = this.food;
       if (this.state === 'reach') {
         crouch = smoothstep(0, 1.2, this.timer);
-        if (this.timer > 1.4) { this.state = 'lift'; this.timer = 0; if (f && f.alive) { f.held = this; f.state = 'held'; } }
+        if (!f || !f.alive) { this.food = null; this.state = 'walk'; this.walkGoal.copy(this.home.p); this.afterWalk = 'taichi'; this.timer = 0; }
+        else if (this.timer > 1.4) { this.state = 'lift'; this.timer = 0; this.eatFrom.copy(this.eatLast); f.held = this; f.state = 'held'; }
       } else if (this.state === 'lift') {
         crouch = 1 - smoothstep(0, 1.0, this.timer);
         if (this.timer > 1.2) { this.state = 'munch'; this.timer = 0; this.bites = 0; }
@@ -310,10 +376,21 @@ class Tortoise {
         }
         if (this.bites >= 3 || !f || !f.alive) {
           if (f && f.alive) sys.bite(f, this, f.bites);
-          this.food = null; this.state = 'walk'; this.walkGoal = this.home.p.clone(); this.afterWalk = 'taichi'; this.timer = 0;
+          this.food = null; this.state = 'walk'; this.walkGoal.copy(this.home.p); this.afterWalk = 'taichi'; this.timer = 0;
         }
       }
     }
+    // heading: proportional, capped at ~50°/s and eased in and out; speed eased (no instant starts or stops)
+    const omT = wantYaw === null ? 0 : clamp(angleDelta(this.yaw, wantYaw) * turnK, -0.9, 0.9);
+    this.turnRate = damp(this.turnRate, omT, 5, dt);
+    this.yaw += this.turnRate * dt;
+    this.spd = damp(this.spd, spT, 3, dt);
+    this.pos.x += Math.sin(this.yaw) * this.spd * dt; this.pos.z += Math.cos(this.yaw) * this.spd * dt;
+    // body height: the floor under it, or a step just ahead (rise onto the terrace before reaching its edge)
+    let gy = W.mainGround(this.pos.x, this.pos.z);
+    const ga = W.mainGround(this.pos.x + Math.sin(this.yaw) * 0.3 * S, this.pos.z + Math.cos(this.yaw) * 0.3 * S);
+    if (gy === null || (ga !== null && ga > gy)) gy = ga;
+    if (gy !== null) groundSpring(this, this.pos, gy, 7, dt);
 
     /* ---- pose ---- */
     this.mesh.position.copy(this.pos);
@@ -326,15 +403,18 @@ class Tortoise {
     if (this.formT > formLen) { this.formT = 0; this.form = 1 - this.form; }
     const fb = smoothstep(0, 3, this.formT) * smoothstep(formLen, formLen - 3, this.formT);
     const cloud = this.form === 0 ? fb : 0, open = this.form === 1 ? fb : 0;
-    const walkW = smoothstep(0.02, 0.2, speed);
-    const stanceW = taiW * (1 - walkW);
-    // hips
+    const walkW = smoothstep(0.02, 0.2, this.spd);
+    this.taiW = damp(this.taiW, this.state === 'taichi' ? 1 : 0, 2.5, dt);
+    this.bendS = damp(this.bendS, bend, 4, dt);
+    crouch = this.crouchS = damp(this.crouchS, crouch, 8, dt);   // (a reach cut short no longer pops upright)
+    const stanceW = this.taiW * (1 - walkW);
+    // gait sway: walking, or a single step on the spot
+    const gw = Math.max(walkW, this.steps.w * 0.6), wp = this.steps.ph;
+    // hips (the weight shifts over the planted foot, the hip of the lifted leg rises and swings forward)
     const sway = Math.sin(ph) * 0.07 * cloud * stanceW;
     const sink = (0.06 + 0.04 * (0.5 - 0.5 * Math.cos(2 * ph)) * cloud + 0.08 * (0.5 - 0.5 * Math.cos(ph)) * open) * stanceW + crouch * 0.3 + walkW * 0.02;
-    this.walkPh += speed / (0.22 * this.scale) * dt;
-    const wp = this.walkPh;
-    B.root.position.set(R.root.x + sway + Math.sin(wp) * 0.04 * walkW, R.root.y - sink + Math.abs(Math.sin(wp)) * 0.025 * walkW, R.root.z);
-    B.root.rotation.set(0.05 * stanceW + bend + crouch * 0.25, Math.sin(ph) * 0.22 * cloud * stanceW + Math.sin(wp) * 0.08 * walkW, Math.sin(wp) * 0.06 * walkW);
+    B.root.position.set(R.root.x + sway - Math.sin(wp) * 0.04 * gw, R.root.y - sink + Math.abs(Math.sin(wp)) * 0.025 * gw, R.root.z);
+    B.root.rotation.set(0.05 * stanceW + this.bendS + crouch * 0.25, Math.sin(ph) * 0.22 * cloud * stanceW - Math.sin(wp) * 0.08 * gw, Math.sin(wp) * 0.06 * gw);
     B.spine.rotation.set(0.04 + crouch * 0.3, Math.sin(ph - 0.5) * 0.1 * cloud * stanceW, 0);
     B.chest.rotation.set(-0.04 + crouch * 0.15, Math.sin(ph - 0.8) * 0.06 * cloud * stanceW, 0);
     B.tail.rotation.set(0, Math.sin(t * 1.3) * 0.2, 0);
@@ -351,21 +431,27 @@ class Tortoise {
     const o = 0.5 - 0.5 * Math.cos(ph);
     hL.lerp(_a.set(0.24, lerp(0.82, 1.22, o), lerp(0.28, 0.48, o)), ow);
     hR.lerp(_a.set(-0.24, lerp(0.82, 1.22, o), lerp(0.28, 0.48, o)), ow);
-    // walking arm swing
-    hL.z += Math.sin(wp) * 0.12 * walkW; hR.z -= Math.sin(wp) * 0.12 * walkW;
-    // reaching for / lifting / eating the peach
-    if (this.state === 'reach' || this.state === 'lift' || this.state === 'munch') {
-      const h = this.eatHand === 0 ? hL : hR;
+    // walking arm swing, opposite to the legs
+    hL.z -= Math.sin(wp) * 0.12 * gw; hR.z += Math.sin(wp) * 0.12 * gw;
+    // reaching for / lifting / eating the peach; afterwards the hand eases back instead of snapping down
+    const eating = this.state === 'reach' || this.state === 'lift' || this.state === 'munch';
+    const h = this.eatHand === 0 ? hL : hR;
+    if (eating) {
       const s = this.eatHand === 0 ? 1 : -1;
       if (this.state === 'reach') {
         const k = smoothstep(0.1, 1.2, this.timer);
         const fp = this.mesh.worldToLocal(_c3.copy(this.food.pos));
         h.set(lerp(h.x, fp.x, k), lerp(h.y, fp.y + 0.08, k), lerp(h.z, fp.z, k));
       } else {
+        // lift from wherever the hand took the peach (it used to jump to a fixed spot, peach and all)
         const k = this.state === 'lift' ? smoothstep(0, 1, this.timer) : 1;
         const bob = this.state === 'munch' ? Math.max(0, Math.sin(this.timer * 5.5)) * 0.04 : 0;
-        h.set(lerp(s * 0.3, s * 0.06, k), lerp(0.6, 1.5 - bob, k), lerp(0.45, 0.42, k));
+        h.lerpVectors(this.eatFrom, _a.set(s * 0.06, 1.5 - bob, 0.42), k);
       }
+      this.eatLast.copy(h); this.eatW = 1;
+    } else if (this.eatW > 0.002) {
+      this.eatW = damp(this.eatW, 0, 2.5, dt);
+      h.lerp(this.eatLast, this.eatW);
     }
     // IK arms (poles: elbows down and out)
     const tw = this.mesh.localToWorld(_t.copy(hL));
@@ -374,8 +460,8 @@ class Tortoise {
     const tw2 = this.mesh.localToWorld(_t.copy(hR));
     const pole2 = this.mesh.localToWorld(_pole.set(-1.2, 0.6, -0.3));
     ik2(B.shoulderR, B.elbowR, B.handR, tw2, pole2);
-    B.handL.rotation.set(0.3 + 0.4 * cloud * Math.sin(ph), 0, 0.2);
-    B.handR.rotation.set(0.3 + 0.4 * cloud * Math.sin(ph + Math.PI), 0, -0.2);
+    B.handL.rotation.set(0.3 + 0.4 * cw * Math.sin(ph), 0, 0.2);
+    B.handR.rotation.set(0.3 + 0.4 * cw * Math.sin(ph + Math.PI), 0, -0.2);
     // held peach follows the hand
     if (this.food && this.food.held === this) {
       const hb = this.eatHand === 0 ? B.handL : B.handR;
@@ -383,16 +469,12 @@ class Tortoise {
       hb.getWorldPosition(this.food.pos);
       this.food.pos.y -= 0.05 * this.scale; this.food.pos.add(_a.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(0.08 * this.scale));
     }
-    // feet: planted (tai chi stance wider), stepping when walking
-    const stance = 0.27;
+    // feet: planted in world space (tai chi stance wider), stepping when walking or turning
+    this.stepFeet(dt, stanceW);
     for (let k = 0; k < 2; k++) {
       const s = k === 0 ? 1 : -1;
-      const ft = this.footT[k];
-      const swing = Math.sin(wp + (k ? Math.PI : 0));
-      ft.set(s * lerp(0.23, stance, stanceW), 0.08 + Math.max(0, swing) * 0.1 * walkW, 0.07 + Math.cos(wp + (k ? Math.PI : 0)) * 0.13 * walkW);
-      const fw = this.mesh.localToWorld(_t.copy(ft));
       const fpole = this.mesh.localToWorld(_pole.set(s * 0.3, 0.4, 1.4));
-      ik2(k ? B.hipR : B.hipL, k ? B.kneeR : B.kneeL, k ? B.footR : B.footL, fw, fpole);
+      ik2(k ? B.hipR : B.hipL, k ? B.kneeR : B.kneeL, k ? B.footR : B.footL, _w3.copy(this.steps.F[k].p), fpole);
       // keep the foot flat
       const knee = k ? B.kneeR : B.kneeL, foot = k ? B.footR : B.footL;
       knee.updateWorldMatrix(true, false);
@@ -405,7 +487,7 @@ class Tortoise {
     if (this.state === 'taichi') { const up = Math.sin(ph) > 0 ? hL : hR; lookYaw = Math.atan2(up.x, 0.6) * 0.8 * cloud; lookPitch = -0.15 * open + (up.y - 1.1) * -0.4 * cloud; }
     if (this.state === 'reach') lookPitch = 0.6;
     if (this.state === 'munch') lookPitch = 0.15 + Math.max(0, Math.sin(this.timer * 5.5)) * 0.12;
-    this.lookYaw = damp(this.lookYaw || 0, lookYaw, 2, dt); this.lookPitch = damp(this.lookPitch || 0, lookPitch, 2, dt);
+    this.lookYaw = damp(this.lookYaw, lookYaw, 2, dt); this.lookPitch = damp(this.lookPitch, lookPitch, 2, dt);
     B.neck1.rotation.set(this.lookPitch * 0.4, this.lookYaw * 0.4, 0);
     B.neck2.rotation.set(this.lookPitch * 0.3, this.lookYaw * 0.3, 0);
     B.head.rotation.set(this.lookPitch * 0.3, this.lookYaw * 0.3, Math.sin(t * 0.3) * 0.04);
@@ -468,6 +550,21 @@ function craneRig() {
   return R;
 }
 
+/** Cubic Bezier point of a landing curve {p0..p3} at t. */
+function bez(P, t, out) {
+  const u = 1 - t;
+  return out.set(0, 0, 0).addScaledVector(P.p0, u * u * u).addScaledVector(P.p1, 3 * u * u * t).addScaledVector(P.p2, 3 * u * t * t).addScaledVector(P.p3, t * t * t);
+}
+const AIR = { fly: 1, approach: 1, glide: 1, takeoff: 1, snatch: 1 };
+const GROUND = { stand: 1, walk: 1, peck: 1, turn: 1 };
+/** Is another resident standing within r of (x, z)? (the tortoises and the cranes on the ground) */
+function occupied(sys, self, x, z, r) {
+  for (const o of sys.tortoises) if (o !== self && Math.hypot(o.pos.x - x, o.pos.z - z) < r) return o;
+  for (const o of sys.cranes) if (o !== self && GROUND[o.state] === 1 && Math.hypot(o.pos.x - x, o.pos.z - z) < r) return o;
+  return null;
+}
+const NOTICE_STATES = { fly: 1, approach: 1, stand: 1, walk: 1, peck: 1, turn: 1 };
+
 class Crane {
   constructor(sys, member, rigDef, geo, rng, ambient = false) {
     this.sys = sys; this.member = member; this.kind = 'crane'; this.ambient = ambient;
@@ -483,162 +580,310 @@ class Crane {
     this.vel = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(6 * Math.sign(this.orbit.w));
     this.yaw = Math.atan2(this.vel.x, this.vel.z); this.pitch = 0; this.bank = 0;
     this.state = 'fly'; this.timer = rng.range(0, 20); this.flapPh = rng.range(0, TAU); this.flapUntil = 0; this.nextFlap = rng.range(1, 5);
-    this.glow = 0; this.food = null; this.ground = 0; this.pose = { fly: 1, fold: 0, legs: 0, flare: 0, peck: 0 };
-    this.walkPh = 0; this.radius = 1.2;
-    this.tmpPos = V(); this.carrot = V(); this.path = null;
+    this.glow = 0; this.food = null; this.ground = 0; this.pose = { fly: 1, fold: 0, legs: 0, flare: 0, peck: 0, air: 1 };
+    this.radius = 1.2;
+    this.tmpPos = V();
     this.restTime = rng.range(25, 60);
+    // Flight: heading, horizontal / vertical speed and a smoothed turn rate. The heading turns at a capped rate
+    // and the bank comes from the real turn rate (it was the heading error divided by the frame time, so the
+    // cranes banked twice as hard at 60 fps as at 30, and mostly sat at the 40° limit).
+    this.hd = this.yaw; this.vh = 6; this.vy = 0; this.om = 0;
+    this.flapRate = 0.25; this.flapA = 0;
+    // ground: eased walking speed and turn rate
+    this.walkSpd = 0; this.turnRate = 0; this.stroll = null; this.steps = new Stepper(); this.legDrop = 0; this.vyG = 0;
+    this.land = { spot: V(), ad: 0, phase: 'in' }; this.toHd = 0; this.lift = 0; this.extend = false;
+    this.path = { p0: V(), p1: V(), p2: V(), p3: V(), len: 1, s: 0, v0: 6 };
+    this.arc = new Float32Array(33);   // arc length table of the landing curve (constant speed along it)
   }
   get position() { return this.B.root.getWorldPosition(this.tmpPos); }
-  wantsFood(f) { return !this.ambient && !this.food && (this.state === 'fly' || this.state === 'stand' || this.state === 'walk'); }
-  /** Bezier glide/landing path */
-  startPath(to, kind, arriveDir) {
-    const p0 = this.pos.clone();
-    const v = this.vel.clone(); if (v.lengthSq() < 0.01) v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-    v.normalize();
-    const dist = p0.distanceTo(to);
-    const ad = arriveDir || to.clone().sub(p0).setY(0).normalize();
-    const p1 = p0.clone().addScaledVector(v, Math.min(dist * 0.45, 14));
-    const p2 = to.clone().addScaledVector(ad, -Math.min(dist * 0.4, 9)).add(new THREE.Vector3(0, kind === 'land' ? 3 : 0, 0));
-    this.path = { p0, p1, p2, p3: to.clone(), t: 0, len: dist * 1.25 + 4, kind };
+  wantsFood(f) { return !this.ambient && !this.food && NOTICE_STATES[this.state] === 1; }
+  /** Re-derive the flight state after the position / velocity were set from outside. */
+  resetFlight() {
+    this.vh = Math.hypot(this.vel.x, this.vel.z); this.vy = this.vel.y; this.om = 0;
+    if (this.vh > 0.01) this.yaw = this.hd = Math.atan2(this.vel.x, this.vel.z); else this.hd = this.yaw;
   }
-  pathPoint(t, out) {
-    const P = this.path, u = 1 - t;
-    return out.set(0, 0, 0).addScaledVector(P.p0, u * u * u).addScaledVector(P.p1, 3 * u * u * t).addScaledVector(P.p2, 3 * u * t * t).addScaledVector(P.p3, t * t * t);
+  /** Fly toward (tx,ty,tz): capped turn rate, eased speed and climb; islets and buildings bend the heading. */
+  steer(tx, ty, tz, cruise, dt, turnMax, avoidK, climbK = 0.45, climbMax = 1.6) {
+    const p = this.pos, dx = tx - p.x, dz = tz - p.z, d = Math.max(Math.hypot(dx, dz), 1e-3);
+    this.flyDir(dx / d, dz / d, ty, cruise, dt, turnMax, avoidK, climbK, climbMax);
+  }
+  /** Fly along the horizontal direction (wx, wz) at height ty. */
+  flyDir(wx, wz, ty, cruise, dt, turnMax, avoidK, climbK = 0.45, climbMax = 1.6) {
+    const p = this.pos, want = _w1.set(wx, 0, wz);
+    if (avoidK) this.sys.world.avoid(p, this.vel, want, avoidK);
+    const omT = clamp(angleDelta(this.hd, Math.atan2(want.x, want.z)) * 1.1, -turnMax, turnMax);
+    this.om = damp(this.om, omT, 2.5, dt);
+    this.hd += this.om * dt;
+    this.vy = damp(this.vy, clamp((ty - p.y) * climbK + want.y * 1.2, -climbMax, climbMax), 1.5, dt);
+    this.vh = damp(this.vh, cruise, 0.9, dt);
+    this.vel.set(Math.sin(this.hd) * this.vh, this.vy, Math.cos(this.hd) * this.vh);
+    p.addScaledVector(this.vel, dt);
+  }
+  /** Choose a clear final approach into `target` (on a lawn); touch down `offset` m short of it. */
+  planLanding(target, offset) {
+    const W = this.sys.world, p = this.pos;
+    const toT = Math.atan2(target.x - p.x, target.z - p.z);
+    let best = null, bestCost = 1e9;
+    for (let i = 0; i < 16; i++) {
+      const a = toT + (i < 8 ? i : i - 16) * (TAU / 16);
+      const sx = Math.sin(a), sz = Math.cos(a);
+      const tx = target.x - sx * offset, tz = target.z - sz * offset;
+      const gy = W.groundAt(tx, tz);
+      if (gy === null || W.blocked(tx, gy + 1.2, tz, 0.6)) continue;   // not under a low bough
+      if (occupied(this.sys, this, tx, tz, 1.3)) continue;              // nor on top of another resident
+      let ok = true;
+      for (let k = 1; k <= 9 && ok; k++) {
+        const back = 2 * k;   // the final leg: 18 m out, descending ~0.22 m per m
+        if (W.blocked(tx - sx * back, gy + 1.0 + Math.max(0, back - 4) * 0.22, tz - sz * back, 1.1)) ok = false;
+      }
+      if (!ok) continue;
+      // prefer lines the crane is already behind and flying along (less circling to line up)
+      const along = (tx - p.x) * sx + (tz - p.z) * sz;
+      const cost = Math.abs(angleDelta(toT, a)) + 0.5 * Math.abs(angleDelta(this.hd, a)) + 0.03 * Math.max(0, 30 - along);
+      if (cost < bestCost) { bestCost = cost; best = a; }
+    }
+    if (best === null) return false;
+    const L = this.land;
+    L.ad = best;
+    { const ax = L.ad, along = (target.x - p.x) * Math.sin(ax) + (target.z - p.z) * Math.cos(ax);
+      L.phase = along > 28 && Math.abs(angleDelta(this.hd, ax)) < 1.6 ? 'in' : 'out'; }
+    L.spot.set(target.x - Math.sin(best) * offset, 0, target.z - Math.cos(best) * offset);
+    L.spot.y = W.groundAt(L.spot.x, L.spot.z);
+    this.state = 'approach'; this.timer = 0;
+    return true;
+  }
+  /** Final glide: a short curve from the line-up point onto the spot, flown at a set speed. */
+  startGlide() {
+    const L = this.land, P = this.path, p = this.pos;
+    const d = p.distanceTo(L.spot);
+    P.p0.copy(p);
+    P.p1.copy(this.vel).normalize().multiplyScalar(d * 0.38).add(p);
+    P.p2.set(-Math.sin(L.ad), 0, -Math.cos(L.ad)).multiplyScalar(d * 0.32).add(L.spot); P.p2.y += 0.8;
+    P.p3.copy(L.spot);
+    let acc = 0;
+    bez(P, 0, _w1); this.arc[0] = 0;
+    for (let i = 1; i <= 32; i++) { bez(P, i / 32, _w2); acc += _w2.distanceTo(_w1); this.arc[i] = acc; _w1.copy(_w2); }
+    P.len = acc; P.s = 0; P.v0 = Math.max(this.vel.length(), 3);
+    this.state = 'glide'; this.timer = 0;
+  }
+  /** Curve parameter at arc length s. */
+  tAt(s) {
+    const A = this.arc;
+    let i = 1;
+    while (i < 32 && A[i] < s) i++;
+    return (i - 1 + clamp((s - A[i - 1]) / Math.max(A[i] - A[i - 1], 1e-6), 0, 1)) / 32;
+  }
+  /** Pick a take-off heading with a clear climb-out, preferring the way the crane already faces. */
+  planTakeoff() {
+    const W = this.sys.world, p = this.pos;
+    let best = this.yaw, bestN = -1;
+    for (let i = 0; i < 16; i++) {
+      const a = this.yaw + (i & 1 ? -1 : 1) * Math.ceil(i / 2) * (TAU / 16);
+      const sx = Math.sin(a), sz = Math.cos(a);
+      let n = 0;
+      for (let d = 2; d <= 26; d += 2) {
+        if (W.blocked(p.x + sx * d, p.y + 0.9 + Math.max(0, d - 3) * 0.36, p.z + sz * d, 1.0)) break;
+        n++;
+      }
+      if (n > bestN) { bestN = n; best = a; }
+      if (n === 13) break;
+    }
+    this.toHd = best; this.state = 'turn'; this.timer = 0; this.stroll = null;
   }
   update(dt, t) {
-    const sys = this.sys, B = this.B;
+    const sys = this.sys, B = this.B, W = sys.world, p = this.pos;
     if (this.member) { const s = 1.25 * (this.member.size || 1); if (s !== this.scale) { this.scale = s; this.mesh.scale.setScalar(s); } }
     this.glow = Math.max(0, this.glow - dt * 0.15);
     this.uniforms.uGlowAmt.value = this.glow * 0.6;
     this.timer += dt;
     const P = this.pose;
-    let flapAmp = 0, flapRate = 0, speed = this.vel.length();
+    let flapAmp = 0, flapRateT = 0.25;
     const hungry = this.member && sys.env.fullness(this.member) < 0.3;
-    if (this.state === 'fly') {
-      // follow an orbit with a wandering carrot; avoid islets; occasionally decide to land
-      const o = this.orbit;
-      o.a += o.w * dt;
-      const cx = hungry ? sys.camera.position.x * 0.6 : 0, cz = hungry ? sys.camera.position.z * 0.6 : 0;
-      const ra = o.r * (1 + 0.18 * Math.sin(t * 0.07 + o.ph)) * (hungry ? 0.6 : 1);
-      this.carrot.set(cx + Math.cos(o.a + 0.35 * Math.sign(o.w)) * ra, o.h + Math.sin(t * 0.11 + o.ph) * 4 + Math.cos(o.a * 2) * o.tilt * 8, cz + Math.sin(o.a + 0.35 * Math.sign(o.w)) * ra);
-      const want = _a.subVectors(this.carrot, this.pos).normalize();
-      sys.world.avoid(this.pos, this.vel, want, 1.5);
-      want.normalize();
-      const sp = this.ambient ? 9 : 6.5;
-      const cur = _b.copy(this.vel).normalize();
-      cur.lerp(want, 1 - Math.exp(-0.9 * dt)).normalize();
-      this.vel.copy(cur).multiplyScalar(damp(speed, sp, 1, dt));
-      this.pos.addScaledVector(this.vel, dt);
-      if (!this.ambient && this.timer > this.restTime && !this.food) {
-        const spot = sys.world.landingSpot(this.rng, hungry ? sys.camera : null);
-        if (spot) { this.landSpot = spot; this.startPath(spot, 'land'); this.state = 'glide'; this.timer = 0; }
-      }
-      // flapping bouts between long glides
+    const cruise = this.ambient ? 9 : 6.5;
+    if (this.state === 'fly' || this.state === 'approach') {
+      // flapping bouts between long glides: a little faster while the wings beat, sinking a little in the glide
       if (t > this.nextFlap) { this.flapUntil = t + this.rng.range(2.2, 3.6); this.nextFlap = this.flapUntil + this.rng.range(3, 7); }
-      const flapping = t < this.flapUntil || this.vel.y > 0.8;
-      flapAmp = flapping ? 0.95 : 0.06; flapRate = flapping ? 1.25 : 0.25;
-      P.fly = damp(P.fly, 1, 3, dt); P.fold = damp(P.fold, 0, 4, dt); P.legs = damp(P.legs, 0, 3, dt); P.flare = damp(P.flare, 0, 3, dt);
-    } else if (this.state === 'glide') {
-      // scripted approach & landing along a Bezier
-      const Pth = this.path;
-      const remaining = (1 - Pth.t) * Pth.len;
-      const sp = lerp(1.6, 6.5, smoothstep(0, 14, remaining));
-      Pth.t = Math.min(1, Pth.t + (sp * dt) / Pth.len);
-      const prev = _c3.copy(this.pos);
-      this.pathPoint(Pth.t, this.pos);
-      this.vel.subVectors(this.pos, prev).multiplyScalar(1 / Math.max(dt, 1e-4));
-      const near = 1 - smoothstep(0, 10, remaining);
-      flapAmp = lerp(0.2, 0.9, smoothstep(0.5, 1, near)); flapRate = lerp(0.3, 1.8, near);
-      P.fly = damp(P.fly, 1, 3, dt); P.legs = damp(P.legs, near, 3, dt); P.flare = damp(P.flare, near, 3, dt); P.fold = damp(P.fold, 0, 4, dt);
-      if (Pth.t >= 1) { this.state = 'stand'; this.timer = 0; this.vel.set(0, 0, 0); this.ground = this.pos.y; this.restTime = this.rng.range(18, 40); }
-    } else if (this.state === 'stand' || this.state === 'walk' || this.state === 'peck') {
-      flapAmp = 0; P.fly = damp(P.fly, 0, 3, dt); P.fold = damp(P.fold, 1, 2.5, dt); P.legs = damp(P.legs, 0, 3, dt); P.flare = damp(P.flare, 0, 3, dt);
+      const flapping = t < this.flapUntil || this.vy > 0.6;
+      flapAmp = flapping ? 0.95 : 0.06; flapRateT = flapping ? 1.25 : 0.25;
+      const sp = cruise * (flapping ? 1.04 : 0.96), sink = flapping ? 0 : 0.6;
+      if (this.state === 'fly') {
+        // follow the orbit circle: chase a point a little ahead of the crane on it (a carrot that moved with
+        // the clock was far slower than the bird, which caught it and looped round it)
+        const o = this.orbit;
+        const cx = hungry ? sys.camera.position.x * 0.6 : 0, cz = hungry ? sys.camera.position.z * 0.6 : 0;
+        const ra = o.r * (1 + 0.18 * Math.sin(t * 0.07 + o.ph)) * (hungry ? 0.6 : 1);
+        o.a = Math.atan2(p.z - cz, p.x - cx);
+        const aC = o.a + Math.sign(o.w) * (this.vh * 1.5 + 4) / Math.max(ra, 6);
+        const hT = o.h + Math.sin(t * 0.11 + o.ph) * 3 + Math.cos(aC * 2) * o.tilt * 6;
+        this.steer(cx + Math.cos(aC) * ra, hT - sink, cz + Math.sin(aC) * ra, sp, dt, this.ambient ? 0.45 : 0.8, 1.5);
+        if (!this.ambient && this.timer > this.restTime && !this.food) {
+          const spot = W.landingSpot(this.rng, hungry ? sys.camera : null);
+          if (!spot || !this.planLanding(spot, 0)) this.timer = this.restTime - 6;   // look again a little later
+        }
+      } else {
+        // Approach: if too close or facing away, fly out beside the approach line ('out', a downwind leg), turn
+        // and follow the line in ('in': steer toward the line, at most 60° off it). Lined up -> final glide.
+        const L = this.land, sx = Math.sin(L.ad), sz = Math.cos(L.ad);
+        const rx = L.spot.x - p.x, rz = L.spot.z - p.z;
+        const along = rx * sx + rz * sz, lat = rx * sz - rz * sx, herr = angleDelta(this.hd, L.ad);
+        if (L.phase === 'in' && (along < 9 || (along < 20 && (Math.abs(lat) > 3.5 || Math.abs(herr) > 0.7)))) L.phase = 'out';
+        if (L.phase === 'out' && along > 34) L.phase = 'in';
+        const cy = L.spot.y + 1.0 + clamp(along - 4, 0, 40) * 0.22 - sink;   // a shallow glide slope (~12°)
+        if (L.phase === 'in' && along < 24 && Math.abs(lat) < 2.5 && Math.abs(herr) < 0.45) this.startGlide();
+        else if (L.phase === 'in') {
+          const h = L.ad + clamp(Math.atan(lat * 0.18), -1.05, 1.05);
+          // on the final leg the path is known to be clear: no avoidance pushes (they fought the descent)
+          this.flyDir(Math.sin(h), Math.cos(h), cy, sp, dt, 0.8, along < 32 ? 0 : 1.0);
+        } else {
+          const side = lat > 0 ? -1 : 1;   // stay on the side of the line the crane is on
+          this.steer(L.spot.x - sx * 40 + sz * side * 16, L.spot.y + 7.5 - sink, L.spot.z - sz * 40 - sx * side * 16, sp, dt, 0.8, 1.0);
+        }
+        if (this.timer > 50) { this.state = 'fly'; this.timer = this.restTime - 10; this.food = null; }
+      }
+      P.fly = damp(P.fly, 1, 3, dt); P.fold = damp(P.fold, 0, 4, dt); P.legs = damp(P.legs, 0, 3, dt); P.flare = damp(P.flare, 0, 3, dt); P.air = damp(P.air, 1, 3, dt);
+    }
+    if (this.state === 'glide') {
+      // the final glide, flown at a set speed along the curve (the old curve parameter ran at a varying speed,
+      // so the crane braked and surged on the way in); braking wing beats, legs forward, a nose-up flare
+      const Pt = this.path, rem = Pt.len - Pt.s;
+      const sp = lerp(0.9, Pt.v0, smoothstep(0.5, 10, rem));
+      const over = Pt.s + sp * dt - Pt.len;
+      Pt.s = Math.min(Pt.len, Pt.s + sp * dt);
+      _w3.copy(p);
+      bez(Pt, this.tAt(Pt.s), p);
+      if (over > 0) { p.x += Math.sin(this.hd) * over; p.z += Math.cos(this.hd) * over; }   // run on past the spot: no stutter at touchdown
+      this.vel.subVectors(p, _w3).multiplyScalar(1 / Math.max(dt, 1e-4));
+      const vh = Math.hypot(this.vel.x, this.vel.z);
+      if (vh > 0.2) { const d = angleDelta(this.hd, Math.atan2(this.vel.x, this.vel.z)); this.hd += d; this.om = damp(this.om, clamp(d / Math.max(dt, 1e-4), -1.5, 1.5), 6, dt); }
+      this.vh = vh; this.vy = this.vel.y;
+      const near = 1 - smoothstep(0, 9, rem);
+      flapAmp = lerp(0.2, 0.9, smoothstep(0.45, 1, near)); flapRateT = lerp(0.3, 1.7, near);
+      P.fly = damp(P.fly, 1, 3, dt); P.legs = damp(P.legs, near, 3, dt); P.flare = damp(P.flare, near, 3, dt); P.fold = damp(P.fold, 0, 4, dt); P.air = damp(P.air, 1, 3, dt);
+      if (Pt.s >= Pt.len) {
+        // touch down and run out a step or two
+        this.state = 'stand'; this.timer = 0; this.yaw = this.hd; this.walkSpd = sp; this.turnRate = 0; this.vyG = 0;
+        this.vel.set(0, 0, 0); this.ground = p.y; this.restTime = this.rng.range(18, 40);
+      }
+    } else if (this.state === 'stand' || this.state === 'walk' || this.state === 'peck' || this.state === 'turn') {
+      flapAmp = 0;
+      P.fly = damp(P.fly, 0, 3, dt); P.fold = damp(P.fold, 1, 2.5, dt); P.legs = damp(P.legs, 0, 3, dt); P.flare = damp(P.flare, 0, 3, dt); P.air = damp(P.air, 0, 4, dt);
+      let spT = 0, wantYaw = null;
       const f = this.food;
-      if (f && f.alive && f.state !== 'float') {
-        const dx = f.pos.x - this.pos.x, dz = f.pos.z - this.pos.z, d = Math.hypot(dx, dz);
-        const want = Math.atan2(dx, dz);
-        this.yaw = dampAngle(this.yaw, want, 2.5, dt);
-        const reach = 0.62 * this.scale;
-        if (d > reach) { this.state = 'walk'; const sp = 0.7 * this.scale; this.pos.x += Math.sin(this.yaw) * sp * dt; this.pos.z += Math.cos(this.yaw) * sp * dt; this.walkPh += dt * 5; }
+      if (this.state === 'turn') {
+        // turn on the spot toward the chosen take-off heading, then run
+        if (f) this.state = 'stand';
         else {
+          wantYaw = this.toHd;
+          if (Math.abs(angleDelta(this.yaw, this.toHd)) < 0.1 && Math.abs(this.turnRate) < 0.3) {
+            this.state = 'takeoff'; this.timer = 0; this.hd = this.yaw; this.vh = this.walkSpd; this.vy = 0; this.om = 0; this.lift = 0; this.ground = p.y; this.vyG = 0;
+          }
+        }
+      } else if (f && f.alive && f.state !== 'float') {
+        this.stroll = null;
+        const dx = f.pos.x - p.x, dz = f.pos.z - p.z, d = Math.hypot(dx, dz);
+        const reach = 0.62 * this.scale;
+        wantYaw = d > 0.2 ? W.walkHeading(p.x, p.z, f.pos.x, f.pos.z, 0.3 * this.scale, sys.dyn, this) : this.yaw;
+        if (d > reach) {
+          this.state = 'walk';
+          spT = 0.7 * this.scale * smoothstep(0.2, 0.9, Math.cos(angleDelta(this.yaw, wantYaw))) * smoothstep(0, 0.35, d - reach + 0.05);
+          // someone already at the peach: wait rather than walk into them
+          if (occupied(sys, this, p.x + Math.sin(this.yaw) * 0.6, p.z + Math.cos(this.yaw) * 0.6, 0.75)) spT = 0;
+          P.peck = damp(P.peck, 0, 5, dt);
+        } else {
           this.state = 'peck';
           P.peck = damp(P.peck, 1, 5, dt);
           if (this.timer > 1.1) { this.timer = 0; sys.bite(f, this, 1); this.glow = Math.min(1.5, this.glow + 0.5); }
         }
-        const gy = sys.world.groundAt(this.pos.x, this.pos.z); if (gy !== null) this.pos.y = damp(this.pos.y, gy, 6, dt);
       } else {
         if (f) this.food = null;
+        if (this.state === 'peck') this.state = 'stand';
         P.peck = damp(P.peck, 0, 3, dt);
-        // idle: occasional stroll and ground pecking, then fly off
-        if (this.state === 'walk' && !this.stroll) this.state = 'stand';
-        if (this.state === 'stand' && this.rng.chance(dt * 0.12)) this.stroll = { t: this.rng.range(1.5, 3.5), yaw: this.yaw + this.rng.range(-1.2, 1.2) };
+        // idle: an occasional stroll, then fly off
+        if (!this.stroll && this.state === 'stand' && this.walkSpd < 0.05 && this.rng.chance(dt * 0.12)) this.stroll = { t: this.rng.range(1.5, 3.5), yaw: this.yaw + this.rng.range(-1.2, 1.2) };
         if (this.stroll) {
-          this.stroll.t -= dt; this.yaw = dampAngle(this.yaw, this.stroll.yaw, 2, dt);
-          const nx = this.pos.x + Math.sin(this.yaw) * 0.55 * dt, nz = this.pos.z + Math.cos(this.yaw) * 0.55 * dt;
-          const gy = sys.world.groundAt(nx, nz);
-          if (gy !== null && Math.abs(gy - this.pos.y) < 0.6) { this.pos.x = nx; this.pos.z = nz; this.pos.y = damp(this.pos.y, gy, 6, dt); this.walkPh += dt * 4; this.state = 'walk'; }
-          else this.stroll.t = 0;
-          if (this.stroll.t <= 0) { this.stroll = null; this.state = 'stand'; }
+          this.stroll.t -= dt; wantYaw = this.stroll.yaw;
+          // look ahead: stop before the lawn's edge, a step or an obstacle
+          const ax = p.x + Math.sin(this.yaw) * 0.9, az = p.z + Math.cos(this.yaw) * 0.9, gy = W.groundAt(ax, az);
+          if (gy === null || Math.abs(gy - p.y) > 0.35 || Math.abs(angleDelta(W.walkHeading(p.x, p.z, ax, az, 0.25), Math.atan2(ax - p.x, az - p.z))) > 0.05) this.stroll.t = 0;
+          if (this.stroll.t > 0) { this.state = 'walk'; spT = 0.55 * smoothstep(0.3, 0.9, Math.cos(angleDelta(this.yaw, wantYaw))); }
+          else this.stroll = null;
         }
-        if (this.timer > this.restTime && !hungry || this.timer > this.restTime * 2.5) {
-          // take off along the facing direction
-          const dir = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-          const to = this.pos.clone().addScaledVector(dir, 16); to.y += 7;
-          this.vel.copy(dir).multiplyScalar(0.5);
-          this.startPath(to, 'takeoff', dir);
-          this.state = 'takeoff'; this.timer = 0; this.stroll = null;
-        }
+        if (!this.stroll && this.state === 'walk' && this.walkSpd < 0.05) this.state = 'stand';
+        if ((this.timer > this.restTime && !hungry || this.timer > this.restTime * 2.5) && this.walkSpd < 0.1) this.planTakeoff();
       }
+      // turn on the spot at a calm, capped rate; ease the walking speed in and out
+      const omT = wantYaw === null ? 0 : clamp(angleDelta(this.yaw, wantYaw) * 2.5, -1.6, 1.6);
+      this.turnRate = damp(this.turnRate, omT, 6, dt);
+      this.yaw += this.turnRate * dt;
+      this.walkSpd = damp(this.walkSpd, spT, 4, dt);
+      p.x += Math.sin(this.yaw) * this.walkSpd * dt; p.z += Math.cos(this.yaw) * this.walkSpd * dt;
+      let gy = W.groundAt(p.x, p.z);
+      const ga = W.groundAt(p.x + Math.sin(this.yaw) * 0.3 * this.scale, p.z + Math.cos(this.yaw) * 0.3 * this.scale);
+      if (gy === null || (ga !== null && ga > gy)) gy = ga;
+      if (gy !== null) groundSpring(this, p, gy, 8, dt);
+      this.hd = this.yaw; this.om = 0;
     } else if (this.state === 'takeoff') {
-      const Pth = this.path;
-      const sp = lerp(1.0, 6.5, smoothstep(0, 1, Pth.t));
-      Pth.t = Math.min(1, Pth.t + (sp * dt) / Pth.len);
-      const prev = _c3.copy(this.pos);
-      this.pathPoint(Pth.t, this.pos);
-      this.vel.subVectors(this.pos, prev).multiplyScalar(1 / Math.max(dt, 1e-4));
-      flapAmp = 1.0; flapRate = 1.7;
-      P.fly = damp(P.fly, 1, 4, dt); P.fold = damp(P.fold, 0, 6, dt); P.legs = damp(P.legs, 0, 1.5, dt); P.flare = damp(P.flare, 0.3, 3, dt);
-      if (Pth.t >= 1) { this.state = 'fly'; this.timer = 0; this.restTime = this.rng.range(30, 70); this.orbit.a = Math.atan2(this.pos.z, this.pos.x); }
-    } else if (this.state === 'snatch') {
-      // fly straight through a floating peach
-      const f = this.food;
-      if (!f || !f.alive) { this.state = 'fly'; this.food = null; }
-      else {
-        const want = _a.subVectors(f.pos, this.pos);
-        const d = want.length(); want.normalize();
-        const cur = _b.copy(this.vel).normalize();
-        cur.lerp(want, 1 - Math.exp(-2.2 * dt)).normalize();
-        this.vel.copy(cur).multiplyScalar(damp(speed, 8, 1, dt));
-        this.pos.addScaledVector(this.vel, dt);
-        flapAmp = 0.8; flapRate = 1.4;
-        const hd = this.B.head.getWorldPosition(_d).distanceTo(f.pos);
-        if (hd < 0.8 * this.scale || d < 0.6 * this.scale) { sys.bite(f, this, 2); this.glow = Math.min(1.5, this.glow + 0.6); if (!f.alive) { this.food = null; this.state = 'fly'; } else this.timer = 0; }
-        if (this.timer > 12) { this.food = null; this.state = 'fly'; }
+      // a short run with the wings beating, lift-off once there is some speed, then a steady climb-out
+      this.vh = damp(this.vh, cruise, 0.9, dt);
+      this.lift = Math.max(this.lift, smoothstep(2.0, 3.2, this.vh));
+      this.vy = damp(this.vy, 2.3 * this.lift, 2.5, dt);
+      if (this.lift > 0.5) {
+        const want = _w1.set(Math.sin(this.toHd), 0, Math.cos(this.toHd));
+        W.avoid(p, this.vel, want, 1.0);
+        this.om = damp(this.om, clamp(angleDelta(this.hd, Math.atan2(want.x, want.z)) * 1.1, -0.8, 0.8), 2.5, dt);
+        this.hd += this.om * dt;
       }
-      P.fly = damp(P.fly, 1, 3, dt); P.fold = damp(P.fold, 0, 4, dt); P.legs = damp(P.legs, 0, 3, dt);
+      this.vel.set(Math.sin(this.hd) * this.vh, this.vy, Math.cos(this.hd) * this.vh);
+      p.addScaledVector(this.vel, dt);
+      // on the ground until lift-off (eased over a terrace edge: it snapped 0.3 m in one frame)
+      const gy = W.groundAt(p.x, p.z);
+      if (gy !== null && (this.lift < 0.05 || p.y < gy)) groundSpring(this, p, gy, 10, dt); else this.vyG = 0;
+      this.walkSpd = this.vh * (1 - this.lift);
+      flapAmp = 1.0; flapRateT = 1.8;
+      P.fly = damp(P.fly, 1, 4, dt); P.fold = damp(P.fold, 0, 6, dt); P.legs = damp(P.legs, 0, 1.5, dt); P.flare = damp(P.flare, 0.3 * (1 - this.lift), 3, dt); P.air = damp(P.air, this.lift, 3, dt);
+      if (p.y > this.ground + 6.5 || this.timer > 10) { this.state = 'fly'; this.timer = 0; this.restTime = this.rng.range(30, 70); this.walkSpd = 0; this.orbit.a = Math.atan2(p.z, p.x); }
+    } else if (this.state === 'snatch') {
+      // fly through a floating peach and take it in one pass; if it is too close to turn onto, extend
+      // straight ahead first and come round (it used to circle the peach, taking two bites per pass)
+      const f = this.food;
+      if (!f || !f.alive || (f.state !== 'float' && f.state !== 'fall')) { this.state = 'fly'; this.food = null; }
+      else {
+        const dx = f.pos.x - p.x, dz = f.pos.z - p.z, dh = Math.hypot(dx, dz);
+        const err = Math.abs(angleDelta(this.hd, Math.atan2(dx, dz))), Rt = this.vh / 1.1;
+        if (this.extend || (err > 1.2 && dh < 2.2 * Rt)) this.extend = dh < 2.6 * Rt;
+        const tx = this.extend ? p.x + Math.sin(this.hd) * 10 : f.pos.x, tz = this.extend ? p.z + Math.cos(this.hd) * 10 : f.pos.z;
+        this.steer(tx, f.pos.y - 0.35 * this.scale, tz, 7.5, dt, 1.1, 1.0, 0.9, 2.4);
+        flapAmp = 0.8; flapRateT = 1.4;
+        const hdist = this.B.head.getWorldPosition(_w3).distanceTo(f.pos);
+        if (hdist < 0.8 * this.scale || p.distanceTo(f.pos) < 0.6 * this.scale) {
+          sys.bite(f, this, f.bites); this.glow = Math.min(1.5, this.glow + 0.8); this.food = null; this.state = 'fly'; this.timer = 0;
+        } else if (this.timer > 14) { this.food = null; this.state = 'fly'; }
+      }
+      P.fly = damp(P.fly, 1, 3, dt); P.fold = damp(P.fold, 0, 4, dt); P.legs = damp(P.legs, 0, 3, dt); P.flare = damp(P.flare, 0, 3, dt); P.air = damp(P.air, 1, 3, dt);
     }
 
-    /* ---- orientation ---- */
-    const vh = Math.hypot(this.vel.x, this.vel.z);
-    if (this.state === 'fly' || this.state === 'glide' || this.state === 'takeoff' || this.state === 'snatch') {
-      if (vh > 0.3) {
-        const ny = Math.atan2(this.vel.x, this.vel.z);
-        const yawRate = angleDelta(this.yaw, ny) / Math.max(dt, 1e-3);
-        this.yaw = dampAngle(this.yaw, ny, 6, dt);
-        this.bank = damp(this.bank, clamp(-yawRate * 0.45, -0.7, 0.7), 3, dt);
-      }
-      this.pitch = damp(this.pitch, clamp(Math.atan2(this.vel.y, Math.max(vh, 0.5)), -0.5, 0.5) - P.flare * 0.5, 3, dt);
+    /* ---- orientation: the body follows the flight path; banks from the turn rate, pitches with the climb ---- */
+    if (AIR[this.state] === 1) {
+      this.yaw = this.hd;
+      this.bank = damp(this.bank, clamp(-Math.atan(this.vh * this.om / 9.8) * 1.2, -0.6, 0.6), 4, dt);
+      const climb = clamp(Math.atan2(this.vy, Math.max(this.vh, 0.5)), -0.45, 0.45);
+      // flare nose-up to land (it pitched nose-down by the flare amount), lean into the take-off run
+      const flare = this.state === 'glide' ? P.flare : 0, lean = this.state === 'takeoff' ? 0.18 * (1 - this.lift) : 0;
+      this.pitch = damp(this.pitch, lerp(climb, 0.5, flare) - lean, 3, dt);
     } else { this.bank = damp(this.bank, 0, 4, dt); this.pitch = damp(this.pitch, 0, 4, dt); }
-    this.mesh.position.copy(this.pos);
+    this.mesh.position.copy(p);
     this.mesh.rotation.set(-this.pitch, this.yaw, this.bank, 'YXZ');
 
     /* ---- skeleton pose ---- */
-    this.flapPh += dt * TAU * flapRate;
-    const fa = damp(this.flapA || 0, flapAmp, 4, dt); this.flapA = fa;
+    // the wing-beat rate eases between beating and gliding (it switched instantly) and the phase is wrapped
+    this.flapRate = damp(this.flapRate, flapRateT, 3, dt);
+    this.flapPh += dt * TAU * this.flapRate;
+    if (this.flapPh > TAU * 64) this.flapPh -= TAU * 64;
+    const fa = this.flapA = damp(this.flapA, flapAmp, 4, dt);
     const fl = Math.sin(this.flapPh) * fa, fl2 = Math.sin(this.flapPh - 0.9) * fa;
     const fly = P.fly, fold = P.fold;
     // wings: spread + flap when flying, folded along the body when standing
-    for (const s of [1, -1]) {
+    for (let s = 1; s >= -1; s -= 2) {
       const w1 = s > 0 ? B.wingL1 : B.wingR1, w2 = s > 0 ? B.wingL2 : B.wingR2;
       const flapZ = (fl * 0.62 + 0.08 - P.flare * 0.15) * s;
       w1.rotation.set(lerp(0, -1.4, fold) + P.flare * 0.25, s * lerp(0, 1.45, fold), lerp(flapZ * fly, s * -0.12, fold), 'YXZ');
@@ -656,18 +901,61 @@ class Crane {
     B.head.rotation.set(lerp(lerp(0, -1.3, fly), 0.1, peck), look * 0.2, 0);
     B.root.rotation.set(peck * 0.25, 0, 0);
     B.tail.rotation.set(fly * 0.3, 0, 0);
-    // legs: trailing behind in flight, swinging down to land, walking on the ground
-    const walking = this.state === 'walk' ? 1 : 0;
-    this.walkW = damp(this.walkW || 0, walking, 5, dt);
-    for (const s of [1, -1]) {
-      const hip = s > 0 ? B.hipL : B.hipR, knee = s > 0 ? B.kneeL : B.kneeR;
-      const ph = this.walkPh + (s > 0 ? 0 : Math.PI);
-      const step = Math.sin(ph) * 0.35 * this.walkW;
-      const trail = fly * (1 - P.legs);
-      hip.rotation.set(lerp(step - 0.05, 1.45, trail) - P.legs * 0.35, 0, 0);
-      knee.rotation.set(lerp(Math.max(0, -Math.cos(ph)) * -0.6 * this.walkW, 0.15, trail) + P.legs * 0.25, 0, 0);
+    // legs: trailing in flight and swung forward to land (posed); on the ground the feet are planted by IK and
+    // step when the body has carried their spot away, so they never slide (the old walk cycle ran at a fixed rate
+    // whatever the speed, and bent the knee forward like a person's; a crane's ankle bends back)
+    const trail = P.air * (1 - P.legs), groundW = 1 - P.air;
+    for (let k = 0; k < 2; k++) {
+      (k ? B.hipR : B.hipL).rotation.set(lerp(-0.05, 1.45, trail) - P.legs * 0.35, 0, 0);
+      (k ? B.kneeR : B.kneeL).rotation.set(lerp(0, 0.15, trail) + P.legs * 0.25, 0, 0);
+      (k ? B.footR : B.footL).quaternion.identity();
     }
-    this.mesh.position.y += Math.abs(Math.sin(this.walkPh)) * 0.02 * this.walkW;
+    if (groundW > 0.01) {
+      const S = this.scale, v = this.walkSpd;
+      this.mesh.updateMatrixWorld(true);
+      if (!this.steps.ready) {
+        // touching down: plant the feet where the posed legs put them
+        for (let k = 0; k < 2; k++) {
+          (k ? B.footR : B.footL).getWorldPosition(_w1);
+          const g = W.groundAt(_w1.x, _w1.z);
+          this.steps.F[k].p.set(_w1.x, (g === null ? p.y : g) + 0.03 * S, _w1.z); this.steps.F[k].swing = false;
+        }
+        this.steps.ready = true;
+      }
+      // where the feet belong: under the hips, a little ahead when walking
+      const lead = 0.18 * v, fx = Math.sin(this.yaw) * lead, fz = Math.cos(this.yaw) * lead;
+      for (let k = 0; k < 2; k++) {
+        const h = this.mesh.localToWorld(_fh[k].set(k ? -0.085 : 0.085, 0.03, 0.02));
+        h.x += fx; h.z += fz;
+        const g = W.groundAt(h.x, h.z);
+        h.y = (g === null ? p.y : g) + 0.03 * S;
+      }
+      this.steps.update(dt, _fh, v > 0.05 || Math.abs(this.turnRate) > 0.1, 0.11 * S, 0.035 * S, clamp(0.34 - 0.06 * v, 0.16, 0.34), 0.12 * S);
+      // lower the body while a planted foot is beyond the leg's reach (legs slightly bent, never over-stretched)
+      let drop = 0;
+      for (let k = 0; k < 2; k++) {
+        const f = this.steps.F[k];
+        if (f.swing) continue;
+        const hp = this.mesh.localToWorld(_w2.set(k ? -0.08 : 0.08, 0.92, -0.02)), L = 0.86 * S;
+        const dh = Math.hypot(hp.x - f.p.x, hp.z - f.p.z);
+        drop = Math.max(drop, hp.y - f.p.y - Math.sqrt(Math.max(L * L - dh * dh, 0.01)));
+      }
+      this.legDrop = damp(this.legDrop, Math.max(0, drop), 12, dt);
+      this.mesh.position.y -= this.legDrop * groundW;
+      this.mesh.updateMatrixWorld(true);
+      for (let k = 0; k < 2; k++) {
+        const hip = k ? B.hipR : B.hipL, knee = k ? B.kneeR : B.kneeL, foot = k ? B.footR : B.footL;
+        _qh.copy(hip.quaternion); _qk.copy(knee.quaternion);
+        ik2(hip, knee, foot, _w3.copy(this.steps.F[k].p), this.mesh.localToWorld(_pole.set(k ? -0.12 : 0.12, 0.5, -1.5)));
+        if (groundW < 0.999) { _qh2.copy(hip.quaternion); hip.quaternion.copy(_qh).slerp(_qh2, groundW); _qk2.copy(knee.quaternion); knee.quaternion.copy(_qk).slerp(_qk2, groundW); }
+        // toes flat on the ground
+        knee.updateWorldMatrix(true, false);
+        knee.getWorldQuaternion(_qp);
+        this.mesh.getWorldQuaternion(_qa);
+        foot.quaternion.copy(_qp.invert().multiply(_qa));
+        if (groundW < 0.999) foot.quaternion.slerp(_qi.identity(), 1 - groundW);
+      }
+    } else this.steps.ready = false;
   }
 }
 
@@ -758,11 +1046,14 @@ class BirdFlock {
     this.target = this.center.clone();
     this.state = 'roam'; this.timer = rng.range(0, 10); this.ph = rng.range(0, TAU);
     for (let i = 0; i < count; i++) {
-      this.birds.push({
+      const b = {
         i: startIndex + i, leader: i === 0, pos: this.center.clone().add(new THREE.Vector3(rng.range(-2, 2), rng.range(-1, 1), rng.range(-2, 2))),
         vel: new THREE.Vector3(rng.range(-1, 1), 0, rng.range(-1, 1)), ph: rng.range(0, TAU), fold: 0, perch: null, glow: 0, peckT: rng.range(0, 1), s: i === 0 ? 1.35 * (member ? member.size || 1 : 1) : rng.range(0.85, 1.05),
-        bank: 0,
-      });
+        // rendered heading / bank / pitch (smoothed), eased wing beat, perch state, hop progress, own circling rate
+        hd: 0, om: 0, bank: 0, pitch: 0, flap: 0.8, flapS: 0.8, perchV: new THREE.Vector3(), perched: false, hop: 0, orbitW: 1.9 + 0.13 * ((i * 5) % 7),
+      };
+      b.hd = Math.atan2(b.vel.x, b.vel.z);
+      this.birds.push(b);
     }
     this.food = null; this.radius = 0.8;
   }
@@ -781,8 +1072,13 @@ class BirdFlock {
       this.target.set(base.x + Math.cos(t * 0.23 + this.ph) * r, base.y + 2 + Math.sin(t * 0.31 + this.ph) * 3, base.z + Math.sin(t * 0.19 + this.ph) * r);
       if (!hungry && this.timer > 25 && this.rng.chance(dt * 0.08)) {
         this.state = 'perch'; this.timer = 0;
-        const perches = sys.world.perches;
-        for (const b of this.birds) b.perch = perches[this.rng.int(0, perches.length - 1)].clone().add(new THREE.Vector3(this.rng.range(-0.15, 0.15), 0.05, this.rng.range(-0.15, 0.15)));
+        // neighbouring twigs, one bird each (two birds sent to one twig sat inside each other)
+        const perches = sys.world.perches, np = perches.length, o = this.rng.int(0, np - 1);
+        for (let k = 0; k < this.birds.length; k++) {
+          const b = this.birds[k];
+          b.perch = b.perchV.copy(perches[(o + k) % np]).add(_d.set(this.rng.range(-0.12, 0.12) + (k >= np ? 0.3 : 0), 0.05, this.rng.range(-0.12, 0.12)));
+          b.perched = false;
+        }
       }
     } else if (this.state === 'perch') {
       if (this.timer > 22 || hungry) { this.state = 'roam'; this.timer = 0; for (const b of this.birds) b.perch = null; }
@@ -796,22 +1092,35 @@ class BirdFlock {
       if (b.perch && this.state === 'perch') {
         const d = _a.subVectors(b.perch, b.pos);
         const dist = d.length();
-        if (dist > 0.05) {
+        if (!b.perched) {
           const sp = Math.min(4.5, dist * 1.8 + 0.5);
-          b.vel.lerp(d.normalize().multiplyScalar(sp), 1 - Math.exp(-4 * dt));
+          b.vel.lerp(d.multiplyScalar(sp / Math.max(dist, 1e-4)), 1 - Math.exp(-4 * dt));
           b.pos.addScaledVector(b.vel, dt);
           b.fold = damp(b.fold, dist < 0.4 ? 1 : 0, 6, dt);
           b.flap = dist < 0.4 ? 0.2 : 0.9;
+          if (dist < 0.06) b.perched = true;
         } else {
-          b.vel.multiplyScalar(0.8); b.fold = damp(b.fold, 1, 6, dt); b.flap = 0;
-          if (this.rng.chance(dt * 0.3)) b.pos.y += 0.04; // hop
+          b.vel.multiplyScalar(Math.pow(0.8, dt * 60));
+          b.fold = damp(b.fold, 1, 6, dt); b.flap = 0;
+          // now and then a little hop on the twig (it jumped up 4 cm in one frame)
+          if (b.hop === 0 && this.rng.chance(dt * 0.3)) b.hop = 1e-4;
+          if (b.hop > 0) { b.hop += dt / 0.3; if (b.hop >= 1) b.hop = 0; }
           b.pos.lerp(b.perch, 1 - Math.exp(-6 * dt));
         }
       } else {
+        if (b.perched) {
+          // leave the twig forwards and upwards (at rest it had no velocity, so its heading flipped at take-off)
+          b.perched = false; b.hop = 0;
+          b.vel.set(Math.sin(b.hd) * 1.6, 1.3, Math.cos(b.hd) * 1.6);
+        }
         // boids: cohesion toward the target, separation, alignment
         const steer = _b.subVectors(this.target, b.pos);
         const dl = steer.length();
-        steer.multiplyScalar((b.leader ? 1.4 : 0.9) / Math.max(dl, 1e-3) * Math.min(dl, 6));
+        const feeding = this.state === 'feed' && this.food;
+        // feeding: arrive rather than seek -- slow down near the peach and hover round it (seeking at full speed
+        // they swung past it, and with direction flips capped they could circle it without ever reaching it)
+        if (feeding) steer.multiplyScalar(lerp(1.4, 4.5, smoothstep(1.0, 6, dl)) / Math.max(dl, 1e-3)).sub(b.vel).multiplyScalar(b.leader ? 1.6 : 1.2);
+        else steer.multiplyScalar((b.leader ? 1.4 : 0.9) / Math.max(dl, 1e-3) * Math.min(dl, 6));
         if (!b.leader) steer.addScaledVector(_c3.subVectors(this.leader.pos, b.pos), 0.35);
         for (let j = 0; j < n; j++) {
           if (j === k) continue;
@@ -820,54 +1129,74 @@ class BirdFlock {
           if (d2 < 1.0) { const k2 = 1.5 / Math.max(d2, 0.05); steer.x += dx * k2; steer.y += dy * k2; steer.z += dz * k2; }
           steer.addScaledVector(o.vel, 0.04);
         }
-        // feeding: hover and peck in turns
-        if (this.state === 'feed' && this.food) {
-          const fd = b.pos.distanceTo(this.food.pos);
+        // feeding: hover and peck in turns, each bird circling at its own rate
+        let fd = 1e9;
+        if (feeding) {
+          fd = b.pos.distanceTo(this.food.pos);
           if (fd < 1.6) {
             b.peckT += dt;
-            const orbitA = t * 2.2 + k * (TAU / n);
+            const orbitA = t * b.orbitW + k * (TAU / n);
             steer.add(_d.set(Math.cos(orbitA), 0.4, Math.sin(orbitA)).multiplyScalar(1.4));
             if (b.peckT > (b.leader ? 1.4 : 2.6) && fd < 1.2) {
               b.peckT = 0;
               sys.bite(this.food, b.leader ? this : null, 1, b.pos);
               b.glow = 1.2;
-              if (!this.food || !this.food.alive) { this.food = null; this.state = 'roam'; this.timer = 0; break; }
+              if (!this.food || !this.food.alive) { this.food = null; this.state = 'roam'; this.timer = 0; }
             }
           }
         }
+        // the flock turns mostly level: half the vertical pull, and climbs / dives no steeper than ~26° (it looped
+        // in 3D around its target and spent nearly half its time climbing or diving at 30-90°, its body pitch
+        // capped at 26°, so it flew tail-first up and down)
+        steer.y *= 0.5;
         sys.world.avoid(b.pos, b.vel, steer, 0.6);
-        b.vel.addScaledVector(steer, dt * 2.2);
-        const sp = b.vel.length(), maxS = this.state === 'feed' ? 4.5 : 5.5;
+        // cap the steering acceleration: separation, cohesion and the feeding swirl added up to pulls that
+        // flipped a slow bird's direction within a frame or two (7x as often at 30 fps)
+        const acc = steer.length() * 2.2;
+        b.vel.addScaledVector(steer, dt * 2.2 * Math.min(1, 14 / Math.max(acc, 1e-6)));
+        const sp = b.vel.length(), maxS = feeding ? lerp(1.6, 4.5, smoothstep(1.2, 6, fd)) : 5.5;
         if (sp > maxS) b.vel.multiplyScalar(maxS / sp);
         if (sp < 1.2) b.vel.multiplyScalar(1.2 / Math.max(sp, 1e-3));
+        const vyMax = 0.5 * Math.max(Math.hypot(b.vel.x, b.vel.z), 1.2);
+        b.vel.y = clamp(b.vel.y, -vyMax, vyMax);
         b.pos.addScaledVector(b.vel, dt);
         b.fold = damp(b.fold, 0, 6, dt);
         b.flap = b.vel.y > 0.3 ? 1.0 : 0.75 + 0.25 * Math.sin(t * 0.7 + k);
       }
+      // the body follows the flight direction at a capped rate (it was set straight from the velocity and snapped
+      // whenever that swung), banks into turns and pitches with the climb; a perched bird keeps its heading
+      const vh = Math.hypot(b.vel.x, b.vel.z);
+      if (vh > 0.45 && !b.perched) {
+        const e = angleDelta(b.hd, Math.atan2(b.vel.x, b.vel.z));
+        const step = clamp(e * (1 - Math.exp(-18 * dt)), -10 * dt, 10 * dt);
+        b.hd += step;
+        b.om = damp(b.om, step / Math.max(dt, 1e-4), 10, dt);
+      } else b.om = damp(b.om, 0, 10, dt);
+      b.bank = damp(b.bank, clamp(-Math.atan(vh * b.om / 9.8) * 1.3, -0.8, 0.8) * (1 - b.fold), 8, dt);
+      b.pitch = damp(b.pitch, clamp(Math.atan2(b.vel.y, Math.max(vh, 0.6)), -0.45, 0.45) * (1 - b.fold), 8, dt);
+      // wing beat: amplitude and rate ease in and out (they switched between 0, 0.2, 0.75 and 1 in one frame)
+      b.flapS = damp(b.flapS, b.flap, 8, dt);
       // flap ~1.5-2 Hz (was 2-3 Hz): at 60 fps (30 in power save) faster wings jumped more than their own
       // width between frames and strobed; wrap the phase (sin(ph), sin(ph/2), sin(0.35 ph) all repeat in 40π)
-      b.ph += dt * (b.flap > 0.05 ? 9.5 + 0.6 * k : 2);
+      b.ph += dt * lerp(2, 9.5 + 0.6 * k, smoothstep(0.05, 0.3, b.flapS));
       if (b.ph > BIRD_PHASE_WRAP) b.ph -= BIRD_PHASE_WRAP;
     }
   }
   write(mesh, anim, night) {
     const m = _m4;
     for (const b of this.birds) {
-      const vh = Math.hypot(b.vel.x, b.vel.z);
-      const yaw = Math.atan2(b.vel.x, b.vel.z);
-      const pitch = clamp(Math.atan2(b.vel.y, Math.max(vh, 0.6)), -0.45, 0.45) * (1 - b.fold);
-      b.bank = damp(b.bank, 0, 3, 0.016);
-      _e2.set(-pitch, b.perch && b.fold > 0.8 ? b.perchYaw ?? (b.perchYaw = yaw) : yaw, 0, 'YXZ');
-      if (!(b.perch && b.fold > 0.8)) b.perchYaw = undefined;
-      _q2.setFromEuler(_e2);
+      if (b.hd > Math.PI * 64 || b.hd < -Math.PI * 64) b.hd %= TAU;
+      _q2.setFromEuler(_e2.set(-b.pitch, b.hd, b.bank, 'YXZ'));
       const s = b.s * 1.15;
-      m.compose(b.pos, _q2, _s2.set(s, s, s));
+      _p2.copy(b.pos);
+      if (b.hop > 0) _p2.y += Math.sin(Math.PI * b.hop) * 0.045;
+      m.compose(_p2, _q2, _s2.set(s, s, s));
       mesh.setMatrixAt(b.i, m);
-      anim.array[b.i * 4] = b.ph; anim.array[b.i * 4 + 1] = (b.flap || 0) * 0.9; anim.array[b.i * 4 + 2] = b.fold; anim.array[b.i * 4 + 3] = (b.leader ? 0.5 : 0.25) * lerp(0.2, 1.6, night) + b.glow;
+      anim.array[b.i * 4] = b.ph; anim.array[b.i * 4 + 1] = b.flapS * 0.9; anim.array[b.i * 4 + 2] = b.fold; anim.array[b.i * 4 + 3] = (b.leader ? 0.5 : 0.25) * lerp(0.2, 1.6, night) + b.glow;
     }
   }
 }
-const _m4 = new THREE.Matrix4(), _e2 = new THREE.Euler(), _q2 = new THREE.Quaternion(), _s2 = new THREE.Vector3();
+const _m4 = new THREE.Matrix4(), _e2 = new THREE.Euler(), _q2 = new THREE.Quaternion(), _s2 = new THREE.Vector3(), _p2 = new THREE.Vector3();
 const BIRD_PHASE_WRAP = 40 * Math.PI;
 
 /* ------------------------------------------------------------------ */
@@ -884,6 +1213,8 @@ export function createCreatures(env, shared, world, fx) {
   anim.setUsage(THREE.DynamicDrawUsage);
   bGeo.setAttribute('aAnim', anim);
   const birdMesh = new THREE.InstancedMesh(bGeo, birdMaterial(shared), maxBirds);
+  birdMesh.name = 'birds';   // names only label the motion probe's output
+  group.name = 'creatures';
   birdMesh.count = 0;
   birdMesh.frustumCulled = false;
   // no shadows from the little birds: their thin wing shadows crossing the sunlit terrace and lawn at flight
@@ -893,6 +1224,7 @@ export function createCreatures(env, shared, world, fx) {
   const sys = {
     env, shared, world, rng, fx, camera: null, tod: null,
     tortoises: [], cranes: [], flocks: [], ambient: [], foods: [],
+    dyn: { n: 0, list: [] },   // residents standing on the ground, as circles walkers steer around
     bite(f, who, n, at) {
       if (!f.alive) return;
       const take = Math.min(n, f.bites);
@@ -911,6 +1243,7 @@ export function createCreatures(env, shared, world, fx) {
   function addMember(m) {
     if (m.kind === 'tortoise') {
       const tt = new Tortoise(sys, m, tRig, tGeo, sys.tortoises.length);
+      tt.mesh.name = 'tortoise' + sys.tortoises.length;
       sys.tortoises.push(tt); group.add(tt.mesh);
     } else if (m.kind === 'crane') {
       const c = new Crane(sys, m, cRig, cGeo, rng.fork(m.id));
@@ -918,11 +1251,13 @@ export function createCreatures(env, shared, world, fx) {
       c.orbit.r = sys.cranes.length % 2 ? c.rng.range(32, 42) : c.rng.range(14, 18); c.orbit.h = c.rng.range(6, 12);
       c.pos.set(Math.cos(c.orbit.a) * c.orbit.r, c.orbit.h, Math.sin(c.orbit.a) * c.orbit.r);
       c.vel.set(-Math.sin(c.orbit.a), 0, Math.cos(c.orbit.a)).multiplyScalar(6 * Math.sign(c.orbit.w));
+      c.resetFlight();
+      c.mesh.name = 'crane' + sys.cranes.length;
       sys.cranes.push(c); group.add(c.mesh);
       // start some cranes on the ground for a calmer first impression
       if (sys.cranes.length % 3 === 0) {
         const spot = world.landingSpot(c.rng, null);
-        if (spot) { c.pos.copy(spot); c.state = 'stand'; c.vel.set(0, 0, 0); c.pose.fly = 0; c.pose.fold = 1; c.timer = 0; c.restTime = c.rng.range(15, 40); }
+        if (spot) { c.pos.copy(spot); c.state = 'stand'; c.vel.set(0, 0, 0); c.resetFlight(); c.pose.fly = 0; c.pose.fold = 1; c.pose.air = 0; c.timer = 0; c.restTime = c.rng.range(15, 40); }
       }
     } else if (m.kind === 'bird') {
       const n = Math.min(7, maxBirds - birdCount);
@@ -934,9 +1269,20 @@ export function createCreatures(env, shared, world, fx) {
   }
   for (const m of env.members) addMember(m);
   // ambient: a distant pair of cranes and a wild flock
-  for (let i = 0; i < 2; i++) { const c = new Crane(sys, null, cRig, cGeo, rng.fork('amb' + i), true); c.orbit.a += i * 0.08; c.orbit.r = 180 + i * 6; c.orbit.h = 30 + i * 3; c.orbit.w = 0.03; sys.ambient.push(c); group.add(c.mesh); }
+  for (let i = 0; i < 2; i++) { const c = new Crane(sys, null, cRig, cGeo, rng.fork('amb' + i), true); c.orbit.a += i * 0.08; c.orbit.r = 180 + i * 6; c.orbit.h = 30 + i * 3; c.orbit.w = 0.03; c.mesh.name = 'craneFar' + i; sys.ambient.push(c); group.add(c.mesh); }
   if (birdCount + 6 <= maxBirds) { const f = new BirdFlock(sys, null, 6, rng.fork('ambflock'), birdCount); birdCount += 6; birdMesh.count = birdCount; f.ph += 2; sys.flocks.push(f); }
 
+  const _nv = new THREE.Vector3();
+  function addDyn(o, r) {
+    const D = sys.dyn, e = D.list[D.n] || (D.list[D.n] = { x: 0, z: 0, r: 0, ref: null });
+    e.x = o.pos.x; e.z = o.pos.z; e.r = r; e.ref = o; D.n++;
+  }
+  function separate(a, ra, b, rb, k) {
+    const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, d = Math.hypot(dx, dz), R = ra + rb;
+    if (d >= R || d < 1e-4) return;
+    const push = (R - d) * 0.5 * k / d;
+    a.pos.x -= dx * push; a.pos.z -= dz * push; b.pos.x += dx * push; b.pos.z += dz * push;
+  }
   /** A new peach exists: send the nearest interested creatures. */
   function notice(f) {
     const cand = [];
@@ -949,13 +1295,19 @@ export function createCreatures(env, shared, world, fx) {
       if (sent >= 3) break;
       if (c.kind === 'tortoise') { if (f.claimT) continue; c.food = f; c.state = 'toFood'; f.claimT = c; sent++; }
       else if (c.kind === 'crane') {
-        c.food = f;
-        if (f.state === 'float') { c.state = 'snatch'; c.timer = 0; }
-        else if (c.state === 'fly') {
-          const ground = world.groundAt(f.pos.x, f.pos.z);
-          if (ground === null) { c.state = 'snatch'; c.timer = 0; }
-          else { const dir = f.pos.clone().sub(c.pos).setY(0).normalize(); const spot = f.pos.clone().addScaledVector(dir, -0.9 * c.scale); spot.y = world.groundAt(spot.x, spot.z) ?? f.pos.y; c.startPath(spot, 'land', dir); c.state = 'glide'; c.timer = 0; }
-        } else if (c.pos.distanceTo(f.pos) > 7) { c.food = null; continue; }
+        const flying = c.state === 'fly' || c.state === 'approach';
+        const ground = f.state === 'float' ? null : f.ground ?? world.groundAt(f.pos.x, f.pos.z);
+        if (ground === null) {
+          // a hovering peach: only a crane on the wing goes for it (a standing one used to take off without a run),
+          // and not one tucked among the boughs or under a roof that it could only circle
+          if (!flying || world.blocked(f.pos.x, f.pos.y, f.pos.z, 0.9)) continue;
+          c.food = f; c.state = 'snatch'; c.timer = 0; c.extend = false;
+        } else if (flying) {
+          // line up and land just short of the peach, on an approach clear of the tree and the buildings
+          if (!c.planLanding(_nv.set(f.pos.x, ground, f.pos.z), 0.9 * c.scale)) continue;
+          c.food = f;
+        } else if (c.pos.distanceTo(f.pos) > 7) continue;
+        else c.food = f;
         sent++;
       } else { c.food = f; c.state = 'feed'; c.timer = 0; for (const b of c.birds) b.perch = null; sent++; }
     }
@@ -964,10 +1316,22 @@ export function createCreatures(env, shared, world, fx) {
     group, sys, addMember, notice,
     update(dt, t, camera, tod) {
       sys.camera = camera; sys.tod = tod;
+      // residents on the ground keep a little personal space (at a peach they stood inside each other)
+      const k = 1 - Math.exp(-8 * dt), T = sys.tortoises, C = sys.cranes;
+      for (let i = 0; i < T.length; i++) {
+        for (let j = i + 1; j < T.length; j++) separate(T[i], 0.3 * T[i].scale, T[j], 0.3 * T[j].scale, k);
+        for (const c of C) if (GROUND[c.state] === 1) separate(T[i], 0.3 * T[i].scale, c, 0.27 * c.scale, k);
+      }
+      for (let i = 0; i < C.length; i++) if (GROUND[C[i].state] === 1) for (let j = i + 1; j < C.length; j++) if (GROUND[C[j].state] === 1) separate(C[i], 0.27 * C[i].scale, C[j], 0.27 * C[j].scale, k);
+      sys.dyn.n = 0;
+      for (const tt of T) addDyn(tt, 0.3 * tt.scale);
+      for (const c of C) if (GROUND[c.state] === 1) addDyn(c, 0.27 * c.scale);
       for (const tt of sys.tortoises) tt.update(dt, t);
       for (const c of sys.cranes) c.update(dt, t);
       for (const c of sys.ambient) c.update(dt, t);
-      for (const f of sys.flocks) { f.update(dt, t); f.write(birdMesh, anim, tod.night); }
+      // the flocks' steering forces are stiff: step them at 60 Hz or finer so they fly the same at 30 fps
+      const nSub = Math.max(1, Math.ceil(dt * 60 - 0.01)), sdt = dt / nSub;
+      for (const f of sys.flocks) { for (let i = 1; i <= nSub; i++) f.update(sdt, t - dt + i * sdt); f.write(birdMesh, anim, tod.night); }
       birdMesh.instanceMatrix.needsUpdate = true;
       anim.needsUpdate = true;
       // unclaimed food gets noticed again a little later

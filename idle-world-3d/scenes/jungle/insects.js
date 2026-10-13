@@ -193,6 +193,14 @@ export function createButterflyMesh(shared, max, tex) {
 }
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
+const angleTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+/** Turn angle a toward b: exponential (lambda) but never faster than maxRate rad/s, so a big turn is a smooth
+ * pivot at any frame rate instead of a one-frame snap. */
+export function turnToward(a, b, lambda, maxRate, dt) {
+  const d = angleTo(a, b);
+  const step = Math.min(Math.abs(d) * (1 - Math.exp(-lambda * dt)), maxRate * dt);
+  return a + Math.sign(d) * step;
+}
 
 export class Butterfly {
   constructor(member, kind, rng, home) {
@@ -202,12 +210,14 @@ export class Butterfly {
     this.target = this.pos.clone();
     this.phase = rng.next() * TAU;
     this.glidePh = this.phase; // fixed offset for the slow glide rhythm (this.phase becomes the wingbeat)
+    this.wobPh = rng.next() * TAU; // fixed offset for the slow meander
     this.freq = kind === 0 ? rng.range(4.2, 5.4) : rng.range(6, 8);
     this.angle = 0.5;
     this.state = 'fly';
     this.timer = rng.range(2, 6);
     this.glide = 0;
     this.yaw = rng.next() * TAU;
+    this.pitch = 0;
     this.food = null;
     this.restSpot = null;
     this.biteT = 0;
@@ -216,54 +226,81 @@ export class Butterfly {
   update(dt, t, ctx) {
     const r = this.rng;
     if (this.state === 'fly') {
-      this.timer -= dt;
-      if (this.timer <= 0 || this.pos.distanceToSquared(this.target) < 0.3) {
-        this.timer = r.range(1.5, 4);
-        ctx.pickTarget(this, this.target);
+      // Target. While it is heading for food or a resting spot it keeps that goal until it gets there: it used
+      // to re-pick a random wander target every frame within 0.55 m of its goal, so it hovered ~0.5 m from the
+      // fruit forever and never fed or landed (and its heading flipped back and forth several times a second).
+      if (this.food && (this.food.dead || this.food.bites <= 0)) this.food = null;
+      if (this.food) ctx.foodTarget(this, this.target);
+      else {
+        this.timer -= dt;
+        if (this.timer <= 0 || (!this.restSpot && this.pos.distanceToSquared(this.target) < 0.3)) {
+          this.restSpot = null;
+          this.timer = r.range(1.5, 4);
+          ctx.pickTarget(this, this.target);
+          if (this.food) ctx.foodTarget(this, this.target);
+          else if (this.restSpot) this.timer = r.range(6, 9); // time to get there
+        }
       }
-      // seek with erratic wobble
+      // seek, slowing within 0.4 m, with a slow erratic meander that calms down near the goal (the meander was
+      // keyed to the wingbeat phase, i.e. a 5 Hz shake of the heading instead of a lazy weave)
       _v.subVectors(this.target, this.pos);
       const d = _v.length();
       const speed = this.food ? 1.6 : (this.kind === 0 ? 1.3 : 1.6);
       _v.multiplyScalar(speed / Math.max(d, 0.4));
-      _v.x += Math.sin(t * 1.3 + this.phase) * 0.7; _v.z += Math.cos(t * 1.1 + this.phase * 1.7) * 0.7;
+      const wob = 0.5 * clamp((d - 0.3) / 1.2, 0, 1);
+      _v.x += Math.sin(t * 1.3 + this.wobPh) * wob; _v.z += Math.cos(t * 1.1 + this.wobPh * 1.7) * wob;
       this.vel.lerp(_v, 1 - Math.exp(-2.2 * dt));
       // flap: each downstroke gives lift → bouncy flight. Morphos glide now and then: the rhythm used to be
       // keyed to the wingbeat phase, so the glide toggled several times a second and the wings stuttered
       const gl = this.kind === 0 ? smoothstep(0.65, 0.85, Math.sin(t * 0.7 + this.glidePh)) : 0;
       this.glide = damp(this.glide, gl, 5, dt);
-      this.phase += dt * this.freq * TAU * (1 - this.glide * 0.85);
+      this.phase = (this.phase + dt * this.freq * TAU * (1 - this.glide * 0.85)) % TAU;
       const s = Math.sin(this.phase);
       this.angle = lerp(lerp(-0.25, 1.25, 0.5 + 0.5 * s), 0.12, this.glide);
       this.pos.addScaledVector(this.vel, dt);
       this.pos.y += Math.cos(this.phase) * 0.35 * dt * (1 - this.glide) * this.freq * 0.25;
-      if (this.food && !this.food.dead) {
-        ctx.foodTarget(this, this.target);
-        if (this.pos.distanceTo(this.target) < 0.12) { this.state = 'feed'; this.biteT = r.range(1.5, 3); }
-      } else if (this.food) this.food = null;
-      if (this.restSpot && this.pos.distanceTo(this.restSpot) < 0.1) { this.state = 'rest'; this.timer = r.range(5, 14) * (ctx.raining && ctx.raining() ? 3 : 1); }
-      if (this.vel.lengthSq() > 0.01) this.yaw = Math.atan2(this.vel.x, this.vel.z);
+      if (this.food && this.pos.distanceTo(this.target) < 0.12) { this.state = 'feed'; this.biteT = r.range(1.5, 3); }
+      else if (this.restSpot && this.pos.distanceTo(this.restSpot) < 0.1) { this.state = 'rest'; this.timer = r.range(5, 14) * (ctx.raining && ctx.raining() ? 3 : 1); }
+      // body follows the flight direction (smoothly; a slow butterfly's velocity direction is noisy)
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      if (sp > 0.05) this.yaw = turnToward(this.yaw, Math.atan2(this.vel.x, this.vel.z), 9 * clamp(sp / 0.4, 0.2, 1), 7, dt);
+      this.pitch = damp(this.pitch, clamp(-this.vel.y * 0.3, -0.5, 0.5), 8, dt);
     } else if (this.state === 'feed') {
-      if (!this.food || this.food.dead) { this.state = 'fly'; this.food = null; this.timer = 0; }
+      if (!this.food || this.food.dead || this.food.bites <= 0) { this.state = 'fly'; this.food = null; this.timer = 0; }
       else {
         ctx.foodTarget(this, this.target);
+        if (!this.food) { this.state = 'fly'; this.timer = 0; return; }
         this.pos.lerp(this.target, 1 - Math.exp(-8 * dt));
-        this.phase += dt * 1.2;
-        this.angle = 1.15 + 0.35 * Math.max(0, Math.sin(this.phase));
+        this.vel.multiplyScalar(Math.exp(-8 * dt));
+        this.phase = (this.phase + dt * 1.2) % TAU;
+        // wings fold up from wherever the flap left them (they used to jump there in one frame)
+        this.angle = damp(this.angle, 1.15 + 0.35 * Math.max(0, Math.sin(this.phase)), 6, dt);
+        this.pitch = damp(this.pitch, -0.25, 6, dt);
         this.biteT -= dt;
         if (this.biteT <= 0) { this.biteT = r.range(2.5, 4.5); ctx.bite(this, this.food); }
       }
     } else if (this.state === 'rest') {
       this.timer -= dt;
-      this.phase += dt * 0.8;
+      this.phase = (this.phase + dt * 0.8) % TAU;
+      if (this.restSpot) this.pos.lerp(this.restSpot, 1 - Math.exp(-6 * dt)); // settle onto the spot
+      this.vel.multiplyScalar(Math.exp(-8 * dt));
       // wings closed (brown underside), occasionally opening to flash blue (eased, not a binary switch)
       const open = smoothstep(0.7, 0.9, Math.sin(this.phase));
       this.angle = damp(this.angle, lerp(1.5, 0.25, open), 4, dt);
-      if (this.timer <= 0 || ctx.hasFoodFor(this)) { this.state = 'fly'; this.restSpot = null; this.timer = 0; this.pos.y += 0.05; }
+      this.pitch = damp(this.pitch, -0.25, 6, dt);
+      // looks for food twice a second (it searched every frame, allocating each time)
+      this.foodT = (this.foodT || 0) - dt;
+      let food = false;
+      if (this.foodT <= 0) { this.foodT = 0.5; food = ctx.hasFoodFor(this); }
+      if (this.timer <= 0 || food) {
+        // lift off with an upward push (it used to pop up 5 cm in one frame)
+        this.state = 'fly'; this.restSpot = null; this.timer = 0;
+        this.vel.set(Math.sin(this.yaw) * 0.3, 0.7, Math.cos(this.yaw) * 0.3);
+      }
     }
   }
   write(mesh, wing, i) {
-    _e.set(this.state === 'fly' ? -this.vel.y * 0.3 : -0.25, this.yaw, 0, 'YXZ');
+    _e.set(this.pitch, this.yaw, 0, 'YXZ');
     _q.setFromEuler(_e);
     _m.compose(this.pos, _q, _s.setScalar(this.size));
     mesh.setMatrixAt(i, _m);
@@ -360,33 +397,64 @@ export function createDragonflyMesh(shared, max) {
 export class Dragonfly {
   constructor(rng, area) {
     this.rng = rng; this.area = area;
-    this.pos = new THREE.Vector3(rng.range(area.x0, area.x1), rng.range(area.y0, area.y1), rng.range(area.z0, area.z1));
-    this.target = this.pos.clone();
+    this.base = new THREE.Vector3(rng.range(area.x0, area.x1), rng.range(area.y0, area.y1), rng.range(area.z0, area.z1));
+    if (area.floor) this.base.y = Math.max(this.base.y, area.floor(this.base.x, this.base.z));
+    this.pos = this.base.clone(); // drawn position = base + hover wobble
+    this.vel = new THREE.Vector3();
+    this.target = this.base.clone();
+    this.home = this.base.clone(); // the spot it hovers at
     this.state = 'hover'; this.timer = rng.range(0.5, 2);
-    this.yaw = rng.next() * TAU; this.tyaw = this.yaw;
+    this.yaw = rng.next() * TAU; this.tyaw = this.yaw; this.pitch = 0;
+    this.omega = 7;
+    this.wob = 1;
     this.jit = rng.next() * 100;
   }
+  // Hover, pivot toward the next spot, dart there. The dart used to be pos.lerp(target, 4.5 dt): full speed in the
+  // first frame (up to 40 m/s, i.e. a teleport across the pond) and travelling sideways while the body was still
+  // turning. Now the body turns first, then a critically damped spring (solved exactly, so identical at any frame
+  // rate) accelerates it smoothly to at most ~7 m/s and brakes it into the next hover.
   update(dt, t) {
     const r = this.rng, A = this.area;
     this.timer -= dt;
     if (this.state === 'hover') {
-      this.pos.x += Math.sin(t * 7 + this.jit) * 0.02 * dt * 10;
-      this.pos.y += Math.sin(t * 5.3 + this.jit) * 0.015 * dt * 10;
       if (this.timer <= 0) {
-        this.state = 'dart';
         this.target.set(r.range(A.x0, A.x1), r.range(A.y0, A.y1), r.range(A.z0, A.z1));
-        _v.subVectors(this.target, this.pos);
+        // the box reaches over the bank: never pick a spot inside the ground
+        if (A.floor) this.target.y = Math.max(this.target.y, A.floor(this.target.x, this.target.z));
+        _v.subVectors(this.target, this.base);
         this.tyaw = Math.atan2(_v.x, _v.z);
-        this.timer = 2;
+        this.omega = Math.min(7, 7 * Math.E / Math.max(_v.length(), 0.1)); // peak speed omega * d / e <= 7 m/s
+        this.state = 'turn';
+        this.timer = 1.5;
       }
-    } else {
-      this.yaw = this.yaw + Math.atan2(Math.sin(this.tyaw - this.yaw), Math.cos(this.tyaw - this.yaw)) * (1 - Math.exp(-12 * dt));
-      this.pos.lerp(this.target, 1 - Math.exp(-4.5 * dt));
-      if (this.pos.distanceToSquared(this.target) < 0.01 || this.timer <= 0) { this.state = 'hover'; this.timer = r.range(0.6, 3); }
+    } else if (this.state === 'turn') {
+      this.yaw = turnToward(this.yaw, this.tyaw, 14, 9, dt);
+      if (Math.abs(angleTo(this.yaw, this.tyaw)) < 0.2 || this.timer <= 0) { this.state = 'dart'; this.timer = 4; }
+    } else if (this.state === 'dart') {
+      const sp = this.vel.length();
+      if (sp > 0.3) this.yaw = turnToward(this.yaw, Math.atan2(this.vel.x, this.vel.z), 12, 9, dt);
+      if ((this.base.distanceToSquared(this.target) < 0.0025 && sp < 0.15) || this.timer <= 0) { this.state = 'hover'; this.home.copy(this.target); this.timer = r.range(0.6, 3); }
     }
+    // critically damped spring of the body toward its goal (the hover spot until the dart starts)
+    const goal = this.state === 'dart' ? this.target : this.home;
+    const w = this.state === 'dart' ? this.omega : 7;
+    const e = Math.exp(-w * dt);
+    _v.subVectors(this.base, goal);                 // x0
+    _v2.copy(this.vel).addScaledVector(_v, w);      // c = v0 + w x0
+    this.base.copy(goal).addScaledVector(_v, e).addScaledVector(_v2, dt * e);
+    this.vel.multiplyScalar(e).addScaledVector(_v2, -w * dt * e);
+    // nose dips/lifts a little with climbs and descents
+    const spd = this.vel.length();
+    this.pitch = damp(this.pitch, spd > 0.2 ? clamp(-this.vel.y / spd, -1, 1) * 0.35 * Math.min(1, spd / 2) : 0, 8, dt);
+    // hover wobble: a few centimetres, eased out while darting (it used to be integrated into the position)
+    this.wob = damp(this.wob, this.state === 'dart' ? 0 : 1, 5, dt);
+    this.pos.set(
+      this.base.x - Math.cos(t * 7 + this.jit) * 0.0286 * this.wob,
+      this.base.y - Math.cos(t * 5.3 + this.jit) * 0.0283 * this.wob,
+      this.base.z);
   }
   write(mesh, i, size) {
-    _e.set(0, this.yaw, 0, 'YXZ');
+    _e.set(this.pitch, this.yaw, 0, 'YXZ');
     _q.setFromEuler(_e);
     _m.compose(this.pos, _q, _s.setScalar(size));
     mesh.setMatrixAt(i, _m);

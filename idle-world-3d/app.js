@@ -453,6 +453,84 @@ const A2C_TEST = /* glsl */`
     a2cAlpha = clamp((diffuseColor.a - alphaTest) / max(fwidth(diffuseColor.a), 0.0001) + 0.5, 0.0, 1.0);
     if (a2cAlpha <= 0.0) discard;
   #endif`;
+/* Cut-out leaves, petals and plumes are painted on a cleared canvas, so their transparent texels are black.
+   Texture filtering and mipmaps mix that black into the visible edge and draw a dark outline round every
+   leaf (worst without MSAA, as on the iPad). Once per texture, before its first upload, the colour of the
+   nearest painted texels is spread into the transparent ones; alpha is untouched. A canvas cannot keep the
+   colour of a fully transparent pixel (it stores premultiplied colour), so the result is uploaded from an
+   ImageData, resized to a power of two first where WebGL 1 needs one for mipmaps or tiling. */
+const bledImages = new WeakMap();
+const bleedStats = { textures: 0, ms: 0 };
+function bleedRGBA(d, w, h) {
+  const n = w * h, state = new Uint8Array(n), queue = new Int32Array(n);
+  let empties = 0, qt = 0;
+  for (let i = 0; i < n; i++) if (d[i * 4 + 3] >= 128) state[i] = 1; else empties++;
+  if (!empties || empties === n) return false;
+  for (let i = 0; i < n; i++) {
+    if (state[i]) continue;
+    const x = i % w, y = (i - x) / w;
+    let touch = false;
+    for (let dy = -1; dy <= 1 && !touch; dy++) {
+      const yy = y + dy; if (yy < 0 || yy >= h) continue;
+      for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx >= 0 && xx < w && state[yy * w + xx] === 1) { touch = true; break; } }
+    }
+    if (touch) { state[i] = 2; queue[qt++] = i; }
+  }
+  for (let qh = 0; qh < qt; qh++) {
+    const i = queue[qh], x = i % w, y = (i - x) / w;
+    let r = 0, g = 0, b = 0, c = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      const yy = y + dy; if (yy < 0 || yy >= h) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx; if (xx < 0 || xx >= w) continue;
+        const j = yy * w + xx;
+        if (state[j] === 1) { r += d[j * 4]; g += d[j * 4 + 1]; b += d[j * 4 + 2]; c++; }
+        else if (state[j] === 0) { state[j] = 2; queue[qt++] = j; }
+      }
+    }
+    if (c) { d[i * 4] = r / c; d[i * 4 + 1] = g / c; d[i * 4 + 2] = b / c; }
+    state[i] = 1;
+  }
+  return true;
+}
+const isPow2 = v => (v & (v - 1)) === 0;
+function bleedTexture(tex) {
+  const img = tex.image;
+  if (!img || tex.isCompressedTexture || tex.isVideoTexture || tex.isCubeTexture || tex.isDataTexture || tex.isData3DTexture || tex.isDataArrayTexture) return;
+  if (bledImages.has(img)) { const out = bledImages.get(img); if (out && tex.image !== out) { tex.image = out; tex.needsUpdate = true; } return; }
+  bledImages.set(img, null);
+  const ok = (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) || (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement) || (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap);
+  let w = img.width, h = img.height;
+  if (!ok || !w || !h || w * h > 4.2e6) return;
+  const t0 = performance.now();
+  // WebGL 1 can only mipmap or tile power-of-two textures (three.js would otherwise resize it itself)
+  const needsPOT = !IS_WEBGL2 && (tex.wrapS !== THREE.ClampToEdgeWrapping || tex.wrapT !== THREE.ClampToEdgeWrapping || (tex.minFilter !== THREE.NearestFilter && tex.minFilter !== THREE.LinearFilter));
+  if (needsPOT && !(isPow2(w) && isPow2(h))) { w = THREE.MathUtils.floorPowerOfTwo(w); h = THREE.MathUtils.floorPowerOfTwo(h); }
+  let data;
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, w, h);
+    data = g.getImageData(0, 0, w, h);
+  } catch (e) { return; } // e.g. a cross-origin image
+  if (!bleedRGBA(data.data, w, h)) return;
+  bledImages.set(img, data);
+  tex.image = data;
+  tex.needsUpdate = true;
+  bleedStats.textures++; bleedStats.ms += performance.now() - t0;
+}
+function bleedCutouts(root) {
+  root.traverse(o => {
+    if (!o.material) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      // cut-outs only: their textures are static (a soft, blended texture may be a live canvas)
+      if (m && m.map && (m.alphaTest > 0 || m.alphaToCoverage)) bleedTexture(m.map);
+    }
+  });
+}
+
 function smoothCutouts(root) {
   if (!scenePass.target.samples) return;
   root.traverse(o => {
@@ -716,6 +794,7 @@ async function enterWorld(id, { first = false } = {}) {
     current = { meta, def, inst, env };
     webgl1Materials(inst.scene);
     smoothCutouts(inst.scene);
+    bleedCutouts(inst.scene);
     scenePass.scene = inst.scene;
     scenePass.camera = inst.camera;
     dynRestore(meta.id);
@@ -723,6 +802,12 @@ async function enterWorld(id, { first = false } = {}) {
     configureRig(inst.view);
     updateRig(0, 0);
     post.snap = true;
+    // one step before compiling: worlds set their environment map, lights and time of day in update(),
+    // and programs compiled before that would all be rebuilt on the first frame (hidden objects only
+    // when they first appear, mid-play: a visible stall on Safari 14, which compiles synchronously)
+    elapsed = 1 / 60;
+    inst.update(1 / 60, elapsed);
+    updateRig(1 / 60, elapsed);
     applyPost(inst.post);
     // compile against the scene buffer so the programs match what the frames will use
     try {
@@ -733,7 +818,6 @@ async function enterWorld(id, { first = false } = {}) {
     } catch (e) { renderer.setRenderTarget(null); }
     // warm-up: let the world settle for a moment before revealing (also builds shadow maps and
     // compiles the depth programs under the veil instead of hitching the first visible frames)
-    elapsed = 0;
     for (let i = 0; i < 3; i++) { elapsed += 1 / 60; inst.update(1 / 60, elapsed); updateRig(1 / 60, elapsed); composer.render(1 / 60); }
     save.scene = meta.id; dirty = true;
     sceneStart = performance.now();
@@ -1308,6 +1392,7 @@ window.__idle = {
     });
   },
   get current() { return current; },
+  bleedStats,
   get rig() { return rig; },
   renderer,
 };

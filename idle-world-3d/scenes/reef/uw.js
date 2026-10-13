@@ -560,9 +560,11 @@ export function createSnow(W, rng, { count = 1500, box = 26 } = {}) {
         gl_PointSize = ps;
         float edge = 1.0 - smoothstep(uBox * 0.32, uBox * 0.5, length(p - cameraPosition));
         vA = edge * smoothstep(0.4, 1.6, dist) * step(p.y, uSurfY - 0.1) * max(px * px / (ps * ps), 0.12);
-        // sparse bioluminescent sparkles at night
+        // sparse bioluminescent sparkles at night (on the wrapped clock: rates rounded to 0.01 rad/s so
+        // the twinkle stays continuous across the wrap; unbounded float32 uTime made it step after days)
         float bio = step(0.82, fract(s * 13.7));
-        vTw = pow(max(sin(uTime * (0.6 + s * 1.4) + s * 70.0), 0.0), 18.0) * bio;
+        float twf = floor((0.6 + s * 1.4) * 100.0 + 0.5) * 0.01;
+        vTw = pow(max(sin(uTimeS * twf + s * 70.0), 0.0), 18.0) * bio;
         vBio = bio;
         vWp = p;
         gl_Position = projectionMatrix * mv;

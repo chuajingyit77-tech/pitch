@@ -123,7 +123,7 @@ export function createSparkles(max = 800) {
   const points = new THREE.Points(geo, mat);
   points.frustumCulled = false;
   points.renderOrder = 6;
-  let head = 0, lo = max, hi = -1;
+  let head = 0, lo = max, hi = -1, base = 0;
   const ranged = [aStart, aVel, aCol];
   const mark = i => { lo = Math.min(lo, i); hi = Math.max(hi, i); };
   function emit(x, y, z, vx, vy, vz, life, r, g, b, size, kind = 0) {
@@ -144,7 +144,15 @@ export function createSparkles(max = 800) {
       }
     },
     update(t, pixelScale) {
-      uniforms.uTime.value = t;
+      // the particle clock is rebased every 600 s (birth times shifted with it, so nothing jumps): the raw scene
+      // clock in float32 quantises particle ages to ~8 ms steps after a day and fast sparks would jitter
+      if (t - base > 600) {
+        base += 600;
+        const S = aStart.array;
+        for (let i = 0; i < max; i++) S[i * 4 + 3] -= 600;
+        lo = 0; hi = max - 1;
+      }
+      uniforms.uTime.value = t - base;
       uniforms.uPix.value = pixelScale;
       if (hi >= lo) {
         for (const a of ranged) { a.clearUpdateRanges(); a.addUpdateRange(lo * 4, (hi - lo + 1) * 4); a.needsUpdate = true; }
@@ -363,7 +371,7 @@ export function createPeaches(shared, treeSpots, maxFood = 12) {
     let n = 0;
     for (const f of foods) {
       if (!f.alive || n >= maxFood) continue;
-      const s = f.scale * (0.35 + 0.65 * f.bites / f.maxBites) * (f.held ? 0.9 : 1);
+      const s = f.scale * (0.35 + 0.65 * (f.bitesS ?? f.bites) / f.maxBites) * (1 - 0.1 * (f.heldS ?? (f.held ? 1 : 0)));
       _q.setFromEuler(_e.set(f.tilt, f.spin, 0));
       _m.compose(f.pos, _q, _s.set(s, s, s));
       food.setMatrixAt(n++, _m);
@@ -424,7 +432,7 @@ export function createHalos(max = 16) {
       for (const f of foods) {
         if (!f.alive || n >= max) continue;
         pos.array[n * 3] = f.pos.x; pos.array[n * 3 + 1] = f.pos.y + f.scale * 0.2; pos.array[n * 3 + 2] = f.pos.z;
-        hal.array[n * 4] = 2.4 * (0.5 + 0.5 * f.bites / f.maxBites); hal.array[n * 4 + 1] = f.ph; hal.array[n * 4 + 2] = lerp(0.55, 1.1, night) * Math.min(1, f.age * 2); hal.array[n * 4 + 3] = 0;
+        hal.array[n * 4] = 2.4 * (0.5 + 0.5 * (f.bitesS ?? f.bites) / f.maxBites); hal.array[n * 4 + 1] = f.ph; hal.array[n * 4 + 2] = lerp(0.55, 1.1, night) * Math.min(1, f.age * 2); hal.array[n * 4 + 3] = 0;
         n++;
       }
       geo.setDrawRange(0, n);

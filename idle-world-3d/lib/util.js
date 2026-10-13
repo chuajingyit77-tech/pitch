@@ -369,7 +369,9 @@ export function createWind({ direction = new THREE.Vector2(1, 0.3), strength = 1
   return {
     uniforms,
     update(dt) {
-      uniforms.uWindTime.value += dt;
+      // every sway and flutter rate in addWind (1.7, 3.1, 8 and 9 rad/s) completes whole cycles every 20π s, so
+      // the clock wraps there seamlessly instead of losing float32 precision over a day
+      uniforms.uWindTime.value = (uniforms.uWindTime.value + dt) % (20 * Math.PI);
       // gusts travel with the wind; integrating keeps them continuous when the direction changes
       uniforms.uWindScroll.value.addScaledVector(uniforms.uWindDir.value, dt * 0.45 * Math.max(0.3, uniforms.uWindStrength.value));
     },
@@ -448,14 +450,14 @@ export function rayPointDistance(ray, p) {
 }
 
 /** Place a quaternion so local +X points along `forward` with world-up bias, plus roll. */
-const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _y2 = new THREE.Vector3(), _z = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 export function quatFromForward(q, forward, roll = 0, up = _up) {
   _x.copy(forward).normalize();
   _z.crossVectors(_x, up);
   if (_z.lengthSq() < 1e-6) _z.set(0, 0, 1);
   _z.normalize();
   _y.crossVectors(_z, _x).normalize();
-  if (roll) { const c = Math.cos(roll), s = Math.sin(roll); const y2 = _y.clone().multiplyScalar(c).addScaledVector(_z, s); _z.multiplyScalar(c).addScaledVector(_y, -s); _y.copy(y2); }
+  if (roll) { const c = Math.cos(roll), s = Math.sin(roll); _y2.copy(_y).multiplyScalar(c).addScaledVector(_z, s); _z.multiplyScalar(c).addScaledVector(_y, -s); _y.copy(_y2); }
   _m.makeBasis(_x, _y, _z);
   return q.setFromRotationMatrix(_m);
 }

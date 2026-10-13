@@ -7,6 +7,8 @@ OUT="${1:-$PWD/qa-out}"; shift || true
 WORLDS="${*:-reef koi meadow island jungle cloudsea}"
 export NODE_PATH="$(npm root -g)"
 mkdir -p "$OUT"
+echo "== 0. Syntax (every app .js file as an ES module)"
+"$QA/syncheck.sh" || exit 1
 echo "== 1. Safari 14 / WebGL 1 iPad emulation: load + feed every world (shader errors, page errors, screenshots)"
 FEED=1 timeout 3600 node "$QA/ios14.cjs" "$OUT/ios14" $WORLDS
 echo "== 2. Flicker / NaN on the iPad tier (low), noon and night"

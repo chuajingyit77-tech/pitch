@@ -18,7 +18,19 @@ const KINDS = {
 };
 const WATER_Y = 0;
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _e = new THREE.Euler();
-const _up = new THREE.Vector3(0, 1, 0), _zAxis = new THREE.Vector3(0, 0, 1);
+const _up = new THREE.Vector3(0, 1, 0), _zAxis = new THREE.Vector3(0, 0, 1), _qFlat = new THREE.Quaternion();
+// Shader clocks are wrapped so float32 keeps full precision on a screen left running for days. Every rate that
+// reads them completes whole cycles in its period, so each wrap is seamless:
+//  - fin flutter (lib/fish.js: sin 5.5t, sin 3.7t), blossom sway (1.1, 2.3 rad/s), fireflies (1.6 rad/s) and the
+//    wind (lib/util.js addWind: 1.7, 3.1, 8, 9 rad/s): 20π s;
+//  - caustics (GLSL.caustics: cell motion at 0.72 and 0.92 rad/s): 50π s;
+//  - water normal-map scroll (0.010, 0.006, 0.008, 0.012 UV/s): 500 s (ripple start times are rebased on the wrap).
+const CLOCK_PERIOD = 20 * Math.PI, CAUSTIC_PERIOD = 50 * Math.PI, WATER_PERIOD = 500;
+// koi steering: largest angle the steering goal may lead the body by (rad). With the Swimmer's heading follow this
+// caps the turn rate near 1 rad/s cruising and 1.3 rad/s chasing food, so the body bends round on an arc
+const KOI_TURN = 0.9, KOI_TURN_FEED = 0.8;
+// time-of-day palette, parsed once (updateTimeOfDay runs twice a second)
+const TOD_COLORS = { nightSky: new THREE.Color('#3a5288'), moss: new THREE.Color('#3a4a22'), waterDay: new THREE.Color('#1f4535'), waterNight: new THREE.Color('#0b1a2c') };
 
 export default {
   id: 'koi',
@@ -314,6 +326,13 @@ class KoiPond {
     this.foods = [];
     this.ripples = [];
     this.disposables = [];
+    // things in the water that koi swim round and floating things drift round: { x, z, r } footprints of the
+    // rocks below the water line, the island stone and the bridge piers
+    this.obstacles = [];
+    // pools: petals and splash droplets are recycled instead of allocated while the world runs (GC pauses)
+    this.petalPool = [];
+    this.dropPool = [];
+    this.wClock = 0; // water shader clock, wrapped at WATER_PERIOD
     this.U = makeUnderwaterUniforms();
   }
 
@@ -347,8 +366,7 @@ class KoiPond {
     const d = -k * Math.log(acc);
     return d + this.noise.fbm2(x * 0.32 + this.shoreNoise, z * 0.32, 3) * 0.55;
   }
-  height(x, z) {
-    const d = this.sdf(x, z);
+  height(x, z, d = this.sdf(x, z)) {
     const n = this.noise.fbm2(x * 0.5 + 7, z * 0.5 - 3, 3);
     if (d < 0) return -0.07 - 1.05 * smoothstep(0, 2.2, -d) + n * 0.05;
     const s = smoothstep(0, 0.75, d);
@@ -371,6 +389,29 @@ class KoiPond {
       if (this.sdf(x, z) < -margin) return out.set(x, 0, z);
     }
     return out.set(this.lobes[0].x, 0, this.lobes[0].z);
+  }
+  /** Clearance from (x, z) to the nearest obstacle footprint (negative = inside one). */
+  obstacleGap(x, z) {
+    let g = Infinity;
+    for (const o of this.obstacles) g = Math.min(g, Math.hypot(x - o.x, z - o.z) - o.r);
+    return g;
+  }
+  /** A random swimming target in open water: in the pond and clear of rocks, the island stone and piers. */
+  openWaterPoint(rng, margin, out) {
+    for (let i = 0; i < 12; i++) {
+      this.randomInPond(rng, margin, out);
+      if (this.obstacleGap(out.x, out.z) > 0.6) return out;
+    }
+    return out;
+  }
+  /** Push a floating point (x, z in `p`) out of obstacle footprints grown by `pad`; returns true if it moved. */
+  pushOutOfObstacles(p, pad) {
+    let moved = false;
+    for (const o of this.obstacles) {
+      const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz), r = o.r + pad;
+      if (d < r && d > 1e-4) { p.x = o.x + dx / d * r; p.z = o.z + dz / d * r; moved = true; }
+    }
+    return moved;
   }
 
   /* ---------- build ---------- */
@@ -419,6 +460,7 @@ class KoiPond {
       addMember: m => this.addKoi(m, true),
       creatures: () => this.koi.map(k => ({ member: k.member, pos: k.sw.pos, radius: 0.32 * k.scale + 0.1 })),
       dispose: () => this.dispose(),
+      debug: this, // test probes read the pond's state (koi, food, petals, pads) through this
     };
   }
 
@@ -460,6 +502,17 @@ class KoiPond {
     this.scene.add(dome);
     this.skyScene = new THREE.Scene();
     this.skyScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat));
+    // The environment is refreshed in place: an own cube camera, PMREM generator and one persistent target, so
+    // a refresh allocates nothing and scene.environment keeps the same texture. (pmrem.fromScene made a new 6 MB
+    // target each time, and the new texture made every material re-resolve its program: a CPU + GPU hitch every
+    // two minutes through dawn and dusk on the old iPad.)
+    this.envCube = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.envCam = new THREE.CubeCamera(0.1, 200, this.envCube);
+    this.envGen = new THREE.PMREMGenerator(this.env.renderer);
+    // keep the 0.02-rad pre-blur that pmrem.fromScene applied (soft sun and stars in the glassy water); three is
+    // pinned to r160, where fromScene does exactly this before _applyPMREM
+    const applyPMREM = this.envGen._applyPMREM;
+    this.envGen._applyPMREM = function (rt) { this._blur(rt, 0, 0, 0.02); applyPMREM.call(this, rt); };
     this.scene.fog = new THREE.FogExp2('#9fb4b8', 0.012);
   }
 
@@ -521,13 +574,37 @@ class KoiPond {
     ]);
     this.disposables.push(na, nb);
     const useTransmission = this.q >= 0.6;
+    // Without transmission (phones, iPads) the surface is drawn as what water really adds: its reflection
+    // (Fresnel-weighted by the physical BRDF) over the pond below, which only loses what is reflected plus a
+    // little absorption. Premultiplied blending: out = reflection + below × (1 − alpha). (It used to be a
+    // 42 % white layer, which veiled the koi in milky haze.) The submerged objects carry the depth tint.
     const mat = new THREE.MeshPhysicalMaterial({
-      color: '#ffffff', roughness: 0.035, metalness: 0, ior: 1.333,
+      color: useTransmission ? '#ffffff' : '#000000', roughness: 0.035, metalness: 0, ior: 1.333,
       transmission: useTransmission ? 1 : 0, thickness: 0.8,
       attenuationColor: new THREE.Color('#3f8a6a'), attenuationDistance: 2.2,
-      transparent: !useTransmission, opacity: 0.42,
+      transparent: !useTransmission,
       specularIntensity: 1, envMapIntensity: 1.5,
     });
+    if (!useTransmission) {
+      mat.blending = THREE.CustomBlending;
+      mat.blendSrc = THREE.OneFactor; mat.blendDst = THREE.OneMinusSrcAlphaFactor;
+      mat.blendSrcAlpha = THREE.OneFactor; mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+      patchMaterial(mat, {
+        key: 'koi-water-clear',
+        fragment: {
+          '#include <opaque_fragment>': /* glsl */`$&
+            {
+              float nv = clamp(dot(normal, geometryViewDir), 0.0, 1.0);
+              float F = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
+              gl_FragColor.a = clamp(F + (1.0 - F) * 0.05, 0.0, 1.0);
+            }`,
+          '#include <fog_fragment>': /* glsl */`$&
+            #ifdef USE_FOG
+              gl_FragColor.a = mix(gl_FragColor.a, 1.0, fogFactor);
+            #endif`,
+        },
+      });
+    }
     this.rippleUniform = { value: Array.from({ length: 32 }, () => new THREE.Vector4(0, 0, -99, 0)) };
     this.waterU = { uNA: { value: na }, uNB: { value: nb }, uWTime: { value: 0 }, uNStr: { value: 0.11 }, uRip: this.rippleUniform };
     patchMaterial(mat, {
@@ -574,9 +651,12 @@ class KoiPond {
     const arr = this.rippleUniform.value;
     let slot = 0, oldest = Infinity;
     for (let i = 0; i < arr.length; i++) { const age = arr[i].w <= 0 ? -Infinity : arr[i].z; if (age < oldest) { oldest = age; slot = i; } }
-    arr[slot].set(x, z, this.time, amp);
-    this.ripples.push({ x, z, t: this.time, amp });
-    if (this.ripples.length > 40) this.ripples.shift();
+    // start time on the wrapped water clock (uWTime); update() rebases the slots when that clock wraps
+    arr[slot].set(x, z, this.wClock, amp);
+    // the CPU-side list (pushes food, petals and pads) keeps the unwrapped time; its oldest entry is recycled
+    const rp = this.ripples.length >= 40 ? this.ripples.shift() : { x: 0, z: 0, t: 0, amp: 0 };
+    rp.x = x; rp.z = z; rp.t = this.time; rp.amp = amp;
+    this.ripples.push(rp);
   }
 
   /* ---------- rocks ---------- */
@@ -622,11 +702,24 @@ class KoiPond {
       const list = placements[vi];
       if (!list.length) return;
       const im = new THREE.InstancedMesh(geo, mat, list.length);
+      const gp = geo.attributes.position;
       list.forEach((p, i) => {
         _m.compose(_v.set(p.x, p.y, p.z), _q.setFromEuler(_e.set(r.range(-0.15, 0.15), p.rot, r.range(-0.15, 0.15))), _s.set(p.s * r.range(0.9, 1.3), p.s * p.sy, p.s));
         im.setMatrixAt(i, _m);
         col.setHSL(0.09 + r.range(-0.02, 0.03), r.range(0.05, 0.14), r.range(0.42, 0.62));
         im.setColorAt(i, col);
+        // footprint of the part below the water line, for rocks that reach into the pond: koi steer round it
+        // instead of swimming through it (no rng use here, so the layout is unchanged)
+        if (this.sdf(p.x, p.z) < p.s * 2) {
+          let rMax = 0, wet = false;
+          for (let j = 0; j < gp.count; j++) {
+            _v2.fromBufferAttribute(gp, j).applyMatrix4(_m);
+            if (_v2.y > 0.03) continue;
+            rMax = Math.max(rMax, Math.hypot(_v2.x - p.x, _v2.z - p.z));
+            if (!wet && (j & 3) === 0 && this.sdf(_v2.x, _v2.z) < -0.15) wet = true;
+          }
+          if (wet) this.obstacles.push({ x: p.x, z: p.z, r: rMax });
+        }
       });
       im.castShadow = true; im.receiveShadow = true;
       this.scene.add(im);
@@ -727,6 +820,7 @@ class KoiPond {
       const pier = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, h, 8), darkWood);
       pier.position.set(p.x, p.y - h / 2 - 0.1, p.z);
       group.add(pier);
+      this.obstacles.push({ x: p.x, z: p.z, r: 0.08 });
     }
     this.scene.add(group);
     this.bridge = group;
@@ -814,6 +908,7 @@ class KoiPond {
       const g = new THREE.Group();
       g.add(new THREE.Mesh(baseGeo, baseMat), new THREE.Mesh(boxGeo, mat));
       const p = this.randomInPond(r, 0.8, new THREE.Vector3());
+      this.pushOutOfObstacles(p, 0.3);
       g.position.set(p.x, WATER_Y, p.z);
       g.rotation.y = r.range(0, TAU);
       g.visible = false;
@@ -835,7 +930,8 @@ class KoiPond {
       if (!g.visible) continue;
       const P = g.position;
       // a slow swirl around the nearest lobe plus a gentle wander
-      const L = this.lobes.reduce((a, b) => (Math.hypot(P.x - a.x, P.z - a.z) - a.r < Math.hypot(P.x - b.x, P.z - b.z) - b.r ? a : b));
+      let L = this.lobes[0];
+      for (const b of this.lobes) if (Math.hypot(P.x - b.x, P.z - b.z) - b.r < Math.hypot(P.x - L.x, P.z - L.z) - L.r) L = b;
       const dx = P.x - L.x, dz = P.z - L.z, d = Math.hypot(dx, dz) || 1;
       f.vel.x += (-dz / d * 0.05 + Math.sin(time * 0.13 + f.ph) * 0.03 - f.vel.x) * dt * 0.5;
       f.vel.z += (dx / d * 0.05 + Math.cos(time * 0.11 + f.ph) * 0.03 - f.vel.z) * dt * 0.5;
@@ -846,7 +942,13 @@ class KoiPond {
         const ox = P.x - o.group.position.x, oz = P.z - o.group.position.z, od = Math.hypot(ox, oz);
         if (od < 0.45 && od > 1e-4) { f.vel.x += ox / od * 0.05 * dt; f.vel.z += oz / od * 0.05 * dt; }
       }
+      // drift round the island stone, rocks and piers instead of through them
+      for (const o of this.obstacles) {
+        const ox = P.x - o.x, oz = P.z - o.z, od = Math.hypot(ox, oz), rr = o.r + 0.4;
+        if (od < rr && od > 1e-4) { const k = (rr - od) / rr * 0.3 * dt; f.vel.x += ox / od * k; f.vel.z += oz / od * k; }
+      }
       P.x += f.vel.x * dt; P.z += f.vel.z * dt;
+      this.pushOutOfObstacles(P, 0.18);
       P.y = WATER_Y + Math.sin(time * 1.3 + f.ph) * 0.006;
       g.rotation.y += f.spin * dt;
       g.rotation.x = Math.sin(time * 0.9 + f.ph) * 0.03;
@@ -1227,13 +1329,21 @@ class KoiPond {
         for (let k = 0; k < gp.count; k++) { const x = gp.getX(k), z = gp.getZ(k); gp.setY(k, (x * x + z * z) / (rad * rad) * 0.018); }
         geo.computeVertexNormals();
         const pad = new THREE.Mesh(geo, padMat);
-        const x = c.x + r.gauss() * 0.7, z = c.z + r.gauss() * 0.7;
-        if (this.sdf(x, z) > -0.5) { geo.dispose(); continue; }
+        const gx = c.x + r.gauss() * 0.7, gz = c.z + r.gauss() * 0.7;
+        if (this.sdf(gx, gz) > -0.5) { geo.dispose(); continue; }
+        // clear of rocks and the island stone, unless that would put it on the shore (no rng use here, so the
+        // rest of the layout is unchanged)
+        _v3.set(gx, 0, gz);
+        if (this.pushOutOfObstacles(_v3, rad * 0.8) && this.sdf(_v3.x, _v3.z) > -0.5) _v3.set(gx, 0, gz);
+        const x = _v3.x, z = _v3.z;
+        // how far koi may nudge the pad: its stem's slack, but never as far as the shore or a rock
+        const reach = clamp(Math.min(0.5, (-this.sdf(x, z) - rad * 0.8) * 0.8, (this.obstacleGap(x, z) - rad * 0.8) * 0.9), 0, 0.5);
         pad.position.set(x, WATER_Y + 0.006, z);
         pad.rotation.y = r.range(0, TAU);
         pad.receiveShadow = true;
         this.scene.add(pad);
-        this.pads.push({ mesh: pad, home: pad.position.clone(), phase: r.range(0, TAU), spin: r.range(-0.02, 0.02), bob: 0 });
+        // anchor: where the pad's stem is rooted; koi can nudge the pad, but only as far as the stem lets it
+        this.pads.push({ mesh: pad, home: pad.position.clone(), anchor: pad.position.clone(), reach, phase: r.range(0, TAU), spin: r.range(-0.02, 0.02), bob: 0 });
         if (r.chance(0.32) && this.flowers.length < 5) {
           const f = new THREE.Group();
           const petals = [];
@@ -1255,6 +1365,8 @@ class KoiPond {
           f.position.set(x + r.range(-0.08, 0.08), WATER_Y + 0.02, z + r.range(-0.08, 0.08));
           f.scale.setScalar(r.range(0.9, 1.25));
           this.scene.add(f);
+          // the flower trails its pad by the fixed offset it has always eased toward (+0.05, +0.05); start it there
+          f.position.x = x + 0.05; f.position.z = z + 0.05;
           this.flowers.push({ group: f, petals, open: 1, pad: this.pads[this.pads.length - 1] });
         }
       }
@@ -1328,6 +1440,8 @@ class KoiPond {
       if (r.chance(0.6) && this.canopy.length) { const t = r.pick(this.canopy); c.set(t.x + r.gauss() * 1.6, 0, t.z + r.gauss() * 1.6); }
       if (this.sdf(c.x, c.z) < -0.15) { p.pos.set(c.x, WATER_Y + 0.003, c.z); p.mode = 1; p.age = r.range(0, 60); }
       else { p.pos.set(c.x, this.height(c.x, c.z) + 0.01, c.z); p.mode = 2; p.age = r.range(0, 20); }
+      // resting petals lie flat, like the ones that land later (a tilted one would tumble as it drifts)
+      p.rot.set(-Math.PI / 2, 0, p.rot.z);
     }
     this.petalTimer = 0;
 
@@ -1387,17 +1501,27 @@ class KoiPond {
   }
 
   spawnPetal(r = this.rng) {
-    const p = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), rot: new THREE.Euler(r.range(0, TAU), r.range(0, TAU), r.range(0, TAU)), spin: new THREE.Vector3(r.range(-3, 3), r.range(-2, 2), r.range(-3, 3)), mode: 0, age: 0, life: r.range(70, 140), ph: r.range(0, TAU) };
-    if (this.petals.length >= this.petalMax) this.petals.shift();
+    // The pool never drops a petal that is still on screen (that popped it out of existence): updatePetals
+    // fades the oldest resting petals early so the pool does not fill, and a full pool skips this one.
+    if (this.petals.length >= this.petalMax) return null;
+    const p = this.petalPool.pop() || { pos: new THREE.Vector3(), vel: new THREE.Vector3(), rot: new THREE.Euler(), spin: new THREE.Vector3(), q0: new THREE.Quaternion(), mode: 0, age: 0, life: 0, ph: 0, settle: 1 };
+    p.rot.set(r.range(0, TAU), r.range(0, TAU), r.range(0, TAU));
+    p.spin.set(r.range(-3, 3), r.range(-2, 2), r.range(-3, 3));
+    p.pos.set(0, 0, 0); p.vel.set(0, 0, 0);
+    p.mode = 0; p.age = 0; p.life = r.range(70, 140); p.ph = r.range(0, TAU); p.settle = 1;
     this.petals.push(p);
     return p;
   }
 
   splash(x, y, z, n = 8, power = 1) {
     for (let i = 0; i < n; i++) {
-      if (this.drops.length >= this.dropMax) this.drops.shift();
+      if (this.drops.length >= this.dropMax) this.dropPool.push(this.drops.shift());
       const a = Math.random() * TAU, s = (0.25 + Math.random() * 0.5) * power;
-      this.drops.push({ p: new THREE.Vector3(x, y + 0.02, z), v: new THREE.Vector3(Math.cos(a) * s * 0.6, (0.8 + Math.random() * 0.9) * power, Math.sin(a) * s * 0.6), life: 1 });
+      const d = this.dropPool.pop() || { p: new THREE.Vector3(), v: new THREE.Vector3(), life: 1 };
+      d.p.set(x, y + 0.02, z);
+      d.v.set(Math.cos(a) * s * 0.6, (0.8 + Math.random() * 0.9) * power, Math.sin(a) * s * 0.6);
+      d.life = 1;
+      this.drops.push(d);
     }
   }
 
@@ -1421,15 +1545,31 @@ class KoiPond {
     mesh.frustumCulled = false;
     this.scene.add(mesh);
     const start = this.randomInPond(r, 0.9, new THREE.Vector3());
+    this.pushOutOfObstacles(start, 0.65);
     const depth = r.range(0.2, 0.6);
     start.y = WATER_Y - depth;
     const sw = new Swimmer({ pos: start, size: 1, speed: 0.25, rng: r, maxPitch: 0.35, agility: 1.4, beat: 0.75 });
     const k = { member, mesh, mat, sw, painted, rng: r, depth, target: this.randomInPond(r, 1.0, new THREE.Vector3()), retarget: r.range(2, 8), gulp: 0, wakeT: r.range(0, 1), mode: 'cruise', scale: 0.6, speed: r.range(0.18, 0.32) };
     k.target.y = WATER_Y - depth;
+    this.pushOutOfObstacles(k.target, 0.6);
+    // individual temperament (own stream, so the koi's other random choices are unchanged): how quickly it
+    // notices food landing, and how hard it dashes for it
+    const r2 = r.fork('temperament');
+    k.alert = r2.range(0.12, 0.9);
+    k.dash = r2.range(0.66, 0.92);
+    k.gulpT = r2.range(0.5, 2.5); // begging: time to the next gulp of air (kept apart from the wake timer)
+    k.turnSide = 0; k.tailSide = 0; k.nearSide = 0; k.chasing = null; k.chaseT = 0; k.pickT = 0; k.skip = null; k.skipT = 0; k.avoidObs = null; k.avoidSide = 1;
+    k.scale = this.koiScale(k);
+    sw.size = k.scale;
     this.koi.push(k);
     if (fresh) { this.addRipple(start.x, start.z, 1.2); this.splash(start.x, WATER_Y, start.z, 10, 1); }
     return k;
   }
+  /** Display scale of a koi: grows with its member's size (a little after each meal). */
+  koiScale(k) { return 0.7 * (k.member.size || 1) * (k.mesh.geometry === this.butterflyGeo ? 1.08 : 1); }
+  /** Nose-up gulp (eating, or begging for air at the surface). A new gulp during the falling half of one in
+   *  progress mirrors its phase (same angle), so the head rises again smoothly instead of snapping. */
+  startGulp(k) { if (k.gulp < 0.5) k.gulp = 1 - k.gulp; }
 
   /* ---------- feeding ---------- */
   feed(raycaster) {
@@ -1456,9 +1596,9 @@ class KoiPond {
   }
   dropFood(x, z, n) {
     for (let i = 0; i < n; i++) {
-      if (this.foods.length >= this.foodMax) this.foods.shift();
+      if (this.foods.length >= this.foodMax) this.foods.shift().gone = true;
       const a = Math.random() * TAU, rr = Math.sqrt(Math.random()) * 0.22;
-      this.foods.push({ pos: new THREE.Vector3(x + Math.cos(a) * rr, WATER_Y + 0.004, z + Math.sin(a) * rr), vel: new THREE.Vector3((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.04), age: 0, ph: Math.random() * TAU, taken: false });
+      this.foods.push({ pos: new THREE.Vector3(x + Math.cos(a) * rr, WATER_Y + 0.004, z + Math.sin(a) * rr), vel: new THREE.Vector3((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.04), age: 0, ph: Math.random() * TAU, taken: false, chasers: 0, gone: false });
     }
     this.addRipple(x, z, 0.9);
     this.splash(x, WATER_Y, z, 6, 0.6);
@@ -1467,14 +1607,14 @@ class KoiPond {
 
   /* ---------- time of day ---------- */
   updateTimeOfDay(force = false) {
-    const S = this.env.sun({ azimuthOffset: 0.7 });
+    const S = this.env.sun(this.sunOpts || (this.sunOpts = { azimuthOffset: 0.7 }));
     const night = S.night, day = S.day;
     this.sunState = S;
     // Sun and moon are two lights cross-fading through dusk and dawn: the key light never jumps to the
     // other side of the sky and there is no dark gap in between.
     const e = S.elevationDeg;
     const sunK = smoothstep(-3.5, 0.5, e);
-    const center = new THREE.Vector3(0, 0, 0);
+    const center = _v3.set(0, 0, 0);
     const sd = _v.copy(S.dir); sd.y = Math.max(sd.y, 0.04); sd.normalize(); // never light from below the ground
     this.sun.position.copy(center).addScaledVector(sd, 40);
     this.sun.target.position.copy(center);
@@ -1483,8 +1623,8 @@ class KoiPond {
     this.moon.position.copy(center).addScaledVector(S.moonDir, 40);
     this.moon.target.position.copy(center);
     this.moon.intensity = 0.95 * smoothstep(0.5, -5, e);
-    this.hemi.color.copy(S.skyAmbient).lerp(new THREE.Color('#3a5288'), night * 0.6);
-    this.hemi.groundColor.copy(S.groundAmbient).lerp(new THREE.Color('#3a4a22'), 0.4);
+    this.hemi.color.copy(S.skyAmbient).lerp(TOD_COLORS.nightSky, night * 0.6);
+    this.hemi.groundColor.copy(S.groundAmbient).lerp(TOD_COLORS.moss, 0.4);
     this.hemi.intensity = Math.max(0.45, S.ambientIntensity) * 0.95 + night * 0.75;
     const u = this.skyMat.uniforms;
     u.uZenith.value.copy(S.zenith); u.uHorizon.value.copy(S.horizon);
@@ -1495,7 +1635,7 @@ class KoiPond {
     this.scene.fog.density = lerp(0.01, 0.016, Math.max(night, S.golden * 0.5));
     // underwater look
     this.U.uCaustic.value = lerp(0.08, clamp(S.sunIntensity / 2.8, 0, 1.1), sunK);
-    this.U.uWaterColor.value.copy(new THREE.Color('#1f4535')).lerp(new THREE.Color('#0b1a2c'), night).multiplyScalar(lerp(1, 0.85, night));
+    this.U.uWaterColor.value.copy(TOD_COLORS.waterDay).lerp(TOD_COLORS.waterNight, night).multiplyScalar(lerp(1, 0.85, night));
     // lantern
     const glow = smoothstep(0.15, 0.7, night);
     // at night the lanterns' point lights would reflect in the mirror-flat pond as single pixels worth
@@ -1509,10 +1649,12 @@ class KoiPond {
     const key = changing ? 'f' + Math.round(S.hours * 30) : 's' + Math.round(S.hours * 6);
     if (force || key !== this.envKey) {
       this.envKey = key;
-      const rt = this.env.pmrem.fromScene(this.skyScene, 0.02);
-      if (this.envRT) this.envRT.dispose();
-      this.envRT = rt;
-      this.scene.environment = rt.texture;
+      const r = this.env.renderer, autoClear = r.autoClear;
+      r.autoClear = true;
+      this.envCam.update(r, this.skyScene);
+      r.autoClear = autoClear;
+      this.envRT = this.envGen.fromCubemap(this.envCube.texture, this.envRT);
+      if (this.scene.environment !== this.envRT.texture) this.scene.environment = this.envRT.texture;
     }
     // post
     if (this.post) {
@@ -1528,20 +1670,30 @@ class KoiPond {
   update(dt, t) {
     this.time += dt;
     const time = this.time;
-    this.U.uKTime.value = time;
-    this.waterU.uWTime.value = time;
-    this.blossomU.uBTime.value = time;
-    this.flyMat.uniforms.uT.value = time;
+    // shader clocks wrap seamlessly (see CLOCK_PERIOD) so float32 stays precise however long the page runs;
+    // motion computed here keeps the unwrapped double-precision time
+    const sclock = time % CLOCK_PERIOD;
+    this.U.uKTime.value = time % CAUSTIC_PERIOD;
+    this.wClock += dt;
+    if (this.wClock >= WATER_PERIOD) {
+      this.wClock -= WATER_PERIOD;
+      for (const r of this.rippleUniform.value) r.z -= WATER_PERIOD; // ripples keep their age across the wrap
+    }
+    this.waterU.uWTime.value = this.wClock;
+    this.blossomU.uBTime.value = sclock;
+    this.flyMat.uniforms.uT.value = sclock;
     // sprites were sized for a 720-pixel-tall buffer; keep them the same on-screen size at any resolution
     this.flyMat.uniforms.uScale.value = this.env.renderer.getDrawingBufferSize(this._dbs || (this._dbs = new THREE.Vector2())).y / 720;
     this.wind.update(dt);
+    const windT = this.wind.uniforms.uWindTime;
+    if (windT.value > CLOCK_PERIOD) windT.value -= CLOCK_PERIOD;
     // wrapped so the offset keeps full float precision on a screen left running all day
     this.streamAlpha.offset.y = (this.streamAlpha.offset.y - dt * 2.2) % 1;
     this.todTimer = (this.todTimer || 0) - dt;
     if (this.todTimer <= 0) { this.todTimer = 0.5; this.updateTimeOfDay(); }
 
     this.updateFood(dt);
-    this.updateKoi(dt, time);
+    this.updateKoi(dt, time, sclock);
     this.updatePetals(dt, time);
     this.updatePads(dt, time);
     this.updateDrops(dt);
@@ -1572,74 +1724,238 @@ class KoiPond {
         const d = Math.hypot(f.pos.x - rp.x, f.pos.z - rp.z);
         if (Math.abs(d - age * 0.5) < 0.12 && d > 1e-3) { f.vel.x += (f.pos.x - rp.x) / d * 0.03 * rp.amp * dt * 8; f.vel.z += (f.pos.z - rp.z) / d * 0.03 * rp.amp * dt * 8; }
       }
-      if (this.sdf(f.pos.x, f.pos.z) > -0.15) { this.sdfGrad(f.pos.x, f.pos.z, _v); f.vel.addScaledVector(_v, -0.05); }
-      if (f.age > 90) { this.foods.splice(i, 1); continue; }
+      // the shore and the rocks hold pellets off with a soft push scaled by dt (it was a fixed kick every frame,
+      // twice as strong at 60 fps as at 30), far enough out that a koi can get its mouth to every pellet
+      const e = this.sdf(f.pos.x, f.pos.z);
+      if (e > -0.45) { this.sdfGrad(f.pos.x, f.pos.z, _v); f.vel.addScaledVector(_v, -Math.min(e + 0.45, 0.4) * 4 * dt); f.vel.multiplyScalar(Math.exp(-2 * dt)); }
+      for (const o of this.obstacles) {
+        const ox = f.pos.x - o.x, oz = f.pos.z - o.z, od = Math.hypot(ox, oz), rr = o.r + 0.6;
+        if (od < rr && od > 1e-4) { const k = Math.min(rr - od, 0.3) * 4 * dt; f.vel.x += ox / od * k; f.vel.z += oz / od * k; }
+      }
+      if (f.age > 90) { this.foods.splice(i, 1); f.gone = true; continue; }
     }
     for (const f of this.foods) {
       const sink = f.age > 70 ? (f.age - 70) * 0.004 : 0;
-      _m.compose(_v.set(f.pos.x, WATER_Y + 0.002 + Math.sin(this.time * 2 + f.ph) * 0.003 - sink, f.pos.z), _q.identity(), _s.setScalar(1));
+      // an uneaten pellet shrinks away over its last seconds instead of vanishing
+      _m.compose(_v.set(f.pos.x, WATER_Y + 0.002 + Math.sin(this.time * 2 + f.ph) * 0.003 - sink, f.pos.z), _q.identity(), _s.setScalar(clamp((90 - f.age) / 4, 0.001, 1)));
       fm.setMatrixAt(n++, _m);
     }
     fm.count = n;
     fm.instanceMatrix.needsUpdate = true;
   }
 
-  updateKoi(dt, time) {
+  /** Begging spot: the shoreline of the lobe nearest the camera, stepped back from any rock standing there. */
+  findBegSpot(cam, out) {
+    let L = this.lobes[0];
+    for (const b of this.lobes) if (Math.hypot(b.x - cam.x, b.z - cam.z) < Math.hypot(L.x - cam.x, L.z - cam.z)) L = b;
+    const dx = cam.x - L.x, dz = cam.z - L.z, l = Math.hypot(dx, dz) || 1;
+    let s = 0;
+    while (this.sdf(L.x + dx / l * s, L.z + dz / l * s) < -0.8 && s < 12) s += 0.1;
+    while (s > 0.2 && this.obstacleGap(L.x + dx / l * s, L.z + dz / l * s) < 0.6) s -= 0.1;
+    return out.set(L.x + dx / l * s, WATER_Y - 0.08, L.z + dz / l * s);
+  }
+
+  /**
+   * Make a steering goal something a koi body can follow. The goal may lead the current heading by at most
+   * `turnMax`, so the velocity swings round together with the body along an arc, at about 1-1.4 rad/s. (Unshaped,
+   * the velocity flipped round within a few frames when the goal moved behind the koi, and the body followed at
+   * the Swimmer's limit: up to 28 rad/s with the old lib, 3.5 rad/s now, sliding sideways or backwards meanwhile.)
+   * Sharp turns are taken at a slow, steady pace, never speeding up while the koi comes round to a goal behind
+   * it; the speed stays under `vmax`; and climbs and dives stay within ~45° of level, which the body (pitching
+   * at most ~20°) can still show, instead of the koi rising or sinking like a lift.
+   */
+  shapeDesired(k, desired, turnMax, vmax) {
+    const f = k.sw.fwd;
+    let hx = f.x, hz = f.z;
+    const hl = Math.hypot(hx, hz);
+    if (hl < 1e-6) { hx = 1; hz = 0; } else { hx /= hl; hz /= hl; }
+    let m = Math.hypot(desired.x, desired.z);
+    let th = m > 1e-6 ? Math.atan2(hx * desired.z - hz * desired.x, hx * desired.x + hz * desired.z) : 0;
+    // near a reversal pick a side and keep it until the turn is well under way, so a goal swinging across ±180°
+    // does not flip the body between left and right turns every frame
+    if (k.turnSide && Math.abs(th) < 1.6) k.turnSide = 0;
+    // right beside a rock, a goal behind on the rock's side is reached by turning away from the rock
+    else if (!k.turnSide && k.nearSide && Math.abs(th) > 1.6 && th * k.nearSide > 0) k.turnSide = -k.nearSide;
+    else if (!k.turnSide && Math.abs(th) > 2.5) k.turnSide = th < 0 ? -1 : 1;
+    if (k.turnSide && th * k.turnSide < 0) th = k.turnSide * (TAU - Math.abs(th)); // the long way round, as chosen
+    // a rock beside the tail: a turn that would sweep the tail into it waits until the koi has swum clear
+    const tailHold = k.tailSide && th * k.tailSide < 0;
+    // sharp turns are swum at a slow, steady pace: forward motion keeps the tail on the head's path (pivoting on
+    // the spot swung it into rocks), and a goal far behind never makes the koi speed up while it comes round
+    m = Math.min(lerp(m, Math.min(m, 0.14), smoothstep(0.6, 2.0, Math.min(Math.abs(th), Math.PI))), vmax);
+    if (tailHold) m = Math.max(m, Math.min(0.16, vmax));
+    const tm = tailHold ? Math.min(turnMax, 0.1) : turnMax;
+    if (Math.abs(th) > tm) th = th < 0 ? -tm : tm;
+    const c = Math.cos(th), sn = Math.sin(th);
+    desired.x = (hx * c - hz * sn) * m;
+    desired.z = (hx * sn + hz * c) * m;
+    const vy = 0.85 * m + 0.015;
+    desired.y = clamp(desired.y, -vy, vy);
+  }
+
+  /**
+   * Steer round rocks, the island stone and the bridge piers (koi used to swim straight through them). A goal
+   * that points into an obstacle ahead is turned toward the edge of it, on one side kept until the koi is past,
+   * so the koi bends round it along the tangent; a koi already closer than its body clearance is pushed out.
+   */
+  avoidObstacles(k, desired) {
+    const sw = k.sw, s = k.scale;
+    k.tailSide = 0; k.nearSide = 0;
+    const dm = Math.hypot(desired.x, desired.z);
+    if (dm < 1e-6) return;
+    let dx = desired.x / dm, dz = desired.z / dm;
+    let hx = sw.fwd.x, hz = sw.fwd.z;
+    const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl;
+    // the body's middle keeps half a body length plus a margin off the obstacle, so the koi can turn there in any
+    // direction without its tail entering it; the body itself (tail to snout) is pushed out within its half width
+    const pathPad = 0.5 * s + 0.08, bodyPad = 0.1 * s + 0.05;
+    const look = 0.5 * s + 0.5 + Math.hypot(sw.vel.x, sw.vel.z) * 2;
+    let px = 0, pz = 0, held = false;
+    for (const o of this.obstacles) {
+      const rx = o.x - sw.pos.x, rz = o.z - sw.pos.z, clear = o.r + pathPad, far = clear + look + 0.5 * s;
+      if (rx * rx + rz * rz > far * far) continue;
+      const dist = Math.hypot(rx, rz);
+      if (dist < 1e-4) continue;
+      // an obstacle beside the tail: turning the other way would sweep the tail into it (shapeDesired checks)
+      const tx = rx + hx * 0.45 * s, tz = rz + hz * 0.45 * s; // obstacle relative to the tail
+      if (Math.hypot(tx, tz) - o.r < 0.14 + 0.12 * s) k.tailSide = hx * tz - hz * tx < 0 ? -1 : 1;
+      const t = clamp(rx * hx + rz * hz, -0.5 * s, 0.5 * s);
+      const cx = sw.pos.x + hx * t - o.x, cz = sw.pos.z + hz * t - o.z, cd = Math.hypot(cx, cz), bc = o.r + bodyPad;
+      if (cd < bc && cd > 1e-4) { const w = (bc - cd) / bc * 1.5 + 0.15; px += cx / cd * w; pz += cz / cd * w; }
+      // already inside the path clearance: ease out, and never head further in (the goal turns to the tangent);
+      // shapeDesired also turns the koi away from this side, so a U-turn here does not sweep it into the rock
+      const inside = dist <= clear;
+      if (inside) {
+        const w = (clear - dist) / clear; px -= rx / dist * w; pz -= rz / dist * w;
+        k.nearSide = hx * rz - hz * rx < 0 ? -1 : 1;
+      }
+      else if (dist - clear > look) continue;
+      const ux = rx / dist, uz = rz / dist, cone = inside ? Math.PI / 2 : Math.asin(Math.min(1, clear / dist));
+      const phi = Math.atan2(ux * dz - uz * dx, ux * dx + uz * dz); // goal direction relative to the obstacle
+      if (Math.abs(phi) >= cone) continue;
+      if (k.avoidObs !== o) {
+        const psi = Math.atan2(ux * hz - uz * hx, ux * hx + uz * hz); // body heading relative to the obstacle
+        k.avoidObs = o; k.avoidSide = phi + 0.5 * psi < 0 ? -1 : 1;
+      }
+      held = true;
+      const w = inside ? 1 : 1 - smoothstep(0, look, dist - clear);
+      const a = phi + (k.avoidSide * cone - phi) * w, c = Math.cos(a), sn = Math.sin(a);
+      dx = ux * c - uz * sn; dz = ux * sn + uz * c;
+    }
+    if (!held) k.avoidObs = null;
+    desired.x = dx * dm + px; desired.z = dz * dm + pz;
+  }
+
+  /** Last resort after integrating: no part of the body (tail to snout) inside an obstacle footprint, and never
+   *  up on the shore (pushing out of a rock must not push a koi onto land). `here` = sdf before this step's move. */
+  resolveObstacles(k, here) {
+    const sw = k.sw, s = k.scale;
+    let hx = sw.fwd.x, hz = sw.fwd.z;
+    const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl;
+    for (const o of this.obstacles) {
+      const rx = o.x - sw.pos.x, rz = o.z - sw.pos.z, lim = o.r + 0.08 * s;
+      if (rx * rx + rz * rz > (lim + 0.5 * s) * (lim + 0.5 * s)) continue;
+      const t = clamp(rx * hx + rz * hz, -0.5 * s, 0.5 * s);
+      const cx = sw.pos.x + hx * t - o.x, cz = sw.pos.z + hz * t - o.z, cd = Math.hypot(cx, cz);
+      // position only: cutting the velocity here jerked the heading round; the steering turns it away
+      if (cd < lim && cd > 1e-4) { const pen = (lim - cd) / cd; sw.pos.x += cx * pen; sw.pos.z += cz * pen; }
+    }
+    if (here < -0.55) return; // one step (and a push out of a rock) moves a koi only a few cm: still off the shore
+    // 0.4 m in from the shoreline the water is deep enough for the biggest koi to stay under the surface
+    const e = this.sdf(sw.pos.x, sw.pos.z) + 0.4;
+    if (e > 0) { this.sdfGrad(sw.pos.x, sw.pos.z, _v); sw.pos.x -= _v.x * e; sw.pos.z -= _v.z * e; }
+  }
+
+  updateKoi(dt, time, sclock) {
     const cam = this.camera.position;
     const desired = _v2;
-    // begging spot: shoreline toward the camera
-    if (!this.begSpot || (this.begT = (this.begT || 0) - dt) <= 0) {
+    // begging spot: shoreline toward the camera. When the nearest shore changes, the spot glides over (the koi
+    // waiting there follow it) instead of jumping, which turned them all round at once
+    this.begT = (this.begT || 0) - dt;
+    if (!this.begSpot || this.begT <= 0) {
       this.begT = 3;
-      const L = this.lobes.reduce((a, b) => (Math.hypot(a.x - cam.x, a.z - cam.z) < Math.hypot(b.x - cam.x, b.z - cam.z) ? a : b));
-      const dx = cam.x - L.x, dz = cam.z - L.z, l = Math.hypot(dx, dz) || 1;
-      let s = 0;
-      while (this.sdf(L.x + dx / l * s, L.z + dz / l * s) < -0.8 && s < 12) s += 0.1;
-      this.begSpot = new THREE.Vector3(L.x + dx / l * s, WATER_Y - 0.08, L.z + dz / l * s);
+      this.findBegSpot(cam, this.begGoal || (this.begGoal = new THREE.Vector3()));
+      if (!this.begSpot) this.begSpot = this.begGoal.clone();
     }
+    this.begSpot.lerp(this.begGoal, 1 - Math.exp(-0.5 * dt));
     const night = this.sunState ? this.sunState.night : 0;
+    // how many koi are after each pellet, so they spread over the food instead of all mobbing the nearest one
+    for (const f of this.foods) f.chasers = 0;
+    for (const k of this.koi) if (k.chasing) k.chasing.chasers++;
     for (const k of this.koi) {
       const sw = k.sw, m = k.member;
-      k.scale = 0.7 * (m.size || 1) * (k.mesh.geometry === this.butterflyGeo ? 1.08 : 1);
+      // a koi grows a little after each meal: ease into the new size instead of popping
+      k.scale = damp(k.scale, this.koiScale(k), 1.5, dt);
       const hungry = this.env.fullness(m) < 0.3;
-      // nearest food
-      let food = null, fd = 7.5;
-      for (const f of this.foods) { const d = Math.hypot(f.pos.x - sw.pos.x, f.pos.z - sw.pos.z); if (d < fd) { fd = d; food = f; } }
-      let speed = k.speed * (1 - night * 0.45);
+      // Food this koi has noticed. Each koi notices a pellet after its own reaction time plus a moment for the
+      // splash to reach it, so the pond does not turn and race in unison; once feeding it sees them all. It goes
+      // for a near pellet that few others are after, and sticks with its choice unless another is clearly better.
+      // (Choosing every frame made pairs of koi swap pellets back and forth each frame.)
+      if (k.skipT > 0) k.skipT -= dt;
+      k.pickT -= dt;
+      let food = k.chasing && !k.chasing.gone && !(k.chasing === k.skip && k.skipT > 0) ? k.chasing : null;
+      if (!food || k.pickT <= 0) {
+        const react = k.alert * (hungry ? 0.6 : 1);
+        let best = Infinity, pick = null;
+        for (const f of this.foods) {
+          if (f === k.skip && k.skipT > 0) continue;
+          const d = Math.hypot(f.pos.x - sw.pos.x, f.pos.z - sw.pos.z);
+          if (d > 7.5 || (k.mode !== 'feed' && f.age <= react + d * 0.22)) continue;
+          const mine = f === food ? 1 : 0;
+          const cost = d + 0.45 * (f.chasers - mine) - 0.3 * mine;
+          if (cost < best) { best = cost; pick = f; }
+        }
+        if (pick !== food) { if (food) food.chasers--; if (pick) pick.chasers++; }
+        food = pick;
+        if (food) k.pickT = 0.4 + Math.random() * 0.5;
+      }
+      let sepK = 1;
+      let speed = k.speed * (1 - night * 0.45), agility = 1.4, turn = KOI_TURN, shore = 0.55, vmax = speed * 1.5 + 0.08;
       if (food) {
         k.mode = 'feed';
-        _v.set(food.pos.x, WATER_Y - 0.075, food.pos.z);
-        // aim the mouth, not the centre
-        sw.seek(_v, 0.85, 0.35, desired);
-        speed = 0.85;
+        if (food !== k.chasing) { k.chasing = food; k.chaseT = 0; }
+        // head for the pellet, easing off as the snout closes in so the bite is slow, rising to the surface on
+        // the way (it used to arrive at full speed: the old target was the pellet itself, for the body's middle)
         const head = _v3.copy(sw.fwd).multiplyScalar(0.42 * k.scale).add(sw.pos);
-        if (Math.hypot(head.x - food.pos.x, head.z - food.pos.z) < 0.09 + 0.05 * k.scale && sw.pos.y > WATER_Y - 0.25) {
+        const md = Math.hypot(food.pos.x - head.x, food.pos.z - head.z);
+        // a pellet it cannot get near (pinned by the shore or a rock): give up on it for a while instead of circling
+        if (md > 0.5 && (k.chaseT += dt) > 8) { k.skip = food; k.skipT = 12; k.chasing = null; }
+        const fx = food.pos.x - sw.pos.x, fz = food.pos.z - sw.pos.z, fl = Math.hypot(fx, fz) || 1;
+        const v = k.dash * clamp(md / 0.7, 0.18, 1);
+        desired.set(fx / fl * v, clamp((WATER_Y - 0.075 - sw.pos.y) * 1.5, -0.3, 0.4), fz / fl * v);
+        agility = 2.6; turn = KOI_TURN_FEED; shore = 0.42; vmax = k.dash + 0.05;
+        // feeding koi press in close at the food
+        sepK = lerp(0.35, 1, smoothstep(0.15, 0.5, md));
+        if (md < 0.1 + 0.06 * k.scale && sw.pos.y > WATER_Y - 0.25) {
           this.foods.splice(this.foods.indexOf(food), 1);
-          k.gulp = 1;
+          food.gone = true;
+          k.chasing = null;
+          this.startGulp(k);
           this.addRipple(food.pos.x, food.pos.z, 0.8);
           this.splash(food.pos.x, WATER_Y, food.pos.z, 4, 0.45);
           this.env.onEat(m, _v.set(food.pos.x, WATER_Y + 0.05, food.pos.z));
         }
       } else {
-        if (k.mode === 'feed') { k.mode = 'cruise'; k.retarget = 0; }
+        if (k.mode === 'feed') { k.mode = 'cruise'; k.retarget = 0; k.chasing = null; }
         k.retarget -= dt;
         const wantBeg = hungry && this.begSpot && (m.seed % 3 !== 0);
         if (wantBeg) {
-          k.mode = 'beg';
+          k.mode = 'beg'; vmax = 0.4;
           _v.copy(this.begSpot).add(_v3.set(Math.sin(time * 0.3 + m.seed) * 0.7, 0, Math.cos(time * 0.27 + m.seed) * 0.7));
           sw.seek(_v, 0.3, 0.8, desired);
-          // gulping air at the surface
-          k.wakeT -= dt;
-          if (k.wakeT <= 0 && sw.pos.distanceTo(this.begSpot) < 1.5) { k.wakeT = 1.5 + Math.random() * 2.5; k.gulp = 0.7; this.addRipple(sw.pos.x + sw.fwd.x * 0.3 * k.scale, sw.pos.z + sw.fwd.z * 0.3 * k.scale, 0.5); }
+          // gulping air at the surface (its own timer: it used to share the wake-ripple timer)
+          k.gulpT -= dt;
+          if (k.gulpT <= 0 && sw.pos.distanceTo(this.begSpot) < 1.5) { k.gulpT = 1.5 + Math.random() * 2.5; this.startGulp(k); this.addRipple(sw.pos.x + sw.fwd.x * 0.3 * k.scale, sw.pos.z + sw.fwd.z * 0.3 * k.scale, 0.5); }
         } else {
           k.mode = 'cruise';
           if (k.retarget <= 0 || sw.pos.distanceTo(k.target) < 0.6) {
             k.retarget = k.rng.range(4, 11);
-            // sometimes follow another koi
+            // sometimes follow another koi (never one that is following this one: the pair would chase in a circle)
             if (k.rng.chance(0.35) && this.koi.length > 1) {
               const o = k.rng.pick(this.koi);
-              if (o !== k) k.follow = o;
+              if (o !== k && o.follow !== k) k.follow = o;
             } else k.follow = null;
-            this.randomInPond(k.rng, 0.9, k.target);
+            this.openWaterPoint(k.rng, 0.9, k.target);
             k.depth = clamp(k.depth + k.rng.range(-0.2, 0.2), 0.16, 0.7) * (1 + night * 0.25);
             k.target.y = WATER_Y - k.depth;
           }
@@ -1650,23 +1966,29 @@ class KoiPond {
       // keep inside the pond with a look-ahead
       const ax = sw.pos.x + sw.vel.x * 1.4, az = sw.pos.z + sw.vel.z * 1.4;
       const d = this.sdf(ax, az);
-      if (d > -0.55) { this.sdfGrad(ax, az, _v); desired.addScaledVector(_v, -(d + 0.55) * 1.6); }
-      // avoid the island stone and bridge piers a little
-      if (this.islandStone) { const dx = sw.pos.x - this.islandStone.x, dz = sw.pos.z - this.islandStone.z, dd = Math.hypot(dx, dz); if (dd < 1.1) { desired.x += dx / dd * 0.4; desired.z += dz / dd * 0.4; } }
+      if (d > -shore) { this.sdfGrad(ax, az, _v); desired.addScaledVector(_v, -(d + shore) * 1.6); }
+      // steer round rocks, the island stone and the bridge piers (koi used to swim through the piers and the stone)
+      this.avoidObstacles(k, desired);
       // separation
       for (const o of this.koi) {
         if (o === k) continue;
         const dx = sw.pos.x - o.sw.pos.x, dy = sw.pos.y - o.sw.pos.y, dz = sw.pos.z - o.sw.pos.z;
         const dd = Math.hypot(dx, dy * 2, dz);
         const minD = 0.32 * (k.scale + o.scale);
-        if (dd < minD && dd > 1e-4) { const f = (minD - dd) / minD * 0.9; desired.x += dx / dd * f; desired.y += dy / dd * f * 0.3; desired.z += dz / dd * f; }
+        if (dd < minD && dd > 1e-4) { const f = (minD - dd) / minD * 0.9 * sepK; desired.x += dx / dd * f; desired.y += dy / dd * f * 0.3; desired.z += dz / dd * f; }
       }
       // never break the surface or touch the floor
-      const floor = this.height(sw.pos.x, sw.pos.z) + 0.16;
+      const here = this.sdf(sw.pos.x, sw.pos.z), ground = this.height(sw.pos.x, sw.pos.z, here), floor = ground + 0.16;
       if (sw.pos.y < floor) desired.y += (floor - sw.pos.y) * 2;
       if (sw.pos.y > WATER_Y - 0.05) desired.y -= (sw.pos.y - (WATER_Y - 0.05)) * 4;
-      sw.steer(desired, dt, k.mode === 'feed' ? 2.6 : 1.4).integrate(dt);
+      // what a koi body can actually do: a capped turn rate, slow sharp turns, climbs no steeper than it can show
+      this.shapeDesired(k, desired, turn, vmax);
+      sw.steer(desired, dt, agility).integrate(dt);
       sw.size = k.scale;
+      this.resolveObstacles(k, here);
+      // and the belly never sinks into the pond floor (the soft push above can lose to a steep slope)
+      const belly = ground + 0.11 * k.scale + 0.02;
+      if (sw.pos.y < belly) sw.pos.y = belly;
       // wake ripples when cruising near the surface
       if (sw.pos.y > WATER_Y - 0.14 && sw.vel.length() > 0.12) {
         k.wakeT -= dt;
@@ -1680,7 +2002,7 @@ class KoiPond {
       k.mesh.scale.setScalar(k.scale);
       const u = k.mat.userData.swimUniforms;
       u.uSwim.value.set(sw.phase, sw.amp * 1.1, sw.turn * 1.2, sw.flutter);
-      u.uFishTime.value = time;
+      u.uFishTime.value = sclock;
     }
   }
 
@@ -1693,12 +2015,13 @@ class KoiPond {
       this.petalTimer += 1 / rate;
       const c = r.pick(this.canopy);
       const p = this.spawnPetal(r);
+      if (!p) continue;
       p.pos.set(c.x + r.gauss() * 0.6, c.y + r.gauss() * 0.3, c.z + r.gauss() * 0.6);
       p.vel.set(0, -0.3, 0);
     }
     const wd = this.wind.uniforms.uWindDir.value;
     const mesh = this.petalMesh;
-    let n = 0;
+    let n = 0, resting = 0;
     for (let i = this.petals.length - 1; i >= 0; i--) {
       const p = this.petals[i];
       p.age += dt;
@@ -1708,10 +2031,13 @@ class KoiPond {
         p.pos.addScaledVector(p.vel, dt);
         p.rot.x += p.spin.x * dt; p.rot.y += p.spin.y * dt; p.rot.z += p.spin.z * dt;
         const g = this.height(p.pos.x, p.pos.z);
+        // on landing the petal settles flat over a moment (it used to snap flat in one frame)
         if (this.sdf(p.pos.x, p.pos.z) < -0.15 && p.pos.y <= WATER_Y + 0.003) {
+          p.q0.setFromEuler(p.rot); p.settle = 0;
           p.mode = 1; p.pos.y = WATER_Y + 0.003; p.rot.set(-Math.PI / 2, 0, p.rot.z); p.vel.set(0, 0, 0);
           if (Math.random() < 0.35) this.addRipple(p.pos.x, p.pos.z, 0.12);
         } else if (p.pos.y <= g + 0.01) {
+          p.q0.setFromEuler(p.rot); p.settle = 0;
           p.mode = 2; p.pos.y = g + 0.012; p.rot.set(-Math.PI / 2, 0, p.rot.z);
         }
       } else if (p.mode === 1) {
@@ -1724,14 +2050,31 @@ class KoiPond {
           if (Math.abs(d - age * 0.5) < 0.1 && d > 1e-3) { p.vel.x += (p.pos.x - rp.x) / d * rp.amp * 0.06 * dt * 8; p.vel.z += (p.pos.z - rp.z) / d * rp.amp * 0.06 * dt * 8; }
         }
         p.pos.addScaledVector(p.vel, dt);
-        if (this.sdf(p.pos.x, p.pos.z) > -0.12) { this.sdfGrad(p.pos.x, p.pos.z, _v); p.pos.addScaledVector(_v, -0.01); p.vel.multiplyScalar(0.5); }
+        // the shore holds petals off with a soft, damped push scaled by dt (it was a fixed 1 cm hop and a
+        // halving of the speed every frame: twice as strong at 60 fps, and petals twitched along the edge)
+        const e = this.sdf(p.pos.x, p.pos.z);
+        if (e > -0.12) {
+          this.sdfGrad(p.pos.x, p.pos.z, _v);
+          p.vel.addScaledVector(_v, -(e + 0.12) * 4 * dt);
+          p.vel.multiplyScalar(Math.exp(-3 * dt));
+          if (e > -0.06) p.pos.addScaledVector(_v, -(e + 0.06));
+        }
         p.rot.z += p.vel.length() * dt * 2;
       }
-      if (p.age > p.life) { this.petals.splice(i, 1); continue; }
+      if (p.settle < 1) p.settle = Math.min(1, p.settle + dt * 4);
+      if (p.age > p.life) { this.petals.splice(i, 1); this.petalPool.push(p); continue; }
+      if (p.life - p.age > 8) resting++;
+    }
+    // Keep the pool from filling up: while more than 80 % of it is in use by petals that are not fading yet,
+    // the oldest resting petal starts its 8-second fade early (a full pool used to drop a visible petal).
+    if (resting > this.petalMax * 0.8) {
+      for (const p of this.petals) if (p.mode !== 0 && p.life - p.age > 8) { p.life = p.age + 8; break; }
     }
     for (const p of this.petals) {
       const fade = p.mode === 0 ? 1 : clamp((p.life - p.age) / 8, 0, 1);
-      _m.compose(p.pos, _q.setFromEuler(p.rot), _s.setScalar(fade));
+      _q.setFromEuler(p.rot);
+      if (p.settle < 1) { const e = 1 - (1 - p.settle) * (1 - p.settle); _qFlat.copy(_q); _q.copy(p.q0).slerp(_qFlat, e); }
+      _m.compose(p.pos, _q, _s.setScalar(fade));
       mesh.setMatrixAt(n++, _m);
     }
     mesh.count = n;
@@ -1754,6 +2097,13 @@ class KoiPond {
         const dx = p.mesh.position.x - k.sw.pos.x, dz = p.mesh.position.z - k.sw.pos.z, d = Math.hypot(dx, dz);
         if (d < 0.45 && d > 1e-3) { p.home.x += dx / d * 0.08 * dt; p.home.z += dz / d * 0.08 * dt; }
       }
+      // ... but the stem holds each pad near its root: it eases back and never strays further than its reach
+      // (at most 0.5 m, and short of the shore and the rocks); pads used to drift without limit over a day
+      const ex = p.home.x - p.anchor.x, ez = p.home.z - p.anchor.z, el = Math.hypot(ex, ez);
+      if (el > 1e-4) {
+        const back = Math.min(1, (1 - Math.exp(-0.05 * dt)) + Math.max(0, el - p.reach) / el);
+        p.home.x -= ex * back; p.home.z -= ez * back;
+      }
       p.mesh.position.set(p.home.x + Math.sin(time * 0.2 + p.phase) * 0.03, WATER_Y + 0.006 + bob, p.home.z + Math.cos(time * 0.17 + p.phase) * 0.03);
       p.mesh.rotation.y += p.spin * dt;
       p.mesh.rotation.x = bob * 3; p.mesh.rotation.z = bob * 2;
@@ -1761,6 +2111,8 @@ class KoiPond {
     // water lilies open by day and close at dusk
     const h = this.env.hours();
     const openTarget = smoothstep(6.5, 9.5, h) * (1 - smoothstep(16.5, 18.5, h));
+    // the flower trails its pad: 1.21 /s is the old per-frame 0.02 at 60 fps, now the same at any frame rate
+    const trail = 1 - Math.exp(-1.21 * dt);
     for (const f of this.flowers) {
       f.open = damp(f.open, openTarget, 0.4, dt);
       for (const pt of f.petals) {
@@ -1768,8 +2120,8 @@ class KoiPond {
         pt.m.rotation.x = -up;
       }
       f.group.position.y = f.pad.mesh.position.y + 0.012;
-      f.group.position.x += (f.pad.mesh.position.x + 0.05 - f.group.position.x) * 0.02;
-      f.group.position.z += (f.pad.mesh.position.z + 0.05 - f.group.position.z) * 0.02;
+      f.group.position.x += (f.pad.mesh.position.x + 0.05 - f.group.position.x) * trail;
+      f.group.position.z += (f.pad.mesh.position.z + 0.05 - f.group.position.z) * trail;
     }
   }
 
@@ -1781,7 +2133,7 @@ class KoiPond {
       d.p.addScaledVector(d.v, dt);
       d.life -= dt * 1.5;
       if (d.p.y < WATER_Y && d.v.y < 0) { if (Math.random() < 0.3) this.addRipple(d.p.x, d.p.z, 0.08); d.life = 0; }
-      if (d.life <= 0) { this.drops.splice(i, 1); continue; }
+      if (d.life <= 0) { this.drops.splice(i, 1); this.dropPool.push(d); continue; }
     }
     for (const d of this.drops) {
       this.dropPos[n * 3] = d.p.x; this.dropPos[n * 3 + 1] = d.p.y; this.dropPos[n * 3 + 2] = d.p.z;
@@ -1795,16 +2147,17 @@ class KoiPond {
 
   updateFlies(time) {
     const pos = this.flyPos;
-    this.flies.forEach((f, i) => {
+    for (let i = 0; i < this.flies.length; i++) {
+      const f = this.flies[i];
       pos[i * 3] = f.base.x + Math.sin(time * f.sp + f.ph) * 0.8;
       pos[i * 3 + 1] = f.base.y + Math.sin(time * f.sp * 1.7 + f.ph * 2) * 0.25;
       pos[i * 3 + 2] = f.base.z + Math.cos(time * f.sp * 0.8 + f.ph) * 0.8;
-    });
+    }
     this.flyPoints.geometry.attributes.position.needsUpdate = true;
   }
 
   dispose() {
-    this.envRT?.dispose();
+    this.envRT?.dispose(); this.envCube?.dispose(); this.envGen?.dispose();
     for (const t of this.disposables) t.dispose?.();
     for (const k of this.koi) { k.painted.map.dispose(); k.mesh.customDepthMaterial?.dispose(); }
     this.koiGeo.dispose(); this.butterflyGeo.dispose();

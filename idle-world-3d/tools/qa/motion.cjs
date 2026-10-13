@@ -184,7 +184,7 @@ async function probe(cfg) {
     window.__reseed = n => { st = n >>> 0; };
     window.__reseed(cfg.seed);
     Math.random = () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  }, { scene: WORLD, hours: HOURS, seed: SEED, quality: Q, noUI: true });
+  }, { scene: WORLD, hours: HOURS, seed: SEED, quality: Q, noUI: true, noIdle: true }); // no idle camera drift: both runs see the same camera
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);
@@ -192,9 +192,12 @@ async function probe(cfg) {
   for (let n = 0; n < FPS.length; n++) {
     const fps = FPS[n];
     if (n > 0) {
-      // fresh copy of the world with the same seed
-      await page.evaluate(async ({ w, seed }) => { window.__reseed(seed); const c = window.__idle.current; c.meta = { ...c.meta, id: '__reload' }; await window.__idle.enterWorld(w); }, { w: WORLD, seed: SEED });
-      await page.waitForFunction(w => window.__idle.sceneId === w && window.__idle.current && window.__idle.current.meta.id === w, WORLD);
+      // a fresh page (the init script clears storage and reseeds), so nothing from the previous run carries
+      // over: residents' hunger, size and last meal live in the saved state
+      await page.goto(`http://127.0.0.1:${port}/`);
+      await page.waitForFunction(() => window.__idle && window.__idle.ready);
+      await page.evaluate(() => window.__idle.ready);
+      await page.waitForFunction(w => window.__idle.sceneId === w, WORLD);
     }
     await page.evaluate(hh => window.__idle.setHours(hh), HOURS);
     const t0 = Date.now();

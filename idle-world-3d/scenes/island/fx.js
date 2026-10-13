@@ -1,6 +1,6 @@
 // 晴岛 effects: 小鱼干 food items, billboard particles (sand puffs, splashes, plankton glow) and ripples.
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, GLSL } from '../../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, GLSL, makeRng } from '../../lib/util.js';
 import { driedFishTexture } from './textures.js';
 import { waveHeight, swellUniforms, SWELL_GLSL } from './water.js';
 import { LAYER_NO_REFLECT, waterUniforms } from './shared.js';
@@ -195,17 +195,22 @@ export function createFx(env, terrain, props) {
   group.add(foodMesh);
   const foods = [];
   const FOOD_SCALE = 2.3;
+  // food draws from its own rng: where a snack lands no longer depends on how many particles happened to
+  // be emitted before (Math.random), which made the animals' choices differ from one frame rate to another
+  const frnd = (r => () => r.next())(makeRng(env.seed ^ 0xf00d));
   function spawnFood(point, { sound = true } = {}) {
     if (foods.length >= MAXF) foods.shift();
     const onDock = props.onDock(point.x, point.z);
     const ground = onDock ? props.deckY + 0.04 : H(point.x, point.z);
     const land = onDock || ground > 0.02;
     const f = {
-      pos: new V3(point.x + (rnd() - 0.5) * 0.3, (land ? ground : 0) + 2.4 + rnd() * 0.6, point.z + (rnd() - 0.5) * 0.3),
-      vel: new V3((rnd() - 0.5) * 0.6, -1, (rnd() - 0.5) * 0.6),
+      pos: new V3(point.x + (frnd() - 0.5) * 0.3, (land ? ground : 0) + 2.4 + frnd() * 0.6, point.z + (frnd() - 0.5) * 0.3),
+      vel: new V3((frnd() - 0.5) * 0.6, -1, (frnd() - 0.5) * 0.6),
       state: 'fall', land, onDock, ground: land ? ground : 0, bites: 4, maxBites: 4,
-      yaw: rnd() * TAU, spin: (rnd() - 0.5) * 8, tilt: 0, t: 0, scale: 1, sound,
+      yaw: frnd() * TAU, spin: (frnd() - 0.5) * 8, tilt: 0, t: 0, scale: 1, sound,
       claimed: 0, // number of eaters heading here
+      // own drift / bob phase (the list index was used, so every floating snack jumped when one was eaten)
+      ph: frnd() * TAU, roll: 0, tiltT: 0, fade: 1, tiltR: (frnd() - 0.5) * 0.3,
     };
     foods.push(f);
     return f;
@@ -229,11 +234,12 @@ export function createFx(env, terrain, props) {
         f.vel.y -= 9.8 * dt;
         f.pos.addScaledVector(f.vel, dt);
         f.yaw += f.spin * dt;
+        f.roll = Math.sin(f.t * 9) * 0.5;
         if (f.pos.y <= f.ground + 0.03) {
           f.pos.y = f.ground + 0.03;
           if (f.land) {
             f.state = 'rest';
-            f.tilt = (rnd() - 0.5) * 0.3;
+            f.tiltT = f.tiltR;
             if (!f.onDock) sandPuff(f.pos, 16, 1);
             if (f.sound) env.sfx(f.onDock ? 'tok' : 'thud');
           } else {
@@ -247,22 +253,28 @@ export function createFx(env, terrain, props) {
       } else if (f.state === 'float') {
         const depth = -H(f.pos.x, f.pos.z);
         f.pos.y = waveHeight(f.pos.x, f.pos.z, t, depth) + 0.02;
-        f.pos.x += Math.sin(t * 0.3 + i) * 0.05 * dt;
-        f.pos.z += Math.cos(t * 0.27 + i) * 0.05 * dt;
-        f.tilt = Math.sin(t * 1.7 + i) * 0.12;
-        f.yaw += Math.sin(t * 0.4 + i) * 0.1 * dt;
+        f.pos.x += Math.sin(t * 0.3 + f.ph) * 0.05 * dt;
+        f.pos.z += Math.cos(t * 0.27 + f.ph) * 0.05 * dt;
+        f.tiltT = Math.sin(t * 1.7 + f.ph) * 0.12;
+        f.yaw += Math.sin(t * 0.4 + f.ph) * 0.1 * dt;
         if (depth < 0.02) { // washed ashore
-          f.state = 'rest'; f.land = true; f.ground = H(f.pos.x, f.pos.z); f.pos.y = f.ground + 0.03;
+          f.state = 'rest'; f.land = true; f.ground = H(f.pos.x, f.pos.z); f.pos.y = f.ground + 0.03; f.tiltT = 0;
         }
       }
-      if (f.t > 150) foods.splice(i, 1); // eventually washed away
+      if (f.state !== 'fall') { // settle from the tumble onto the sand / the swell in a blink, not one frame
+        const k = 1 - Math.exp(-14 * dt);
+        f.roll += (0 - f.roll) * k; f.tilt += (f.tiltT - f.tilt) * k;
+      }
+      // eventually washed away: shrink out over the last second and a half instead of vanishing
+      if (f.t > 148.5) f.fade = Math.max(0.02, 1 - (f.t - 148.5) / 1.5);
+      if (f.t > 150) foods.splice(i, 1);
     }
     foodMesh.count = foods.length;
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
-      _e.set(f.tilt, f.yaw, f.state === 'fall' ? Math.sin(f.t * 9) * 0.5 : 0);
+      _e.set(f.tilt, f.yaw, f.roll);
       _q.setFromEuler(_e);
-      _m.compose(f.pos, _q, _s.setScalar(FOOD_SCALE * f.scale));
+      _m.compose(f.pos, _q, _s.setScalar(FOOD_SCALE * f.scale * f.fade));
       foodMesh.setMatrixAt(i, _m);
     }
     foodMesh.instanceMatrix.needsUpdate = true;

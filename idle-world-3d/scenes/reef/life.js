@@ -1,7 +1,7 @@
 // 深蓝 · 珊瑚礁 — reef life: named residents (clownfish in their anemone, tangs, idol, angelfish,
 // turtles), a chromis school, a silverside bait ball, cruising barramundi, and the feeding system.
 import * as THREE from 'three';
-import { clamp, lerp, smoothstep, TAU, makeRng, quatFromForward, damp } from '../../lib/util.js';
+import { clamp, lerp, smoothstep, TAU, makeRng, quatFromForward, damp, angleDelta } from '../../lib/util.js';
 import { SHAPES, PAINTERS, REGION, buildFishGeometry, paintFish, createFishMaterial, applySwim, prepareSwimGeometry, FishInstances, Swimmer } from '../../lib/fish.js';
 import { waterize } from './uw.js';
 import { Turtle } from './turtle.js';
@@ -195,6 +195,107 @@ const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vect
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 
 /* ------------------------------------------------------------------ */
+/* Steering shapes (motion audit)                                      */
+/* ------------------------------------------------------------------ */
+// The lib Swimmer blends its velocity toward whatever it is asked for and turns the body after the
+// velocity (yaw level, capped at ~3.5 rad/s, held while nearly stopped). A target behind the fish (a
+// pellet, the next roam point, a dart) made the velocity shrink through a standstill and come back
+// reversed, so the fish swam backwards while the body caught up (with the older lib it whipped round,
+// often over the top). A target straight above or below gave a near-vertical velocity whose tiny,
+// noisy horizontal part the yaw chased. These keep every request one a body can follow: an arc turn no
+// faster than the body turns, never steeper than the fish can pitch.
+const _ap = new THREE.Vector3(), _hv = new THREE.Vector3();
+/** Pitch-limit the direction `d` in place (length kept); a near-vertical one keeps `fwd`'s compass heading. */
+function limitPitch(d, maxPitch, fwd) {
+  const s = Math.hypot(d.x, d.y, d.z);
+  if (s < 1e-7) return d;
+  let h = Math.hypot(d.x, d.z);
+  const tp = Math.tan(maxPitch);
+  if (Math.abs(d.y) <= h * tp) return d;
+  if (h < 1e-4 * s) {
+    d.x = fwd.x; d.z = fwd.z; h = Math.hypot(d.x, d.z);
+    if (h < 1e-6) { d.x = 1; d.z = 0; h = 1; }
+  }
+  const c = Math.cos(maxPitch) * s / h;
+  d.x *= c; d.z *= c; d.y = Math.sign(d.y) * Math.sin(maxPitch) * s;
+  return d;
+}
+/**
+ * Shape a desired velocity so the body can follow it: at most `maxAng` off the current heading and no
+ * steeper than the fish can pitch. A target behind is reached by an arc turn, to the side the fish
+ * already favours, so it never dithers left/right.
+ */
+function arcSteer(sw, d, maxAng = 1.0) {
+  const s = Math.hypot(d.x, d.y, d.z);
+  if (s < 1e-6) return d;
+  // a steady arc at this cone turns at about agility * tan(cone): keep that under ~3 rad/s so the body
+  // (which turns at most ~3.5 rad/s) stays on its path instead of sliding round the bend
+  maxAng = Math.min(maxAng, Math.atan(3.0 / Math.max(sw.agility, 0.1)));
+  const f = sw.fwd;
+  const c = (f.x * d.x + f.y * d.y + f.z * d.z) / s, cm = Math.cos(maxAng);
+  if (c < cm) {
+    _ap.copy(d).addScaledVector(f, -c * s);            // the part of d across the heading
+    const hl = Math.hypot(f.x, f.z) || 1;
+    const lx = f.z / hl, lz = -f.x / hl;                // horizontal "left" of the heading
+    if (c < -0.85) {
+      // (nearly) straight behind: commit to one side until the turn is under way
+      if (!sw.arcSide) { const sd = _ap.x * lx + _ap.z * lz; sw.arcSide = Math.abs(sd) > 0.05 * s ? Math.sign(sd) : (sw.yawRate > 0 ? 1 : sw.yawRate < 0 ? -1 : (sw.phase > Math.PI ? 1 : -1)); }
+      _ap.set(lx * sw.arcSide, _ap.y / s * 0.3, lz * sw.arcSide);
+    } else sw.arcSide = 0;
+    const al = _ap.length();
+    if (al > 1e-6) _ap.multiplyScalar(1 / al); else _ap.set(lx, 0, lz);
+    d.copy(f).multiplyScalar(cm).addScaledVector(_ap, Math.sin(maxAng)).multiplyScalar(s);
+  } else if (c > -0.5) sw.arcSide = 0;
+  return limitPitch(d, sw.maxPitch + 0.12, f);
+}
+/**
+ * Station keeping in a current: the swimming velocity stays within `maxAng` of `axis` (upstream) and
+ * never drops below a slow forward creep, so a fish that is ahead of its station eases off and lets the
+ * current set it back instead of turning round (which flipped it, or set it circling its station).
+ */
+function coneSteer(sw, d, axis, maxAng = 0.5, minFwd = 0.03) {
+  let a = axis.x * d.x + axis.y * d.y + axis.z * d.z;
+  _ap.copy(d).addScaledVector(axis, -a);
+  a = Math.max(a, minFwd);
+  const l = _ap.length(), lm = a * Math.tan(maxAng);
+  if (l > lm) _ap.multiplyScalar(lm / l);
+  d.copy(axis).multiplyScalar(a).add(_ap);
+  return d;
+}
+/**
+ * Hover at `spot` facing `face` (any length; null keeps the heading). A fish that is nearly still has no
+ * direction of travel to turn after: on a spring it spun after its few mm/s of drift (older lib), or now
+ * the lib freezes its heading wherever it happened to stop. Here the body turns toward `face` (the
+ * viewer, the rock it pecks, the cleaning-station wall) at a gentle, capped rate, yaw and pitch
+ * separately; the fish creeps along that heading and fin-work holds it at the spot (a direct position
+ * ease that does not steer the body).
+ */
+function hoverAt(sw, dt, spot, face, { creep = 0.03, hold = 1.6, turn = 0.6 } = {}) {
+  const dir = sw.hoverDir || (sw.hoverDir = new THREE.Vector3());
+  if (!sw.hovering) { dir.copy(sw.fwd); sw.hovering = true; }
+  if (face) {
+    _hv.copy(face);
+    const fh = Math.hypot(_hv.x, _hv.z), fl = Math.hypot(fh, _hv.y);
+    if (fl > 1e-6) {
+      const y0 = Math.atan2(dir.z, dir.x), p0 = Math.asin(clamp(dir.y, -1, 1));
+      const p1 = clamp(Math.atan2(_hv.y, fh), -sw.maxPitch, sw.maxPitch);
+      const k = 1 - Math.exp(-2.2 * dt), cap = turn * dt;
+      // a facing that points almost straight up or down has no compass heading: keep ours
+      const dy = angleDelta(y0, Math.atan2(_hv.z, _hv.x)) * smoothstep(0.05, 0.3, fh / fl);
+      const yaw = y0 + clamp(dy * k, -cap, cap), pit = p0 + clamp((p1 - p0) * k, -cap, cap);
+      dir.set(Math.cos(pit) * Math.cos(yaw), Math.sin(pit), Math.cos(pit) * Math.sin(yaw));
+    }
+  }
+  _hv.copy(dir).multiplyScalar(creep);
+  sw.fwd.copy(dir);   // the lib holds a nearly still fish's heading: this is the heading it holds
+  swim(sw, _hv, dt);
+  sw.pos.lerp(spot, 1 - Math.exp(-hold * dt));
+}
+const endHover = sw => { sw.hovering = false; };
+/** One steering step of a Swimmer (every reef fish goes through here). */
+const swim = (sw, d, dt) => sw.steer(d, dt).integrate(dt);
+
+/* ------------------------------------------------------------------ */
 /* Food                                                                */
 /* ------------------------------------------------------------------ */
 class Food {
@@ -351,6 +452,7 @@ export async function createLife(ctx) {
     const mat = createFishMaterial(painted, { envMapIntensity: 1.1 });
     waterize(mat, W, { key: 'fish', rim: 1.4 });
     const inst = new FishInstances(geo, mat, 16, { castShadow: env.shadows });
+    inst.mesh.name = 'res_' + kind;
     group.add(inst.mesh);
     species[kind] = inst;
     disposables.push(geo, painted.map);
@@ -360,8 +462,21 @@ export async function createLife(ctx) {
   const residents = [];
   const turtles = [];
   const bommieList = bommies;
-  const addResident = (m) => {
-    if (m.kind === 'turtle') { addTurtle(m); return; }
+  // A resident added while the world is on screen swims in from out of view (it used to pop up in the
+  // middle of the reef): a point well outside the camera's horizontal field of view.
+  const offscreenPoint = (r, out) => {
+    camera.getWorldDirection(_v1); _v1.y = 0;
+    if (_v1.lengthSq() < 1e-6) _v1.set(0, 0, -1);
+    _v1.normalize();
+    const a = Math.atan2(_v1.z, _v1.x) + (r.chance(0.5) ? 1 : -1) * r.range(1.15, 1.35), R = r.range(12, 15);
+    out.set(camera.position.x + Math.cos(a) * R, 0, camera.position.z + Math.sin(a) * R);
+    const rc = Math.hypot(out.x - center.x, out.z - center.z);
+    if (rc > 19) { out.x = center.x + (out.x - center.x) * 19 / rc; out.z = center.z + (out.z - center.z) * 19 / rc; }
+    out.y = Math.min(floorAt(out.x, out.z) + r.range(1.6, 3), surfY - 1.8);
+    return out;
+  };
+  const addResident = (m, arriving = false) => {
+    if (m.kind === 'turtle') { addTurtle(m, arriving); return; }
     const sp = SPEC[m.kind];
     if (!sp) return;
     const r = makeRng(m.seed || 1);
@@ -372,21 +487,28 @@ export async function createLife(ctx) {
     const start = home ? home.pos.clone().add(new THREE.Vector3(r.range(-0.4, 0.4), 0.45, r.range(-0.4, 0.4)))
       : new THREE.Vector3(b.x + r.range(-3, 3), 0, b.z + r.range(-3, 3));
     if (!home) start.y = floorAt(start.x, start.z) + r.range(0.8, 2.4);
+    if (arriving) offscreenPoint(r, start);
     const sw = new Swimmer({ pos: start, size, speed: sp.cruise, rng: r, agility: sp.agility, maxPitch: 0.65 });
-    residents.push({ m, kind: m.kind, sp, size, sw, home, rng: r, state: 'roam', timer: r.range(0, 4), target: start.clone(), spot: null, food: null, begSlot: residents.length, begPhase: r.range(0, 60), speedK: r.range(0.85, 1.15), bob: r.range(0, TAU), clear: size * 0.45 + 0.15 });
+    residents.push({ m, kind: m.kind, sp, size, sw, home, rng: r, state: 'roam', timer: r.range(0, 4), target: start.clone(), spot: null, food: null, begSlot: residents.length, begPhase: r.range(0, 60), speedK: r.range(0.85, 1.15), bob: r.range(0, TAU), clear: size * 0.45 + 0.15,
+      // feeding: reaction time, pellet re-think timer, swallow pause; tail calm (nestling); figure-of-eight
+      noticed: false, react: 0, pick: 0, pickInt: r.range(0.35, 0.6), gulp: 0, calm: 1, pecking: false, begHover: false, begSpd: 1, begPrev: start.clone(),
+      n8: 0, n8w: 0.5, n8R: 0.18, n8rot: 0, n8c: new THREE.Vector3() });
   };
 
   /* ---- turtles ---- */
-  const addTurtle = (m) => {
-    const t = new Turtle(W, env, (m.seed || 7) >>> 0);
+  const addTurtle = (m, arriving = false) => {
+    // added at runtime: share an existing turtle's painted textures (no freeze) and swim in from off screen
+    const t = new Turtle(W, env, (m.seed || 7) >>> 0, arriving && turtles.length ? turtles[0].t : null);
     const r = makeRng(m.seed || 3);
     const s = 0.95 * (m.size || 1);
     t.root.scale.setScalar(s);
+    t.root.name = 'turtle';
     const a = r.range(0, TAU);
     const pos = new THREE.Vector3(Math.cos(a) * 7, 0, Math.sin(a) * 7);
     pos.y = floorAt(pos.x, pos.z) + 3;
+    if (arriving) { offscreenPoint(r, pos); pos.y += 0.6; }
     group.add(t.root);
-    turtles.push({ m, t, pos, vel: new THREE.Vector3(Math.cos(a + 1.6), 0, Math.sin(a + 1.6)).multiplyScalar(0.4), fwd: new THREE.Vector3(Math.cos(a + 1.6), 0, Math.sin(a + 1.6)), quat: new THREE.Quaternion(), roll: 0, target: pos.clone(), timer: 0, rng: r, size: s, food: null, stroke: 1, state: 'cruise' });
+    turtles.push({ m, t, pos, vel: new THREE.Vector3(Math.cos(a + 1.6), 0, Math.sin(a + 1.6)).multiplyScalar(0.4), fwd: new THREE.Vector3(Math.cos(a + 1.6), 0, Math.sin(a + 1.6)), spd: 0.4, quat: new THREE.Quaternion(), roll: 0, target: pos.clone(), timer: 0, rng: r, size: s, food: null, stroke: 1, state: 'cruise', begSpd: 1, begPrev: pos.clone(), facing: false });
   };
   for (const m of env.members) addResident(m);
 
@@ -398,6 +520,7 @@ export async function createLife(ctx) {
   const chromMat = createFishMaterial(chromPaint, { envMapIntensity: 1.2 });
   waterize(chromMat, W, { key: 'fish', rim: 1.4 });
   const chromInst = new FishInstances(chromGeo, chromMat, nSchool + nChromHover, { castShadow: false });
+  chromInst.mesh.name = 'chromis';
   group.add(chromInst.mesh);
   disposables.push(chromGeo, chromPaint.map);
   const school = [];
@@ -418,6 +541,7 @@ export async function createLife(ctx) {
   const silMat = createFishMaterial(silPaint, { envMapIntensity: 1.6 });
   waterize(silMat, W, { key: 'fish', rim: 1.4 });
   const silInst = new FishInstances(silGeo, silMat, nSilver, { castShadow: false });
+  silInst.mesh.name = 'silversides';
   group.add(silInst.mesh);
   disposables.push(silGeo, silPaint.map);
   const silver = [];
@@ -439,6 +563,7 @@ export async function createLife(ctx) {
     const m = createFishMaterial(pt, { envMapIntensity: 1.2 });
     waterize(m, W, { key: 'fish', rim: 1.4 });
     const inst = new FishInstances(g, m, n, { castShadow: false });
+    inst.mesh.name = painter;
     group.add(inst.mesh);
     disposables.push(g, pt.map);
     return inst;
@@ -482,7 +607,7 @@ export async function createLife(ctx) {
     for (let k = 0; k < 2; k++) {
       const sw = new Swimmer({ pos: p0.clone().add(new THREE.Vector3(k * 0.4, 0, k * 0.3)), size: bfRng.range(0.36, 0.44), speed: 0.4, rng: bfRng, agility: 2.6, maxPitch: 0.6 });
       sw.lead = k === 0 ? null : butter[butter.length - 1];
-      sw.target = p0.clone(); sw.spot = new THREE.Vector3(); sw.timer = 0; sw.state = 'roam'; sw.food = null; sw.r = bfRng;
+      sw.target = p0.clone(); sw.spot = new THREE.Vector3(); sw.timer = 0; sw.state = 'roam'; sw.food = null; sw.r = bfRng; sw.bob = bfRng.range(0, TAU); sw.pecking = false;
       butter.push(sw);
     }
   }
@@ -523,6 +648,7 @@ export async function createLife(ctx) {
   /* ---- distant school of jacks: silhouettes in the blue ---- */
   const nJack = Math.round(clamp(150 * q, 60, 160));
   const jackInst = new FishInstances(silGeo, silMat, nJack, { castShadow: false });
+  jackInst.mesh.name = 'jacks';
   group.add(jackInst.mesh);
   const jRng = rng.fork('jacks');
   const jA = -Math.PI / 2 + jRng.range(-0.6, 0.6);
@@ -554,6 +680,7 @@ export async function createLife(ctx) {
       applySwim(mat, { waveK: 6.0 });
       waterize(mat, W, { key: 'barra', rim: 1.2 });
       barraInst = new FishInstances(g, mat, 2, { castShadow: env.shadows });
+      barraInst.mesh.name = 'barramundi';
       group.add(barraInst.mesh);
       disposables.push(g);
       const bRng = rng.fork('barra');
@@ -573,6 +700,7 @@ export async function createLife(ctx) {
 
   /* ---- food ---- */
   const food = new Food(W, env, 72);
+  food.mesh.name = 'food';
   group.add(food.mesh, food.crumbPts, food.puffPts);
 
   /* ---- helpers ---- */
@@ -591,11 +719,33 @@ export async function createLife(ctx) {
     if (r > 20) { desired.x -= (p.x - center.x) / r * (r - 20) * 0.6; desired.z -= (p.z - center.z) / r * (r - 20) * 0.6; }
     return desired;
   }
-  function clampAbove(sw, clear, ignore = null) {
+  // per-frame 0.3 / 0.5 factors made this push twice as hard at 60 fps as at 30: now per second
+  // (the same strength as before at 60 fps)
+  function clampAbove(sw, clear, dt, ignore = null) {
     const p = sw.pos;
     let fl = floorAt(p.x, p.z) + clear * 0.6;
     if (ignore && Math.hypot(p.x - ignore.x, p.z - ignore.z) < 0.9) fl = Math.min(fl, ignore.y + 0.05);
-    if (p.y < fl) { p.y = lerp(p.y, fl, 0.3); if (sw.vel.y < 0) sw.vel.y *= 0.5; }
+    if (p.y < fl) { p.y = lerp(p.y, fl, 1 - Math.pow(0.7, dt * 60)); if (sw.vel.y < 0) sw.vel.y *= Math.pow(0.5, dt * 60); }
+  }
+  // Pellet choice for residents: near, ahead of the fish rather than behind it, and not already chased
+  // by other residents; the current pellet is kept unless another is clearly better. (Taking the
+  // nearest pellet every frame made fish dither between two pellets and all chase the same one.)
+  function pickPellet(f, from, radius) {
+    const sw = f.sw, cur = f.food && f.food.alive ? f.food : null;
+    let best = null, bc = Infinity, cc = Infinity;
+    for (const it of food.items) {
+      if (!it.alive) continue;
+      const fx = it.pos.x - from.x, fy = it.pos.y - from.y, fz = it.pos.z - from.z;
+      if (fx * fx + fy * fy + fz * fz > radius * radius) continue;
+      const ex = it.pos.x - sw.pos.x, ey = it.pos.y - sw.pos.y, ez = it.pos.z - sw.pos.z;
+      const d = Math.sqrt(ex * ex + ey * ey + ez * ez) + 1e-6;
+      const ahead = (ex * sw.fwd.x + ey * sw.fwd.y + ez * sw.fwd.z) / d;
+      const others = it.claim - (it === cur ? 1 : 0);
+      const cost = d * (1.35 - 0.35 * ahead) * (1 + 0.6 * Math.max(0, others));
+      if (it === cur) cc = cost;
+      if (cost < bc) { bc = cost; best = it; }
+    }
+    return cur && cc < Infinity && bc > cc * 0.7 ? cur : best;
   }
   const randomReefPoint = (r, out, lo = 0.6, hi = 2.6) => {
     const b = bommieList[Math.floor(r.next() * bommieList.length)];
@@ -617,8 +767,15 @@ export async function createLife(ctx) {
   /* ---- per-frame ---- */
   let time = 0, fishT = 0;
   const foodAvail = it => it.alive;
+  const foodFloating = it => it.alive && !it.rest;   // plankton pickers take food from the water column
+  // a pellet lying on the sand is picked from just above it: fish are held a little off the bottom, so
+  // aiming at the pellet itself left them circling it out of reach
+  const _aim = new THREE.Vector3();
+  const aimAt = (it, out = _aim) => { out.copy(it.pos); if (it.rest) out.y += 0.12; return out; };
   function updateResidents(dt, t) {
     const anyFood = food.active > 0;
+    // how many residents chase each pellet (spreads them over the cloud instead of one scrum)
+    if (anyFood) { for (const it of food.items) it.claim = 0; for (const f of residents) if (f.food && f.food.alive) f.food.claim++; }
     for (const f of residents) {
       const sw = f.sw, sp = f.sp, r = f.rng;
       const full = env.fullness(f.m);
@@ -627,49 +784,92 @@ export async function createLife(ctx) {
       _d.set(0, 0, 0);
       let speed = sp.cruise * f.speedK;
       let arrive = 0.6;
-      // food first
+      let hover = false;
+      // Food: each fish notices it after its own reaction time, picks a pellet and stays on it, turns
+      // and approaches in an arc, slows to bite, pauses to swallow, then goes for the next one. (It
+      // re-took the nearest pellet every frame, reacted in the very frame the food landed, skipped the
+      // swallow and whipped round at up to ~10 rad/s.)
       if (anyFood) {
-        const noticeFrom = f.home ? f.home.pos : sw.pos;
-        const it = food.nearest(noticeFrom, f.home ? 3.6 : sp.notice * (hungry ? 1.4 : 1), foodAvail);
-        f.food = it;
-      } else f.food = null;
-      if (f.food) {
+        if (!f.noticed) { f.noticed = true; f.react = r.range(0.2, 0.75) * (hungry ? 0.6 : 1); f.pick = 0; }
+        if (f.food && !f.food.alive) { f.food = null; f.pick = 0; f.react = Math.max(f.react, r.range(0.1, 0.3)); }
+        f.react -= dt;
+        if (f.gulp > 0) f.gulp -= dt;
+        if (f.gulp <= 0 && f.react <= 0) {
+          // re-think a held pellet every ~0.5 s, look for one every 0.2 s (time-based, no per-frame draws)
+          f.pick -= dt;
+          if (f.pick <= 0) {
+            const it = pickPellet(f, f.home ? f.home.pos : sw.pos, f.home ? 3.6 : sp.notice * (hungry ? 1.4 : 1));
+            if (it !== f.food) { if (f.food) f.food.claim--; if (it) it.claim++; f.food = it; }
+            f.pick = it ? f.pickInt : 0.2;
+          }
+        }
+      } else { f.food = null; f.noticed = false; f.gulp = 0; }
+      const feeding = f.state === 'food' || f.state === 'gulp';
+      if (anyFood && !f.food && (f.gulp > 0 || (feeding && f.react > 0))) {
+        // swallowing, or a pellet just went: coast on, slowing, before the next one
+        f.state = 'gulp';
+        _d.copy(sw.fwd).multiplyScalar(Math.min(sw.vel.length(), sp.cruise) * 0.45);
+      } else if (f.food) {
         f.state = 'food';
-        const it = f.food;
+        f.begHover = false;
+        const it = f.food, aim = aimAt(it);
         _v1.copy(sw.fwd).multiplyScalar(f.size * 0.45).add(sw.pos);          // mouth
-        const dist = _v1.distanceTo(it.pos);
-        speed = sp.sprint * (dist > 1.5 ? 1 : 0.6);
-        sw.seek(it.pos, speed, 0.4, _d);
-        _d.addScaledVector(_v2.subVectors(it.pos, _v1), 0.8);
+        const dist = _v1.distanceTo(aim);
+        // full sprint far out, easing to 60 % close in (was a step at 1.5 m)
+        speed = sp.sprint * f.speedK * lerp(0.6, 1, smoothstep(0.8, 2.2, dist));
+        sw.seek(aim, speed, 0.45, _d);
+        // mouth-to-pellet correction, capped (it grew with distance and drove fish to ~2.4 m/s)
+        _v2.subVectors(aim, _v1);
+        const l2 = _v2.length();
+        if (l2 > 0.5) _v2.multiplyScalar(0.5 / l2);
+        _d.addScaledVector(_v2, 0.8);
         if (dist < 0.1 + f.size * 0.22) {
           food.eat(it);
           env.onEat(f.m, it.pos.clone());
-          f.timer = r.range(0.6, 1.4);
+          it.claim = Math.max(0, it.claim - 1);
+          f.food = null;
+          f.pick = 0;
+          f.gulp = r.range(0.35, 0.8);
           f.state = 'gulp';
         }
       } else {
-        if (f.state === 'food' || f.state === 'gulp') { f.state = 'roam'; f.timer = 0; }
+        if (feeding) { f.state = 'roam'; f.timer = 0; }
         const begOn = hungry && ((t + f.begPhase) % 40) < 17;
         if (begOn) {
           if (f.state !== 'beg') { f.state = 'beg'; }
           if (f.home) {
             // clownfish beg in front of their anemone, never far from home
             camera.getWorldDirection(camFwd);
+            // (a gentler sway than before: the fish now hovers on this spot facing the viewer, and a wide
+            // fast sway would slide it sideways)
             f.target.copy(f.home.pos).addScaledVector(camFwd, -1.5);
-            f.target.y = f.home.pos.y + 0.7 + Math.sin(t * 1.1 + f.bob) * 0.15;
-            f.target.x += Math.sin(t * 0.7 + f.bob) * 0.3;
+            f.target.y = f.home.pos.y + 0.7 + Math.sin(t * 1.1 + f.bob) * 0.08;
+            f.target.x += Math.sin(t * 0.6 + f.bob) * 0.12;
           } else begPoint(f.begSlot, t, f.target);
           const dist = sw.pos.distanceTo(f.target);
-          speed = dist > 2 ? sp.sprint * 0.75 : sp.cruise * 0.6;
-          sw.seek(f.target, speed, 1.2, _d);
-          if (dist < 1.2) {
-            _v1.subVectors(camera.position, sw.pos).normalize().multiplyScalar(0.07);
-            _d.add(_v1);
-            _d.y += Math.sin(t * 2.2 + f.bob) * 0.06;
+          // at its begging spot a fish hovers facing the viewer (it used to hang on the point with no
+          // speed and spin after the drift); not while the spot itself travels with an orbiting camera,
+          // then it swims along
+          f.begSpd = damp(f.begSpd, f.begPrev.distanceTo(f.target) / Math.max(dt, 1e-4), 4, dt);
+          f.begPrev.copy(f.target);
+          f.begHover = dist < (f.begHover ? 0.8 : 0.45) && f.begSpd < (f.begHover ? 0.22 : 0.15);
+          if (f.begHover) {
+            _v1.subVectors(camera.position, sw.pos);
+            hoverAt(sw, dt, f.target, _v1, { creep: 0.04, hold: 1.4, turn: 0.9 });
+            hover = true;
+          } else {
+            speed = dist > 2 ? sp.sprint * 0.75 : sp.cruise * 0.6;
+            sw.seek(f.target, speed, 1.2, _d);
+            if (dist < 1.2) {
+              _v1.subVectors(camera.position, sw.pos).normalize().multiplyScalar(0.07);
+              _d.add(_v1);
+              _d.y += Math.sin(t * 2.2 + f.bob) * 0.06;
+            }
           }
         } else if (f.home) {
           // clownfish: loops above the anemone, then nestle into the tentacles
           if (f.state === 'beg') f.state = 'home';
+          f.begHover = false;
           if (f.timer <= 0) {
             if (f.state === 'nestle' || r.chance(0.45)) {
               f.state = 'home'; f.timer = r.range(3, 7);
@@ -677,14 +877,23 @@ export async function createLife(ctx) {
               f.target.set(f.home.pos.x + Math.cos(a) * rr, f.home.pos.y + r.range(0.35, 0.85), f.home.pos.z + Math.sin(a) * rr);
             } else {
               f.state = 'nestle'; f.timer = r.range(5, 11);
-              const a = r.range(0, TAU), rr = r.range(0.0, f.home.r * 0.55);
-              f.target.set(f.home.pos.x + Math.cos(a) * rr, f.home.pos.y + 0.2, f.home.pos.z + Math.sin(a) * rr);
+              const a = r.range(0, TAU), rr = r.range(0.0, f.home.r * 0.3);
+              f.n8c.set(f.home.pos.x + Math.cos(a) * rr, f.home.pos.y, f.home.pos.z + Math.sin(a) * rr);
+              f.n8 = r.range(0, TAU); f.n8w = (r.chance(0.5) ? 1 : -1) * r.range(0.38, 0.5);
+              f.n8R = r.range(0.16, Math.max(0.2, f.home.r * 0.55)); f.n8rot = r.range(0, TAU);
             }
           }
           if (f.state === 'nestle') {
+            // slow figure-of-eight low over the tentacles: always under way (clownfish scull with their
+            // pectorals here), so the body follows a calm curve. It used to hover on a wobbling point and
+            // spin after its few mm/s of drift at >= 1 rad/s, never facing one way.
+            f.n8 += dt * f.n8w;
+            const a = f.n8 + Math.sign(f.n8w) * 0.5, R = f.n8R;
+            const ex = Math.sin(a) * R, ez = Math.sin(a) * Math.cos(a) * R;
+            const c = Math.cos(f.n8rot), s = Math.sin(f.n8rot);
+            f.target.set(f.n8c.x + ex * c - ez * s, f.home.pos.y + 0.2 + Math.sin(a * 2 + f.bob) * 0.04, f.n8c.z + ex * s + ez * c);
             speed = 0.16; arrive = 0.35;
             sw.seek(f.target, speed, arrive, _d);
-            _d.x += Math.sin(t * 1.3 + f.bob) * 0.05; _d.z += Math.cos(t * 1.1 + f.bob) * 0.05;
           } else {
             speed = sp.cruise * f.speedK;
             sw.seek(f.target, speed, 0.5, _d);
@@ -693,7 +902,9 @@ export async function createLife(ctx) {
         } else {
           // reef fish: roam between coral heads and graze on the rock
           if (f.state === 'beg') { f.state = 'roam'; f.timer = 0; }
+          f.begHover = false;
           if (f.timer <= 0) {
+            f.pecking = false;
             if (f.state === 'roam' && r.chance(0.4)) {
               f.state = 'graze'; f.timer = r.range(3, 6);
               const b = bommieList[Math.floor(r.next() * bommieList.length)];
@@ -709,11 +920,16 @@ export async function createLife(ctx) {
           }
           if (f.state === 'graze') {
             const dist = sw.pos.distanceTo(f.target);
-            if (dist > 0.4) sw.seek(f.target, speed, 0.8, _d);
+            f.pecking = dist < (f.pecking ? 0.7 : 0.4);
+            if (!f.pecking) sw.seek(f.target, speed, 0.8, _d);
             else {
-              // nose down to the rock, little pecks
-              _d.subVectors(f.spot, sw.pos).normalize().multiplyScalar(0.06 + 0.05 * Math.max(0, Math.sin(t * 6 + f.bob)));
-              _d.addScaledVector(_v1.subVectors(f.target, sw.pos), 0.8);
+              // nose down to the rock, little pecks: hold above the spot facing it (it used to hover on a
+              // spring there and spin after the drift, like the nestling clownfish)
+              _v3.subVectors(f.spot, f.target).normalize();
+              _v2.copy(f.target).addScaledVector(_v3, 0.1 * Math.max(0, Math.sin(t * 6 + f.bob)));
+              _v1.subVectors(f.spot, sw.pos);
+              hoverAt(sw, dt, _v2, _v1, { creep: 0.025, hold: 2.0, turn: 0.8 });
+              hover = true;
             }
           } else {
             sw.seek(f.target, speed, 1.2, _d);
@@ -721,21 +937,27 @@ export async function createLife(ctx) {
           }
         }
       }
-      // separation from other residents
-      for (const o of residents) {
-        if (o === f) continue;
-        const dx = sw.pos.x - o.sw.pos.x, dy = sw.pos.y - o.sw.pos.y, dz = sw.pos.z - o.sw.pos.z;
-        const d2 = dx * dx + dy * dy + dz * dz, rr = (f.size + o.size) * 0.7;
-        if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2), k = (rr - d) / d * 1.5; _d.x += dx * k; _d.y += dy * k; _d.z += dz * k; }
-      }
       const ign = f.home && (f.state === 'nestle' || f.state === 'home' || f.state === 'food' || f.state === 'gulp') ? f.home.pos : null;
-      avoid(sw, _d, f.clear, dt, ign);
-      sw.steer(_d, dt).integrate(dt);
-      clampAbove(sw, f.clear, ign);
-      if (f.state === 'nestle') sw.amp *= 0.7;
+      if (!hover) {
+        endHover(sw);
+        // separation from other residents (a clownfish pair sharing an anemone keeps close company)
+        for (const o of residents) {
+          if (o === f) continue;
+          const dx = sw.pos.x - o.sw.pos.x, dy = sw.pos.y - o.sw.pos.y, dz = sw.pos.z - o.sw.pos.z;
+          const d2 = dx * dx + dy * dy + dz * dz, rr = (f.size + o.size) * (f.home && o.home === f.home ? 0.45 : 0.7);
+          if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2), k = (rr - d) / d * 1.5; _d.x += dx * k; _d.y += dy * k; _d.z += dz * k; }
+        }
+        avoid(sw, _d, f.clear, dt, ign);
+        arcSteer(sw, _d, f.state === 'food' ? 1.05 : 0.7);   // a dash for food turns tighter than cruising
+        swim(sw, _d, dt);
+      }
+      clampAbove(sw, f.clear, dt, ign);
+      // tail calm while nestling (sculling with the pectorals), eased in and out and applied when drawn:
+      // it was `amp *= 0.7` per frame, a 1.8x stronger tail at 30 fps
+      f.calm = damp(f.calm, f.state === 'nestle' ? 0.12 : 1, 3, dt);
     }
     for (const kind in species) species[kind].begin();
-    for (const f of residents) species[f.kind].push(f.sw);
+    for (const f of residents) { const a = f.sw.amp; f.sw.amp = a * f.calm; species[f.kind].push(f.sw); f.sw.amp = a; }
     for (const kind in species) species[kind].end(fishT);
   }
 
@@ -745,56 +967,91 @@ export async function createLife(ctx) {
       const hungry = full < 0.35;
       tu.timer -= dt;
       let speed = 0.42;
-      const it = food.active ? food.nearest(tu.pos, 9, foodAvail) : null;
+      let face = false, begging = false;
+      // keep the pellet it goes for (re-taking the nearest one every frame made it weave between two)
+      if (!food.active || (tu.food && !tu.food.alive)) tu.food = null;
+      if (food.active && !tu.food) tu.food = food.nearest(tu.pos, 9, foodAvail);
+      const it = tu.food;
       if (it) {
         tu.state = 'food';
         _v1.copy(tu.fwd).multiplyScalar(0.8 * tu.size).add(tu.pos);
-        const d = _v1.distanceTo(it.pos);
-        tu.target.copy(it.pos);
-        speed = d > 2 ? 0.75 : 0.35;
-        if (d < 0.22 * tu.size + 0.12) { food.eat(it); env.onEat(tu.m, it.pos.clone()); }
+        aimAt(it, tu.target);
+        const d = _v1.distanceTo(tu.target);
+        speed = lerp(0.35, 0.75, smoothstep(1.2, 2.8, d));   // was a step at 2 m
+        if (d < 0.22 * tu.size + 0.12) { food.eat(it); env.onEat(tu.m, it.pos.clone()); tu.food = null; }
       } else if (hungry && ((t + tu.size * 77) % 50) < 22) {
+        begging = true;
         tu.state = 'beg';
         begPoint(7, t, tu.target);
         tu.target.y += 0.6;
         speed = 0.5;
-      } else {
-        if (tu.state !== 'cruise' || tu.timer <= 0 || tu.pos.distanceTo(tu.target) < 1.5) {
-          tu.state = 'cruise';
-          tu.timer = tu.rng.range(12, 22);
-          const a = tu.rng.range(0, TAU), r = tu.rng.range(3, 12);
-          tu.target.set(center.x + Math.cos(a) * r, 0, center.z + Math.sin(a) * r);
-          tu.target.y = floorAt(tu.target.x, tu.target.z) + tu.rng.range(1.6, 4.5);
-        }
+        // settle facing the viewer only while the spot stays put (with an orbiting camera it travels and
+        // the turtle swims along instead of sliding sideways after it)
+        tu.begSpd = damp(tu.begSpd, tu.begPrev.distanceTo(tu.target) / Math.max(dt, 1e-4), 4, dt);
+        tu.begPrev.copy(tu.target);
+        face = tu.pos.distanceTo(tu.target) < 1.2 && tu.begSpd < (tu.facing ? 0.22 : 0.15);
+      }
+      tu.facing = face;
+      if (!it && !begging && (tu.state !== 'cruise' || tu.timer <= 0 || tu.pos.distanceTo(tu.target) < 1.5)) {
+        tu.state = 'cruise';
+        tu.timer = tu.rng.range(12, 22);
+        const a = tu.rng.range(0, TAU), r = tu.rng.range(3, 12);
+        tu.target.set(center.x + Math.cos(a) * r, 0, center.z + Math.sin(a) * r);
+        tu.target.y = floorAt(tu.target.x, tu.target.z) + tu.rng.range(1.6, 4.5);
       }
       _d.subVectors(tu.target, tu.pos);
       const dist = _d.length();
-      _d.multiplyScalar(speed * clamp(dist / 2.5, 0.25, 1) / Math.max(dist, 1e-3));
-      // avoid the reef
-      const fl = floorAt(tu.pos.x + tu.vel.x, tu.pos.z + tu.vel.z) + 0.7 * tu.size;
+      // begging in front of the viewer: settle on the spot (no circling it) and face the camera
+      _d.multiplyScalar(speed * (face ? smoothstep(0.15, 1.2, dist) : clamp(dist / 2.5, 0.25, 1)) / Math.max(dist, 1e-3));
+      // avoid the reef (looking ahead along the heading)
+      const ah = tu.size + tu.spd;
+      const fl = Math.max(floorAt(tu.pos.x + tu.fwd.x * ah, tu.pos.z + tu.fwd.z * ah), floorAt(tu.pos.x, tu.pos.z)) + 0.7 * tu.size;
       if (tu.pos.y < fl + 0.4) _d.y += (fl + 0.4 - tu.pos.y) * 1.5;
       if (tu.pos.y > surfY - 1.5) _d.y -= 0.5;
       for (const f of residents) {
         const dx = tu.pos.x - f.sw.pos.x, dy = tu.pos.y - f.sw.pos.y, dz = tu.pos.z - f.sw.pos.z, d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < 1.0) f.sw.vel.addScaledVector(_v1.set(-dx, -dy, -dz).normalize(), dt * 2);
       }
-      tu.vel.lerp(_d, 1 - Math.exp(-0.7 * dt));
-      tu.pos.addScaledVector(tu.vel, dt);
-      const sp = tu.vel.length();
-      if (sp > 0.02) {
-        _f.copy(tu.vel).divideScalar(sp);
-        _f.y = clamp(_f.y, -0.35, 0.35);
-        const prevYaw = Math.atan2(tu.fwd.z, tu.fwd.x);
-        tu.fwd.lerp(_f.normalize(), 1 - Math.exp(-1.2 * dt)).normalize();
-        // diving straight onto a pellet left no heading: near-vertical forward vectors made the roll
-        // frame (and the whole turtle) spin; keep the pitch within ~35 degrees
-        const hz = Math.hypot(tu.fwd.x, tu.fwd.z);
-        if (Math.abs(tu.fwd.y) > 0.57 && hz > 1e-4) { const k = 0.8216 / hz; tu.fwd.x *= k; tu.fwd.z *= k; tu.fwd.y = Math.sign(tu.fwd.y) * 0.57; }
-        const yawRate = -((Math.atan2(tu.fwd.z, tu.fwd.x) - prevYaw + Math.PI * 3) % TAU - Math.PI) / Math.max(dt, 1e-3);
-        tu.roll = lerp(tu.roll, clamp(-yawRate * 0.6, -0.35, 0.35), 1 - Math.exp(-1.5 * dt));
+      // The body follows its path: the turtle swims along its heading and turns the heading toward where
+      // it wants to go, yaw and pitch separately at a capped rate (0.2..0.8 rad/s). It used to blend its
+      // velocity toward the target, so a target behind made it stall and back up while the shell swung
+      // round after it.
+      const want = _d.length();
+      const prevYaw = Math.atan2(tu.fwd.z, tu.fwd.x);
+      let align = 1;
+      if (want > 1e-4 || face) {
+        const h = Math.hypot(_d.x, _d.z);
+        let yawT = h > 1e-3 ? Math.atan2(_d.z, _d.x) : prevYaw, pitT = clamp(Math.atan2(_d.y, h), -0.6, 0.6);
+        if (face) {
+          _v2.subVectors(camera.position, tu.pos);
+          const w = 1 - smoothstep(0.3, 1.2, dist);
+          yawT = prevYaw + angleDelta(prevYaw, yawT) * (1 - w) + angleDelta(prevYaw, Math.atan2(_v2.z, _v2.x)) * w;
+          pitT *= 1 - w;
+        }
+        const pit0 = Math.asin(clamp(tu.fwd.y, -1, 1));
+        const k = 1 - Math.exp(-1.2 * dt);
+        const dy = angleDelta(prevYaw, yawT), ady = Math.abs(dy);
+        const yaw = prevYaw + Math.sign(dy) * Math.min(ady, clamp(ady * k, 0.2 * dt, 0.8 * dt));
+        const pit = pit0 + clamp((pitT - pit0) * k, -0.5 * dt, 0.5 * dt);
+        tu.fwd.set(Math.cos(pit) * Math.cos(yaw), Math.sin(pit), Math.cos(pit) * Math.sin(yaw));
+        if (want > 1e-4) align = (tu.fwd.x * _d.x + tu.fwd.y * _d.y + tu.fwd.z * _d.z) / want;
       }
-      const stroke = tu.state === 'food' ? 1 : clamp(0.35 + (0.5 + 0.5 * Math.sin(t * 0.13 + tu.size * 10)) * 0.8, 0, 1);
-      const bob = tu.t.animate(dt, t, stroke, tu.state === 'food' ? 1.4 : 1);
+      // power strokes speed it up, glides let it coast; slower while still turning toward the target
+      const stroke0 = it ? 1 : clamp(0.35 + (0.5 + 0.5 * Math.sin(t * 0.13 + tu.size * 10)) * 0.8, 0, 1);
+      const spdT = want * lerp(0.35, 1, smoothstep(-0.3, 0.85, align)) * lerp(0.8, 1.08, stroke0);
+      tu.spd = damp(tu.spd, spdT, 0.7, dt);
+      tu.vel.copy(tu.fwd).multiplyScalar(tu.spd);
+      tu.pos.addScaledVector(tu.vel, dt);
+      if (face) tu.pos.lerp(tu.target, 1 - Math.exp(-0.5 * dt * (1 - smoothstep(0.3, 1.2, dist))));
+      // never into the rock: ease up over a ledge the look-ahead missed
+      const minY = floorAt(tu.pos.x, tu.pos.z) + 0.45 * tu.size;
+      if (tu.pos.y < minY) tu.pos.y = damp(tu.pos.y, minY, 6, dt);
+      const yawRate = -angleDelta(prevYaw, Math.atan2(tu.fwd.z, tu.fwd.x)) / Math.max(dt, 1e-3);
+      tu.roll = lerp(tu.roll, clamp(-yawRate * 0.6, -0.35, 0.35), 1 - Math.exp(-1.5 * dt));
+      // flipper beat follows the speed (it ran at a fixed rate whatever the turtle did); gentle sculling
+      // when it barely moves
+      const stroke = Math.min(stroke0, 0.3 + tu.spd / 0.42);
+      const bob = tu.t.animate(dt, t, stroke, clamp(0.35 + 0.65 * tu.spd / 0.42, 0.7, 1.6));
       quatFromForward(tu.quat, tu.fwd, tu.roll);
       tu.t.root.quaternion.copy(tu.quat);
       tu.t.root.position.copy(tu.pos);
@@ -806,7 +1063,7 @@ export async function createLife(ctx) {
   function updateSchool(dt, t) {
     // the school wanders around the reef, swirling; it is drawn to food
     let fx = 0, fz = 0, fy = 0, fn = 0;
-    if (food.active) for (const it of food.items) if (it.alive) { fx += it.pos.x; fy += it.pos.y; fz += it.pos.z; fn++; }
+    if (food.active) for (const it of food.items) if (it.alive && !it.rest) { fx += it.pos.x; fy += it.pos.y; fz += it.pos.z; fn++; }
     const ax = center.x + Math.cos(t * 0.045) * 6.5 + Math.sin(t * 0.11) * 2;
     const az = center.z + Math.sin(t * 0.037) * 6 + Math.cos(t * 0.09) * 2;
     _v3.set(ax, 0, az);
@@ -844,7 +1101,7 @@ export async function createLife(ctx) {
       _d.y += (anchor.y - s.pos.y) * 0.35 + Math.sin(t * 0.7 + i) * 0.05;
       // food: darting at pellets nearby
       if (fn && (i % 3 === 0)) {
-        if (!s.food || !s.food.alive) s.food = food.nearest(s.pos, 3.2, foodAvail);
+        if (!s.food || !s.food.alive || s.food.rest) s.food = food.nearest(s.pos, 3.2, foodFloating);
         if (s.food) {
           _v1.copy(s.fwd).multiplyScalar(s.size * 0.45).add(s.pos);
           _d.addScaledVector(_v2.subVectors(s.food.pos, _v1), 2.2);
@@ -855,8 +1112,9 @@ export async function createLife(ctx) {
       const maxS = s.food ? 1.7 : 1.0;
       if (sp > maxS) _d.multiplyScalar(maxS / sp);
       avoid(s, _d, 0.35, dt);
-      s.steer(_d, dt).integrate(dt);
-      clampAbove(s, 0.3);
+      if (s.food) arcSteer(s, _d, 1.1);   // a dart at a pellet behind turns in an arc (it whipped round)
+      swim(s, _d, dt);
+      clampAbove(s, 0.3, dt);
     }
     chromInst.begin();
     for (const s of school) chromInst.push(s);
@@ -881,7 +1139,7 @@ export async function createLife(ctx) {
         const dx = s.pos.x - o.pos.x, dy = s.pos.y - o.pos.y, dz = s.pos.z - o.pos.z, d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < 0.06 && d2 > 1e-6) { _d.x += dx * 4; _d.y += dy * 4; _d.z += dz * 4; }
       }
-      s.steer(_d, dt).integrate(dt);
+      swim(s, _d, dt);
     }
     // the ball drifts slowly
     c.x += Math.sin(t * 0.03) * dt * 0.15; c.z += Math.cos(t * 0.025) * dt * 0.15;
@@ -891,8 +1149,10 @@ export async function createLife(ctx) {
   }
 
 
+  const upstream = new THREE.Vector3();
   function updateHover(dt, t) {
     const cur = W.uCurDir.value;
+    upstream.set(-cur.x, 0, -cur.y).normalize();
     const night = tod.night;
     for (const g of hoverGroups) {
       for (const s of g.fish) {
@@ -903,11 +1163,20 @@ export async function createLife(ctx) {
         _d.subVectors(_v1, s.pos).multiplyScalar(0.9);
         // hold station facing into the current
         _d.x -= cur.x * 0.16; _d.z -= cur.y * 0.16;
+        coneSteer(s, _d, upstream, 0.5, 0.03);
+        // now and then a short dart forward to snap at plankton: a burst along the heading, up to ~45
+        // degrees off it, eased in and out (it was an instant velocity kick in any direction, so the fish
+        // lurched sideways or backwards and the body whipped round after it)
         s.dart -= dt;
-        if (s.dart < 0) { s.dart = 1.5 + Math.random() * 5; s.vel.addScaledVector(_v2.set(Math.random() - 0.5, (Math.random() - 0.5) * 0.4, Math.random() - 0.5), 0.6); }
-        if (food.active && !s.food) s.food = food.nearest(s.pos, 3.0, foodAvail);
+        if (s.dart < 0) {
+          s.dart = 1.5 + Math.random() * 5; s.dartT = 0.32;
+          const a = Math.atan2(s.fwd.z, s.fwd.x) + (Math.random() - 0.5) * 1.6, pz = (Math.random() - 0.5) * 0.5;
+          (s.dartDir || (s.dartDir = new THREE.Vector3())).set(Math.cos(a) * Math.cos(pz), Math.sin(pz), Math.sin(a) * Math.cos(pz));
+        }
+        if (s.dartT > 0) { s.dartT -= dt; _d.addScaledVector(s.dartDir, 0.55 * Math.sin(Math.PI * clamp(1 - s.dartT / 0.32, 0, 1))); }
+        if (food.active && !s.food) s.food = food.nearest(s.pos, 3.0, foodFloating);
         if (s.food) {
-          if (!s.food.alive) s.food = null;
+          if (!s.food.alive || s.food.rest) s.food = null;
           else {
             _v2.copy(s.fwd).multiplyScalar(s.size * 0.45).add(s.pos);
             _d.addScaledVector(_v3.subVectors(s.food.pos, _v2), 2.4);
@@ -916,9 +1185,12 @@ export async function createLife(ctx) {
         }
         const sp = _d.length(), maxS = s.food ? 1.6 : 0.6;
         if (sp > maxS) _d.multiplyScalar(maxS / sp);
-        s.steer(_d, dt).integrate(dt);
+        // a pellet behind, or back to station after a chase: turn in an arc (reversing through a
+        // standstill flipped the body over the top)
+        arcSteer(s, _d, s.food ? 1.1 : 0.9);
+        swim(s, _d, dt);
         s.pos.x += cur.x * 0.16 * dt; s.pos.z += cur.y * 0.16 * dt;
-        clampAbove(s, 0.25);
+        clampAbove(s, 0.25, dt);
       }
     }
     if (anthOInst) { anthOInst.begin(); for (const s of anthO) anthOInst.push(s); anthOInst.end(fishT); }
@@ -930,16 +1202,25 @@ export async function createLife(ctx) {
       const r = s.r;
       s.timer -= dt;
       _d.set(0, 0, 0);
+      let hover = false;
       if (s.lead) {
-        // the partner follows close behind and slightly to the side
+        // the partner follows close behind and slightly to the side; while the leader nibbles it waits
+        // beside it facing the same way (it used to stall on its slot and spin after the drift)
         _v1.copy(s.lead.pos).addScaledVector(s.lead.fwd, -0.45).add(_v2.set(-s.lead.fwd.z, 0.08, s.lead.fwd.x).multiplyScalar(0.3));
-        s.seek(_v1, 0.9, 0.6, _d);
+        if (s.lead.hovering && s.pos.distanceTo(_v1) < (s.hovering ? 0.6 : 0.35)) {
+          hoverAt(s, dt, _v1, s.lead.fwd, { creep: 0.025, hold: 1.5, turn: 0.8 });
+          hover = true;
+        } else s.seek(_v1, 0.9, 0.6, _d);
       } else {
-        const it = food.active ? food.nearest(s.pos, 6, foodAvail) : null;
+        // keep the pellet it goes for (re-taking the nearest one every frame made it weave)
+        if (!food.active || (s.food && !s.food.alive)) s.food = null;
+        if (food.active && !s.food) s.food = food.nearest(s.pos, 6, foodAvail);
+        const it = s.food;
         if (it) {
-          s.seek(it.pos, 1.3, 0.3, _d);
+          const aim = aimAt(it);
+          s.seek(aim, 1.3, 0.3, _d);
           _v1.copy(s.fwd).multiplyScalar(s.size * 0.45).add(s.pos);
-          if (_v1.distanceTo(it.pos) < 0.14) { food.eat(it); env.onEat(null, it.pos.clone()); }
+          if (_v1.distanceTo(aim) < 0.14) { food.eat(it); env.onEat(null, it.pos.clone()); s.food = null; }
         } else {
           if (s.timer <= 0) {
             if (s.state === 'roam' && r.chance(0.5)) {
@@ -951,14 +1232,25 @@ export async function createLife(ctx) {
               s.target.copy(s.spot).addScaledVector(hm.normal(x, z, _v3), 0.35);
             } else { s.state = 'roam'; s.timer = r.range(5, 10); randomReefPoint(r, s.target, 0.6, 2.2); }
           }
-          if (s.state === 'graze' && s.pos.distanceTo(s.target) < 0.4) {
-            _d.subVectors(s.spot, s.pos).normalize().multiplyScalar(0.06 + 0.05 * Math.max(0, Math.sin(t * 5 + s.phase)));
+          const dist = s.pos.distanceTo(s.target);
+          s.pecking = s.state === 'graze' && dist < (s.pecking ? 0.7 : 0.4);
+          if (s.pecking) {
+            // nibbling at the coral: hold just off it, facing it, with little pecks (it was pushed nose-first
+            // into the rock against the floor avoidance, a tug-of-war that set the heading wandering)
+            _v3.subVectors(s.spot, s.target).normalize();
+            _v2.copy(s.target).addScaledVector(_v3, 0.12 + 0.08 * Math.max(0, Math.sin(t * 5 + s.bob)));
+            hoverAt(s, dt, _v2, _v1.subVectors(s.spot, s.pos), { creep: 0.025, hold: 1.8, turn: 0.8 });
+            hover = true;
           } else s.seek(s.target, 0.45, 1.0, _d);
         }
       }
-      avoid(s, _d, 0.3, dt);
-      s.steer(_d, dt).integrate(dt);
-      clampAbove(s, 0.3);
+      if (!hover) {
+        endHover(s);
+        avoid(s, _d, 0.3, dt);
+        arcSteer(s, _d, s.food ? 1.0 : 0.8);
+        swim(s, _d, dt);
+      }
+      clampAbove(s, 0.3, dt);
     }
     bfInst.begin(); for (const s of butter) bfInst.push(s); bfInst.end(fishT);
   }
@@ -982,7 +1274,8 @@ export async function createLife(ctx) {
         _v1.x += Math.cos(t * 1.3 + s.ph) * 0.2; _v1.z += Math.sin(t * 1.5 + s.ph) * 0.2;
         s.seek(_v1, 0.5, 0.3, _d);
       }
-      s.steer(_d, dt).integrate(dt);
+      limitPitch(_d, s.maxPitch + 0.12, s.fwd);   // straight up/down the client's flank spun the body frame
+      swim(s, _d, dt);
     }
     cleanerInst.begin(); for (const s of cleaners) cleanerInst.push(s); cleanerInst.end(fishT);
   }
@@ -1000,7 +1293,7 @@ export async function createLife(ctx) {
       _v1.x += Math.sin(t * 0.5 + s.jit) * 0.3; _v1.y += Math.sin(t * 0.4 + s.jit * 2) * 0.2;
       _d.subVectors(_v1, s.pos).multiplyScalar(0.8).addScaledVector(fus.dir, 1.2);
       const sp = _d.length(); if (sp > 1.8) _d.multiplyScalar(1.8 / sp);
-      s.steer(_d, dt).integrate(dt);
+      swim(s, _d, dt);
     }
     fusInst.begin(); for (const s of fus.fish) fusInst.push(s); fusInst.end(fishT);
   }
@@ -1015,7 +1308,7 @@ export async function createLife(ctx) {
       _d.set(-rz / rr * 1.1, 0, rx / rr * 1.1);
       _d.x += -rx / rr * (rr - R) * 0.5; _d.z += -rz / rr * (rr - R) * 0.5;
       _d.y = -ry * 0.35 + Math.sin(t * 0.4 + i) * 0.2;
-      s.steer(_d, dt).integrate(dt);
+      swim(s, _d, dt);
     }
     c.x += Math.sin(t * 0.02) * dt * 0.2;
     jackInst.begin(); for (const s of jacks) jackInst.push(s); jackInst.end(fishT);
@@ -1025,31 +1318,38 @@ export async function createLife(ctx) {
     if (!barraInst) return;
     for (const b of barra) {
       b.timer -= dt;
-      const it = food.active ? food.nearest(b.pos, 6, foodAvail) : null;
+      // keep the pellet it goes for (re-taking the nearest one every frame made it weave)
+      if (!food.active || (b.food && !b.food.alive)) b.food = null;
+      if (food.active && !b.food) b.food = food.nearest(b.pos, 6, foodAvail);
+      const it = b.food;
       let speed = 0.5;
       b.cleanT = (b.cleanT ?? (20 + barra.indexOf(b) * 35)) - dt;
       if (!it && b.cleanT < 0 && !station.client) { station.client = b; b.state = 'toStation'; }
       if (station.client === b && !it) {
         if (b.state === 'toStation') {
+          endHover(b);
           b.seek(station.hover, 0.5, 2.0, _d);
           if (b.pos.distanceTo(station.hover) < 0.5) { b.state = 'cleaning'; b.cleanDur = 14 + Math.random() * 6; }
+          avoid(b, _d, 0.7, dt);
+          arcSteer(b, _d, 0.9);
+          swim(b, _d, dt);
         } else {
-          // hover still, nose slightly up, while the wrasse work
-          _d.subVectors(station.hover, b.pos).multiplyScalar(0.6);
-          _d.addScaledVector(_v2.set(-station.out.x, 0.25, -station.out.z), 0.02);
+          // hover still, nose slightly up toward the wall, while the wrasse work. It used to hang on a
+          // spring with almost no speed and turn after the drift at >= 1 rad/s the whole time.
+          hoverAt(b, dt, station.hover, _v2.set(-station.out.x, 0.25, -station.out.z), { creep: 0.02, hold: 0.8, turn: 0.35 });
           b.cleanDur -= dt;
           if (b.cleanDur < 0) { station.client = null; b.state = 'cruise'; b.cleanT = 60 + Math.random() * 60; b.timer = 0; }
         }
-        avoid(b, _d, 0.7, dt);
-        b.steer(_d, dt).integrate(dt);
-        b.amp *= b.state === 'cleaning' ? 0.4 : 1;
+        clampAbove(b, 0.6, dt);
+        b.calm = damp(b.calm ?? 1, b.state === 'cleaning' ? 0.06 : 1, 2.5, dt);
         continue;
       }
+      endHover(b);
       if (station.client === b) { station.client = null; b.state = 'cruise'; }
       if (it) {
-        b.target.copy(it.pos); speed = 1.2;
+        aimAt(it, b.target); speed = 1.2;
         _v1.copy(b.fwd).multiplyScalar(b.size * 0.48).add(b.pos);
-        if (_v1.distanceTo(it.pos) < 0.2) { food.eat(it); env.onEat(null, it.pos.clone()); }
+        if (_v1.distanceTo(b.target) < 0.2) { food.eat(it); env.onEat(null, it.pos.clone()); b.food = null; }
       } else if (b.timer <= 0 || b.pos.distanceTo(b.target) < 2) {
         b.timer = 10 + Math.random() * 12;
         const a = Math.random() * TAU, r = 6 + Math.random() * 9;
@@ -1058,17 +1358,21 @@ export async function createLife(ctx) {
       }
       b.seek(b.target, speed, 3, _d);
       avoid(b, _d, 0.7, dt);
-      b.steer(_d, dt).integrate(dt);
-      clampAbove(b, 0.6);
+      arcSteer(b, _d, 0.9);
+      swim(b, _d, dt);
+      clampAbove(b, 0.6, dt);
+      b.calm = damp(b.calm ?? 1, 1, 2.5, dt);
     }
+    // the tail all but stops while being cleaned, eased and applied when drawn (it was `amp *= 0.4`
+    // per frame: twice the tail at 30 fps)
     barraInst.begin();
-    for (const b of barra) barraInst.push(b);
+    for (const b of barra) { const a = b.amp; b.amp = a * (b.calm ?? 1); barraInst.push(b); b.amp = a; }
     barraInst.end(fishT);
   }
 
   return {
     group, food, residents, turtles, school, schoolC, barra, silver, silCenter, hoverGroups, butter, station, jackC, fus,
-    addMember(m) { addResident(m); },
+    addMember(m) { addResident(m, true); },
     update(dt, t) {
       time = t;
       fishT = t % FISH_PERIOD;

@@ -13,7 +13,7 @@ world.
 
     idle-world-3d/tools/qa/check_ipad.sh <outdir>       # all six worlds; or name some: ... <outdir> koi reef
 
-It runs four checks:
+It first checks the syntax of every app file (`syncheck.sh`; plain `node --check` silently passes ES modules), then runs four checks:
 1. **The iPad emulation**: Safari 14 on an iPad Air 3, iOS 14.8, WebGL 1, 1112×834 at 2×. Each world loads,
    is fed, and gets a screenshot. It must show zero shader or page errors. Look at the screenshots.
 2. **Flicker and NaN** on the low tier (the iPad's), at noon and at night. `flickerPermille` must stay well

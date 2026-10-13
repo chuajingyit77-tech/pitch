@@ -1,7 +1,7 @@
 // 芒原 · particles and small life: pampas fluff, fireflies, falling maple leaves, Guiding-Wind stream,
 // crumb puffs, red dragonflies (akatombo), glow sprites.
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, damp, patchMaterial, makeRng } from '../../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, damp, angleDelta, patchMaterial, makeRng } from '../../lib/util.js';
 import { addFog } from './sky.js';
 import { translucentLambert } from './flora.js';
 
@@ -44,7 +44,9 @@ function driftPoints({ count, rng, color, size, box, blink = false, back = 0 }) 
         p.x += sin(uTime * qf(0.5 + aSeed.y) + aSeed.z * 20.0) * 0.5;
         p.z += cos(uTime * qf(0.4 + aSeed.x * 0.5) + aSeed.y * 25.0) * 0.5;
         p.y += sin(uTime * qf(0.35 + aSeed.w * 0.6) + aSeed.x * 30.0) * 0.35;
-        p = mod(p + uBox * 0.5, uBox) - uBox * 0.5;
+        // wrap in world space around the box centre: motes stay put when the box follows the camera (they used to
+        // ride along with every camera move and bob with the ground under the box centre)
+        p = mod(p - uCenter + uBox * 0.5, uBox) - uBox * 0.5;
         vec3 wp = uCenter + p;
         vec4 mv = viewMatrix * vec4(wp, 1.0);
         gl_Position = projectionMatrix * mv;
@@ -127,13 +129,15 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   });
   addFog(leafMat, fogU, 'mfogFL');
   const leafMesh = new THREE.InstancedMesh(leafGeo, leafMat, LEAVES + STREAM_LEAVES);
+  leafMesh.name = 'fallingLeaves';
   leafMesh.frustumCulled = false;
   leafMesh.castShadow = false;
   const leafCols = ['#c0141a', '#d42a16', '#e2501a', '#a80f22', '#e87a1c', '#cf3a14', '#b8301c', '#d8a02a'].map(c => new THREE.Color(c));
   const leaves = [];
   const lrng = rng.fork('leaves');
   for (let i = 0; i < LEAVES + STREAM_LEAVES; i++) {
-    const l = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), axis: new THREE.Vector3(), ang: lrng.range(0, TAU), spin: lrng.range(2, 6) * lrng.sign(), phase: lrng.range(0, TAU), stream: i >= LEAVES, active: i < LEAVES, life: 0, scale: lrng.range(0.75, 1.25) };
+    // fade: 0..1 size factor, so a leaf grows in where it spawns and shrinks away before it is recycled
+    const l = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), axis: new THREE.Vector3(), ang: lrng.range(0, TAU), spin: lrng.range(2, 6) * lrng.sign(), phase: lrng.range(0, TAU), stream: i >= LEAVES, active: i < LEAVES, life: 0, scale: lrng.range(0.75, 1.25), fade: 0 };
     l.axis.set(lrng.range(-1, 1), lrng.range(-1, 1), lrng.range(-1, 1)).normalize();
     leafMesh.setColorAt(i, lrng.pick(leafCols).clone().multiplyScalar(lrng.range(0.8, 1.05)));
     leaves.push(l);
@@ -176,8 +180,10 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       s.p0.copy(camera.position).addScaledVector(fwd, srng.range(3.5, 7.5)).addScaledVector(right, side * srng.range(2, 6));
       s.p0.y = Math.max(heightAt(s.p0.x, s.p0.z) + 1.2, camera.position.y - srng.range(0.4, 2.2));
       s.p1.lerpVectors(s.p0, to, 0.5).addScaledVector(right, side * srng.range(0.5, 3)).add(tmp.set(0, srng.range(0.8, 2.4), 0));
-      s.p2.copy(to).add(tmp.set(srng.range(-0.3, 0.3), 0.35, srng.range(-0.3, 0.3)));
-      if (s.kind === 'leaf' && leafSlots.length) { s.leaf = leafSlots.pop(); s.leaf.active = true; s.leaf.life = 0; }
+      // the curve ends exactly where the swirl around the offering begins (it used to jump up to ~1 m there)
+      srng.range(-0.3, 0.3); srng.range(-0.3, 0.3);
+      s.p2.set(to.x + Math.cos(s.phase) * s.orbit, to.y + 0.3, to.z + Math.sin(s.phase) * s.orbit);
+      if (s.kind === 'leaf' && leafSlots.length) { s.leaf = leafSlots.pop(); s.leaf.active = true; s.leaf.life = 0; s.leaf.fade = 0; }
       else s.kind = 'fluff';
       streamers.push(s);
     }
@@ -222,11 +228,13 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   // per-instance index (WebGL 1 has no gl_InstanceID)
   wingGeo.setAttribute('aIdx', new THREE.InstancedBufferAttribute(Float32Array.from({ length: DF }, (_, i) => i), 1));
   const dfWing = new THREE.InstancedMesh(wingGeo, wingMat, DF);
+  dfBody.name = 'dragonflies'; dfWing.name = 'dragonflyWings';
   dfBody.frustumCulled = dfWing.frustumCulled = false;
   scene.add(dfBody, dfWing);
   const drng = rng.fork('dragonflies');
   const dflies = [];
-  for (let i = 0; i < DF; i++) dflies.push({ pos: new THREE.Vector3(drng.range(-10, 10), 2, drng.range(-4, 14)), goal: new THREE.Vector3(), vel: new THREE.Vector3(), timer: drng.range(0, 2), heading: drng.range(0, TAU), hover: true });
+  // each dragonfly draws from its own random stream, so one's choices never depend on when another's timer ran out
+  for (let i = 0; i < DF; i++) dflies.push({ pos: new THREE.Vector3(drng.range(-10, 10), 2, drng.range(-4, 14)), goal: new THREE.Vector3(), vel: new THREE.Vector3(), timer: drng.range(0, 2), heading: drng.range(0, TAU), hover: true, rng: drng.fork('df' + i) });
 
   /* ---------------- songbird flock ---------------- */
   const NB = Math.round(18 * Math.max(q, 0.6));
@@ -245,18 +253,26 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
   }
   const birdU = { uTime: { value: 0 } };
   const birdMat = new THREE.MeshLambertMaterial({ color: '#2a2420', side: THREE.DoubleSide });
+  // aFlap (per bird, 0..1): flapping effort. Each bird eases into a short glide, wings held in a slight V, while it
+  // descends, and flaps again to climb (its own timing, never in unison with the flock).
   patchMaterial(birdMat, {
-    key: 'songbird', uniforms: birdU, vertexHeader: 'attribute float aWing; attribute float aIdx; uniform float uTime;',
-    vertex: { '#include <begin_vertex>': '$&\n float fl = sin(uTime * 17.0 + aIdx * 2.31); float glide = step(0.0, sin(uTime * 0.9 + aIdx * 0.7)); transformed.y += aWing * mix(fl * 0.1, 0.012, glide * 0.0 + 0.0) * 1.0;' },
+    key: 'songbird2', uniforms: birdU, vertexHeader: 'attribute float aWing; attribute float aIdx; attribute float aFlap; uniform float uTime;',
+    vertex: { '#include <begin_vertex>': '$&\n float fl = sin(uTime * 17.0 + aIdx * 2.31); transformed.y += aWing * (fl * 0.1 * aFlap + 0.014 * (1.0 - aFlap));' },
   });
   addFog(birdMat, fogU, 'mfogBird');
+  // per-instance index and flap effort (WebGL 1 has no gl_InstanceID): one value per bird
   birdGeo.setAttribute('aIdx', new THREE.InstancedBufferAttribute(Float32Array.from({ length: NB }, (_, i) => i), 1));
+  const flapA = new THREE.InstancedBufferAttribute(new Float32Array(NB).fill(1), 1);
+  flapA.setUsage(THREE.DynamicDrawUsage);
+  birdGeo.setAttribute('aFlap', flapA);
   const birds = new THREE.InstancedMesh(birdGeo, birdMat, NB);
+  birds.name = 'songbirds';
   birds.frustumCulled = false;
   scene.add(birds);
   const brng = rng.fork('birds');
   const flock = [];
-  for (let i = 0; i < NB; i++) flock.push({ off: new THREE.Vector3(brng.range(-4, 4), brng.range(-1.2, 1.2), brng.range(-4, 4)), ph: brng.range(0, TAU), pos: new THREE.Vector3(), prev: new THREE.Vector3(), heading: 0 });
+  for (let i = 0; i < NB; i++) flock.push({ off: new THREE.Vector3(brng.range(-4, 4), brng.range(-1.2, 1.2), brng.range(-4, 4)), ph: brng.range(0, TAU), pos: new THREE.Vector3(), prev: new THREE.Vector3(), heading: 0, turn: 0, pitch: 0, vh: 0, vy: 0, flap: 1, fresh: true });
+  const be = new THREE.Euler(0, 0, 0, 'YXZ');   // yaw, then pitch about the bird's own wing axis, then roll
   const fc = new THREE.Vector3(brng.range(-15, 15), 0, brng.range(-45, -30));
   const leader = new THREE.Vector3(), leaderPrev = new THREE.Vector3();
 
@@ -307,12 +323,15 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
         l.vel.z = damp(l.vel.z, wz * 0.55 + Math.cos(t * 1.3 + l.phase) * 0.3, 1.5, dt);
         l.vel.y = damp(l.vel.y, -0.55 - 0.25 * Math.sin(t * 2.3 + l.phase * 2.0), 2, dt);
         l.pos.addScaledVector(l.vel, dt);
-        const gy = heightAt(l.pos.x, l.pos.z);
-        if (l.pos.y < gy + 0.8 || l.life > 40 || l.pos.distanceToSquared(target) > 40 * 40) spawnLeaf(l, leafCenter, false);
+        let gy = heightAt(l.pos.x, l.pos.z), d2 = l.pos.distanceToSquared(target);
+        if (l.pos.y < gy + 0.8 || l.life > 40 || d2 > 40 * 40) { spawnLeaf(l, leafCenter, false); gy = heightAt(l.pos.x, l.pos.z); d2 = l.pos.distanceToSquared(target); }
+        // recycled leaves used to vanish in mid-air (0.8 m up) and appear full size elsewhere: grow in over the
+        // first 0.8 s, shrink away over the last half metre of the fall, the end of its life, or near the edge
+        l.fade = smoothstep(0, 0.8, l.life) * smoothstep(0.8, 1.3, l.pos.y - gy) * (1 - smoothstep(38, 40, l.life)) * (1 - smoothstep(36 * 36, 40 * 40, d2));
       }
       l.ang += l.spin * dt;
       tmpQ.setFromAxisAngle(l.axis, l.ang);
-      sc.setScalar(l.scale * (l.stream ? 1.3 : 1));
+      sc.setScalar(l.scale * (l.stream ? 1.3 : 1) * l.fade);
       mtx.compose(l.pos, tmpQ, sc);
       leafMesh.setMatrixAt(i, mtx);
     }
@@ -323,7 +342,7 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     for (let i = streamers.length - 1; i >= 0; i--) {
       const s = streamers[i];
       s.t += dt / s.dur;
-      if (s.t < 0) { if (s.leaf) s.leaf.pos.set(0, -999, 0); continue; }
+      if (s.t < 0) { if (s.leaf) { s.leaf.pos.set(0, -999, 0); s.leaf.fade = 0; } continue; }
       let a = 1;
       if (s.t <= 1) {
         const u = s.t, iu = 1 - u;
@@ -339,7 +358,8 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
         a = 1 - smoothstep(0.6, 1.6, o);
         if (o > 1.6) { streamers.splice(i, 1); if (s.leaf) s.leaf.active = false; continue; }
       }
-      if (s.leaf) s.leaf.pos.copy(s.pos);
+      // stream leaves grow in and shrink out with the stream's fade instead of popping at full size
+      if (s.leaf) { s.leaf.pos.copy(s.pos); s.leaf.fade = a; }
       else if (np < 200) {
         SP.pos[np * 3] = s.pos.x; SP.pos[np * 3 + 1] = s.pos.y; SP.pos[np * 3 + 2] = s.pos.z;
         const b = (1.6 + golden) * a;
@@ -373,31 +393,41 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
     wingU.uTime.value = t % FLAP_PERIOD;
     if (dfBody.visible) {
       for (let i = 0; i < dflies.length; i++) {
-        const d = dflies[i];
+        const d = dflies[i], r = d.rng;
         d.timer -= dt;
         if (d.timer <= 0) {
           d.hover = !d.hover;
           if (!d.hover) {
             // dart to a new spot between the camera and the torii
-            const base = tmp.lerpVectors(camera.position, target, drng.range(0.25, 0.8));
-            d.goal.set(base.x + drng.range(-6, 6), 0, base.z + drng.range(-4, 4));
-            d.goal.y = heightAt(d.goal.x, d.goal.z) + drng.range(1.3, 2.4);
-            d.timer = drng.range(0.4, 0.9);
-          } else d.timer = drng.range(0.6, 2.2);
+            const base = tmp.lerpVectors(camera.position, target, r.range(0.25, 0.8));
+            d.goal.set(base.x + r.range(-6, 6), 0, base.z + r.range(-4, 4));
+            d.goal.y = heightAt(d.goal.x, d.goal.z) + r.range(1.3, 2.4);
+            d.timer = r.range(0.55, 1.05);
+          } else d.timer = r.range(0.6, 2.2);
         }
+        // Body heading: it used to snap to the velocity direction in a single frame (up to 180°, several times a
+        // minute each). Now a dart first pivots toward its goal (quick, but at most 12 rad/s) and only then
+        // accelerates; while coasting out of a dart the body keeps following the motion.
+        let want = null;
         if (d.hover) {
           d.vel.multiplyScalar(Math.exp(-6 * dt));
           d.vel.x += Math.sin(t * 7 + i) * dt * 0.6; d.vel.y += Math.sin(t * 5 + i * 2) * dt * 0.4;
+          if (d.vel.x * d.vel.x + d.vel.z * d.vel.z > 0.09) want = Math.atan2(d.vel.x, d.vel.z);
         } else {
           tmp.subVectors(d.goal, d.pos);
           const dl = tmp.length();
-          tmp.multiplyScalar(Math.min(4.5, dl * 4) / Math.max(dl, 1e-3));
+          if (tmp.x * tmp.x + tmp.z * tmp.z > 0.04) want = Math.atan2(tmp.x, tmp.z);
+          const go = want === null ? 1 : smoothstep(0.55, 0.95, Math.cos(angleDelta(d.heading, want)));
+          tmp.multiplyScalar(Math.min(4.5, dl * 4) * go / Math.max(dl, 1e-3));
           d.vel.lerp(tmp, 1 - Math.exp(-8 * dt));
+        }
+        if (want !== null) {
+          d.heading += clamp(angleDelta(d.heading, want) * (1 - Math.exp(-14 * dt)), -12 * dt, 12 * dt);
+          if (d.heading > Math.PI) d.heading -= TAU; else if (d.heading < -Math.PI) d.heading += TAU;
         }
         d.pos.addScaledVector(d.vel, dt);
         const gy = heightAt(d.pos.x, d.pos.z) + 1.1;
         if (d.pos.y < gy) d.pos.y = gy;
-        if (d.vel.lengthSq() > 0.04) d.heading = Math.atan2(d.vel.x, d.vel.z);
         e.set(0, d.heading, 0);
         tmpQ.setFromEuler(e);
         sc.setScalar(1.5 * dfVis);
@@ -421,18 +451,37 @@ export function createFx({ env, scene, rng, heightAt, fogU, wind, leafTex, discT
       b.prev.copy(b.pos);
       b.pos.copy(leader).add(b.off);
       b.pos.x += Math.sin(t * 0.6 + b.ph) * 1.6; b.pos.y += Math.sin(t * 0.9 + b.ph * 2) * 0.6; b.pos.z += Math.cos(t * 0.5 + b.ph) * 1.6;
-      tmp.subVectors(b.pos, b.prev);
-      // after being hidden the previous position is stale: keep the old heading for that one frame
-      if (!birdsShown) tmp.set(0, 0, 0);
-      if (tmp.lengthSq() > 1e-6) b.heading = Math.atan2(tmp.x, tmp.z);
-      e.set(clamp(-tmp.y * 2, -0.6, 0.6), b.heading, Math.sin(t + b.ph) * 0.3);
-      tmpQ.setFromEuler(e);
+      // after being hidden the previous position is stale: skip that one step and restart from the next
+      if (!birdsShown) b.fresh = true;
+      else if (dt > 1e-6) {
+        tmp.subVectors(b.pos, b.prev);
+        const vh = Math.hypot(tmp.x, tmp.z);
+        if (vh > 1e-7) {
+          // heading, turn rate and flight-path angle from this step's motion. The pitch used to be the per-frame
+          // height change (twice as steep at 30 fps, and nearly zero at any rate); this ratio is the same at any fps.
+          const h = Math.atan2(tmp.x, tmp.z), pt = -Math.atan2(tmp.y, vh);
+          if (b.fresh) { b.heading = h; b.turn = 0; b.pitch = pt; b.fresh = false; }
+          b.turn = damp(b.turn, angleDelta(b.heading, h) / dt, 5, dt);
+          b.heading = h;
+          b.pitch = damp(b.pitch, pt, 6, dt);
+          b.vh = vh / dt;
+          b.vy = damp(b.vy, tmp.y / dt, 4, dt);
+        }
+      }
+      b.flap = damp(b.flap, smoothstep(-0.75, -0.3, b.vy), 2.5, dt);
+      flapA.array[i] = b.flap;
+      // bank into the turn (coordinated turn: tan(bank) = speed x turn rate / g) instead of a free-running roll
+      // that leaned out of turns as often as into them
+      const roll = b.fresh ? 0 : clamp(-Math.atan(b.vh * b.turn / 9.8), -0.55, 0.55);
+      be.set(clamp(b.pitch, -0.5, 0.5), b.heading, roll);
+      tmpQ.setFromEuler(be);
       sc.setScalar(show);
       mtx.compose(b.pos, tmpQ, sc);
       birds.setMatrixAt(i, mtx);
     }
     birdsShown = true;
     birds.instanceMatrix.needsUpdate = true;
+    flapA.needsUpdate = true;
   };
   fx.dispose = () => {};
   void quality; void up; void wind;

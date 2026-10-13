@@ -158,26 +158,95 @@ export default {
       { c: garden.Bp.clone().add(new THREE.Vector3(0, 3.5, 0)), r: 4.5 },
     ];
     const tmpA = new THREE.Vector3();
+    // The jade tai-chi terrace stands ~25 cm proud of the lawn: anything that walks or rests on it uses its top
+    // (walking used the lawn height and sank the tortoise and peaches into the stone).
+    const tj = garden.taiji, TERRACE_R = 2.3;
+    const onTerrace = (x, z) => Math.hypot(x - tj.x, z - tj.z) < TERRACE_R;
+    const floorAt = (x, z, g) => (g !== null && onTerrace(x, z) ? Math.max(g, garden.taijiFloor) : g);
+    // Obstacles for flight-path planning (landing approaches and take-offs) and for walking around. The peach
+    // tree sprawls ~8 m from its trunk with boughs hanging low, so it is modelled as trunk + limbs + foliage.
+    const trunk = garden.treePos, treeTop = garden.tree.top, cl = garden.tree.clusters;
+    const segDist2 = (x, y, z, a, b) => {   // squared distance from (x,y,z) to the segment a-b
+      const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, wx = x - a.x, wy = y - a.y, wz = z - a.z;
+      const t = clamp((wx * ux + wy * uy + wz * uz) / Math.max(ux * ux + uy * uy + uz * uz, 1e-6), 0, 1);
+      const dx = wx - ux * t, dy = wy - uy * t, dz = wz - uz * t;
+      return dx * dx + dy * dy + dz * dz;
+    };
+    const trunkBase = trunk.clone();
+    const builds = [   // footprint radius and roof height of the buildings
+      { x: garden.pavPos.x, z: garden.pavPos.z, r: 3.9, top: garden.pavPos.y + 7.5 },
+      { x: garden.A.x, z: garden.A.z, r: 4.8, top: garden.A.y + 10 },
+      { x: garden.Bp.x, z: garden.Bp.z, r: 4.4, top: garden.Bp.y + 6.5 },
+    ];
+    const lanternsAt = [-1, 1].map(s => ({ x: tj.x + 1.2, z: tj.z + s * 3.2 }));
+    // circles a walker steers around on the main lawn (a goal inside one is walked straight into)
+    const walkObs = [
+      { x: trunk.x, z: trunk.z, r: 1.25 },
+      { x: garden.pavPos.x, z: garden.pavPos.z, r: 3.3 },
+      { x: garden.poolC.x, z: garden.poolC.z, r: 1.55 },
+      ...lanternsAt.map(l => ({ x: l.x, z: l.z, r: 0.42 })),
+    ];
+    const hungryOut = { p: new THREE.Vector3(), yaw: 0 };
     const world = {
-      mainGround: garden.mainGround, groundAt: garden.groundAt,
+      mainGround: (x, z) => floorAt(x, z, garden.mainGround(x, z)),
+      groundAt: (x, z) => floorAt(x, z, garden.groundAt(x, z)),
       treeTop: garden.tree.top.clone().add(new THREE.Vector3(0, 1.2, 0)),
       perches: garden.perches.length ? garden.perches : [garden.tree.top.clone()],
       taijiSpot(i) {
-        const tj = garden.taiji, tr = garden.treePos;
+        const tr = garden.treePos;
         const yaw = Math.atan2(tj.x - tr.x, tj.z - tr.z);
         if (i === 0) return { p: new THREE.Vector3(tj.x, garden.taijiFloor, tj.z), yaw };
         const a = yaw + (i % 2 ? 1 : -1) * (1.2 + Math.floor((i - 1) / 2) * 0.8);
         const p = new THREE.Vector3(tj.x + Math.sin(a) * 3.6, 0, tj.z + Math.cos(a) * 3.6);
-        p.y = garden.mainGround(p.x, p.z) ?? garden.taijiFloor;
+        p.y = world.mainGround(p.x, p.z) ?? garden.taijiFloor;
         return { p, yaw };
       },
+      // (reuses one object: it is asked every frame while a resident is hungry)
       hungrySpot(home, cam) {
         const d = tmpA.set(cam.position.x - home.p.x, 0, cam.position.z - home.p.z).normalize();
-        const p = home.p.clone().addScaledVector(d, 3.5);
-        const g = garden.mainGround(p.x, p.z);
+        const p = hungryOut.p.copy(home.p).addScaledVector(d, 3.5);
+        const g = world.mainGround(p.x, p.z);
         if (g === null) return home;
         p.y = g;
-        return { p, yaw: Math.atan2(d.x, d.z) };
+        hungryOut.yaw = Math.atan2(d.x, d.z);
+        return hungryOut;
+      },
+      /** True if a flying crane (half-span margin m) at x,y,z would touch the tree, a building, a lantern or an islet. */
+      blocked(x, y, z, m) {
+        if (segDist2(x, y, z, trunkBase, treeTop) < (1.1 + m) ** 2) return true;
+        for (const c of cl) {
+          const dx = x - c.c.x, dy = y - c.c.y, dz = z - c.c.z, R = c.r + m;
+          if (dx * dx + dy * dy + dz * dz < R * R || segDist2(x, y, z, treeTop, c.c) < (0.35 + m) ** 2) return true;
+        }
+        for (const b of builds) if (y < b.top + m && Math.hypot(x - b.x, z - b.z) < b.r + m) return true;
+        for (const l of lanternsAt) if (Math.hypot(x - l.x, z - l.z) < 0.5 + m && y < garden.taijiFloor + 2.1 + m) return true;
+        const g = garden.groundAt(x, z);
+        if (g !== null && y < g + 0.3) return true;
+        for (const il of islets) if (Math.hypot(x - il.x, z - il.z) < il.R - 1.5 && y < il.top && y > il.bottom) return true;
+        return false;
+      },
+      /** Heading from (x,z) toward (gx,gz) that passes the trunk, buildings, pond and lanterns (and the residents
+       *  in `extra`, other than `self`) at clearance c. */
+      walkHeading(x, z, gx, gz, c, extra = null, self = null) {
+        let dx = gx - x, dz = gz - z;
+        const D = Math.hypot(dx, dz) || 1e-6;
+        dx /= D; dz /= D;
+        let head = Math.atan2(dx, dz), near = 1e9;
+        const nS = walkObs.length, n = nS + (extra ? extra.n : 0);
+        for (let i = 0; i < n; i++) {
+          const o = i < nS ? walkObs[i] : extra.list[i - nS];
+          if (o.ref === self && self) continue;
+          const R = o.r + c, ox = o.x - x, oz = o.z - z;
+          const along = ox * dx + oz * dz, lat = ox * dz - oz * dx, d = Math.hypot(ox, oz);
+          if (along <= 0 || along > D + R || Math.abs(lat) >= R || along > near) continue;
+          if (Math.hypot(gx - o.x, gz - o.z) < R) continue;
+          near = along;
+          const a0 = Math.atan2(ox, oz);
+          // the tangent on the side the path already leans to; inside the ring, walk round it
+          const off = d > R ? Math.asin(R / d) : Math.PI / 2;
+          head = lat > 0 ? a0 - off : a0 + off;
+        }
+        return head;
       },
       landingSpot(r, cam) {
         const spots = garden.landSpots;
@@ -210,7 +279,7 @@ export default {
       if (foods.filter(f => f.alive).length >= 12) return null;
       const f = {
         pos: p.clone(), vel: new THREE.Vector3(), alive: true, bites: 6, maxBites: 6, scale: 0.27, tilt: rng.range(-0.15, 0.15), spin: rng.range(0, TAU),
-        state: float ? 'float' : 'fall', ground, onMain, baseY: p.y, ph: rng.range(0, TAU), age: 0, held: null, claimT: null, noticeT: 0,
+        state: float ? 'float' : 'fall', ground, onMain, baseY: p.y, ph: rng.range(0, TAU), age: 0, held: null, claimT: null, noticeT: 0, bitesS: 6, heldS: 0,
       };
       if (!float) f.pos.y += drop;
       foods.push(f);
@@ -300,8 +369,11 @@ export default {
             else { f.vel.set(0, 0, 0); f.state = 'rest'; }
           } else if (f.ground === null && f.age > 1.2) { f.state = 'float'; f.baseY = f.pos.y; }
         } else if (f.state === 'float') {
-          f.pos.y = f.baseY + Math.sin(t * 1.3 + f.ph) * 0.22; f.spin += dt * 0.6;
+          // the bob fades in (it started mid-swing and the peach jumped up to 22 cm on its first frame)
+          f.pos.y = f.baseY + Math.sin(t * 1.3 + f.ph) * 0.22 * Math.min(1, f.age); f.spin += dt * 0.6;
         }
+        // shown size eases after each bite (~0.1 s) instead of stepping down in one frame
+        f.bitesS = damp(f.bitesS, f.bites, 14, dt); f.heldS = damp(f.heldS, f.held ? 1 : 0, 8, dt);
         if (f.state !== 'held' && Math.random() < dt * 5) {
           const a = Math.random() * TAU;
           fx.sparkles.emit(f.pos.x + Math.cos(a) * 0.3, f.pos.y + 0.1, f.pos.z + Math.sin(a) * 0.3, 0, 0.35, 0, 1.6, 2.2, 1.5, 0.7, 0.16, 0);
@@ -348,9 +420,11 @@ export default {
         const hits = raycaster.intersectObjects(garden.pickables, false);
         if (hits.length && hits[0].distance < 400) {
           const p = hits[0].point;
-          const g = garden.groundAt(p.x, p.z);
-          const onLawn = g !== null && Math.abs(g - p.y) < 1.2;
-          // on lawns the peach drops and rests; on roofs, rails or rock faces it hovers just off the surface
+          const g = world.groundAt(p.x, p.z);
+          // on lawns (and the terrace) the peach drops and rests; on roofs, rails, platforms or rock faces it hovers
+          // just off the surface (a peach dropped to the lawn under a platform or rail rested inside it, and the
+          // tortoise and cranes walked into the stone to reach it)
+          const onLawn = g !== null && p.y - g < 0.35 && g - p.y < 1.2;
           const f = onLawn ? spawnPeach(p, { ground: g, onMain: garden.mainGround(p.x, p.z) !== null })
             : spawnPeach(_ray.copy(p).addScaledVector(raycaster.ray.direction, -0.8), { float: true });
           return f ? p.clone() : null;
@@ -379,6 +453,8 @@ export default {
       },
       creatures: () => creatures.list(),
       addMember(m) { creatures.addMember(m); },
+      // test handle (motion probes read the creatures' state through it)
+      debug: { sys: creatures.sys, foods, garden, world },
       dispose() {
         envMap.dispose();
         creatures.dispose();

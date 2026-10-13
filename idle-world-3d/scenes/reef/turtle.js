@@ -98,12 +98,19 @@ function flipperGeo(pts, depth) {
 }
 
 export class Turtle {
-  constructor(W, env, seed) {
+  /**
+   * `reuse`: another Turtle whose painted textures this one shares (with its own tint). Painting them
+   * takes ~0.3-0.7 s of canvas loops, which froze the screen when a turtle was added from the "new
+   * resident" button; at world creation every turtle still gets its own.
+   */
+  constructor(W, env, seed, reuse = null) {
     this.root = new THREE.Group();
-    const tex = shellTextures(seed);
-    const skin = skinTexture(seed + 1);
-    this.textures = [tex.map, tex.normalMap, skin];
+    let tex, skin;
+    if (reuse) { tex = { map: reuse.shellMap, normalMap: reuse.shellNormal }; skin = reuse.skinMap; this.textures = []; }
+    else { tex = shellTextures(seed); skin = skinTexture(seed + 1); this.textures = [tex.map, tex.normalMap, skin]; }
+    this.shellMap = tex.map; this.shellNormal = tex.normalMap; this.skinMap = skin;
     const shellMat = new THREE.MeshStandardMaterial({ map: tex.map, normalMap: tex.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.48, metalness: 0, envMapIntensity: 0.8 });
+    if (reuse) { const tr = makeRng(seed + 7); shellMat.color.setRGB(tr.range(0.86, 1.05), tr.range(0.88, 1.04), tr.range(0.82, 1.0)); }
     const skinMat = new THREE.MeshStandardMaterial({ map: skin, roughness: 0.62, metalness: 0, envMapIntensity: 0.5, side: THREE.DoubleSide });
     const plastMat = new THREE.MeshStandardMaterial({ color: '#d9cf9c', roughness: 0.6, envMapIntensity: 0.5 });
     const eyeMat = new THREE.MeshStandardMaterial({ color: '#0a0a0a', roughness: 0.15, envMapIntensity: 1.2 });

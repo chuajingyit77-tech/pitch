@@ -86,13 +86,22 @@ export function createSky(env, rng) {
   const seaDisc = new THREE.Mesh(new THREE.CircleGeometry(3000, 32).rotateX(-Math.PI / 2), seaMat);
   seaDisc.position.y = -30;
   envScene.add(seaDisc);
+  // Refreshed in place: an own cube camera, PMREM generator and one persistent target, so a refresh at
+  // dusk allocates nothing and scene.environment keeps the same texture. (fromScene made a new 6 MB
+  // target each time, and the new texture made every standard material re-resolve its program: a
+  // CPU + GPU spike every minute or two through twilight on the old iPad.)
+  const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  const cubeCam = new THREE.CubeCamera(1, 10000, cubeRT);
+  const pmremGen = new THREE.PMREMGenerator(env.renderer);
   let envRT = null;
   function updateEnv(seaColor) {
     seaMat.color.copy(seaColor);
-    const rt = env.pmrem.fromScene(envScene, 0, 1, 10000);
-    if (envRT) envRT.dispose();
-    envRT = rt;
-    return rt.texture;
+    const r = env.renderer, autoClear = r.autoClear;
+    r.autoClear = true;
+    cubeCam.update(r, envScene);
+    r.autoClear = autoClear;
+    envRT = pmremGen.fromCubemap(cubeRT.texture, envRT);
+    return envRT.texture;
   }
 
   /* ---------------- clouds ---------------- */
@@ -101,7 +110,7 @@ export function createSky(env, rng) {
   return {
     sky, uniforms: u, updateEnv, clouds,
     dispose() {
-      envRT?.dispose();
+      envRT?.dispose(); cubeRT.dispose(); pmremGen.dispose();
       seaDisc.geometry.dispose(); seaMat.dispose();
       clouds.dispose();
     },
