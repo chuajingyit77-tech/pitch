@@ -50,8 +50,17 @@ const srv = http.createServer((req, res) => {
   if (process.env.VIEW) await page.evaluate(v => { window.__idle.setView(v); window.__idle.simulate(3); }, JSON.parse(process.env.VIEW));
   await page.waitForTimeout(4000);
   const buf = await page.evaluate(() => { const gl = window.__idle.renderer.getContext(); return [gl.drawingBufferWidth, gl.drawingBufferHeight]; });
+  // cost of one frame of this world as the iPad draws it (the scene pass only; post passes add ~15 calls)
+  const cost = await page.evaluate(() => {
+    const I = window.__idle, r = I.renderer, inst = I.current.inst;
+    const ar = r.info.autoReset; r.info.autoReset = false; r.info.reset();
+    r.render(inst.scene, inst.camera);
+    const out = { calls: r.info.render.calls, triangles: r.info.render.triangles, programs: r.info.programs.length, textures: r.info.memory.textures, geometries: r.info.memory.geometries };
+    r.info.autoReset = ar;
+    return out;
+  });
   await page.screenshot({ path: OUTPNG });
   const err = await page.evaluate(() => window.__idle.error);
-  console.log(`${WORLD}@${HOURS}${DPR ? ' dpr ' + DPR : ''}: buffer ${buf.join('x')}${err ? ' ERROR ' + err.slice(0, 200) : ''}${logs.length ? ' | ' + logs.slice(0, 3).join(' | ') : ''}`);
+  console.log(`${WORLD}@${HOURS}${DPR ? ' dpr ' + DPR : ''}: buffer ${buf.join('x')} | scene: ${cost.calls} draw calls, ${(cost.triangles / 1000).toFixed(0)}k triangles, ${cost.programs} programs, ${cost.textures} textures, ${cost.geometries} geometries${err ? ' ERROR ' + err.slice(0, 200) : ''}${logs.length ? ' | ' + logs.slice(0, 3).join(' | ') : ''}`);
   await browser.close(); srv.close();
 })().catch(e => { console.error(e); process.exit(1); });
