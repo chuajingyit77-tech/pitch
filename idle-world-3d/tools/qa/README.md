@@ -16,8 +16,9 @@ world.
 It first checks the syntax of every app file (`syncheck.sh`; plain `node --check` silently passes ES modules), then runs four checks:
 1. **The iPad emulation**: Safari 14 on an iPad Air 3, iOS 14.8, WebGL 1, 1112×834 at 2×. Each world loads,
    is fed, and gets a screenshot. It must show zero shader or page errors. Look at the screenshots.
-2. **Flicker and NaN** on the low tier (the iPad's), at noon and at night. `flickerPermille` must stay well
-   under 1, with no NaN.
+2. **Flicker and NaN** on the iPad's own path (`GL1=1`: WebGL 1, no MSAA) and on WebGL 2, low tier, at noon
+   and at night. `flickerPermille` must stay well under 1, with no NaN. The WebGL 1 path matters most: without
+   MSAA and with three's sRGB handling it shimmered several times more than WebGL 2.
 3. **The motion probe**. It looks for snaps, jumps (teleports), bodies not following their path, and
    motion that differs between 30 and 60 fps.
 4. **Skinning parity**. Bone-animated creatures must have the same pose in WebGL 1 as in WebGL 2
@@ -30,10 +31,12 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | tool | what it does |
 |---|---|
 | `ios14.cjs <out> [worlds]` | iPad / Safari 14 emulation of `play.html`. With `FEED=1` it also feeds each world. |
-| `ipadshot.cjs <out.png> <world> [hour] [dpr]` | One iPad screenshot at a fixed hour and seed. `dpr 0.734` emulates the old 0.5 MP picture. |
-| `flicker.cjs <out> world:hour …` | NaN/Inf, brightest pixel and temporal flicker heatmaps. Env: `Q`, `VW`/`VH`, `VIEW`. |
+| `ipadshot.cjs <out.png> <world> [hour] [dpr]` | One iPad screenshot at a fixed hour and seed, plus the frame's draw cost. `VIEW='{"dist":0}'` is the closest zoom; `dpr 0.734` emulates the old 0.5 MP picture. |
+| `flicker.cjs <out> world:hour …` | NaN/Inf, brightest pixel and temporal flicker heatmaps. Env: `GL1=1` (iPad path), `Q`, `VW`/`VH`, `VIEW`. |
 | `motion.cjs <out> <world>` | Per-mover motion statistics, compared at 60 and 30 fps. |
 | `skin_parity.cjs <out> [worlds]` | Silhouettes of skinned creatures in WebGL 1 vs WebGL 2. |
+| `closeup.cjs <out> <world>` | iPad close-ups of fish (or `--name obj`), `--gl2 1` for the WebGL 2 A/B. |
+| `syncheck.sh` | Syntax of every app file as an ES module. |
 | `shoot.cjs --scene <id> …` | Desktop screenshot. Options include hours, view, feed, quality and UI. |
 | `phone.cjs …` | Same as `shoot.cjs`, emulating an iPhone 13. |
 | `tour.cjs <out>` | Visits every world in one page, testing switching and dispose. |

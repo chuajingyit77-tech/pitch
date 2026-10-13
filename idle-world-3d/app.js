@@ -533,6 +533,65 @@ function bleedCutouts(root) {
   });
 }
 
+/* WebGL 1 (iPad) mipmaps for colour textures. three r160 uploads an sRGB texture under WebGL 1 through
+   EXT_sRGB, which cannot build mipmaps, so it switches them off: every leaf, petal, grass and ground texture
+   then breaks into sparkling pixel noise as it shrinks with distance (on the iPad's path the meadow flickered
+   ten times as much as on WebGL 2). Colour maps of the stock materials are uploaded as plain textures
+   instead, with mipmaps, and decoded from sRGB in the shader by three's own inline decode. A texture is
+   converted only when every use of it is such a colour map, in a shader that still samples it the stock way;
+   anything a world samples itself keeps the browser's sRGB decode. */
+const gl1MipStats = { converted: 0, kept: 0 };
+function gl1ColorMipmaps(root) {
+  if (IS_WEBGL2 || !root || !renderer.extensions.has('EXT_sRGB')) return;
+  const uses = new Map();
+  const note = (tex, ok, m) => {
+    if (!tex || !tex.isTexture) return;
+    let u = uses.get(tex);
+    if (!u) uses.set(tex, u = { ok: true, mats: new Set() });
+    if (!ok) u.ok = false; else if (m) u.mats.add(m);
+  };
+  const stock = new Map();
+  // does the material still sample its map through three's chunk? (dry-run its shader patches)
+  const stockMap = m => {
+    if (stock.has(m)) return stock.get(m);
+    let ok = true;
+    if (m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) {
+      const sh = { vertexShader: '', fragmentShader: '#include <map_fragment>', uniforms: {}, defines: {} };
+      const had = Object.prototype.hasOwnProperty.call(m.userData, 'shader'), prev = m.userData.shader;
+      try {
+        m.onBeforeCompile(sh, renderer);
+        ok = sh.fragmentShader.includes('#include <map_fragment>');
+        for (const k in sh.uniforms) { const v = sh.uniforms[k] && sh.uniforms[k].value; if (v && v.isTexture) note(v, false); }
+      } catch (e) { ok = false; }
+      if (had) m.userData.shader = prev; else delete m.userData.shader;
+    }
+    stock.set(m, ok);
+    return ok;
+  };
+  const OTHER = ['emissiveMap', 'specularColorMap', 'sheenColorMap', 'specularIntensityMap', 'alphaMap', 'lightMap', 'aoMap', 'bumpMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'displacementMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap', 'transmissionMap', 'thicknessMap', 'iridescenceMap', 'iridescenceThicknessMap', 'sheenRoughnessMap', 'anisotropyMap', 'envMap', 'gradientMap', 'matcap'];
+  root.traverse(o => {
+    if (!o.material) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m) continue;
+      if (m.isShaderMaterial) { for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) note(v, false); } continue; }
+      for (const k of OTHER) if (m[k]) note(m[k], false);
+      if (m.map) note(m.map, stockMap(m) && !m.map.isVideoTexture && !m.map.isCompressedTexture && !m.map.isRenderTargetTexture && !m.map.isDataTexture, m);
+    }
+  });
+  if (root.background && root.background.isTexture) note(root.background, false);
+  if (root.environment && root.environment.isTexture) note(root.environment, false);
+  for (const [tex, u] of uses) {
+    if (tex.colorSpace !== THREE.SRGBColorSpace || !u.mats.size) continue;
+    if (!u.ok) { gl1MipStats.kept++; continue; }
+    tex.colorSpace = THREE.NoColorSpace;
+    // an earlier upload through EXT_sRGB may already have switched this texture's mipmaps off
+    if (tex.format === THREE._SRGBAFormat) { tex.format = THREE.RGBAFormat; tex.generateMipmaps = true; if (tex.minFilter === THREE.LinearFilter) tex.minFilter = THREE.LinearMipmapLinearFilter; }
+    tex.needsUpdate = true;
+    for (const m of u.mats) { if (!m.defines || !('DECODE_VIDEO_TEXTURE' in m.defines)) { m.defines = Object.assign({}, m.defines, { DECODE_VIDEO_TEXTURE: '' }); m.needsUpdate = true; } }
+    gl1MipStats.converted++;
+  }
+}
+
 function smoothCutouts(root) {
   if (!scenePass.target.samples) return;
   root.traverse(o => {
@@ -810,6 +869,7 @@ async function enterWorld(id, { first = false } = {}) {
     elapsed = 1 / 60;
     inst.update(1 / 60, elapsed);
     updateRig(1 / 60, elapsed);
+    gl1ColorMipmaps(inst.scene);
     applyPost(inst.post);
     // compile against the scene buffer so the programs match what the frames will use
     try {
@@ -1394,7 +1454,7 @@ window.__idle = {
     });
   },
   get current() { return current; },
-  bleedStats,
+  bleedStats, gl1MipStats,
   get rig() { return rig; },
   renderer,
 };

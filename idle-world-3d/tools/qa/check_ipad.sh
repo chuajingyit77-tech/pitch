@@ -11,8 +11,9 @@ echo "== 0. Syntax (every app .js file as an ES module)"
 "$QA/syncheck.sh" || exit 1
 echo "== 1. Safari 14 / WebGL 1 iPad emulation: load + feed every world (shader errors, page errors, screenshots)"
 FEED=1 timeout 3600 node "$QA/ios14.cjs" "$OUT/ios14" $WORLDS
-echo "== 2. Flicker / NaN on the iPad tier (low), noon and night"
+echo "== 2. Flicker / NaN on the iPad's own path (WebGL 1, low tier) and on WebGL 2, noon and night"
 JOBS=""; for w in $WORLDS; do JOBS="$JOBS $w:12 $w:21"; done
+GL1=1 Q=low VW=480 VH=270 timeout 5400 node "$QA/flicker.cjs" "$OUT/flicker_gl1" $JOBS
 Q=low VW=480 VH=270 timeout 5400 node "$QA/flicker.cjs" "$OUT/flicker_low" $JOBS
 echo "== 3. Motion: snaps, jumps, misalignment, 30 vs 60 fps"
 for w in $WORLDS; do timeout 1500 node "$QA/motion.cjs" "$OUT/motion" "$w" --fps 60,30 --secs 20 --feed 8 | grep -E "^==|frame-rate"; done

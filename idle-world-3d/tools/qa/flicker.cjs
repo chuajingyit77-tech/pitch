@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Stability probe: for each world/hour, NaN/Inf in the HDR buffer and temporal flicker of the final image.
 // NODE_PATH=$(npm root -g) node flicker.cjs [outdir] reef:13 reef:23 koi:21.5 ...
-// env: VW/VH viewport (default 640x360), Q=high|medium|low quality tier, VIEW='{"yaw":..,"pitch":..,"dist":..}'
+// env: VW/VH viewport (default 640x360), Q=high|medium|low quality tier, VIEW='{"yaw":..,"pitch":..,"dist":..}',
+//      GL1=1 for the iPad's WebGL 1 path
 // Writes <id>_<hour>[_Q].png (screenshot) and <id>_<hour>[_Q]_flicker.png (red = pixels that flickered).
 // Metrics: nan/inf (+nanAt) count in the raw HDR scene render; maxL = brightest raw HDR luminance (+maxAt [x,y]
 // screen fractions, top-left origin); over32 = pixels brighter than 32; flickerPermille = per-mille of pixels that
@@ -34,8 +35,11 @@ const srv = http.createServer((req, resp) => {
 (async () => {
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const port = srv.address().port;
-  const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-  const page = await browser.newPage({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1 });
+  // GL1=1: measure the iPad's path (Safari 14: WebGL 1, FXAA instead of MSAA, no alpha-to-coverage)
+  const GL1 = !!process.env.GL1;
+  const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', ...(GL1 ? ['--disable-webgl2'] : [])] });
+  const page = await browser.newPage({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1,
+    ...(GL1 ? { userAgent: 'Mozilla/5.0 (iPad; CPU OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1', hasTouch: true, isMobile: true } : {}) });
   page.setDefaultTimeout(900000);
   let logs = [];
   page.on('console', m => { if (m.type() === 'error') logs.push(`[console] ${m.text().slice(0, 300)}`); });
@@ -58,10 +62,10 @@ const srv = http.createServer((req, resp) => {
     await page.evaluate(() => window.__idle.simulate(3));
     if (process.env.VIEW) await page.evaluate(v => { window.__idle.setView(v); window.__idle.simulate(1.5); }, JSON.parse(process.env.VIEW));
     const r = await page.evaluate(() => window.__idle.diagnose({ frames: 8, heatmap: true }));
-    const tag = `${id}_${h}${process.env.Q ? '_' + process.env.Q : ''}`;
+    const tag = `${id}_${h}${process.env.Q ? '_' + process.env.Q : ''}${GL1 ? '_gl1' : ''}`;
     await page.screenshot({ path: path.join(OUT, `${tag}.png`) });
     if (r && r.map) { fs.writeFileSync(path.join(OUT, `${tag}_flicker.png`), Buffer.from(r.map.split(',')[1], 'base64')); delete r.map; }
-    console.log(`${id}@${h}${process.env.Q ? ' [' + process.env.Q + ']' : ''}: ${JSON.stringify(r)}`);
+    console.log(`${id}@${h}${process.env.Q ? ' [' + process.env.Q + ']' : ''}${GL1 ? ' [webgl1]' : ''}: ${JSON.stringify(r)}`);
     if (logs.length) { console.log('  ' + logs.slice(0, 6).join('\n  ')); logs = []; }
   }
   await browser.close();
