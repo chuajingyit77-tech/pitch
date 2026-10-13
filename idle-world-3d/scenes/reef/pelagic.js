@@ -165,6 +165,15 @@ export class Manta {
     this.u.uVis.value = 0;
     this.mesh.visible = true;
   }
+  /** Where the manta will be `ahead` s from now on its current visit (false once the visit is over). */
+  predict(ahead, out) {
+    if (this.eagle || !this.active) return false;
+    const k = (this.t + ahead) / this.dur;
+    if (k >= 1) return false;
+    out.lerpVectors(this.start, this.end, k).addScaledVector(this.side, Math.sin(k * TAU * 1.1 + this.wig) * 3.0);
+    out.y = this.height + Math.sin(k * TAU * 0.8 + this.wig) * 1.2;
+    return true;
+  }
   update(dt, time, floorAt) {
     if (this.eagle) return this.updateEagle(dt, time, floorAt);
     if (!this.active) {
@@ -313,7 +322,7 @@ export class Jellies {
     this.group.add(this.mesh, this.lines);
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._s = new THREE.Vector3(); this._e = new THREE.Euler();
   }
-  update(dt, time, night, floorAt) {
+  update(dt, time, night, floorAt, giant = null) {
     const vis = night > 0.02;
     this.group.visible = vis;
     this.u.uNight.value = night;
@@ -333,6 +342,15 @@ export class Jellies {
       const low = smoothstep(floor + 0.8, floor, it.pos.y);
       it.vel.y = lerp(it.vel.y, -0.035 * (1 - low) + pulse * 0.16 * (1 - smoothstep(ceil - 1.2, ceil, it.pos.y)) + low * 0.12, 1 - Math.exp(-2 * dt));
       it.pos.addScaledVector(it.vel, dt).addScaledVector(it.drift, dt);
+      // the whale shark's bow wave and flank currents push a bell aside (a gentle drift, eased in)
+      if (giant && giant.on) {
+        const g = giant, bx = g.head.x - g.tail.x, by = g.head.y - g.tail.y, bz = g.head.z - g.tail.z;
+        const px = it.pos.x - g.tail.x, py = it.pos.y - g.tail.y, pz = it.pos.z - g.tail.z;
+        const u = clamp((px * bx + py * by + pz * bz) / Math.max(bx * bx + by * by + bz * bz, 1e-6), 0, 1.15);
+        const dx = px - bx * u, dy = py - by * u, dz = pz - bz * u, d = Math.hypot(dx, dy, dz) || 1;
+        const w = smoothstep(g.r + 3.0, g.r + 0.6, d) * g.vis * 0.9;
+        if (w > 0) it.pos.addScaledVector(_tmpV.set(dx / d, dy / d, dz / d), w * dt);
+      }
       if (it.pos.y < floor) it.pos.y = lerp(it.pos.y, floor, 1 - Math.exp(-3 * dt));
       if (it.pos.y > ceil) it.pos.y = lerp(it.pos.y, ceil, 1 - Math.exp(-1.5 * dt));
       // turn the drift back toward the reef gradually instead of reversing it in one frame

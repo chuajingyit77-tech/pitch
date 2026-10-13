@@ -1,13 +1,16 @@
 // 深蓝 · 珊瑚礁 — an underwater coral reef garden on a sandy slope (ABZÛ / Endless Ocean mood).
 // Modules: reef/uw.js (water volume), reef/terrain.js (seabed, rocks, height map), reef/corals.js
-// (the living reef), reef/life.js (fish, turtles, feeding), reef/pelagic.js (manta, jellies).
+// (the living reef), reef/life.js (fish, turtles, feeding), reef/pelagic.js (manta, jellies),
+// reef/giant.js (the whale shark that passes through the blue every few minutes).
 import * as THREE from 'three';
-import { clamp, lerp, smoothstep, TAU } from '../lib/util.js';
-import { createWaterUniforms, setWaterTime, createBackground, createSurface, createShafts, createSnow, createBubbles, createEnvBuilder, DETAIL } from './reef/uw.js';
+import { clamp, lerp, smoothstep, damp, TAU } from '../lib/util.js';
+import { createWaterUniforms, setWaterTime, createBackground, createSurface, createShafts, createSnow, createGlow, createBubbles, createEnvBuilder, DETAIL } from './reef/uw.js';
 import { createGround, buildTerrain, buildRocks, HeightMap } from './reef/terrain.js';
 import { buildReef } from './reef/corals.js';
 import { createLife } from './reef/life.js';
 import { Manta, Jellies } from './reef/pelagic.js';
+import { WhaleShark } from './reef/giant.js';
+import { Cuttlefish } from './reef/cuttle.js';
 
 const SURF_Y = 12;
 const REF_Y = 0.5;
@@ -62,10 +65,15 @@ export default {
     const surface = createSurface(W, n1, n2);
     surface.name = 'surface';
     scene.add(surface);
-    const shafts = createShafts(W, rng.fork('shafts'), { count: Math.round(34 * Math.max(0.5, env.q)), radius: 24, center });
+    const shafts = createShafts(W, rng.fork('shafts'), { count: Math.round(34 * Math.max(0.5, env.q)), radius: 24, center, far: Math.round(9 * Math.max(0.55, env.q)), frng: rng.fork('farShafts') });
     scene.add(shafts.mesh);
     const snow = createSnow(W, rng.fork('snow'), { count: Math.round(1800 * env.q) });
     scene.add(snow.mesh);
+    // glowing plankton at night (drawn only after dusk; shown for the first frames so it compiles with the rest)
+    const glow = createGlow(W, rng.fork('glow'), { count: Math.round(2600 * Math.max(0.45, env.q)) });
+    glow.mesh.name = 'plankton';
+    scene.add(glow.mesh);
+    let warmFrames = 6;
     const bubbleSrc = [];
     if (an0) bubbleSrc.push(an0.pos.clone().add(new THREE.Vector3(0.7, -0.2, 0.3)));
     for (const b of rocks.bommies.slice(1)) {
@@ -93,7 +101,9 @@ export default {
 
     /* ---------------- life ---------------- */
     const tod = { hours: -99, envHours: -99, sunW: new THREE.Vector3(0, 1, 0), axis: new THREE.Vector3(0, -1, 0), night: 0, day: 1, golden: 0 };
-    const life = await createLife({ W, env, hm, scene, anemones: reef.anemones, bommies: rocks.bommies, surfY: SURF_Y, camera, center, thickets: reef.thickets, tod });
+    // the whale shark's state (filled in by reef/giant.js each frame): the schools part round it
+    const giantState = { on: false, head: new THREE.Vector3(), tail: new THREE.Vector3(), mid: new THREE.Vector3(), fwd: new THREE.Vector3(1, 0, 0), r: 1, vis: 0, speed: 0 };
+    const life = await createLife({ W, env, hm, scene, anemones: reef.anemones, bommies: rocks.bommies, surfY: SURF_Y, camera, center, thickets: reef.thickets, tod, giant: giantState });
     life.group.name = 'life';
     scene.add(life.group);
     const manta = new Manta(W, rng.fork('manta'), center);
@@ -278,6 +288,27 @@ export default {
       pitch: 0.16, pitchRange: [-0.1, 0.55],
       drift: 0.035, idlePitch: 0.15, fov: 45, minY: -1,
     };
+    /* ---------------- the gentle giant ---------------- */
+    // kept clear of the haze pinnacles and the kelp; planned against this view when each visit starts
+    // (rounded rocks: an ellipsoid round each, a little larger than the displaced rock template)
+    const obstacles = rocks.far.map(f => ({ x: f.pos.x, z: f.pos.z, y: f.pos.y, r: Math.max(f.scale.x, f.scale.z) * 1.3, ry: f.scale.y * 1.35 }));
+    for (const k of reef.kelpClumps || []) obstacles.push(k);
+    // the manta's visits are predictable: the giant's path keeps clear of it (moving obstacle)
+    const movers = [{ r: manta.scale + 2.2, predict: (ahead, out) => manta.predict(ahead, out) }];
+    const giant = new WhaleShark({ W, env, camera, view, floorAt, surfY: SURF_Y, obstacles, movers, rng: rng.fork('giant'), state: giantState });
+    scene.add(giant.group);
+
+    /* ---------------- a cuttlefish on the coral head that faces the default view ---------------- */
+    const cutHome = (() => {
+      const dx = Math.sin(view.yaw), dz = Math.cos(view.yaw);   // from the reef toward the camera
+      const x = mainB.x + dx * (mainB.r + 0.7) - dz * 1.1, z = mainB.z + dz * (mainB.r + 0.7) + dx * 1.1;
+      return new THREE.Vector3(x, hm.at(x, z), z);
+    })();
+    const cuttle = new Cuttlefish({ W, rng: rng.fork('cuttle'), floorAt, home: cutHome, seed: env.seed >>> 0 });
+    scene.add(cuttle.mesh);
+    collectEnvMats();
+    for (const [mat, base] of envMats) mat.envMapIntensity = base * envScale;
+
     const post = {
       bloom: { strength: 0.3, radius: 0.7, threshold: 0.8 },
       exposure: 1.0, toneMapping: 'aces',
@@ -302,6 +333,26 @@ export default {
       return made;
     }
 
+    /* ---------------- garden eels: duck when something big passes over ---------------- */
+    const eelNight = () => smoothstep(0.25, 0.75, tod.night);
+    function updateEels(dt) {
+      for (const c of reef.eelColonies || []) {
+        let threat = 0;
+        const g = giantState;
+        if (g.on) {
+          // horizontal distance from the colony to the shark's body (tail .. snout)
+          const bx = g.head.x - g.tail.x, bz = g.head.z - g.tail.z, px = c.x - g.tail.x, pz = c.z - g.tail.z;
+          const u = clamp((px * bx + pz * bz) / Math.max(bx * bx + bz * bz, 1e-6), 0, 1);
+          threat = smoothstep(11, 6.5, Math.hypot(px - bx * u, pz - bz * u)) * g.vis;
+        }
+        threat = Math.max(threat, smoothstep(4.6, 2.6, Math.hypot(eagle.pos.x - c.x, eagle.pos.z - c.z)));
+        const want = Math.max(threat > 0.15 ? 1 : 0, eelNight());
+        c.duck = c.init ? damp(c.duck, want, want > c.duck ? 5 : 0.3, dt) : want;   // a night-time visit starts with them in
+        c.init = true;
+        c.u.value.set(c.x, c.z, c.duck, 0);
+      }
+    }
+
     /* ---------------- hover tags ---------------- */
     const tagCache = [];
     const tag = (i) => (tagCache[i] || (tagCache[i] = { member: null, label: null, pos: null, radius: 0.5 }));
@@ -309,11 +360,14 @@ export default {
     let time = 0;
     return {
       scene, camera, view, post,
-      debug: { anemones: reef.anemones, bommies: rocks.bommies, life, manta, eagle, hm },
+      debug: { anemones: reef.anemones, bommies: rocks.bommies, life, manta, eagle, hm, giant, cuttle, eels: reef.eelColonies, glow },
+      /** Test hook: start a whale-shark visit now and jump to t s from its closest pass (0 = crossing the view). */
+      debugGiant(t = 0) { return giant.debug(t); },
       update(dt, t) {
         time += dt;
         setWaterTime(W, time);
         snow.syncHi(W.uTimeHi.value);
+        glow.syncHi(W.uTimeHi.value);
         bubbles.syncHi(W.uTimeHi.value);
         applyTod(false);
         blendTod(1 - Math.exp(-dt / 1.2));
@@ -323,12 +377,32 @@ export default {
         surface.position.set(camera.position.x, SURF_Y, camera.position.z);
         const ph = env.renderer.getDrawingBufferSize(_v2).y || 720;
         const sc = ph / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
-        snow.u.uScale.value = sc; bubbles.u.uScale.value = sc;
+        snow.u.uScale.value = sc; bubbles.u.uScale.value = sc; glow.u.uScale.value = sc;
         view.minY = hm.at(camera.position.x, camera.position.z) + 1.1;
+        giant.update(dt, time);
         life.update(dt, time);
-        manta.update(dt, time);
+        // the manta waits while the whale shark has the stage
+        if (manta.active || !giant.active) manta.update(dt, time);
         eagle.update(dt, time, floorAt);
-        jellies.update(dt, time, tod.night, floorAt);
+        jellies.update(dt, time, tod.night, floorAt, giantState);
+        cuttle.update(dt, time, { night: tod.night, giant: giantState, food: life.food, camera });
+        // plankton: night only (kept on for the first frames so its program compiles under the veil)
+        glow.u.uBio.value = smoothstep(0.25, 0.9, tod.night);
+        camera.getWorldDirection(_v);
+        glow.u.uBoxC.value.copy(camera.position).addScaledVector(_v, 8);
+        giant.setNight(glow.u.uBio.value);
+        glow.mesh.visible = glow.u.uBio.value > 0.004 || warmFrames > 0;
+        if (giantState.on) { glow.u.uGiantA.value.set(giantState.tail.x, giantState.tail.y, giantState.tail.z, giantState.vis); glow.u.uGiantB.value.set(giantState.head.x, giantState.head.y, giantState.head.z, giantState.r); }
+        else glow.u.uGiantA.value.w = 0;
+        // Things that start hidden (the manta between visits, the jellies by day, the plankton) would compile
+        // their shaders when they first appear, mid-play (a visible stall on Safari 14). For the frames before
+        // the world is revealed they are drawn: the manta far out of sight, the others at zero light.
+        if (warmFrames > 0) {
+          warmFrames--;
+          if (!manta.active) { manta.mesh.visible = warmFrames > 0; manta.mesh.position.set(0, -500, 0); }
+          if (!jellies.group.visible) jellies.group.visible = warmFrames > 0;
+        }
+        updateEels(dt);
         post.bloom.strength = lerp(0.3, 0.62, tod.night);
         post.bloom.threshold = lerp(0.8, 0.48, tod.night);
         post.exposure = lerp(1.0, 1.3, tod.night);
@@ -363,6 +437,8 @@ export default {
         { const c = tag(i++); c.member = null; c.label = '银汉鱼群'; c.pos = life.silCenter; c.radius = 2.0; }
         for (const b of life.barra) { const c = tag(i++); c.member = null; c.label = '尖吻鲈'; c.pos = b.pos; c.radius = 0.6; }
         if (manta.mesh.visible) { const c = tag(i++); c.member = null; c.label = '蝠鲼'; c.pos = manta.pos; c.radius = 2.2; }
+        { const c = tag(i++); c.member = null; c.label = '乌贼'; c.pos = cuttle.pos; c.radius = 0.45; }
+        if (giant.active && giant.state.vis > 0.3) { const c = tag(i++); c.member = null; c.label = '鲸鲨'; c.pos = giant.pos; c.radius = giant.TL * 0.3; }
         { const c = tag(i++); c.member = null; c.label = '鹰鳐'; c.pos = eagle.pos; c.radius = 1.0; }
         for (const g of life.hoverGroups) { if (g.kind !== 'anthias') continue; const c = tag(i++); c.member = null; c.label = '金拟花鮨'; c.pos = g.c; c.radius = 1.3; }
         if (life.butter[0]) { const c = tag(i++); c.member = null; c.label = '蝴蝶鱼'; c.pos = life.butter[0].pos; c.radius = 0.5; }
@@ -373,6 +449,8 @@ export default {
       },
       dispose() {
         envB.dispose();
+        giant.dispose();
+        cuttle.dispose();
         life.dispose();
         for (const t of disposeList) t.dispose?.();
       },

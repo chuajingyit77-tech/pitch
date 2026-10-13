@@ -437,7 +437,7 @@ class Food {
 /* Life                                                                */
 /* ------------------------------------------------------------------ */
 export async function createLife(ctx) {
-  const { W, env, hm, scene, anemones, bommies, surfY, camera, center, thickets = [], tod = { night: 0 } } = ctx;
+  const { W, env, hm, scene, anemones, bommies, surfY, camera, center, thickets = [], tod = { night: 0 }, giant = null } = ctx;
   const rng = env.rng.fork('life');
   const q = Math.max(0.45, env.q);
   const group = new THREE.Group();
@@ -764,6 +764,27 @@ export async function createLife(ctx) {
     return out;
   };
 
+  /* ---- the whale shark passing: schools part round it and close up behind ---- */
+  // giant (reef/giant.js, updated before life): { on, head, tail, fwd, r, vis }. Its body is a capsule from
+  // the tail to a little ahead of the snout (the bow wave); a fish within `reach` metres of its skin swims
+  // away at up to `k` m/s (sideways from the body axis, plus `down` toward the reef for reef dwellers).
+  // Returns how strongly it is fleeing (0..1), so callers can let it swim faster than its cruise cap.
+  function giantPush(p, out, reach, k, down = 0) {
+    if (!giant || !giant.on) return 0;
+    const t0 = giant.tail, h = giant.head, f = giant.fwd;
+    const bx = h.x + f.x * 2.2 - t0.x, by = h.y + f.y * 2.2 - t0.y, bz = h.z + f.z * 2.2 - t0.z;
+    const px = p.x - t0.x, py = p.y - t0.y, pz = p.z - t0.z;
+    const L2 = bx * bx + by * by + bz * bz;
+    const u = clamp((px * bx + py * by + pz * bz) / Math.max(L2, 1e-6), 0, 1);
+    let dx = px - bx * u, dy = py - by * u, dz = pz - bz * u;
+    const d = Math.hypot(dx, dy, dz), R = giant.r + reach;
+    if (d >= R) return 0;
+    if (d < 1e-3) { dx = -f.z; dy = 0; dz = f.x; } else { dx /= d; dy /= d; dz /= d; }
+    const w = smoothstep(R, giant.r * 0.8, d) * giant.vis;
+    out.x += dx * k * w; out.y += dy * k * w - down * w; out.z += dz * k * w;
+    return w;
+  }
+
   /* ---- per-frame ---- */
   let time = 0, fishT = 0;
   const foodAvail = it => it.alive;
@@ -947,6 +968,7 @@ export async function createLife(ctx) {
           const d2 = dx * dx + dy * dy + dz * dz, rr = (f.size + o.size) * (f.home && o.home === f.home ? 0.45 : 0.7);
           if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2), k = (rr - d) / d * 1.5; _d.x += dx * k; _d.y += dy * k; _d.z += dz * k; }
         }
+        giantPush(sw.pos, _d, 2.6, 1.4, 0.5);
         avoid(sw, _d, f.clear, dt, ign);
         arcSteer(sw, _d, f.state === 'food' ? 1.05 : 0.7);   // a dash for food turns tighter than cruising
         swim(sw, _d, dt);
@@ -1012,6 +1034,8 @@ export async function createLife(ctx) {
         const dx = tu.pos.x - f.sw.pos.x, dy = tu.pos.y - f.sw.pos.y, dz = tu.pos.z - f.sw.pos.z, d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < 1.0) f.sw.vel.addScaledVector(_v1.set(-dx, -dy, -dz).normalize(), dt * 2);
       }
+      // a turtle gives the whale shark room (it steers away and dips under it)
+      giantPush(tu.pos, _d, 3.2, 0.9, 0.3);
       // The body follows its path: the turtle swims along its heading and turns the heading toward where
       // it wants to go, yaw and pitch separately at a capped rate (0.2..0.8 rad/s). It used to blend its
       // velocity toward the target, so a target behind made it stall and back up while the shell swung
@@ -1108,8 +1132,9 @@ export async function createLife(ctx) {
           if (_v1.distanceTo(s.food.pos) < 0.12) { food.eat(s.food); env.onEat(null, s.food.pos.clone()); s.food = null; }
         }
       } else s.food = null;
+      const flee = giantPush(s.pos, _d, 3.4, 2.2, 0.7);
       const sp = _d.length();
-      const maxS = s.food ? 1.7 : 1.0;
+      const maxS = Math.max(s.food ? 1.7 : 1.0, 1.0 + 0.9 * flee);
       if (sp > maxS) _d.multiplyScalar(maxS / sp);
       avoid(s, _d, 0.35, dt);
       if (s.food) arcSteer(s, _d, 1.1);   // a dart at a pellet behind turns in an arc (it whipped round)
@@ -1139,6 +1164,7 @@ export async function createLife(ctx) {
         const dx = s.pos.x - o.pos.x, dy = s.pos.y - o.pos.y, dz = s.pos.z - o.pos.z, d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < 0.06 && d2 > 1e-6) { _d.x += dx * 4; _d.y += dy * 4; _d.z += dz * 4; }
       }
+      giantPush(s.pos, _d, 4.0, 2.6);
       swim(s, _d, dt);
     }
     // the ball drifts slowly
@@ -1183,7 +1209,8 @@ export async function createLife(ctx) {
             if (_v2.distanceTo(s.food.pos) < 0.11) { food.eat(s.food); env.onEat(null, s.food.pos.clone()); s.food = null; }
           }
         }
-        const sp = _d.length(), maxS = s.food ? 1.6 : 0.6;
+        const flee = giantPush(s.pos, _d, 3.0, 1.6, 1.0);
+        const sp = _d.length(), maxS = Math.max(s.food ? 1.6 : 0.6, 0.6 + 1.2 * flee);
         if (sp > maxS) _d.multiplyScalar(maxS / sp);
         // a pellet behind, or back to station after a chase: turn in an arc (reversing through a
         // standstill flipped the body over the top)
@@ -1246,6 +1273,7 @@ export async function createLife(ctx) {
       }
       if (!hover) {
         endHover(s);
+        giantPush(s.pos, _d, 2.4, 1.3, 0.5);
         avoid(s, _d, 0.3, dt);
         arcSteer(s, _d, s.food ? 1.0 : 0.8);
         swim(s, _d, dt);
@@ -1292,7 +1320,8 @@ export async function createLife(ctx) {
       _v1.copy(fus.c).addScaledVector(fus.dir, s.off.x).add(_v2.set(sx * s.off.z, s.off.y, sz * s.off.z));
       _v1.x += Math.sin(t * 0.5 + s.jit) * 0.3; _v1.y += Math.sin(t * 0.4 + s.jit * 2) * 0.2;
       _d.subVectors(_v1, s.pos).multiplyScalar(0.8).addScaledVector(fus.dir, 1.2);
-      const sp = _d.length(); if (sp > 1.8) _d.multiplyScalar(1.8 / sp);
+      const flee = giantPush(s.pos, _d, 4.0, 2.4);
+      const sp = _d.length(), cap = 1.8 + 0.9 * flee; if (sp > cap) _d.multiplyScalar(cap / sp);
       swim(s, _d, dt);
     }
     fusInst.begin(); for (const s of fus.fish) fusInst.push(s); fusInst.end(fishT);
@@ -1308,6 +1337,7 @@ export async function createLife(ctx) {
       _d.set(-rz / rr * 1.1, 0, rx / rr * 1.1);
       _d.x += -rx / rr * (rr - R) * 0.5; _d.z += -rz / rr * (rr - R) * 0.5;
       _d.y = -ry * 0.35 + Math.sin(t * 0.4 + i) * 0.2;
+      giantPush(s.pos, _d, 4.5, 2.4);
       swim(s, _d, dt);
     }
     c.x += Math.sin(t * 0.02) * dt * 0.2;
