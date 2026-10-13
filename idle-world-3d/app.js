@@ -525,8 +525,10 @@ function bleedCutouts(root) {
   root.traverse(o => {
     if (!o.material) return;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-      // cut-outs only: their textures are static (a soft, blended texture may be a live canvas)
-      if (m && m.map && (m.alphaTest > 0 || m.alphaToCoverage)) bleedTexture(m.map);
+      // solid cut-outs only (leaves, petals, fronds: alpha test 0.4 and up). Soft, feathery cut-outs (pampas
+      // plumes, fins, small petals, alpha test below 0.4) look right darkened at their wispy edges, and
+      // brightening those makes them shimmer as they sway. Blended textures may be live canvases.
+      if (m && m.map && m.alphaTest >= 0.4) bleedTexture(m.map);
     }
   });
 }
