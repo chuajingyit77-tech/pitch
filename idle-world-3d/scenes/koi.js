@@ -10,6 +10,7 @@ import {
   makeCanvas, noiseCanvas, GLSL, patchMaterial, createWind, addWind, softDiscTexture,
 } from '../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, createSwimDepthMaterial, Swimmer } from '../lib/fish.js';
+import { Heron } from './koi/heron.js';
 
 const KINDS = {
   kohaku: { zh: '红白' }, tancho: { zh: '丹顶' }, sanke: { zh: '大正三色' }, showa: { zh: '昭和三色' },
@@ -677,6 +678,9 @@ class KoiPond {
     this.buildSpout();
     this.buildParticles();
     this.buildKoi();
+    // the gentle giant: a grey heron that visits now and then (built here, hidden until its first visit)
+    this.heron = new Heron(this, this.rng.fork('heron'));
+    addUnderwater(this.heron.mat, this.U, { caustic: 0.8, tint: 1, key: 'heron' });
     this.updateTimeOfDay(true);
 
     return {
@@ -698,8 +702,10 @@ class KoiPond {
       feed: ray => this.feed(ray),
       feedRandom: n => this.feedRandom(n),
       addMember: m => this.addKoi(m, true),
-      creatures: () => this.koi.map(k => ({ member: k.member, pos: k.sw.pos, radius: 0.32 * k.scale + 0.1 })),
+      creatures: () => this.creatures(),
       dispose: () => this.dispose(),
+      // test hook: start a heron visit now and run it t seconds in (spot: index into its landing spots, -1 = choose)
+      debugGiant: (t = 14, spot = -1, stay = 120) => this.heron.debug(t, spot, stay),
       debug: this, // test probes read the pond's state (koi, food, petals, pads) through this
     };
   }
@@ -941,10 +947,12 @@ class KoiPond {
     placements[0].push({ x: isle.x, y: -0.35, z: isle.z, s: 0.7, sy: 0.75, rot: 1 });
     this.islandStone = isle;
     const col = new THREE.Color();
+    this.rockMeshes = [];
     variants.forEach((geo, vi) => {
       const list = placements[vi];
       if (!list.length) return;
       const im = new THREE.InstancedMesh(geo, mat, list.length);
+      this.rockMeshes.push(im);
       const gp = geo.userData.footprint; // the old stone's vertices (see rockGeometry)
       list.forEach((p, i) => {
         _m.compose(_v.set(p.x, p.y, p.z), _q.setFromEuler(_e.set(r.range(-0.15, 0.15), p.rot, r.range(-0.15, 0.15))), _s.set(p.s * r.range(0.9, 1.3), p.s * p.sy, p.s));
@@ -1122,6 +1130,7 @@ class KoiPond {
     g.rotation.y = r.range(0, TAU);
     g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.scene.add(g);
+    this.lanternGroup = g;
     this.lanternLight = new THREE.PointLight('#ffb062', 0, 12, 1.6);
     this.lanternLight.position.copy(spot).add(new THREE.Vector3(0, 1.5, 0));
     this.scene.add(this.lanternLight);
@@ -1555,6 +1564,7 @@ class KoiPond {
         ok = !this.nearBridge(x, z, 1.2);
       }
       const y = Math.max(this.height(x, z), -0.05);
+      (this.irisSpots || (this.irisSpots = [])).push({ x, z });
       for (let k = 0; k < leavesPer; k++) {
         _m.compose(_v.set(x + r.gauss() * 0.12, y, z + r.gauss() * 0.12), _q.setFromEuler(_e.set(r.range(-0.3, 0.3), r.range(0, TAU), r.range(-0.3, 0.3))), _s.set(1, r.range(0.7, 1.2), 1));
         irisL.setMatrixAt(li++, _m);
@@ -1910,6 +1920,7 @@ class KoiPond {
     this.lanternGlow.emissiveIntensity = glow * 3.2;
     this.lanternLight.intensity = glow * 14;
     this.flyMat.uniforms.uNight.value = glow;
+    if (this.heron) this.heron.setLight(S);
     // env map from the sky, refreshed when the light changes
     const changing = S.golden > 0.02 || (night > 0.02 && night < 0.98) || (day > 0.02 && day < 0.98);
     const key = changing ? 'f' + Math.round(S.hours * 30) : 's' + Math.round(S.hours * 6);
@@ -1965,6 +1976,7 @@ class KoiPond {
     this.updateDrops(dt);
     this.updateFlies(time);
     this.updateFloatLanterns(dt, time);
+    this.heron.update(dt, time);
 
     // spout keeps the water alive
     this.spoutT = (this.spoutT || 0) - dt;
@@ -2222,11 +2234,27 @@ class KoiPond {
               if (o !== k && o.follow !== k) k.follow = o;
             } else k.follow = null;
             this.openWaterPoint(k.rng, 0.9, k.target);
+            // while the heron stands in the pond, wander elsewhere
+            const H = this.heron;
+            for (let tries = 0; tries < 4 && H && H.present && Math.hypot(k.target.x - H.center.x, k.target.z - H.center.z) < 2.4; tries++) this.openWaterPoint(k.rng, 0.9, k.target);
             k.depth = clamp(k.depth + k.rng.range(-0.2, 0.2), 0.16, 0.7) * (1 + night * 0.25);
             k.target.y = WATER_Y - k.depth;
           }
           if (k.follow) { _v.copy(k.follow.sw.pos).addScaledVector(k.follow.sw.fwd, -0.55); _v.y = WATER_Y - k.depth; sw.seek(_v, speed * 1.3, 0.6, desired); }
           else sw.seek(k.target, speed, 1.2, desired);
+        }
+      }
+      // the heron: koi notice it and keep their distance (bolder for food), darting off when it lands or strikes
+      const H = this.heron;
+      if (H && H.present) {
+        const dx = sw.pos.x - H.center.x, dz = sw.pos.z - H.center.z, d = Math.hypot(dx, dz);
+        const feeding = k.mode === 'feed', R = (feeding ? 1.05 : 1.75) + H.alarm * 0.9;
+        if (d < R && d > 1e-3) {
+          const f = 1 - d / R, push = (feeding ? 0.42 : 0.55) * f * (0.6 + f) + H.alarm * f * 0.55;
+          desired.x += dx / d * push; desired.z += dz / d * push;
+          desired.y -= push * 0.15; // and go a little deeper
+          vmax = Math.max(vmax, 0.1 + push * 0.85);
+          agility = Math.max(agility, 1.4 + H.alarm * 1.4);
         }
       }
       // keep inside the pond with a look-ahead
@@ -2427,5 +2455,11 @@ class KoiPond {
     for (const t of this.disposables) t.dispose?.();
     for (const k of this.koi) { k.painted.map.dispose(); k.mesh.customDepthMaterial?.dispose(); }
     this.koiGeo.dispose(); this.butterflyGeo.dispose();
+    this.heron?.dispose();
+  }
+  creatures() {
+    const out = this.koi.map(k => ({ member: k.member, pos: k.sw.pos, radius: 0.32 * k.scale + 0.1 }));
+    if (this.heron && this.heron.obj.visible) out.push({ member: null, label: '苍鹭', pos: this.heron.bodyPos.x, radius: 0.45 });
+    return out;
   }
 }

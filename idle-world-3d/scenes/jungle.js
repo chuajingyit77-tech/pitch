@@ -18,6 +18,9 @@ import { createFrogMesh } from './jungle/frog.js';
 import { loadMacawKit, Macaw } from './jungle/macaw.js';
 import { makeWingAtlas, createButterflyMesh, Butterfly, createDragonflyMesh, Dragonfly, turnToward } from './jungle/insects.js';
 import { FruitSystem, FRUIT_KINDS } from './jungle/fruit.js';
+import { createVistaUniforms, setVistaClock } from './jungle/far.js';
+import { buildVista } from './jungle/vista.js';
+import { createGiants } from './jungle/giants.js';
 
 /* ------------------------------------------------------------------ */
 /* Weather schedule (shared by the scene and the ambience helper)       */
@@ -49,8 +52,14 @@ export function ambienceFor(h) {
   return isNightHour(h) ? ['waterfall', 'insects', 'frogs'] : ['waterfall', 'birds'];
 }
 
-const VIEW_TARGET = new THREE.Vector3(1.4, 2.4, -3.6);
-const VIEW_PITCH = 0.14;
+// The camera stands where it always stood, aimed 3.5° higher with a slightly wider lens (54° instead of 50°), so
+// the vista beyond the cliff — the ancient tree, the ridges, the gentle giants — shows above the rim. Placement
+// tests (which plants frame the view, which spots the frogs use) keep the original aim, so every plant, rock and
+// perch stays exactly where it was.
+const VIEW_TARGET = new THREE.Vector3(1.4, 3.38, -3.6);
+const VIEW_PITCH = 0.087;
+const VIEW_FOV = 54;
+const LAYOUT_Y = 2.4, LAYOUT_PITCH = 0.14;
 const SUN_AZ = Math.PI * 0.35;
 const LATITUDE = 25;
 
@@ -98,7 +107,8 @@ export default {
     const wN1 = env.loadTexture('textures/Water_1_M_Normal.jpg', { srgb: false, repeat: true });
     const wN2 = env.loadTexture('textures/Water_2_M_Normal.jpg', { srgb: false, repeat: true });
 
-    const camPos0 = new THREE.Vector3(VIEW_TARGET.x, VIEW_TARGET.y + 14 * Math.sin(VIEW_PITCH), VIEW_TARGET.z + 14 * Math.cos(VIEW_PITCH));
+    const camPos0 = new THREE.Vector3(VIEW_TARGET.x, LAYOUT_Y + 14 * Math.sin(LAYOUT_PITCH), VIEW_TARGET.z + 14 * Math.cos(LAYOUT_PITCH));
+    const viewCam = new THREE.Vector3(VIEW_TARGET.x, VIEW_TARGET.y + 14 * Math.sin(VIEW_PITCH), VIEW_TARGET.z + 14 * Math.cos(VIEW_PITCH));
     /* ---------------- layout + ground ---------------- */
     const L = createLayout((seed % 100000) + 17);
     const groundMat = new THREE.MeshStandardMaterial({ map: ground.map, normalMap: ground.normalMap, normalScale: new THREE.Vector2(0.9, 0.9), vertexColors: true, roughness: 0.93, envMapIntensity: 0.45 });
@@ -201,9 +211,11 @@ export default {
       const h = rb.range(6, 13) + back * 0.25, r0 = rb.range(0.3, 0.6);
       const lean = new THREE.Vector3(rb.range(-1.2, 1.2), 0, rb.range(-1.2, 1.2));
       const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(x, y - 1, z), new THREE.Vector3(x + lean.x * 0.3, y + h * 0.5, z + lean.z * 0.3), new THREE.Vector3(x + lean.x, y + h, z + lean.z)]);
-      const g = taperTube(curve, t => lerp(r0 * 1.4, r0 * 0.5, Math.pow(t, 0.7)), { tubular: 8, radial: 7, tint: [0.85, 0.9, 0.8], uvScale: [2, 0.4] });
-      bgParts.push(g);
-      bgTops.push(new THREE.Vector3(x + lean.x, y + h, z + lean.z));
+      // the middle of the vista window stays open (see inVistaWindow below); the trees at its sides frame it. Its
+      // crown is still drawn from the rng (and then left out), so every later placement is unchanged.
+      const open = Math.abs(Math.atan2(x - viewCam.x, viewCam.z - z) + 0.04) < 0.17;
+      if (!open) bgParts.push(taperTube(curve, t => lerp(r0 * 1.4, r0 * 0.5, Math.pow(t, 0.7)), { tubular: 8, radial: 7, tint: [0.85, 0.9, 0.8], uvScale: [2, 0.4] }));
+      bgTops.push(Object.assign(new THREE.Vector3(x + lean.x, y + h, z + lean.z), { open }));
     }
     // side forest wall (lower ground, left and right)
     for (let i = 0; i < Math.round(12 * Math.max(q, 0.6)); i++) {
@@ -620,7 +632,7 @@ export default {
     // over the camera: overhanging fronds at the top of the frame
     for (let i = 0; i < 10; i++) clumpsB.push({ x: rc.range(-12, 12), y: rc.range(13.5, 17), z: rc.range(6, 14), s: rc.range(2.5, 4), rot: rc.next() * TAU });
     // background crowns
-    for (const p of bgTops) for (let k = 0; k < 4; k++) clumpsA.push({ x: p.x + rc.range(-2.8, 2.8), y: p.y + rc.range(-3, 0.5), z: p.z + rc.range(-2.8, 2.8), s: rc.range(2.6, 4.6), rot: rc.next() * TAU });
+    for (const p of bgTops) for (let k = 0; k < 4; k++) clumpsA.push({ x: p.x + rc.range(-2.8, 2.8), y: p.y + rc.range(-3, 0.5), z: p.z + rc.range(-2.8, 2.8), s: rc.range(2.6, 4.6), rot: rc.next() * TAU, open: p.open });
     // layered forest wall on the plateau, receding into the haze
     for (let i = 0; i < Math.round(40 * Math.max(q, 0.6)); i++) {
       const x = rc.range(-34, 34);
@@ -634,8 +646,26 @@ export default {
       const back = rc.range(0.8, 6);
       clumpsB.push({ x, y: L.cliffH(x) + rc.range(0.2, 1.5), z: L.cliffZ(x) - back, s: rc.range(1.6, 3), rot: rc.next() * TAU });
     }
-    const canopyA = instance(clumpGeoA, clumpMat, clumpsA, { shadow: false, mainOnly: true });
-    const canopyB = instance(clumpGeoB, clumpMat, clumpsB, { shadow: false });
+    // The vista window: an opening in the plateau forest behind the waterfall, through which the ridges, the gentle
+    // giants and the ancient tree are seen. Crowns on the plateau that would rise into it above the cliff's rim (seen
+    // from the default view) are left out, after all their random draws, so every other placement is unchanged; the
+    // window's sides are ragged, and low crowns that only fringe the rim stay.
+    const inVistaWindow = c => {
+      if (c.z > L.cliffZ(c.x) - 0.6) return false;
+      const a = Math.atan2(c.x - viewCam.x, viewCam.z - c.z);
+      const rag = 0.06 * Math.sin(c.x * 0.83 + c.z * 0.41) + 0.04 * Math.sin(c.x * 2.3 - c.z * 1.7);
+      if (a < -0.44 + rag || a > 0.34 + rag) return false;
+      // the rim straight between the camera and the crown, and how high the crown reaches above it
+      let lo = 0, hi = 1;
+      for (let k = 0; k < 18; k++) { const m = (lo + hi) / 2, x = lerp(viewCam.x, c.x, m), z = lerp(viewCam.z, c.z, m); if (z > L.cliffZ(x)) lo = m; else hi = m; }
+      const xr = lerp(viewCam.x, c.x, hi), zr = lerp(viewCam.z, c.z, hi);
+      const rimEl = Math.atan2(L.cliffH(xr) + 0.4 - viewCam.y, Math.hypot(xr - viewCam.x, zr - viewCam.z));
+      const topEl = Math.atan2(c.y + c.s * 1.8 - viewCam.y, Math.hypot(c.x - viewCam.x, c.z - viewCam.z));
+      return topEl > rimEl + 0.02;
+    };
+    const keep = list => list.filter(c => !c.open && !inVistaWindow(c));
+    const canopyA = instance(clumpGeoA, clumpMat, keep(clumpsA), { shadow: false, mainOnly: true });
+    const canopyB = instance(clumpGeoB, clumpMat, keep(clumpsB), { shadow: false });
 
     /* ---------------- water ---------------- */
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -651,9 +681,17 @@ export default {
     pond.mesh.material.uniforms.uFall.value.set(plunge.x, plunge.z, 1, 0);
 
     /* ---------------- sky, lights, environment ---------------- */
-    const sky = buildSky(shared);
+    // the vista beyond the cliff (jungle/vista.js, far.js): ridges, the ancient tree, mist curtains, gentle giants
+    const vistaU = createVistaUniforms();
+    const vista = buildVista(shared, vistaU, (seed % 100000) + 4242);
+    scene.add(vista.mesh);
+    const sky = buildSky(shared, vistaU);
     sky.renderOrder = 900; // after the opaque world so hidden sky pixels are never shaded
     scene.add(sky);
+    const giants = createGiants(shared, vistaU, vista.land, R('giants'));
+    giants.group.traverse(o => o.layers.set(1)); // main view only: the pond's reflection never sees past the cliff
+    scene.add(giants.group);
+    const giantPos = [];
     const sun = new THREE.DirectionalLight(0xffffff, 3);
     sun.castShadow = env.shadows;
     const sm = q >= 0.9 ? 2048 : 1024;
@@ -700,6 +738,8 @@ export default {
         rayAnchors.push(Object.assign(new THREE.Vector4(x, y, z, broad ? rr3.range(1.4, 2.4) : rr3.range(0.6, 1.5)), { len: rr3.range(24, 32), k: broad ? rr3.range(0.4, 0.6) : rr3.range(0.55, 1.0) }));
       }
     }
+    // and a few tall shafts in the valley beyond the cliff, slanting down through the ancient tree's crown
+    for (const a of vista.shaftAnchors) rayAnchors.push(Object.assign(new THREE.Vector4(a.pos.x, a.pos.y, a.pos.z, a.width), { len: a.len, k: a.k }));
     const godRays = ONLY_MAIN(buildGodRays(shared, rayAnchors, R('rays')));
     scene.add(godRays);
     const rm = R('motes');
@@ -1205,7 +1245,7 @@ export default {
       yaw: 0, yawRange: [-0.9, 0.9],
       pitch: VIEW_PITCH, pitchRange: [0.04, 0.5],
       drift: 0.03, idlePitch: VIEW_PITCH, idleDist: 14,
-      fov: 50, minY: 0.7,
+      fov: VIEW_FOV, minY: 0.7,
     };
     const post = {
       bloom: { strength: 0.35, radius: 0.7, threshold: 0.85 },
@@ -1300,6 +1340,18 @@ export default {
       su.uHorizon.value.copy(s.horizon).lerp(fog, 0.35);
       su.uSunDir.value.copy(s.dir); su.uSunCol.value.copy(s.sunColor).multiplyScalar(s.sunIntensity * 0.5);
       su.uMoonDir.value.copy(s.moonDir); su.uOvercast.value = rainA; su.uDay.value = day;
+      // the vista: haze the colour of the sky at the horizon (as the sky shader blends it), brighter toward the sun;
+      // sunlit mist curtains; open-air ambient. Rain and dawn mist thicken the air until the far ridges fade away.
+      {
+        const V = vistaU;
+        V.uHazeCol.value.copy(su.uHorizon.value).multiplyScalar(0.35).add(_c.copy(fog).multiplyScalar(1.1 * 0.65)).multiplyScalar(lerp(1, 0.92, rainA));
+        V.uHazeSunCol.value.copy(V.uHazeCol.value).add(_c.copy(lc).multiplyScalar(Math.min(li, 4) * (0.07 + golden * 0.12) * (1 - rainA * 0.7)));
+        V.uMistCol.value.copy(V.uHazeCol.value).multiplyScalar(1.08).add(_c.copy(lc).multiplyScalar(Math.min(li, 4) * 0.035 * (1 - rainA * 0.6)));
+        V.uMistAmt.value = clamp(0.85 + dawnMist * 0.5 + rainA * 0.45 + dusk * 0.15 + night * 0.1 - golden * 0.1, 0, 1.4);
+        V.uHazeK.value = (1 + dawnMist * 0.8 + rainA * 2.2 + night * 0.3) / 240;
+        V.uSkyAmb.value.copy(hemi.color).multiplyScalar(hemi.intensity * 0.95);
+        V.uGroundAmb.value.copy(hemi.groundColor).lerp(pal.envGreen, 0.35).multiplyScalar(hemi.intensity * 0.8);
+      }
       // water, waterfall, mist
       const wu = pond.mesh.material.uniforms;
       wu.uAmb.value.copy(amb);
@@ -1395,6 +1447,10 @@ export default {
       rain.material.uniforms.uPxK.value = 2 * Math.tan(camera.fov * Math.PI / 360) / Math.max(1, _px2.y);
       wind.update(dt);
       applyTime(dt, simT < 0.2);
+      // the vista: drifting mist and breathing glow (wrapped clocks), and the giants' schedule (they cost nothing
+      // between passes: hidden and not updated)
+      setVistaClock(vistaU, t);
+      giants.update(dt, t, simT);
       // frogs
       for (let i = 0; i < frogs.length; i++) { frogs[i].update(dt, t); frogs[i].write(i); }
       frogKit.mesh.count = frogs.length;
@@ -1527,7 +1583,7 @@ export default {
     const compileRT = new THREE.WebGLRenderTarget(1, 1);
     renderer.setRenderTarget(compileRT);
     let compileRTLive = true;
-    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, dragonflies, allFish, pondRocks, boulderSpots, post, view, L };
+    if (window.__IDLE_TEST__) window.__jungle = { scene, shared, pond, godRays, waterfall, mist, sun, hemi, fruits, frogs, macaws, butterflies, dragonflies, allFish, pondRocks, boulderSpots, post, view, L, vista, vistaU, giants };
     // initial pose
     update(1 / 60, 0);
 
@@ -1576,6 +1632,9 @@ export default {
         return n;
       },
       addMember(member) { spawnMember(member); },
+      /** Test hook: send the gentle giants across now, fast-forwarded `ahead` seconds into their pass
+       * (opts.variant 0 / 1 near ridge, 2 far ridge; opts.dir 1 left to right, -1 right to left). */
+      debugGiant(ahead = 30, opts = {}) { return giants.debug(simT, simT, ahead, opts); },
       creatures() {
         // live positions (as in the other worlds), so a name tag follows its creature instead of staying where it
         // was when the pointer last moved
@@ -1603,6 +1662,7 @@ export default {
         fruits.dispose();
         frogKit.mesh.customDepthMaterial?.dispose();
         macawKit.geo.dispose(); macawKit.mat.dispose();
+        vista.dispose(); giants.dispose();
       },
     };
   },

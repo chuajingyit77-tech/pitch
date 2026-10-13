@@ -1114,11 +1114,34 @@ export function buildReef(ctx) {
   })();
   const eelMat = stdMat(W, { vertexColors: true, roughness: 0.5, envMapIntensity: 0.6 }, { key: 'eel' });
   addSway(eelMat, W, { height: 1, amount: 0.08, stiff: 1.3, flutter: 0.06, key: 'eel' });
-  const eels = [];
+  // They duck into their burrows when something big glides over (the whale shark, the eagle ray) and stay
+  // in them at night. reef.js sets a duck level per colony (fast down, slow back out); each eel has its
+  // own threshold, so the colony ripples down almost together and comes back out one by one. The eel
+  // slides down its own length into the sand (the seabed hides it), no squashing.
+  const eelU = { uEelA: { value: new THREE.Vector4(0, 0, 0, 0) }, uEelB: { value: new THREE.Vector4(1e4, 1e4, 0, 0) } };
+  patchMaterial(eelMat, {
+    key: 'eelduck',
+    uniforms: eelU,
+    vertexHeader: 'uniform vec4 uEelA, uEelB;',
+    vertex: {
+      '#include <begin_vertex>': /* glsl */`$&
+        {
+          vec3 eo = vec3(0.0);
+          #ifdef USE_INSTANCING
+            eo = instanceMatrix[3].xyz;
+          #endif
+          float duck = length(eo.xz - uEelA.xy) < length(eo.xz - uEelB.xy) ? uEelA.z : uEelB.z;
+          float th = fract(sin(dot(eo.xz, vec2(12.9898, 78.233))) * 43758.5453) * 0.5 + 0.04;
+          transformed.y -= smoothstep(th, th + 0.36, duck) * 1.08;
+        }`,
+    },
+  });
+  const eels = [], eelColonies = [];
   const eelYaw = Math.atan2(-curDir.y, curDir.x);
   for (let c = q > 0.6 ? 2 : 1; c > 0; c--) {
     const a = rng.range(0, TAU), r = rng.range(13.5, 17);
     const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+    eelColonies.push({ x: cx, z: cz, duck: 0, u: eelColonies.length ? eelU.uEelB : eelU.uEelA });
     for (let i = N(26); i > 0; i--) {
       const x = cx + rng.gauss() * 1.4, z = cz + rng.gauss() * 1.4;
       if (hm.at(x, z) > ground.height(x, z) + 0.05) continue;
@@ -1136,10 +1159,11 @@ export function buildReef(ctx) {
   stableCutout(kelpMat, kelpTex, env);
   const kelpG = new THREE.PlaneGeometry(1, 1, 1, 20);
   kelpG.translate(0, 0.5, 0);
-  const kelps = [];
+  const kelps = [], kelpClumps = [];
   for (let c = N(3); c > 0; c--) {
     const a = rng.range(0, TAU), r = rng.range(19, 28);
     const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+    kelpClumps.push({ x: cx, z: cz, y: ground.height(cx, cz), r: 2.6, ry: 9 });   // kept clear by the whale shark
     for (let i = rng.int(4, 7); i > 0; i--) {
       const x = cx + rng.range(-1.6, 1.6), z = cz + rng.range(-1.6, 1.6);
       const h = rng.range(4.5, 8.5), w = rng.range(0.45, 0.65), yaw = rng.range(0, TAU);
@@ -1200,5 +1224,5 @@ export function buildReef(ctx) {
   }
   group.add(instanced(rubG, rubMat, rubble, { shadow: false }));
 
-  return { group, anemones, thickets, reefSpots };
+  return { group, anemones, thickets, reefSpots, kelpClumps, eelColonies };
 }

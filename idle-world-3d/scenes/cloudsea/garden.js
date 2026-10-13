@@ -767,6 +767,7 @@ export function createGarden(env, shared, tex, wind) {
 
   /* ---- decorative floating islets (bobbing) ---- */
   const nSmall = q >= 0.7 ? 6 : 4;
+  const decor = [];   // { obj, R, depth, scale }: obstacles the Kun's paths keep clear of
   const baseAng = rng.range(0, TAU);
   for (let i = 0; i < nSmall; i++) {
     const a = baseAng + (i / nSmall) * TAU + rng.range(-0.3, 0.3);
@@ -804,6 +805,7 @@ export function createGarden(env, shared, tex, wind) {
       holder.add(new THREE.Mesh(mergeGeometries(rocks), rockMat));
     }
     group.add(holder);
+    decor.push({ obj: holder, R, depth: isl.depth, scale: holder.scale.x });
     bobbers.push({ obj: holder, base: holder.position.y, amp: rng.range(0.3, 0.7), speed: rng.range(0.12, 0.25), phase: rng.range(0, TAU) });
     colliders.push({ c: holder.position.clone().add(new THREE.Vector3(0, -R * 0.5, 0)), r: R * 1.6 + 2 });
   }
@@ -814,6 +816,7 @@ export function createGarden(env, shared, tex, wind) {
   const farRock = [];
   const farA0 = farRng.range(0, TAU);
   const nPeaks = q >= 0.7 ? 14 : 9;
+  const peaks = [];   // { x, z, R, y0, y1 }: karst pillars in the haze (obstacles for the Kun)
   for (let i = 0; i < nPeaks; i++) {
     const a = farA0 + (i / nPeaks) * TAU + farRng.range(-0.18, 0.18);
     const d = farRng.range(650, 2100);
@@ -840,6 +843,7 @@ export function createGarden(env, shared, tex, wind) {
     g.computeVertexNormals();
     g.translate(Math.cos(a) * d, CLOUD_TOP - 40, Math.sin(a) * d);
     farRock.push(g);
+    peaks.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, R: R * 1.25, y0: CLOUD_TOP - 40, y1: CLOUD_TOP - 40 + H });
     // pines on top
     for (let k = 0; k < 3; k++) {
       const pg = paint(new THREE.ConeGeometry(R * 0.16, R * 0.32, 6), '#24402f');
@@ -900,7 +904,7 @@ export function createGarden(env, shared, tex, wind) {
   return {
     group, pickables, colliders, casters, main, islA, islB, A, Bp,
     treePos, tree, peachSpots, perches: tree.perches, taiji, taijiFloor, pavPos, pav, landSpots,
-    mistFalls, lanterns, groundAt, mainGround, poolC, reserved, stoneLanternGlow,
+    mistFalls, lanterns, groundAt, mainGround, poolC, reserved, stoneLanternGlow, decor, peaks, palC,
     /** Frees what the shell's scene disposal cannot reach: textures given to shaders as uniforms only, and the
      *  crown's shadow-pass material. */
     dispose() {

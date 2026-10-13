@@ -6,7 +6,7 @@
 // - Foam: swash edge, incoming wavelets, reef surf, rocks/posts, whitecaps; bioluminescent at night.
 import * as THREE from 'three';
 import { GLSL, TAU, smoothstep } from '../../lib/util.js';
-import { waterUniforms, WATER_PERIOD } from './shared.js';
+import { waterUniforms, WATER_PERIOD, whaleFieldUniforms } from './shared.js';
 import { fieldUniforms, SWASH_GLSL } from './terrain.js';
 
 const WAVES = [
@@ -151,6 +151,9 @@ uniform vec3 uSunDir, uSunCol, uMoonDir, uMoonCol;
 uniform vec3 uSSS, uFoamCol, uGlow, uHorizon;
 uniform float uNight, uReflStrength, uHazeNear, uHazeFar, uMirrorOn;
 uniform vec3 uSkyFallback;
+uniform sampler2D tWhaleFx;   // the gentle giant's marks (whalefx.js): R white water, G calm slick
+uniform vec4 uWhaleFx;
+uniform float uWhaleFxOn;
 ${GLSL.noise}
 ${SWASH_GLSL}
 varying vec4 vMirror;
@@ -222,6 +225,10 @@ void main() {
   float fp = max(max(lx, ly), 1e-4);
   float fpG = max(sqrt(lx * ly), 1e-4);
 
+  // where the whale has been: white water (R) and a smooth slick (G), one lookup and only while there is any
+  vec2 wfx = vec2(0.0);
+  if (uWhaleFxOn > 0.5) wfx = texture2D(tWhaleFx, clamp((p - uWhaleFx.xy) * uWhaleFx.zw, 0.0, 1.0)).rg;
+
   // detail normals (three scrolling octaves), calmer over the lagoon, fading with distance
   vec3 n1 = texture2D(tNormal, p * 0.105 + uNScroll.xy).rgb * 2.0 - 1.0;
   vec3 n2 = texture2D(tNormal, p * 0.043 + uNScroll.zw).rgb * 2.0 - 1.0;
@@ -229,7 +236,7 @@ void main() {
   vec2 slope = n1.xy * 0.45 + n2.xy * 0.6 + n3.xy * 0.28;
   float calm = mix(0.5, 1.0, smoothstep(0.3, 3.5, depth));
   float farK = 1.0 - smoothstep(50.0, 900.0, dist) * 0.75;
-  float nk = 0.32 * calm * farK;
+  float nk = 0.32 * calm * farK * (1.0 - 0.8 * wfx.g);
   vec3 N = normalize(vN + vec3(slope.x, 0.0, slope.y) * nk);
   // slope variance of the normal map that mip filtering removed inside this pixel (measured from the
   // 1024x1024 texture: the share lost per mip level follows smoothstep(1, 8.5, level); total xy variance 0.055)
@@ -243,7 +250,7 @@ void main() {
   F = clamp(F * uReflStrength, 0.0, 1.0);
 
   // rougher, blurrier reflections over the open swell; crisp over the calm lagoon
-  float rough = smoothstep(1.0, 6.0, depth);
+  float rough = smoothstep(1.0, 6.0, depth) * (1.0 - 0.7 * wfx.g);
   vec2 ruv = vMirror.xy / vMirror.w + N.xz * mix(0.03, 0.075, rough) / (1.0 + dist * 0.006);
   #if __VERSION__ >= 300
     vec3 mirror = textureLod(tMirror, ruv, mix(1.1, 3.6, rough)).rgb;
@@ -252,7 +259,9 @@ void main() {
   #else
     vec3 mirror = texture2D(tMirror, ruv, mix(1.1, 3.6, rough)).rgb;
   #endif
-  vec3 refl = mix(uSkyFallback, mirror, uMirrorOn);
+  // (far out the mirror image is clipped right at the horizon by its skewed far plane, which drew a dark line along
+  // the horizon at night: there the sea reflects the sky's horizon colour instead)
+  vec3 refl = mix(uSkyFallback, mirror, uMirrorOn * (1.0 - smoothstep(1500.0, 3500.0, dist)));
 
   // sun + moon speculars and a glittering path made of discrete sparkles (each part is skipped while its
   // light is off or far from the reflection, which keeps the per-pixel cost down)
@@ -299,11 +308,15 @@ void main() {
   float lacyN = vnoiseAAP(wp2 * 2.2 + vec2(uCapOff.x, 0.0), 3.74, fp) * 0.55 + vnoiseAAP(wp2 * 6.5 + vec2(0.0, uCapOff.y), 11.05, fp) * 0.45;
   float lacy = mix(smoothstep(0.52, 0.78, lacyN), 0.12, aaFade(3.74, fp));
   float caps = smoothstep(0.7, 1.0, vCrest + (fn - 0.5) * 0.45) * lacy * smoothstep(5.0, 9.0, depth) * 0.6;
-  float foam = clamp(foamEdge + lines + lace + ob * 0.85 + reef + caps, 0.0, 1.0) * 0.92;
+  float wFoam = smoothstep(0.1, 0.75, wfx.r * (0.6 + 0.8 * fn));
+  float foam = clamp(foamEdge + lines + lace + ob * 0.85 + reef + caps + wFoam, 0.0, 1.0) * 0.92;
 
-  // bioluminescent plankton: the shore foam and the shallows glow blue at night
-  float bio = (foamEdge * 1.0 + lines * 1.1 + lace * 0.3 + ob * 0.5 + reef * 0.06) * (0.7 + 0.3 * sin(t * 2.3 + p.x * 3.1 + p.y * 2.3) * (1.0 - aaFade(0.61, fp)));
-  if (uGlow.b > 0.0 && u < 4.0) bio += sparkle(p + 3.0 / 2.7, t, 0.7, 0.12, 2.7, fp) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4;
+  // bioluminescent plankton: the shore foam, the shallows and whatever the whale stirs up glow blue at night. The glow
+  // breathes slowly (about 8 s, its phase drifting in broad patches), and the odd plankton glint fades in and out
+  // over a second or more (the old glow rippled at 2.3 rad/s, which read as shimmer)
+  float breath = 0.64 + 0.36 * sin(t * 0.8 + vnoise(p * 0.045) * 6.2831);
+  float bio = (foamEdge * 1.0 + lines * 1.1 + lace * 0.3 + ob * 0.5 + reef * 0.06 + wFoam * 1.2) * breath;
+  if (uGlow.b > 0.0 && u < 4.0) bio += sparkle(p + 3.0 / 2.7, t, 0.28, 0.12, 2.7, fp) * (1.0 - smoothstep(0.0, 4.0, u)) * 1.4 * (0.75 + 0.25 * breath);
   vec3 glow = uGlow * bio;
 
   vec3 surf = refl * F + spec + sss * (1.0 - F);
@@ -331,6 +344,7 @@ export function createWater(env, camera, { normalTex }) {
     ...waterUniforms,
     ...fieldUniforms,
     ...swellUniforms,
+    ...whaleFieldUniforms,
     uTexMat: { value: new THREE.Matrix4() },
     tMirror: { value: null },
     tNormal: { value: normalTex },

@@ -11,6 +11,8 @@ import { createFlora } from './island/flora.js';
 import { planProps, createProps } from './island/props.js';
 import { createFx } from './island/fx.js';
 import { createFauna } from './island/fauna.js';
+import { createGiant } from './island/whale.js';
+import { createWhaleFx } from './island/whalefx.js';
 
 export default {
   id: 'island',
@@ -87,6 +89,13 @@ export default {
     // The moon hangs low over the sea in front of the opening view so its path glitters behind the island.
     const moonYaw = viewYaw - 0.3;
     const moonFlat = new THREE.Vector2(-Math.sin(moonYaw), -Math.cos(moonYaw));
+
+    /* ---------------- the gentle giant (a humpback passing far out every few minutes) ---------------- */
+    const whaleFx = createWhaleFx(env, { wind });
+    const giant = createGiant(env, { camera, view, fx: whaleFx, wind });
+    scene.add(giant.group, whaleFx.group);
+    const GL = { rim: new THREE.Color(), haze: new THREE.Color() };
+    const FXL = { keyDir: new THREE.Vector3(0, 1, 0), key: new THREE.Color(), amb: new THREE.Color(), backK: 0.4, glow: new THREE.Color(), haze: new THREE.Color() };
 
     /* ---------------- time of day ---------------- */
     const post = {
@@ -214,6 +223,19 @@ export default {
       cu.uHaze.value.copy(C.horizon);
       cu.uOpacity.value = lerp(1, 0.6, night);
 
+      // the gentle giant: a soft sheen on its wet skin (sky by day, moon by night) and the haze it sits in; its
+      // spray lit by the key light, glowing gold against a low sun and blue with plankton at night
+      GL.rim.copy(s.skyAmbient).multiplyScalar(0.16 * s.ambientIntensity).lerp(C.tmp.copy(C.moon).multiplyScalar(0.2), night);
+      GL.haze.copy(C.horizon);
+      giant.setLight(GL);
+      FXL.keyDir.copy(keyDir);
+      FXL.key.copy(sun.color).multiplyScalar(sun.intensity);
+      FXL.amb.copy(hemi.color).multiplyScalar(hemi.intensity * 1.6).add(C.tmp.copy(C.horizon).multiplyScalar(0.25));
+      FXL.backK = 0.35 + golden * 1.3;
+      FXL.glow.copy(wu.uGlow.value);
+      FXL.haze.copy(C.horizon);
+      whaleFx.setLight(FXL);
+
       // lights on the dock come on at dusk
       tod.lantern = smoothstep(3, -3, s.elevationDeg);
 
@@ -289,7 +311,8 @@ export default {
 
     /* ---------------- per-frame ---------------- */
     let todTimer = 0, hEased = env.hours();
-    const faunaInfo = { dusk: 0, night: 0, timeJump: false }, fxInfo = { night: 0 }; // reused every frame
+    const faunaInfo = { dusk: 0, night: 0, timeJump: false }, fxInfo = { night: 0 }, giantInfo = { glow: 0 }; // reused every frame
+    const _buf = new THREE.Vector2();
     function update(dt, t) {
       // shader clocks wrapped seamlessly (every rate reading them completes whole cycles: island/shared.js), so
       // float32 keeps full precision on a screen left on for days; scrolls and drifts are wrapped in setTime
@@ -323,6 +346,10 @@ export default {
       fauna.update(dt, t, faunaInfo);
       fxInfo.night = smoothstep(0.4, 0.95, tod.night);
       fx.update(dt, t, fxInfo);
+      giantInfo.glow = fxInfo.night;
+      giant.update(dt, t, giantInfo);
+      whaleFx.setView(env.renderer.getDrawingBufferSize(_buf).y, camera.projectionMatrix);
+      whaleFx.update(dt);
     }
 
     return {
@@ -333,9 +360,13 @@ export default {
       addMember: m => fauna.addMember(m),
       creatures: () => fauna.creatures(),
       resize() { water.resize(); },
-      _debug: { terrain, props, fx, fauna, water, sky, flora },
+      /** Test hook: start a whale pass now (if none is on) and play it to pass time t (s); returns its timeline. */
+      debugGiant: (t = 0, opts = {}) => giant.debug(t, opts),
+      giantTimeline: () => giant.timeline(),
+      _debug: { terrain, props, fx, fauna, water, sky, flora, giant, whaleFx },
       dispose() {
         water.dispose(); sky.dispose(); terrain.dispose(); flora.dispose(); props.dispose(); fx.dispose(); fauna.dispose();
+        giant.dispose(); whaleFx.dispose();
         normalTex.dispose();
         if (scene.environment) scene.environment = null;
       },
