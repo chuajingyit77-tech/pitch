@@ -9,7 +9,7 @@ import {
   TAU, clamp, lerp, smoothstep, damp, makeRng, createNoise, canvasTexture, normalMapFromHeight,
   makeCanvas, noiseCanvas, GLSL, patchMaterial, createWind, addWind, softDiscTexture,
 } from '../lib/util.js';
-import { buildFishGeometry, paintFish, createFishMaterial, createSwimDepthMaterial, Swimmer } from '../lib/fish.js';
+import { buildFishGeometry, paintFish, createFishMaterial, createSwimDepthMaterial, Swimmer, addFinPass } from '../lib/fish.js';
 
 const KINDS = {
   kohaku: { zh: '红白' }, tancho: { zh: '丹顶' }, sanke: { zh: '大正三色' }, showa: { zh: '昭和三色' },
@@ -1809,6 +1809,7 @@ class KoiPond {
     mesh.castShadow = true;
     mesh.customDepthMaterial = createSwimDepthMaterial(mat.userData.swimUniforms);
     mesh.frustumCulled = false;
+    addFinPass(mesh);
     this.scene.add(mesh);
     const start = this.randomInPond(r, 0.9, new THREE.Vector3());
     this.pushOutOfObstacles(start, 0.65);

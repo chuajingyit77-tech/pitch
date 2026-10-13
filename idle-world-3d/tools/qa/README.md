@@ -22,7 +22,8 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
    own animation loop and steps the world itself, so a run repeats exactly and two builds can be compared number
    for number.
 3. **The motion probe**. It looks for snaps, jumps (teleports), bodies not following their path, and
-   motion that differs between 30 and 60 fps.
+   motion that differs between 30 and 60 fps. It also steps the world itself, so both runs start from the same
+   state and differ only in their time step.
 4. **Skinning parity**. Bone-animated creatures must have the same pose in WebGL 1 as in WebGL 2
    (IoU 1.000).
 5. **View windows**. The meadow draws only the part of its field that can be in view; every test view must

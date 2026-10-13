@@ -64,7 +64,8 @@ async function probe(cfg) {
   I.simulate(cfg.warm, dt);
   scene.updateMatrixWorld(true);
   const all = [];
-  scene.traverse(o => { if (!o.isBone && !o.isLight && !o.isCamera && !o.isScene) all.push(o); });
+  // a fish's blended fin pass (lib/fish.js addFinPass) shares the fish's instance data: not a mover of its own
+  scene.traverse(o => { if (!o.isBone && !o.isLight && !o.isCamera && !o.isScene && !o.userData.finPass) all.push(o); });
   const v = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), m = new THREE.Matrix4();
   const l0 = new Map(), w0 = new Map(), i0 = new Map();
   for (const o of all) {
@@ -176,6 +177,8 @@ async function probe(cfg) {
   });
   await page.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await page.route('https://fonts.gstatic.com/**', r => r.abort());
+  // No idle camera drift (both runs see the same camera), and the page's own animation loop stopped (manualClock):
+  // the probe alone steps the world, so both runs start from the same state and differ only in their time step.
   await page.addInitScript(cfg => {
     window.__IDLE_TEST__ = cfg;
     try { localStorage.clear(); } catch (e) {}
@@ -184,7 +187,7 @@ async function probe(cfg) {
     window.__reseed = n => { st = n >>> 0; };
     window.__reseed(cfg.seed);
     Math.random = () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  }, { scene: WORLD, hours: HOURS, seed: SEED, quality: Q, noUI: true, noIdle: true }); // no idle camera drift: both runs see the same camera
+  }, { scene: WORLD, hours: HOURS, seed: SEED, quality: Q, noUI: true, noIdle: true, manualClock: true });
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);

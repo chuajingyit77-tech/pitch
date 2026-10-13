@@ -647,7 +647,11 @@ export function paintFish(species, opts = {}) {
           const f = painter.fin(region, a, b, C) || [1, 1, 1, 0.5];
           // soften the outer margin
           const edgeFade = 1 - smoothstep(0.9, 1.0, a) * 0.5;
-          px[o] = f[0] * 255; px[o + 1] = f[1] * 255; px[o + 2] = f[2] * 255; px[o + 3] = clamp(f[3] * edgeFade, 0, 1) * 255;
+          // the fleshy base of a fin is opaque and only its membrane turns translucent toward the edge; the opaque
+          // base also covers the end of the body tube where it meets the tail (seen through a translucent fin, the
+          // blunt end showed as a block with a dark seam)
+          const base = 1 - smoothstep(0.0, 0.2, a);
+          px[o] = f[0] * 255; px[o + 1] = f[1] * 255; px[o + 2] = f[2] * 255; px[o + 3] = clamp(Math.max(f[3], base) * edgeFade, 0, 1) * 255;
         } else {
           px[o] = px[o + 1] = px[o + 2] = 128; px[o + 3] = 0;
         }
@@ -814,10 +818,18 @@ export function createFishMaterial(painted, overrides = {}) {
   applySwim(mat, { waveK: p.waveK ?? 7.0 });
   // three r160 forces alpha to 1 on opaque materials, which defeats alpha-to-coverage; keep the fin alpha.
   // The chunk itself stays in place so later patches that hook it (underwater tint, fog, rim) still apply.
+  // uFinMode splits the fins over two passes where there is no multisampling (see addFinPass): 0 = one pass
+  // (alpha-to-coverage), 1 = this pass keeps only the opaque part, 2 = the blended fin pass, translucent part only.
+  const finMode = { value: 0 };
+  mat.userData.finMode = finMode;
+  mat.onBeforeRender = finModeHook(finMode, false);
   patchMaterial(mat, {
     key: 'a2c',
+    uniforms: { uFinMode: finMode },
+    fragmentHeader: 'uniform float uFinMode;',
     fragment: {
       '#include <opaque_fragment>': `float fishAlpha = diffuseColor.a;
+        if (uFinMode > 0.5 && (uFinMode < 1.5 ? fishAlpha < ${FIN_SOLID} : (fishAlpha >= ${FIN_SOLID} || fishAlpha < 0.015))) discard;
         $&
         gl_FragColor.a = fishAlpha;
         #ifdef USE_TRANSMISSION
@@ -826,6 +838,99 @@ export function createFishMaterial(painted, overrides = {}) {
     },
   });
   return mat;
+}
+
+/* ------------------------------------------------------------------ */
+/* Translucent fins without multisampling                              */
+/* ------------------------------------------------------------------ */
+// With MSAA (WebGL 2) fins are translucent through alpha-to-coverage, in the fish's own pass. Without it (WebGL 1:
+// the iPad) that pass could only cut them out, so fins were solid painted sheets with stair-stepped edges. There,
+// the fish's own pass now keeps the body and the opaque part of the fins, and a second, blended pass draws the
+// translucent part: fin triangles only, sharing every buffer (and the instance data) with the fish, so its edges
+// fade out smoothly and the water, the floor and other fish show through.
+const FIN_SOLID = '0.97';
+// set just before each draw (the uniform is shared by both passes); a fish without a fin pass keeps one pass
+function finModeHook(finMode, finPass) {
+  return function (renderer) {
+    const rt = renderer.getRenderTarget();
+    finMode.value = (rt && rt.samples > 0) || !finMode.split ? 0 : finPass ? 2 : 1;
+  };
+}
+// material properties a world may change while it runs (night glow, wet look ...): the fin pass follows them
+const FIN_SYNC = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'envMap', 'emissiveIntensity',
+  'roughness', 'metalness', 'envMapIntensity', 'opacity', 'clearcoat', 'clearcoatRoughness', 'iridescence', 'sheen',
+  'sheenRoughness', 'visible', 'fog', 'toneMapped', 'side'];
+function syncFinMaterial(fin, main) {
+  for (let i = 0; i < FIN_SYNC.length; i++) { const k = FIN_SYNC[i]; if (fin[k] !== main[k]) fin[k] = main[k]; }
+  fin.color.copy(main.color); fin.emissive.copy(main.emissive); fin.sheenColor.copy(main.sheenColor);
+  fin.normalScale.copy(main.normalScale);
+}
+
+/** Adds the blended fin pass to a fish Mesh or InstancedMesh drawn with createFishMaterial (as a child, so it is
+ * added, hidden and removed with the fish). Without multisampling only; with MSAA it draws nothing. Call it after
+ * the world's own patches on the material, for every mesh that shares the material (FishInstances does it).
+ * Returns the fin mesh, or null if the fish has no fins. */
+const finTriangles = new WeakMap(); // fish geometry -> its fin triangles (index array)
+export function addFinPass(mesh) {
+  const main = mesh.material, finMode = main && main.userData && main.userData.finMode;
+  const src = mesh.geometry, fin = src.getAttribute('aFin'), index = src.index;
+  if (!finMode || !fin || !index) return null;
+  let tri = finTriangles.get(src);
+  if (!tri) {
+    tri = [];
+    const isFin = v => { const r = fin.getX(v); return r > 0.5 && r < 5.5; };
+    for (let t = 0; t + 2 < index.count; t += 3) {
+      const a = index.getX(t), b = index.getX(t + 1), c = index.getX(t + 2);
+      if (isFin(a) && isFin(b) && isFin(c)) tri.push(a, b, c);
+    }
+    finTriangles.set(src, tri);
+  }
+  if (!tri.length) return null;
+  finMode.split = true;
+  // the fin pass draws from the fish's own vertex buffers, with an index of its own
+  const g = new THREE.BufferGeometry();
+  for (const k in src.attributes) g.setAttribute(k, src.attributes[k]);
+  g.setIndex(tri);
+  if (src.boundingSphere) g.boundingSphere = src.boundingSphere.clone();
+  // disposing it releases only that index: the vertex buffers are the fish's, still drawn by the fish (and other
+  // fish sharing the geometry) or disposed with it
+  g.dispose = function () { this.attributes = {}; THREE.BufferGeometry.prototype.dispose.call(this); };
+  // the same material and shader patches (a clone, so blending and depth can differ); userData is shared by hand
+  // because clone() deep-copies it through JSON
+  const ud = main.userData;
+  main.userData = {};
+  const mat = main.clone();
+  main.userData = ud;
+  mat.userData = { swimUniforms: ud.swimUniforms, finMode, finPass: true };
+  mat.defines = Object.assign({}, main.defines);
+  mat.transparent = true;
+  mat.depthWrite = false;
+  mat.alphaTest = 0;
+  mat.alphaToCoverage = false;
+  mat.forceSinglePass = true;
+  mat.onBeforeCompile = (shader, renderer) => main.onBeforeCompile(shader, renderer);
+  mat.customProgramCacheKey = () => main.customProgramCacheKey() + '|finPass';
+  const hook = finModeHook(finMode, true);
+  mat.onBeforeRender = function (renderer) { syncFinMaterial(mat, main); hook(renderer); };
+  main.addEventListener('dispose', () => mat.dispose());
+  const fins = mesh.isInstancedMesh ? new THREE.InstancedMesh(g, mat, 1) : new THREE.Mesh(g, mat);
+  if (mesh.isInstancedMesh) fins.instanceMatrix = mesh.instanceMatrix;
+  fins.name = 'fins';
+  fins.userData.finPass = true;
+  fins.frustumCulled = mesh.frustumCulled;
+  fins.castShadow = false;
+  fins.receiveShadow = mesh.receiveShadow;
+  // fish swim under the water surface and inside haze and particles: their fins come before every blended layer of
+  // the world (the island's water is drawn early, at -10, and writes depth: after it, fins under it would vanish)
+  fins.renderOrder = mesh.renderOrder - 1000;
+  fins.onBeforeRender = function (renderer, scene, camera, geometry, material, group) {
+    THREE.Object3D.prototype.onBeforeRender.call(this, renderer, scene, camera, geometry, material, group);
+    const rt = renderer.getRenderTarget();
+    g.setDrawRange(0, rt && rt.samples > 0 ? 0 : Infinity);
+    if (mesh.isInstancedMesh) { this.count = mesh.count; this.instanceColor = mesh.instanceColor; }
+  };
+  mesh.add(fins);
+  return fins;
 }
 
 /* ------------------------------------------------------------------ */
@@ -845,6 +950,7 @@ export class FishInstances {
     this.mesh.castShadow = castShadow;
     this.mesh.receiveShadow = receiveShadow;
     if (castShadow && material.userData.swimUniforms) this.mesh.customDepthMaterial = createSwimDepthMaterial(material.userData.swimUniforms);
+    this.fins = addFinPass(this.mesh);
     this.max = maxCount;
     this.count = 0;
     this.mesh.count = 0;

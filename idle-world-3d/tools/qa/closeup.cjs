@@ -67,6 +67,7 @@ const srv = http.createServer((req, res) => {
         // hero fish are single meshes (koi), schools are instanced (reef, jungle)
         const meshes = [];
         scene.traverse(o => {
+          if (o.userData.finPass) return; // a fish's fin pass, framed with its fish
           if (o.isInstancedMesh && o.geometry.attributes.aSwim && o.count > 0) meshes.push(o);
           else if (o.isMesh && !o.isInstancedMesh && o.visible && o.material && o.material.userData && o.material.userData.swimUniforms) subjects.push({ o, i: -1, fish: true });
         });
