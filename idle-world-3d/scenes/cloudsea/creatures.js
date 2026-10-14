@@ -710,12 +710,21 @@ class Crane {
         // follow the orbit circle: chase a point a little ahead of the crane on it (a carrot that moved with
         // the clock was far slower than the bird, which caught it and looped round it)
         const o = this.orbit;
+        const esc = this.ambient ? sys.escort : null;
+        if (esc && esc.on) {
+          // while the Kun passes, the distant pair circle on the line of sight in front of it (scale: two cranes
+          // against the giant); each keeps to its own side of the point, and they return to their orbit after
+          const k = this.escortSide || (this.escortSide = sys.ambient.indexOf(this) % 2 ? 1 : -1);
+          const e = esc.p, rx = esc.r.x * k * 9, rz = esc.r.z * k * 9;
+          this.steer(e.x + rx + Math.cos(t * 0.21 + o.ph) * 10, e.y + Math.sin(t * 0.17 + o.ph) * 3 - sink, e.z + rz + Math.sin(t * 0.21 + o.ph) * 10, sp, dt, 0.45, 1.5);
+        } else {
         const cx = hungry ? sys.camera.position.x * 0.6 : 0, cz = hungry ? sys.camera.position.z * 0.6 : 0;
         const ra = o.r * (1 + 0.18 * Math.sin(t * 0.07 + o.ph)) * (hungry ? 0.6 : 1);
         o.a = Math.atan2(p.z - cz, p.x - cx);
         const aC = o.a + Math.sign(o.w) * (this.vh * 1.5 + 4) / Math.max(ra, 6);
         const hT = o.h + Math.sin(t * 0.11 + o.ph) * 3 + Math.cos(aC * 2) * o.tilt * 6;
         this.steer(cx + Math.cos(aC) * ra, hT - sink, cz + Math.sin(aC) * ra, sp, dt, this.ambient ? 0.45 : 0.8, 1.5);
+        }
         if (!this.ambient && this.timer > this.restTime && !this.food) {
           const spot = W.landingSpot(this.rng, hungry ? sys.camera : null);
           if (!spot || !this.planLanding(spot, 0)) this.timer = this.restTime - 6;   // look again a little later
@@ -1224,6 +1233,7 @@ export function createCreatures(env, shared, world, fx) {
   const sys = {
     env, shared, world, rng, fx, camera: null, tod: null,
     tortoises: [], cranes: [], flocks: [], ambient: [], foods: [],
+    escort: { on: false, p: new THREE.Vector3(), r: new THREE.Vector3(1, 0, 0) },   // set by the Kun while it passes
     dyn: { n: 0, list: [] },   // residents standing on the ground, as circles walkers steer around
     bite(f, who, n, at) {
       if (!f.alive) return;

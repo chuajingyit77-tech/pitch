@@ -6,12 +6,15 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
-import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, windowedInstances, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
+import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, windowedInstances, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SPIRIT_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
 import { buildTorii, buildHokora, buildLantern, makeStoneMaterial, makeTofuFactory } from './meadow/props.js';
 import { buildRocks, makeRockMaterial, rockSurfaceTexture, rockFootTufts } from './meadow/rock.js';
 import * as TX from './meadow/tex.js';
 import { createFx } from './meadow/fx.js';
 import { applyFoxPose, findFoxBones } from './meadow/foxpose.js';
+import { Giants } from './meadow/giants.js';
+import { createShafts, createMist } from './meadow/light.js';
+import { createSparrows, createMoths } from './meadow/fauna.js';
 
 const FOX_SCALE = 0.0078;     // ≈1.2 m nose to tail
 const WALK_REF = 115;         // walking ground speed in model units / s (× scale = m/s)
@@ -49,7 +52,7 @@ export default {
     /* Terrain + layout                                                  */
     /* ================================================================ */
     const lay = rng.fork('layout');
-    function rawHeight(x, z) {
+    function baseHeight(x, z) {
       let h = noise.fbm2(x * 0.0105 + 3.7, z * 0.0105 - 1.3, 4) * 3.2;
       h += noise.fbm2(x * 0.042 - 8.1, z * 0.042 + 2.2, 3) * 0.45;
       const r2 = x * x + (z + 1.5) * (z + 1.5);
@@ -58,6 +61,24 @@ export default {
       const d = Math.hypot(x, z);
       h += smoothstep(70, 300, d) * (noise.fbm2(x * 0.0045 + 11, z * 0.0045 - 7, 3) * 7 + 1.5);
       return h;
+    }
+    // A gentle knoll on the far side of the field, right of the torii in the default view, its top a grazed lawn:
+    // the sika herd's stage (they are shorter than the susuki, and the field lies below the torii's mound). The
+    // ground blends to a flat crest a little above the mound's height, whatever the seed's terrain (an added bump
+    // left the slope facing the viewer higher than the crest on some seeds, hiding the herd); exactly the old
+    // ground outside its footprint, so nothing near the torii moves. (Its own fork: the layout stream is untouched.)
+    const knr = rng.fork('knoll');
+    const KNOLL = { x: knr.range(3.5, 6.0), z: knr.range(-23, -20.5), rx: 24, rz: 17, top: 0, lx: 9.5, lz: 9, lzo: 3 };
+    KNOLL.top = baseHeight(0, 0) + 0.8;
+    function rawHeight(x, z) {
+      const h = baseHeight(x, z);
+      const dx = (x - KNOLL.x) / KNOLL.rx, dz = (z - KNOLL.z) / KNOLL.rz, r2 = dx * dx + dz * dz;
+      return r2 < 1 ? h + (KNOLL.top - h) * smoothstep(1, 0.4, Math.sqrt(r2)) : h;
+    }
+    /** 1 on the knoll's grazed lawn (its crest and the slope toward the view: short, greener grass), 0 off it. */
+    function lawnAt(x, z) {
+      const dx = (x - KNOLL.x) / KNOLL.lx, dz = (z - KNOLL.z - KNOLL.lzo) / KNOLL.lz;
+      return 1 - smoothstep(0.72, 1.1, Math.sqrt(dx * dx + dz * dz) + 0.18 * noise.noise2(x * 0.21 + 5.1, z * 0.21 - 2.7));
     }
     const H0 = rawHeight(0, 0);
     const heightAt = (x, z) => rawHeight(x, z) - H0;
@@ -202,10 +223,11 @@ export default {
       const tmat = new THREE.MeshLambertMaterial({ color: '#ffffff' });
       patchMaterial(tmat, {
         key: 'meadowTerrain',
-        uniforms: { ...windU, uPath: { value: pathU }, uPathW: { value: 0.58 }, uNearCol: { value: new THREE.Color('#3e3622') }, uFarCol: { value: new THREE.Color('#8c7442') }, uFarCol2: { value: new THREE.Color('#4e4a2a') }, uDirtCol: { value: new THREE.Color('#7c6548') } },
+        uniforms: { ...windU, uPath: { value: pathU }, uPathW: { value: 0.58 }, uNearCol: { value: new THREE.Color('#3e3622') }, uFarCol: { value: new THREE.Color('#8c7442') }, uFarCol2: { value: new THREE.Color('#4e4a2a') }, uDirtCol: { value: new THREE.Color('#7c6548') },
+          uLawn: { value: new THREE.Vector4(KNOLL.x, KNOLL.z + KNOLL.lzo, 1 / KNOLL.lx, 1 / KNOLL.lz) }, uTurfCol: { value: new THREE.Color('#6a6a32') } },
         vertexHeader: '',
-        fragmentHeader: WIND_GLSL.replace(/uniform vec4 uPress\[4\];/, 'uniform vec4 uPress[4];') + `
-          uniform vec2 uPath[24]; uniform float uPathW; uniform vec3 uNearCol, uFarCol, uFarCol2, uDirtCol;
+        fragmentHeader: WIND_GLSL.replace(/uniform vec4 uPress\[4\];/, 'uniform vec4 uPress[4];') + SPIRIT_GLSL + `
+          uniform vec2 uPath[24]; uniform float uPathW; uniform vec3 uNearCol, uFarCol, uFarCol2, uDirtCol, uTurfCol; uniform vec4 uLawn;
           float pathDistF(vec2 p){ float d = 1e9; for (int i = 0; i < 23; i++){ vec2 a = uPath[i], b = uPath[i + 1]; vec2 pa = p - a, ba = b - a;
             float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); d = min(d, length(pa - ba * h)); } return d; }`,
         fragment: {
@@ -220,6 +242,10 @@ export default {
               float streak = mNoise(vec2(wp.x * 0.02, wp.z * 0.2));
               vec3 farC = mix(uFarCol, uFarCol2, smoothstep(0.45, 0.8, big)) * (0.72 + 0.3 * pat + 0.18 * streak + 0.32 * g);
               vec3 c = mix(nearC, farC, smoothstep(12.0, 55.0, dc));
+              // the knoll's grazed lawn: short green-gold turf
+              vec2 lq = (wp.xz - uLawn.xy) * uLawn.zw;
+              float lawn = 1.0 - smoothstep(0.72, 1.1, length(lq) + 0.18 * (mNoise(wp.xz * 0.21) * 2.0 - 1.0));
+              c = mix(c, uTurfCol * (0.72 + 0.5 * pat + 0.2 * big), lawn * 0.8);
               if (dot(wp.xz, wp.xz) < 3600.0) {
                 float pd = pathDistF(wp.xz);
                 float edge = uPathW + (mNoise(wp.xz * 2.1) - 0.5) * 0.32;
@@ -231,6 +257,8 @@ export default {
               }
               diffuseColor.rgb = c;
             }`,
+          // a pool of the spirit fox's light on the ground under it
+          '#include <opaque_fragment>': 'outgoingLight += spiritGlow(vFogWorld, 0.3);\n$&',
         },
       });
       addFog(tmat, fogU, 'mfogTerr');
@@ -284,16 +312,20 @@ export default {
           if (f < 0.1) continue;
           if (f < 0.4 && grng.chance(0.35)) continue;
           const patch = noise.fbm2(x * 0.06 + 40, z * 0.06, 2) * 0.5 + 0.5;
-          const H = (1.15 + 0.6 * grng.next()) * (0.78 + 0.4 * patch) * (0.24 + 0.76 * f) * R.y;
+          // the knoll's grazed lawn: short, greener tussocks and no plumes (applied after the same random draws,
+          // so every other plant of the field keeps its place)
+          const lk = lawnAt(x, z);
+          const H = (1.15 + 0.6 * grng.next()) * (0.78 + 0.4 * patch) * (0.24 + 0.76 * f) * R.y * (1 - 0.7 * lk);
           const y = heightAt(x, z) - 0.04;
-          const hue = clamp((noise.fbm2(x * 0.03 - 9, z * 0.03 + 4, 2)) * 1.3 + (1 - f) * 0.7 + grng.range(-0.25, 0.25), -1, 1);
+          const hue = clamp((noise.fbm2(x * 0.03 - 9, z * 0.03 + 4, 2)) * 1.3 + (1 - f) * 0.7 + grng.range(-0.25, 0.25) + 0.85 * lk, -1, 1);
           const rec = { x, y, z, rot: grng.range(0, TAU), sx: H * grng.range(0.7, 1.0) * R.xz, sy: H, inst: [hue, grng.next(), grng.next(), grng.next()] };
           clumps.push(rec);
           if (f > 0.55 && grng.chance(R.pp * (0.6 + 0.8 * patch))) {
             const nP = grng.chance(0.35) ? 2 : 1;
             for (let k = 0; k < nP; k++) {
               const ph = H * grng.range(1.15, 1.45);
-              plumes.push({ x: x + grng.range(-0.15, 0.15) * rec.sx, y, z: z + grng.range(-0.15, 0.15) * rec.sx, rot: Math.atan2(-baseWind.y, baseWind.x) + grng.range(-0.7, 0.7), sx: ph * grng.range(0.85, 1.1) * (R.xz > 1.5 ? 1.25 : 1), sy: ph, inst: [grng.range(-0.3, 0.3), grng.next(), grng.next(), grng.next()] });
+              const pl = { x: x + grng.range(-0.15, 0.15) * rec.sx, y, z: z + grng.range(-0.15, 0.15) * rec.sx, rot: Math.atan2(-baseWind.y, baseWind.x) + grng.range(-0.7, 0.7), sx: ph * grng.range(0.85, 1.1) * (R.xz > 1.5 ? 1.25 : 1), sy: ph, inst: [grng.range(-0.3, 0.3), grng.next(), grng.next(), grng.next()] };
+              if (lk < 0.25) plumes.push(pl);
             }
           }
         }
@@ -836,7 +868,28 @@ export default {
     shrineGlow.position.set(SHRINE.x, SHRINE.y + 0.95, SHRINE.z + 0.4);
     scene.add(shrineGlow);
 
-    const world = { night: 0, dusk: 0, day: 1, golden: 0 };
+    /* ================================================================ */
+    /* Gentle giants (the spirit fox by night, the sika herd by day),    */
+    /* light shafts and banks of ground mist                             */
+    /* ================================================================ */
+    const giants = new Giants({ env, scene, heightAt, fogU, seed: env.seed, obstacles, target: TARGET, shrine: SHRINE, knoll: KNOLL });
+    const shafts = createShafts({ scene, fogU, trees, heightAt, rng: rng.fork('shafts'), q, target: TARGET });
+    const mist = createMist({ scene, fogU, heightAt, rng: rng.fork('mist'), target: TARGET, noiseTex: giants.fox.tNoise });
+    // Upload the giants' textures now, under the loading veil: they are first drawn mid-play, when a pass begins,
+    // and an upload then (canvas read-back and mipmaps) would cost the iPad a frame.
+    if (env.renderer && env.renderer.initTexture) for (const tx of [giants.fox.tNoise, giants.fox.tMark, giants.herd.tex]) env.renderer.initTexture(tx);
+    const giantCtx = { night: 0, el: 30, pr: 1, pxK: 1000, wind: new THREE.Vector2(1, 0), rim: new THREE.Color(), sunDir: new THREE.Vector3(0, 1, 0), fill: new THREE.Color() };
+    let giantSlot = -1;   // the grass-press slot the spirit fox holds while it parts the susuki
+    // small life: sparrows on the path (perching in the two nearest maples), moths round the lit lanterns
+    const perches = [];
+    for (const tr of trees.slice(0, 2)) for (const c of tr.clusters) perches.push(new THREE.Vector3(tr.x + c.p.x, tr.y + c.p.y - 0.2, tr.z + c.p.z));
+    const sparrows = createSparrows({ env, scene, fogU, heightAt, rng: rng.fork('sparrows'), pathPoint, perches });
+    const moths = createMoths({ env, scene, rng: rng.fork('moths'), lanterns: LANTERNS });
+    const threats = [], threatPool = Array.from({ length: 20 }, () => ({ x: 0, z: 0, r: 0 }));
+    let threatN = 0;
+    const threat = (x, z, r) => { if (threatN < threatPool.length) { const o = threatPool[threatN++]; o.x = x; o.z = z; o.r = r; threats.push(o); } };
+
+    const world = { night: 0, dusk: 0, day: 1, golden: 0, el: 30, sunVis: 1, morning: false };
     for (const m of env.members) foxes.push(new Fox(m));
 
     /* ================================================================ */
@@ -918,6 +971,7 @@ export default {
         this.scale = n === 1 ? 0.55 : 0;
         tmpV.copy(this.pos).y += 0.08;
         fx.puff(tmpV, 16, true);
+        if (n === 2) sparrows.onCrumbs(this.pos);
         env.onEat(fox ? fox.member : null, tmpV);
         if (n === 2) this.kill(true);
       }
@@ -1000,6 +1054,9 @@ export default {
       guide.pos.copy(p);
       guide.dir.set(p.x - camera.position.x, p.z - camera.position.z).normalize();
       fx.stream(camera, p);
+      // the sika herd startles at an offering landing near it; sparrows beside it flush
+      giants.onFood(p);
+      sparrows.onDrop(p);
       // the nearest free fox notices
       assignFoxes();
       return f;
@@ -1096,12 +1153,13 @@ export default {
       const np = (((hours - 18) % 24) + 24) % 24 / 12;
       moonDir.set(-0.95 + 1.7 * clamp(np, 0, 1), 0.1 + 0.2 * Math.sin(Math.PI * clamp(np, 0, 1)), -1).normalize();
       const night = s.night, day = s.day;
-      world.night = night; world.day = day; world.golden = s.golden;
+      world.night = night; world.day = day; world.golden = s.golden; world.el = el; world.morning = morning;
       world.dusk = smoothstep(-9, -1, el) * (1 - smoothstep(0, 4, el));
       // horizon occlusion of the sun by the ridges
       const az = Math.atan2(sunDirV.x, -sunDirV.z);
       const ridge = THREE.MathUtils.radToDeg(mountains.userData.horizonAt(az));
       const sunVis = smoothstep(ridge - 0.5, ridge + 0.6, el);
+      world.sunVis = sunVis;
       // light: sun by day, moon by night
       if (el > -5) {
         lightDir.copy(sunDirV);
@@ -1158,6 +1216,7 @@ export default {
       }
       // lanterns / shrine glow
       const lampOn = smoothstep(-1, -7, el);
+      world.lampOn = lampOn;
       for (let i = 0; i < lanternLights.length; i++) { const l = lanternLights[i]; l.intensity = 9 * lampOn * (0.92 + 0.08 * Math.sin(t * 9.0 + l.position.x)); }
       windowMat.emissiveIntensity = 3.2 * lampOn;
       for (let i = 0; i < lanternGlows.length; i++) { const g = lanternGlows[i]; g.material.opacity = lampOn * (0.85 + 0.15 * Math.sin(t * 7 + i)); g.visible = lampOn > 0.01; }
@@ -1234,6 +1293,11 @@ export default {
       const press = windU.uPress.value;
       for (let i = 0; i < 4; i++) pressHeld[i] = false;
       for (const f of foods) if (!f.dead && f.slot >= 0) pressHeld[f.slot] = true;
+      // The spirit fox parts the susuki as it walks. It takes a slot only when one is free and that slot's grass has
+      // eased back up (like an offering), follows the fox with it, and lets it go once its grass is upright again.
+      const fw = giants.kind === 'fox' ? giants.fox.pressW : 0;
+      if (giantSlot < 0 && fw > 0.01) for (let i = 3; i >= 0; i--) if (!pressHeld[i] && press[i].w <= 0.02) { giantSlot = i; break; }
+      if (giantSlot >= 0) pressHeld[giantSlot] = true;
       for (const f of foods) {
         if (f.dead || f.slot >= 0) continue;
         for (let i = 0; i < 4; i++) {
@@ -1242,7 +1306,13 @@ export default {
           break;
         }
       }
-      for (let i = 0; i < 4; i++) press[i].w = pressHeld[i] ? damp(press[i].w, 0.9, 3, dt) : damp(press[i].w, 0, 2, dt);
+      for (let i = 0; i < 4; i++) if (i !== giantSlot) press[i].w = pressHeld[i] ? damp(press[i].w, 0.9, 3, dt) : damp(press[i].w, 0, 2, dt);
+      if (giantSlot >= 0) {
+        const gs = press[giantSlot], gp = giants.fox.pressPos;
+        if (fw > 0.01) gs.set(gp.x, gp.y, gp.z, gs.w);
+        gs.w = damp(gs.w, fw, 3, dt);
+        if (fw <= 0.01 && gs.w < 0.02) giantSlot = -1;
+      }
     }
     const pressHeld = [false, false, false, false];
 
@@ -1281,6 +1351,34 @@ export default {
       }
     }
 
+    // Layered light for each hour. Shafts: the low sun through the maples and over the field (strongest at the
+    // evening's golden hour, looking into the light), the moon's faint silver ones at night. Mist: thick banks at
+    // dawn, a light veil at dusk, a moonlit haze at night, none by day.
+    const shaftL = new THREE.Vector3(), shaftCol = new THREE.Color(), mistCol = new THREE.Color(), mistGlow = new THREE.Color(), glowDir = new THREE.Vector3();
+    function updateLight(dt) {
+      const el = world.el, morning = world.morning;
+      const dawn = morning ? smoothstep(-9, -3, el) * (1 - smoothstep(5, 13, el)) : 0;
+      const dusk = morning ? 0 : smoothstep(6, 0, el) * (1 - smoothstep(-4, -9, el));
+      const sunK = smoothstep(-1.5, 2.5, el) * (1 - smoothstep(14, 28, el)) * (0.35 + 0.65 * world.sunVis) * (morning ? 0.5 + 0.5 * dawn : 1);
+      const moonK = smoothstep(-6, -14, el) * 0.3;
+      let k;
+      if (sunK >= moonK) { shaftL.copy(sunDirV).negate(); shaftCol.copy(pal.halo).lerp(pal.sun, 0.35); k = sunK * 1.25; }
+      else { shaftL.copy(moonDir).negate(); shaftCol.copy(MOONRAY); k = moonK * 0.9; }
+      if (shaftL.y > -0.07) { shaftL.y = -0.07; shaftL.normalize(); }
+      shafts.update(dt, shaftL, shaftCol, k);
+      const amount = Math.max(dawn * 0.75, dusk * 0.3, world.night * 0.34);
+      if (world.night > 0.5) {
+        mistCol.copy(pal.mistC).multiplyScalar(2.4);
+        mistGlow.copy(MOONRAY).multiplyScalar(0.3);
+        glowDir.copy(moonDir);
+      } else {
+        mistCol.copy(pal.mistC).multiplyScalar(morning ? 0.95 : 0.8);
+        mistGlow.copy(pal.glow).multiplyScalar(0.35 * (0.3 + 0.7 * world.sunVis));
+        glowDir.copy(sunDirV);
+      }
+      mist.update(dt, amount, mistCol, mistGlow, glowDir, windDir, camera.position.distanceTo(view.target), Math.max(dawn, dusk * 0.7) / Math.max(amount, 1e-3) * 0.75);
+    }
+
     let lastT = 0;
     const inst = {
       scene, camera, view, post,
@@ -1315,6 +1413,25 @@ export default {
         fxCtx.windSpeed = windSpeed; fxCtx.day = world.day; fxCtx.night = world.night; fxCtx.golden = world.golden;
         fxCtx.pr = prVec.y / 720 + 0.0001;
         fx.update(dt, t, fxCtx);
+        // gentle giants, and the light the spirit fox throws on the grass round it
+        giantCtx.night = world.night; giantCtx.el = world.el; giantCtx.pr = fxCtx.pr;
+        giantCtx.pxK = prVec.y / (2 * Math.tan(camera.fov * Math.PI / 360));
+        giantCtx.wind.copy(windDir);
+        giantCtx.rim.copy(lightCol).multiplyScalar(world.day * (0.55 + 0.6 * world.golden) * (0.4 + 0.6 * world.sunVis));
+        giantCtx.sunDir.copy(lightDir);
+        giantCtx.fill.copy(hemi.color).multiplyScalar(hemi.intensity * 0.45);
+        giants.update(dt, t, giantCtx);
+        const sp = windU.uSpirit.value;
+        if (giants.kind === 'fox') sp.set(giants.fox.glowPos.x, giants.fox.glowPos.y, giants.fox.glowPos.z, 0.5 * giants.fox.glow);
+        else sp.w = 0;
+        updateLight(dt);
+        // sparrows keep clear of foxes (more so of a running one), of the spirit fox and of the deer
+        threats.length = 0; threatN = 0;
+        for (const f of foxes) threat(f.pos.x, f.pos.z, f.speed > f.walkSpeed * 1.3 ? 2.4 : 1.3);
+        if (giants.kind === 'fox') threat(giants.fox.anchor.position.x, giants.fox.anchor.position.z, 5);
+        if (giants.kind === 'deer') for (const d of giants.herd.deer) threat(d.pos.x, d.pos.z, 3);
+        sparrows.update(dt, t, { day: world.day, threats });
+        moths.update(dt, world.lampOn || 0, fxCtx.pr);
         void tod;
       },
       feed(raycaster) {
@@ -1340,9 +1457,11 @@ export default {
         foxes.push(new Fox(member, true));
       },
       creatures() {
-        return foxes.map(f => ({ member: f.member, pos: f.labelPos, radius: 0.55 }));
+        return giants.tags(foxes.map(f => ({ member: f.member, pos: f.labelPos, radius: 0.55 })));
       },
-      debug: { foxes, foods, world, heightAt, pathPoint, spawnFood: p => spawnFood(p) },
+      /** Test hook: start a giant's pass now ('fox' | 'deer', or by the hour) and run it `secs` s on. */
+      debugGiant(kind = null, secs = 25) { return giants.debug(kind, secs, giantCtx); },
+      debug: { foxes, foods, world, heightAt, pathPoint, spawnFood: p => spawnFood(p), giants, shafts, mist, sparrows, moths, knoll: KNOLL },
       dispose() {
         foxes.forEach(f => f.dispose());
         cranes.forEach(c => { c.mixer.stopAllAction(); c.mixer.uncacheRoot(c.o); });
@@ -1355,6 +1474,7 @@ export default {
         envSky.geometry.dispose();
         disposables.forEach(d => d && d.dispose && d.dispose());
         fx.dispose();
+        giants.dispose(); shafts.dispose(); mist.dispose(); sparrows.dispose(); moths.dispose();
       },
     };
     void lastT; void tmpV2;
