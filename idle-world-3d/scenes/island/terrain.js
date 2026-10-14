@@ -224,8 +224,9 @@ export function createTerrain(env, rng, noise) {
   mesh.castShadow = true;
   mesh.name = 'terrain';
 
-  // Endless deep floor beyond the terrain so the far ocean has something to tint.
-  const deepGeo = new THREE.RingGeometry(FIELD_SIZE * 0.45, 9000, 64, 1);
+  // Endless deep floor beyond the terrain so the far ocean has something to tint. It stops where the sea starts to
+  // fade into the sky dome (water.js, 1.5-3 km): any further and its black edge showed under the horizon.
+  const deepGeo = new THREE.RingGeometry(FIELD_SIZE * 0.45, 1500, 64, 1);
   deepGeo.rotateX(-Math.PI / 2);
   const deepMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
   patchMaterial(deepMat, {

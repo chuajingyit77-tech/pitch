@@ -15,7 +15,7 @@ export const LAYER_NO_REFLECT = 1;
  * The shader clock uWTime is wrapped every WATER_PERIOD s so float32 keeps full precision on a screen left on for
  * days, and the wrap is seamless because every rate that reads it completes whole cycles in that period:
  *  - caustics (lib GLSL.caustics: sin at 0.9 and 1.15 × its time, fed uWTime × 0.7 and × 0.45 → 0.63, 0.805, 0.405,
- *    0.5175 rad/s), swash (0.9 rad/s), surf sets (0.6), obstacle foam (1.6), plankton glow (2.3), star twinkle
+ *    0.5175 rad/s), swash (0.9 rad/s), surf sets (0.6), obstacle foam (1.6), plankton breathing (0.8), star twinkle
  *    (sky.js: rates snapped to 1/400 rad/s): 800π s holds 400 × each rate in cycles, all whole numbers;
  *  - the Gerstner swell: each wave's angular frequency is snapped to whole cycles per period (water.js WV, the
  *    same on the CPU and the GPU; the change is below 0.07%);
@@ -30,6 +30,17 @@ export const waterUniforms = {
   uDeep: { value: new THREE.Color(0.008, 0.07, 0.17) },     // asymptotic in-scatter radiance (lit)
   uCaustic: { value: new THREE.Color(1, 1, 1) },            // sun colour * intensity, 0 at night
   uGlowUW: { value: new THREE.Color(0, 0, 0) },             // night plankton glow tint
+};
+
+/**
+ * The gentle giant's marks on the sea (whalefx.js): a coarse field (R: white water, G: calm slick) over a window of
+ * WHALE_FIELD_SIZE m that the water shader samples once per pixel and only while something is there.
+ */
+export const WHALE_FIELD_N = 128, WHALE_FIELD_SIZE = 192;
+export const whaleFieldUniforms = {
+  tWhaleFx: { value: null },
+  uWhaleFx: { value: new THREE.Vector4(-WHALE_FIELD_SIZE / 2, -WHALE_FIELD_SIZE / 2, 1 / WHALE_FIELD_SIZE, 1 / WHALE_FIELD_SIZE) },
+  uWhaleFxOn: { value: 0 },
 };
 
 export const UNDERWATER_GLSL = /* glsl */`

@@ -37,7 +37,9 @@ export function createSky(env, rng) {
     `)
     .replace('gl_FragColor = vec4( retColor, 1.0 );', /* glsl */`
       vec3 col = retColor * uSkyGain;
-      float upv = direction.y;
+      // below the horizon the dome shows the sky mirrored (it is only seen there through the far sea, which fades
+      // into it: water.js), so sea and sky meet without a dark or a bright seam
+      float upv = abs(direction.y);
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col = max(mix(vec3(lum), col, uSkySat), 0.0);
       col *= mix(uLowTint, vec3(1.0), smoothstep(0.0, 0.35, upv));
