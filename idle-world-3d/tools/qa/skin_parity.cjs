@@ -4,6 +4,8 @@
 // rendered alone from a fixed camera aimed at it, and the two silhouettes are compared (IoU = intersection over
 // union; 1 = identical pose). Writes <outdir>/<world>_<n>.png (left WebGL 2, right WebGL 1, bottom XOR).
 // NODE_PATH=$(npm root -g) node skin_parity.cjs <outdir> [worlds...]
+//   env EVAL='<js>': page code run before the capture (a world's hook to bring on a creature that is hidden between
+//   visits, e.g. EVAL='__idle.current.inst.debugGiant(32)'); only creatures actually drawn are compared.
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -55,13 +57,19 @@ async function capture(port, world, gl1) {
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);
   await page.waitForFunction(w => window.__idle.sceneId === w || window.__idle.error, world);
-  const res = await page.evaluate(({ S }) => {
+  const res = await page.evaluate(({ S, code }) => {
     const I = window.__idle, inst = I.current.inst, THREE = I.current.env.THREE, r = I.renderer;
     I.simulate(3, 1 / 60);
+    // a world's hook (EVAL), e.g. to bring on a giant that is hidden between its visits
+    if (code) { (0, eval)(code); I.simulate(0.5, 1 / 60); }
     const scene = inst.scene;
     scene.updateMatrixWorld(true);
+    // only creatures that are drawn: a mesh under a hidden group (a prewarm copy, a giant between visits) renders
+    // nothing in either browser, and its "identical" empty silhouettes proved nothing
+    const shown = o => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
     const skinned = [];
-    scene.traverse(o => { if (o.isSkinnedMesh && o.visible) skinned.push(o); });
+    let hidden = 0;
+    scene.traverse(o => { if (o.isSkinnedMesh) { if (shown(o)) skinned.push(o); else hidden++; } });
     const rt = new THREE.WebGLRenderTarget(S, S);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 1000);
     const px = new Uint8Array(S * S * 4);
@@ -89,8 +97,8 @@ async function capture(port, world, gl1) {
       out.push({ name: path.reverse().join('/'), bones: m.skeleton.bones.length, cover, mask: mask.join('') });
     }
     rt.dispose();
-    return { webgl2: r.capabilities.isWebGL2, n: skinned.length, out };
-  }, { S });
+    return { webgl2: r.capabilities.isWebGL2, n: skinned.length, hidden, out };
+  }, { S, code: process.env.EVAL || '' });
   await browser.close();
   return { ...res, logs };
 }
@@ -102,7 +110,7 @@ async function capture(port, world, gl1) {
   for (const w of WORLDS) {
     const t0 = Date.now();
     const a = await capture(port, w, false), b = await capture(port, w, true);
-    console.log(`== ${w}: WebGL2=${a.webgl2} (${a.n} skinned) vs WebGL2=${b.webgl2} (${b.n} skinned)  [${((Date.now() - t0) / 1000).toFixed(0)} s]`);
+    console.log(`== ${w}: WebGL2=${a.webgl2} (${a.n} skinned${a.hidden ? `, ${a.hidden} hidden skipped` : ''}) vs WebGL2=${b.webgl2} (${b.n} skinned)  [${((Date.now() - t0) / 1000).toFixed(0)} s]`);
     for (const l of [...a.logs, ...b.logs].filter(Boolean).slice(0, 6)) console.log('   log: ' + l);
     for (let i = 0; i < Math.max(a.out.length, b.out.length); i++) {
       const x = a.out[i], y = b.out[i];

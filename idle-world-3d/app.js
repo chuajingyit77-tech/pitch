@@ -272,6 +272,14 @@ const FinalShader = {
     }`,
 };
 
+// FXAA runs only where the scene buffer cannot be multisampled (WebGL 1: the iPad). three's port leaves alone every
+// pixel whose neighbours all differ from it by less than its threshold, 0.2 of the full range, so an edge between two
+// similar surfaces kept its stair-steps: a white fox's jaw over its chest, a misty ridge against a grey sky, a giant
+// in haze. At 0.06 those edges are smoothed too. Textures stay as sharp (it follows long edges, not texture grain),
+// and the flicker probe measured less flicker in 10 of 12 world/hour views (none above 0.7 per mille).
+const FXAA_SHADER = { ...FXAAShader, fragmentShader: FXAAShader.fragmentShader.replace('const float edgeDetectionQuality = .2;', 'const float edgeDetectionQuality = .06;') };
+if (FXAA_SHADER.fragmentShader === FXAAShader.fragmentShader) console.warn('[post] FXAA edge threshold not applied');
+
 let composer, scenePass, bloomPass, outputPass, fxaaPass, finalPass;
 function buildComposer() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -283,7 +291,7 @@ function buildComposer() {
   scenePass = new ScenePass(Math.min(Q.samples, MAX_SAMPLES));
   bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.3, 0.6, 0.85);
   outputPass = new OutputPass();
-  fxaaPass = new ShaderPass(FXAAShader);
+  fxaaPass = new ShaderPass(FXAA_SHADER);
   finalPass = new ShaderPass(FinalShader);
   composer.addPass(scenePass);
   composer.addPass(bloomPass);
@@ -1334,7 +1342,10 @@ window.__idle = {
   /** Advance the simulation without rendering (test harness). */
   simulate(seconds, step = 1 / 30) {
     if (!current) return;
-    for (let s = 0; s < seconds; s += step) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); applyPost(current.inst.post || {}, step); }
+    // a whole number of steps: adding up the step drifted, so 4 s at 1/60 could take 241 steps, and runs at two time
+    // steps ended a step apart
+    const n = seconds > 0 ? Math.max(1, Math.round(seconds / step)) : 0;
+    for (let k = 0; k < n; k++) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); applyPost(current.inst.post || {}, step); }
   },
   setView(v) { Object.assign(rig, v); if (v.yaw !== undefined) rig.yawT = v.yaw; if (v.pitch !== undefined) rig.pitchT = v.pitch; if (v.dist !== undefined) rig.distT = v.dist; },
   /**
