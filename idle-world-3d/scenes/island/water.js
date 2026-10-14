@@ -395,10 +395,14 @@ export function createWater(env, camera, { normalTex }) {
   mesh.name = 'water';
 
   /* ---------------- planar mirror ---------------- */
+  // WebGL 1 (the iPad) builds mip levels only for power-of-two targets. The roughness blur reads levels 1.1-3.6, so
+  // a 348x261 mirror had none there and the iPad's reflections came out sharp and grainy where they should be soft.
+  const pot = n => 2 ** Math.round(Math.log2(n));
   const rtSize = () => {
     const s = env.renderer.getDrawingBufferSize(new THREE.Vector2());
     const k = 0.5 * Math.max(0.55, q);
-    return [Math.max(64, Math.round(s.x * k)), Math.max(64, Math.round(s.y * k))];
+    const w = Math.max(64, Math.round(s.x * k)), h = Math.max(64, Math.round(s.y * k));
+    return env.renderer.capabilities.isWebGL2 ? [w, h] : [pot(w), pot(h)];
   };
   const [rw, rh] = rtSize();
   const rt = new THREE.WebGLRenderTarget(rw, rh, { type: THREE.HalfFloatType, minFilter: THREE.LinearMipmapLinearFilter, generateMipmaps: true });

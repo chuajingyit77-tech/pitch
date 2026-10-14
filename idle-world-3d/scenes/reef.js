@@ -97,7 +97,7 @@ export default {
     sunL.shadow.radius = 3;
     sunL.target.position.copy(center);
     scene.add(sunL, sunL.target);
-    const envB = createEnvBuilder(env.pmrem, W);
+    const envB = createEnvBuilder(env.renderer, W);
 
     /* ---------------- life ---------------- */
     const tod = { hours: -99, envHours: -99, sunW: new THREE.Vector3(0, 1, 0), axis: new THREE.Vector3(0, -1, 0), night: 0, day: 1, golden: 0 };
@@ -230,8 +230,7 @@ export default {
       envB.u.uEnvY.value = 4;
       envB.u.uWin.value.setRGB(tgt.L0.x, tgt.L0.y, tgt.L0.z).multiplyScalar(3);
       const r = envB.build();
-      scene.environment = r.texture;
-      r.old?.dispose();
+      if (scene.environment !== r.texture) scene.environment = r.texture;
       W.uL0.value.copy(_keepL0); W.uGlow.value.copy(_keepGlow); W.uSunW.value.copy(dirA);
     }
     const groundAt = (x, z) => ground.height(x, z);

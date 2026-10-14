@@ -15,6 +15,7 @@ import { pnSmoothSkinned } from './meadow/foxgeo.js';
 import { Giants } from './meadow/giants.js';
 import { createShafts, createMist } from './meadow/light.js';
 import { createSparrows, createMoths } from './meadow/fauna.js';
+import { createEnvRefresher } from '../lib/envmap.js';
 
 const FOX_SCALE = 0.0078;     // ≈1.2 m nose to tail
 const WALK_REF = 115;         // walking ground speed in model units / s (× scale = m/s)
@@ -177,7 +178,9 @@ export default {
     const envScene = new THREE.Scene();
     const envSky = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 16), skyMat);
     envScene.add(envSky);
-    let envRT = null, envKey = -999, envRefL = 1, envMats = null;
+    // refreshed in place (lib/envmap.js): fromScene made a new target every refresh, a hitch on the iPad
+    const envMap = createEnvRefresher(env.renderer, envScene, { near: 0.1, far: 100 });
+    let envKey = -999, envRefL = 1, envMats = null;
     const lumOf = c => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
     // sunset azimuth (from the torii, angle around -Z toward +X)
     const ss = THREE.MathUtils.degToRad;
@@ -1245,10 +1248,8 @@ export default {
       const key = Math.round(hours * 30);
       if (key !== envKey) {
         envKey = key;
-        const rt = env.pmrem.fromScene(envScene, 0, 0.1, 100);
-        if (envRT) envRT.dispose();
-        envRT = rt;
-        scene.environment = rt.texture;
+        const tex = envMap.update();
+        if (scene.environment !== tex) scene.environment = tex;
         envRefL = skyL;
       }
       if (!envMats) {
@@ -1474,7 +1475,7 @@ export default {
         scene.traverse(o => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
         sunLight.dispose();
         lanternLights.forEach(l => l.dispose());
-        if (envRT) envRT.dispose();
+        envMap.dispose();
         envSky.geometry.dispose();
         disposables.forEach(d => d && d.dispose && d.dispose());
         fx.dispose();

@@ -1,5 +1,6 @@
 // Ground, pond basin, the waterfall cliff (with plateau), boulders and fallen logs.
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, createNoise, makeRng } from '../../lib/util.js';
 
 export const WATER_Y = -0.25;
@@ -209,12 +210,18 @@ export function buildBoulder(seed, detail = 3, { flat = 0.35, rough = 0.28 } = {
     pos.setXYZ(i, v.x * 1.15, v.y, v.z);
   }
   geo.deleteAttribute('uv');
+  geo.deleteAttribute('normal');
+  // the icosphere comes with its own three corners per face: welded, so the normals are shared and the stone
+  // shades round (per-face normals made every boulder a cut gem); the same triangles
+  const g = mergeVertices(geo, 1e-4);
+  geo.dispose();
+  const gp = g.attributes.position;
   // planar uv
-  const uvs = new Float32Array(pos.count * 2);
-  for (let i = 0; i < pos.count; i++) { uvs[i * 2] = pos.getX(i) * 0.6 + pos.getZ(i) * 0.4; uvs[i * 2 + 1] = pos.getY(i) * 0.6; }
-  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  geo.computeVertexNormals();
-  return geo;
+  const uvs = new Float32Array(gp.count * 2);
+  for (let i = 0; i < gp.count; i++) { uvs[i * 2] = gp.getX(i) * 0.6 + gp.getZ(i) * 0.4; uvs[i * 2 + 1] = gp.getY(i) * 0.6; }
+  g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  g.computeVertexNormals();
+  return g;
 }
 
 /* ------------------------------------------------------------------ */

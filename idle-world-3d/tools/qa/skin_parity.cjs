@@ -6,6 +6,7 @@
 // NODE_PATH=$(npm root -g) node skin_parity.cjs <outdir> [worlds...]
 //   env EVAL='<js>': page code run before the capture (a world's hook to bring on a creature that is hidden between
 //   visits, e.g. EVAL='__idle.current.inst.debugGiant(32)'); only creatures actually drawn are compared.
+//   env HOURS=21: the time of day (default 12), for creatures that come out only at night.
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -52,7 +53,7 @@ async function capture(port, world, gl1) {
     Math.random = () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     // no frame loop: the world only moves when the probe steps it, so both browsers see the same moment
     window.requestAnimationFrame = () => 0;
-  }, { scene: world, hours: 12, seed: 777, quality: 'low', noUI: true });
+  }, { scene: world, hours: +(process.env.HOURS || 12), seed: 777, quality: 'low', noUI: true });
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);

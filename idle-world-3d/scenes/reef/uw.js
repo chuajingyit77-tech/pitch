@@ -1,6 +1,7 @@
 // 深蓝 · 珊瑚礁 — water volume: shared uniforms, GLSL (in-scatter fog, caustics, sway, detail bump),
 // material patchers, background dome, the surface seen from below, light shafts, marine snow, bubbles.
 import * as THREE from 'three';
+import { createEnvRefresher } from '../../lib/envmap.js';
 import { GLSL, patchMaterial } from '../../lib/util.js';
 
 /* ------------------------------------------------------------------ */
@@ -847,7 +848,7 @@ export function createBubbles(W, rng, emitters, perEmitter = 36) {
 /* ------------------------------------------------------------------ */
 /* Environment map (reflections on fish scales, wet rock)              */
 /* ------------------------------------------------------------------ */
-export function createEnvBuilder(pmrem, W) {
+export function createEnvBuilder(renderer, W) {
   const u = { ...W, uEnvY: { value: 4 }, uWin: { value: new THREE.Color(1, 1, 1) } };
   const scene = new THREE.Scene();
   const mat = new THREE.ShaderMaterial({
@@ -867,14 +868,12 @@ export function createEnvBuilder(pmrem, W) {
       }`,
   });
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), mat));
-  let rt = null;
+  // refreshed in place (lib/envmap.js): fromScene made a new target every rebuild, a hitch on the iPad as the
+  // light changes; now the texture is the same object every time and nothing is allocated
+  const envMap = createEnvRefresher(renderer, scene, { near: 0.1, far: 50, sigma: 0.02 });
   return {
     u,
-    build() {
-      const next = pmrem.fromScene(scene, 0.02, 0.1, 50);
-      const old = rt; rt = next;
-      return { texture: next.texture, old };
-    },
-    dispose() { rt?.dispose(); mat.dispose(); scene.children[0].geometry.dispose(); },
+    build() { return { texture: envMap.update(), old: null }; },
+    dispose() { envMap.dispose(); mat.dispose(); scene.children[0].geometry.dispose(); },
   };
 }

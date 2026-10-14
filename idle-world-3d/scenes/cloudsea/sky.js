@@ -1,6 +1,7 @@
 // 云海 · sky dome (gradient, sun, crepuscular rays, cirrus, stars, moon), aurora ribbons and the
 // image-based lighting environment rendered from the same sky.
 import * as THREE from 'three';
+import { createEnvRefresher } from '../../lib/envmap.js';
 import { SHARED_GLSL, NOISE_GLSL, CLOCK_K, angQ } from './common.js';
 
 const SKY_VERT = /* glsl */`
@@ -233,7 +234,10 @@ export function createEnvironment(env, shared, skyMaterial) {
   const envScene = new THREE.Scene();
   const m = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMaterial);
   envScene.add(m);
-  let rt = null, lastT = -99;
+  // refreshed in place (lib/envmap.js): fromScene made a new target every refresh, and through dawn and dusk this
+  // refreshes every few seconds, each one a hitch on the iPad
+  const envMap = createEnvRefresher(env.renderer, envScene, { near: 0.1, far: 100, sigma: 0.02 });
+  let lastT = -99;
   const sig = new Float32Array(ENV_COLORS.length * 3 + 5), last = new Float32Array(sig.length).fill(-1);
   function change() {
     let k = 0;
@@ -248,18 +252,16 @@ export function createEnvironment(env, shared, skyMaterial) {
     return d;
   }
   return {
-    get texture() { return rt ? rt.texture : null; },
+    get texture() { return envMap.texture; },
     update(elapsed, force) {
       if (!force && elapsed - lastT < 0.8) return false;
       if (change() < 0.04 && !force) return false;
       last.set(sig); lastT = elapsed;
       shared.uEnvPass.value = 1;
-      const old = rt;
-      rt = env.pmrem.fromScene(envScene, 0.02, 0.1, 100);
+      envMap.update();
       shared.uEnvPass.value = 0;
-      if (old) old.dispose();   // swapped in the same frame: there is never a frame without an env map
       return true;
     },
-    dispose() { if (rt) rt.dispose(); m.geometry.dispose(); },
+    dispose() { envMap.dispose(); m.geometry.dispose(); },
   };
 }

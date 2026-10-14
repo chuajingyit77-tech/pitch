@@ -156,7 +156,7 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
               b.perch = 'tree';
               b.react = -1; b.dest = null;
               // the rest of the flock goes with it
-              for (const o of birds) if (o !== b && o.mode === 'ground' && o.react < 0 && o.pos.distanceTo(b.pos) < 2.2) flee(o, r.range(0.05, 0.3));
+              for (const o of birds) if (o !== b && o.mode === 'ground' && o.react < 0 && o.pos.distanceTo(b.pos) < 2.2) flee(o, o.r.range(0.05, 0.3));
             }
           }
         } else if (b.mode === 'perch') {
@@ -183,8 +183,11 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
           b.pos.copy(tmp);
           b.flap = damp(b.flap, u > 0.85 && b.perch === 'tree' ? 0.4 : 1, 10, dt);
           if (u >= 1) {
-            if (b.perch === 'tree') { b.mode = 'perch'; b.wait = roost ? 1e9 : r.range(5, 12); }
-            else { b.mode = 'ground'; b.wait = r.range(0.3, 1.2); }
+            // the time this step ran past the landing counts toward the wait (each landing would otherwise be
+            // late by up to a frame, more at 30 fps than at 60, and the flock drifted apart by frame rate)
+            const over = (b.t - 1) * b.T;
+            if (b.perch === 'tree') { b.mode = 'perch'; b.wait = roost ? 1e9 : r.range(5, 12) - over; }
+            else { b.mode = 'ground'; b.wait = r.range(0.3, 1.2) - over; }
           }
         } else {
           b.flap = damp(b.flap, 0, 10, dt);
@@ -196,7 +199,7 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
               const u = Math.min(b.hop.t, 1);
               b.pos.lerpVectors(b.hop.a, b.hop.b, u);
               b.pos.y += 4 * b.hop.h * u * (1 - u);
-              if (u >= 1) { b.hop = null; b.wait = r.chance(0.3) ? r.range(0.05, 0.15) : r.range(0.3, 1.6); }
+              if (u >= 1) { const over = (b.hop.t - 1) * b.hop.T; b.hop = null; b.wait = (r.chance(0.3) ? r.range(0.05, 0.15) : r.range(0.3, 1.6)) - over; }
             } else if (b.nextHop) {
               // facing the way it will hop: off it goes
               if (Math.abs(angleDelta(b.heading, b.wantH)) < 0.3) { b.hop = b.nextHop; b.nextHop = null; b.hop.t = 0; b.hop.a.copy(b.pos); }
@@ -204,7 +207,7 @@ export function createSparrows({ env, scene, fogU, heightAt, rng, pathPoint, per
               b.wait -= dt;
               b.peckIn = (b.peckIn ?? r.range(0.2, 1.2)) - dt;
               if (b.peck > 0) b.peck -= dt;
-              else if (b.peckIn <= 0) { b.peck = r.range(0.12, 0.2); b.peckIn = r.range(0.35, 1.3); }
+              else if (b.peckIn <= 0) { b.peck = r.range(0.12, 0.2) + b.peck; b.peckIn += r.range(0.35, 1.3); }
               if (b.wait <= 0 && b.peck <= 0) {
                 // next hop: toward the crumbs while there are any, otherwise a little wander along the path
                 let dx, dz;

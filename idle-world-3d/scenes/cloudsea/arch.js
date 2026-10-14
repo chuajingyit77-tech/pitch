@@ -490,7 +490,11 @@ export function bridge(B, a, b, { width = 1.7, rise = 2.2 } = {}) {
 /* Plaque texture                                                      */
 /* ------------------------------------------------------------------ */
 export function plaqueGeometry() {
-  const tex = canvasTexture(512, 224, (g, w, h) => {
+  // drawn as 512x224 (the plaque's proportions) into a 512x256 canvas: WebGL 1 (the iPad) mipmaps only
+  // power-of-two textures and squeezed a 512x224 one to 512x128, blurring the characters
+  const tex = canvasTexture(512, 256, (g, w, H) => {
+    const h = 224;
+    g.scale(1, H / h);
     g.fillStyle = '#1d2f5a'; g.fillRect(0, 0, w, h);
     g.strokeStyle = '#e2b450'; g.lineWidth = 14; g.strokeRect(10, 10, w - 20, h - 20);
     g.lineWidth = 4; g.strokeRect(30, 30, w - 60, h - 60);
