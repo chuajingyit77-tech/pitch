@@ -47,7 +47,8 @@ vec3 cloudShade(vec3 N, vec3 V, vec3 L, float hn, float sh, float exposure, floa
   vec3 direct = uLightCol * diffuse * sh * mix(0.3, 1.0, depth) * exposure;
   float VL = dot(-V, L);
   float fwd = pow(max(VL, 0.0), 5.0);
-  vec3 silver = uLightCol * thin * (0.1 + 2.2 * fwd) * sh * (0.35 + 0.65 * depth);
+  // (moonlit at night: the silver lining reaches round the whole rim, not only toward the moon)
+  vec3 silver = uLightCol * thin * (0.1 + 2.2 * fwd + uNight * (0.9 + 1.2 * pow(max(VL, 0.0), 2.0))) * sh * (0.35 + 0.65 * depth);
   vec3 sheen = uLightCol * pow(max(VL, 0.0), 12.0) * 0.3 * sh * depth;
   return vec3(0.97, 0.965, 0.96) * (amb + direct) + silver + sheen;
 }
@@ -56,6 +57,36 @@ vec3 cloudShade(vec3 N, vec3 V, vec3 L, float hn, float sh, float exposure, floa
 /* ------------------------------------------------------------------ */
 /* Cloud sea                                                           */
 /* ------------------------------------------------------------------ */
+// Height of the cloud sea's surface at xz, exactly as the sea's vertex shader puts it (texture LOD from its mesh
+// spacing), for other vertex shaders that meet the cloud tops softly (the Kun, mist bands). Needs SHARED_GLSL;
+// the uniforms come from seaHeightUniforms(sea).
+export const SEA_HEIGHT_GLSL = /* glsl */`
+#if __VERSION__ < 300
+#define textureLod texture2DLod
+#endif
+uniform sampler2D tBillow;
+uniform vec4 uL1, uL2, uL0;
+uniform vec2 uRot2;
+uniform float uTexSize, uCurve, uSeaA, uSeaB, uSeaSegs;
+float seaHeightAt(vec2 xz){
+  float r = length(xz);
+  float sp = max(uSeaB * (r + uSeaA), 6.2831853 * r / uSeaSegs);
+  float lod1 = clamp(log2(max(sp * uL1.x * uTexSize, 1.0)), 0.0, 9.0);
+  float lod2 = clamp(log2(max(sp * uL2.x * uTexSize, 1.0)), 0.0, 9.0);
+  vec2 xr = vec2(xz.x * uRot2.x - xz.y * uRot2.y, xz.x * uRot2.y + xz.y * uRot2.x);
+  float h1 = textureLod(tBillow, xz * uL1.x + uL1.yz, lod1).r;
+  float h2 = textureLod(tBillow, xr * uL2.x + uL2.yz, lod2).r;
+  float sw = textureLod(tBillow, xz * uL0.x + uL0.yz, 5.0).a;
+  return uCloudTop + (h1 - 0.45) * uL1.w * (0.55 + 0.9 * sw) + (h2 - 0.5) * uL2.w + (sw - 0.5) * uL0.w - dot(xz, xz) * uCurve;
+}
+`;
+export function seaHeightUniforms(sea) {
+  const U = sea.uniforms, G = sea.grid;
+  return {
+    tBillow: U.tBillow, uL1: U.uL1, uL2: U.uL2, uL0: U.uL0, uRot2: U.uRot2, uTexSize: U.uTexSize, uCurve: U.uCurve,
+    uSeaA: { value: G.A }, uSeaB: { value: G.b }, uSeaSegs: { value: G.segs },
+  };
+}
 const SEA_VERT = /* glsl */`
 // textureLod is GLSL ES 3.0; WebGL 1 vertex shaders have texture2DLod (Safari 14)
 #if __VERSION__ < 300
@@ -164,6 +195,8 @@ void main(){
   // forward scattering glow toward the sun and thin bright rims on the tops
   float rimT = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
   col += uLightCol * (pow(max(VL, 0.0), 10.0) * 0.45 * depth + rimT * pow(max(VL, 0.0), 4.0) * 1.2 * depth) * sh;
+  // moonlit edges: at night the crests of the billows catch a silver rim of moonlight all round, brighter toward the moon
+  col += uLightCol * uNight * rimT * (0.6 + 1.4 * pow(max(VL, 0.0), 2.0)) * depth * sh;
   col += glowLights(vW, N) * (0.6 + 0.4 * hn);
   // haze: the sea dissolves into the horizon
   col = mix(col, hazeColor(-V), fogAmountAt(vW));
@@ -183,6 +216,7 @@ function solveExpGrid(rings, rMax, firstSpacing) {
 
 function seaGeometry(rings, segs, rMax, first) {
   const { A, b } = solveExpGrid(rings, rMax, first);
+  seaGeometry.grid = { A, b, segs };   // vertex spacing at radius r: max(b (r + A), 2 pi r / segs) (read by kun.js)
   const n = 1 + rings * segs;
   const pos = new Float32Array(n * 3), spacing = new Float32Array(n);
   spacing[0] = first;
@@ -220,6 +254,7 @@ export function createCloudSea(env, shared, tex) {
   const rings = Math.round(lerp(110, 220, clamp((q - 0.45) / 0.55, 0, 1)));
   const segs = Math.round(lerp(150, 300, clamp((q - 0.45) / 0.55, 0, 1)));
   const geo = seaGeometry(rings, segs, 4200, q >= 0.9 ? 0.9 : q >= 0.6 ? 1.4 : 2.2);
+  const grid = seaGeometry.grid;
   const rot = env.rng.range(0.4, 1.1);
   const casters = [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, 0, 0));
   const glowPos = [], glowCol = [];
@@ -265,7 +300,7 @@ export function createCloudSea(env, shared, tex) {
     return CLOUD_TOP + (h1 - 0.45) * L1.w * (0.55 + 0.9 * sw) + (h2 - 0.5) * L2.w - (x * x + z * z) * uniforms.uCurve.value;
   };
   return {
-    mesh, uniforms, heightAt, casters, glowPos, glowCol,
+    mesh, uniforms, heightAt, casters, glowPos, glowCol, grid,
     update(dt) {
       // the offsets only feed tiling textures (period 1): wrapping keeps them precise in float32 forever
       L1.y = (L1.y + v1.x * dt) % 1; L1.z = (L1.z + v1.y * dt) % 1;
@@ -281,7 +316,7 @@ export function createCloudSea(env, shared, tex) {
 /* ------------------------------------------------------------------ */
 const PUFF_VERT = /* glsl */`
 attribute vec4 aPuff;     // centre, radius
-attribute vec4 aPuff2;    // seed, shade (0 inner/low .. 1 exposed), alpha, unused
+attribute vec4 aPuff2;    // seed, shade (0 inner/low .. 1 exposed), alpha, thin (0: by its shape .. 1: thin vapour all through)
 attribute vec4 aCluster;  // cluster centre, cluster radius
 varying vec2 vUv;
 varying vec4 vP2;
@@ -327,7 +362,8 @@ void main(){
   vec3 rel = vC - vCl.xyz;
   float exposure = smoothstep(-0.75, 0.55, dot(rel / max(length(rel), 1e-3), L)) * 0.8 + 0.2 * vP2.y;
   float sh = casterShadow(vW, L);
-  vec3 col = cloudShade(N, V, L, clamp(vP2.y * 0.7 + vUv.y * 0.2 + 0.1, 0.0, 1.0), sh, exposure, r2 * r2);
+  // (a thin plume of vapour, like a whale's blow, scatters the light right through, not only at its edges)
+  vec3 col = cloudShade(N, V, L, clamp(vP2.y * 0.7 + vUv.y * 0.2 + 0.1, 0.0, 1.0), sh, exposure, max(r2 * r2, vP2.w));
   col += glowLights(vW, N);
   float fog = fogAmountAt(vC) * uFogMul;
   col = mix(col, hazeColor(-V), fog);
@@ -344,7 +380,7 @@ void main(){
  * distance and keep a fixed order inside it (`ord`, back to front). Sorting overlapping puffs of one swirl
  * by their own distances made them swap places as the camera bobbed, and every swap popped.
  */
-export function createPuffs(shared, tex, items, { dynamic = false, fogMul = 1, glow } = {}) {
+export function createPuffs(shared, tex, items, { dynamic = false, fogMul = 1, glow, hysteresis = 0 } = {}) {
   const n = items.length;
   const quad = new THREE.PlaneGeometry(2, 2);
   const geo = new THREE.InstancedBufferGeometry();
@@ -374,18 +410,21 @@ export function createPuffs(shared, tex, items, { dynamic = false, fogMul = 1, g
     for (let k = 0; k < n; k++) {
       const it = items[order[k]], o = k * 4;
       P[o] = it.x; P[o + 1] = it.y; P[o + 2] = it.z; P[o + 3] = it.r;
-      P2[o] = it.seed; P2[o + 1] = it.shade; P2[o + 2] = it.alpha; P2[o + 3] = 0;
+      P2[o] = it.seed; P2[o + 1] = it.shade; P2[o + 2] = it.alpha; P2[o + 3] = it.thin || 0;
       C[o] = it.cx; C[o + 1] = it.cy; C[o + 2] = it.cz; C[o + 3] = it.cr;
     }
     aPuff.needsUpdate = aPuff2.needsUpdate = aCluster.needsUpdate = true;
   }
+  // hysteresis (moving puffs): one puff passes in front of another only once it is clearly nearer (by this share
+  // of the squared distance), so two puffs at nearly the same distance never swap back and forth as the camera bobs
+  const keep = 1 - hysteresis;
   function sortFrom(p) {
     for (let i = 0; i < n; i++) { const it = items[i], c = it.grp || it; const dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z; dist[i] = dx * dx + dy * dy + dz * dz; }
     // insertion sort (far to near; fixed order inside a group): the order barely changes between frames
     for (let i = 1; i < n; i++) {
       const v = order[i], dv = dist[v], ov = ord[v];
       let j = i - 1;
-      while (j >= 0 && (dist[order[j]] < dv || (dist[order[j]] === dv && ord[order[j]] > ov))) { order[j + 1] = order[j]; j--; }
+      while (j >= 0 && (dist[order[j]] < dv * keep || (dist[order[j]] === dv && ord[order[j]] > ov))) { order[j + 1] = order[j]; j--; }
       order[j + 1] = v;
     }
   }
