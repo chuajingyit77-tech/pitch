@@ -23,8 +23,10 @@
 //   mis/mis90    mean / 90th-percentile angle (deg) between that axis and the direction of travel while moving;
 //                high values = sliding sideways or backwards, body not following its path
 //   side%        share of moving steps more than 45° off that axis
-// Then per mover across time steps: speed and turn-rate ratios (lowest fps / highest fps) and the change of
-// the mean misalignment; differences beyond ±20 % (or 10°) are flagged as frame-rate dependence.
+// Then per mover across time steps: mean speed and mean turn-rate ratios (lowest fps / highest fps) and the change of
+// the mean misalignment; differences beyond ±20 % (or 10°) are flagged as frame-rate dependence. With --feed the
+// comparison covers the time before the feeding: the race for the pellets that follows parts two runs at different
+// time steps (another fish wins a pellet by one step) whether or not anything depends on the frame rate.
 // Writes <outdir>/<world>_<fps>.json and prints a ranked summary.
 const { chromium } = require('playwright');
 const http = require('http');
@@ -118,11 +120,11 @@ async function probe(cfg) {
   }
   const pct = (arr, p) => { if (!arr.length) return 0; const a = Float64Array.from(arr).sort(); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; };
   const AX = { '+x': [1, 0, 0], '-x': [-1, 0, 0], '+y': [0, 1, 0], '-y': [0, -1, 0], '+z': [0, 0, 1], '-z': [0, 0, -1] };
-  const out = [];
-  for (let j = 0; j < movers.length; j++) {
-    const r = rec[j], d = [], sp = [], rot = [], acc = [];
+  // statistics of one mover over steps [k0, k1)
+  const stats = (r, k0, k1) => {
+    const d = [], sp = [], rot = [], acc = [];
     let px = 0, py = 0, pz = 0, snaps = 0;
-    for (let k = 1; k < steps; k++) {
+    for (let k = k0 + 1; k < k1; k++) {
       const dx = r[k * 7] - r[(k - 1) * 7], dy = r[k * 7 + 1] - r[(k - 1) * 7 + 1], dz = r[k * 7 + 2] - r[(k - 1) * 7 + 2];
       const dd = Math.hypot(dx, dy, dz);
       d.push(dd); sp.push(dd / dt);
@@ -130,7 +132,7 @@ async function probe(cfg) {
       const ang = 2 * Math.acos(Math.min(1, dot));
       rot.push(ang / dt);
       if (ang > 0.6) snaps++;
-      if (k > 1) acc.push(Math.hypot(dx / dt - px, dy / dt - py, dz / dt - pz) / dt);
+      if (k > k0 + 1) acc.push(Math.hypot(dx / dt - px, dy / dt - py, dz / dt - pz) / dt);
       px = dx / dt; py = dy / dt; pz = dz / dt;
     }
     const d90 = pct(d, 0.9);
@@ -139,7 +141,7 @@ async function probe(cfg) {
     // heading: which local axis follows the direction of travel
     const sp90 = pct(sp, 0.9), thr = Math.max(0.3 * sp90, 0.03);
     const sums = {}; for (const a in AX) sums[a] = [];
-    for (let k = 1; k < steps; k++) {
+    for (let k = k0 + 1; k < k1; k++) {
       const dx = r[k * 7] - r[(k - 1) * 7], dy = r[k * 7 + 1] - r[(k - 1) * 7 + 1], dz = r[k * 7 + 2] - r[(k - 1) * 7 + 2];
       const dd = Math.hypot(dx, dy, dz);
       if (dd / dt < thr) continue;
@@ -149,16 +151,27 @@ async function probe(cfg) {
     let axis = null, best = -2;
     for (const a in AX) { const n = sums[a].length; if (!n) continue; const mean = sums[a].reduce((x, y) => x + y, 0) / n; if (mean > best) { best = mean; axis = a; } }
     const mis = axis ? sums[axis].map(c => Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI) : [];
-    out.push({
-      key: movers[j].key, type: movers[j].o.type, start: [r[0], r[1], r[2]].map(x => +x.toFixed(2)),
+    const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+    return {
+      spdMean: +mean(sp).toFixed(3), rotMean: +mean(rot).toFixed(3),
       spd50: +pct(sp, 0.5).toFixed(3), spd95: +pct(sp, 0.95).toFixed(3),
       rot95: +pct(rot, 0.95).toFixed(2), rotMax: +Math.max(0, ...rot).toFixed(2), snaps, jumps,
       acc50: +pct(acc, 0.5).toFixed(2), acc99: +pct(acc, 0.99).toFixed(2),
       axis, moving: mis.length, mis: mis.length ? +(mis.reduce((x, y) => x + y, 0) / mis.length).toFixed(1) : null,
       mis90: mis.length ? +pct(mis, 0.9).toFixed(1) : null, side: mis.length ? Math.round(100 * mis.filter(a => a > 45).length / mis.length) : null,
-    });
+    };
+  };
+  // A feeding sets off a race for the pellets; which fish reaches which pellet first turns on a single step, so
+  // after it two runs at different time steps part ways (different winners, different paths) even when nothing
+  // depends on the frame rate. The frame-rate comparison therefore uses the time before the feeding (`pre`); the
+  // whole run still counts for snaps, jumps and sliding.
+  const preSteps = feedStep >= Math.round(4 / dt) ? feedStep : 0;
+  const out = [];
+  for (let j = 0; j < movers.length; j++) {
+    const r = rec[j];
+    out.push({ key: movers[j].key, type: movers[j].o.type, start: [r[0], r[1], r[2]].map(x => +x.toFixed(2)), ...stats(r, 0, steps), pre: preSteps ? stats(r, 0, preSteps) : null });
   }
-  return { movers: out, fed, steps };
+  return { movers: out, fed, steps, preSecs: preSteps * dt };
 }
 
 (async () => {
@@ -216,17 +229,24 @@ async function probe(cfg) {
   }
   if (FPS.length > 1) {
     const hi = Math.max(...FPS), lo = Math.min(...FPS);
-    const A = new Map(runs[hi].movers.map(x => [x.key, x])), B = new Map(runs[lo].movers.map(x => [x.key, x]));
+    // before the feeding when there is one (see `pre` in probe())
+    const pick = x => x.pre || x;
+    const A = new Map(runs[hi].movers.map(x => [x.key, pick(x)])), B = new Map(runs[lo].movers.map(x => [x.key, pick(x)]));
     const rows = [];
     for (const [k, a] of A) {
       const b = B.get(k); if (!b) continue;
-      const sr = a.spd50 > 1e-3 ? b.spd50 / a.spd50 : null, rr = a.rot95 > 1e-2 ? b.rot95 / a.rot95 : null;
+      // means, not percentiles: distance and turning per second are the same at any time step for motion that is
+      // smooth, and only per-step jitter or a per-frame rate makes them differ. (A median or 95th percentile of a
+      // fish that hovers and now and then darts lands on the edge of the darts at one frame rate and not at the
+      // other, and flagged fish whose motion matched step for step.)
+      const sr = a.spdMean > 1e-3 ? b.spdMean / a.spdMean : null, rr = a.rotMean > 1e-2 ? b.rotMean / a.rotMean : null;
       const dm = a.mis !== null && b.mis !== null ? b.mis - a.mis : null;
       const bad = (sr !== null && Math.abs(sr - 1) > 0.2) || (rr !== null && Math.abs(rr - 1) > 0.2) || (dm !== null && Math.abs(dm) > 10);
       rows.push({ k, sr, rr, dm, bad });
     }
     const bad = rows.filter(r => r.bad);
-    console.log(`== frame-rate dependence (${lo} fps vs ${hi} fps): ${bad.length} of ${rows.length} matched movers differ`);
+    const pre = runs[hi].preSecs ? ` over the ${runs[hi].preSecs.toFixed(0)} s before the feeding` : '';
+    console.log(`== frame-rate dependence (${lo} fps vs ${hi} fps${pre}): ${bad.length} of ${rows.length} matched movers differ`);
     for (const r of bad.slice(0, 40)) console.log(`  ${r.k}: speed×${r.sr === null ? '-' : r.sr.toFixed(2)} turn×${r.rr === null ? '-' : r.rr.toFixed(2)} misalign${r.dm === null ? ' -' : (r.dm >= 0 ? ' +' : ' ') + r.dm.toFixed(1) + '°'}`);
   }
   if (logs.length) console.log(logs.slice(0, 10).join('\n'));

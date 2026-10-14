@@ -23,7 +23,10 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
    for number.
 3. **The motion probe**. It looks for snaps, jumps (teleports), bodies not following their path, and
    motion that differs between 30 and 60 fps. It also steps the world itself, so both runs start from the same
-   state and differ only in their time step.
+   state and differ only in their time step. The 30/60 comparison uses mean speed and turn rate over the time
+   before the feeding: after it, which fish wins which pellet turns on a single step and the runs part ways.
+   Creatures that roll dice during play need their own random streams (`rng.fork(...)`); on the shared
+   `Math.random` their choices depend on what else drew that frame, and so on the frame rate.
 4. **Skinning parity**. Bone-animated creatures must have the same pose in WebGL 1 as in WebGL 2
    (IoU 1.000).
 5. **View windows**. The meadow draws only the part of its field that can be in view; every test view must

@@ -3,7 +3,6 @@
 // Art direction inspired by Ghost of Tsushima; all assets procedural except the CC0 Fox / Stork models.
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, angleDelta, createNoise, createWind, addWind, patchMaterial, softDiscTexture } from '../lib/util.js';
 import { samplePalette, makeFogUniforms, addFog, createSkyMaterial, buildMountains, SKY_PERIOD } from './meadow/sky.js';
 import { makeWindUniforms, makeGrassColorUniforms, grassMaterial, buildClump, buildPlumeStalk, instancedFrom, windowedInstances, buildMaple, mapleLeafMaterial, mapleLeafDepthMaterial, buildGrove, WIND_GLSL, SPIRIT_GLSL, SWAY_RATE, FLUTTER_RATE } from './meadow/flora.js';
@@ -12,6 +11,7 @@ import { buildRocks, makeRockMaterial, rockSurfaceTexture, rockFootTufts } from 
 import * as TX from './meadow/tex.js';
 import { createFx } from './meadow/fx.js';
 import { applyFoxPose, findFoxBones } from './meadow/foxpose.js';
+import { pnSmoothSkinned } from './meadow/foxgeo.js';
 import { Giants } from './meadow/giants.js';
 import { createShafts, createMist } from './meadow/light.js';
 import { createSparrows, createMoths } from './meadow/fauna.js';
@@ -474,9 +474,9 @@ export default {
     const foxG = await env.loadGLTF('models/Fox.glb');
     let baseFoxMat = null, foxGeo = null;
     foxG.scene.traverse(o => { if (o.isMesh && !baseFoxMat) { baseFoxMat = o.material; foxGeo = o.geometry; } });
-    // the glTF fox ships without normals (flat-shaded via derivatives); build smooth normals so any material works
-    foxGeo = own(mergeVertices(foxGeo.clone(), 1e-3));
-    foxGeo.computeVertexNormals();
+    // the glTF fox ships without normals (flat-shaded via derivatives) and as 576 facets: rebuilt as curved PN
+    // patches with smooth normals (round outline and shading up close; same proportions, skinning and texture)
+    foxGeo = own(pnSmoothSkinned(foxGeo, { level: 3 }));
     const foxMat = addFog(baseFoxMat.clone(), fogU, 'mfogFox');
     foxMat.flatShading = false;
     foxMat.envMapIntensity = 0.6;
@@ -491,7 +491,11 @@ export default {
         '#include <map_fragment>': `$&
           float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
           diffuseColor.rgb = vec3(1.0, 0.95, 0.86) * (0.16 + 0.86 * smoothstep(0.06, 0.62, lum));`,
-        '#include <emissivemap_fragment>': '$&\n totalEmissiveRadiance += vec3(0.62, 0.78, 1.0) * uGlow * (0.35 + 0.65 * diffuseColor.r);',
+        // the glow gathers toward the outline, a soft aura, and stays fainter where the body faces the viewer, so
+        // the moonlit form still reads (an even glow lit every part alike and the fox looked flat)
+        '#include <emissivemap_fragment>': `$&
+          float foxRim = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+          totalEmissiveRadiance += vec3(0.62, 0.78, 1.0) * uGlow * (0.35 + 0.65 * diffuseColor.r) * (0.4 + 1.1 * foxRim * foxRim);`,
       },
     });
     addFog(whiteMat, fogU, 'mfogWFox');

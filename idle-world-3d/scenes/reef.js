@@ -326,6 +326,9 @@ export default {
       }
       return null;
     }
+    // how many pellets a tap drops, and where an automatic feeding lands: its own dice, so the same taps give
+    // the same feeding whatever else has drawn on Math.random (and at any frame rate)
+    const feedRng = rng.fork('feed');
     function dropAt(p, n) {
       p.y = clamp(p.y, hm.at(p.x, p.z) + 0.7, SURF_Y - 0.8);
       const made = life.spawnFood(p, n);
@@ -414,7 +417,7 @@ export default {
           p.copy(hit).addScaledVector(raycaster.ray.direction, -Math.min(2.0, hit.distanceTo(raycaster.ray.origin) * 0.2));
           p.y += 1.4;
         } else raycaster.ray.at(8, p);
-        const n = 6 + Math.floor(Math.random() * 5);
+        const n = feedRng.int(6, 10);
         return dropAt(p, n) ? p : null;
       },
       feedRandom(n) {
@@ -422,8 +425,8 @@ export default {
         let made = 0;
         for (let k = 0; k < 3; k++) {
           const p = new THREE.Vector3(view.target.x, 0, view.target.z).addScaledVector(_v, -2.5 + k * 0.8);
-          p.x += (Math.random() - 0.5) * 3; p.z += (Math.random() - 0.5) * 3;
-          p.y = hm.at(p.x, p.z) + 1.8 + Math.random();
+          p.x += feedRng.range(-1.5, 1.5); p.z += feedRng.range(-1.5, 1.5);
+          p.y = hm.at(p.x, p.z) + feedRng.range(1.8, 2.8);
           made += dropAt(p, Math.ceil(n / 2) + 1);
         }
         return made ? n : 0;

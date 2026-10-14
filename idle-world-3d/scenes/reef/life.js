@@ -576,7 +576,11 @@ export async function createLife(ctx) {
       const off = new THREE.Vector3(hRng.range(-1, 1) * spread, hRng.range(0.15, 1) * spread * 0.55, hRng.range(-1, 1) * spread);
       const p = centerPos.clone().add(off);
       const sw = new Swimmer({ pos: p, size: hRng.range(sizeLo, sizeHi), speed: 0.1, rng: hRng, agility: 3.5, maxPitch: 0.4 });
-      sw.off = off; sw.jit = hRng.range(0, 100); sw.food = null; sw.dart = 0;
+      sw.off = off; sw.jit = hRng.range(0, 100); sw.food = null;
+      // each fish rolls its own darts: on the shared Math.random its darts depended on what else had rolled dice
+      // that frame (so they changed with the frame rate), and a first dart at 0 s set every fish off at once
+      sw.rng = hRng.fork(`dart${hoverGroups.length}:${i}`);
+      sw.dart = sw.rng.range(0.4, 6.5);
       fish.push(sw);
     }
     hoverGroups.push({ c: centerPos.clone(), fish, kind, spread });
@@ -691,6 +695,7 @@ export async function createLife(ctx) {
         p.y = floorAt(p.x, p.z) + bRng.range(1.5, 3);
         const sw = new Swimmer({ pos: p, size: bRng.range(1.05, 1.3), speed: 0.5, rng: bRng, agility: 0.9, maxPitch: 0.25 });
         sw.target = p.clone(); sw.timer = 0; sw.food = null;
+        sw.rng = bRng.fork(`roam${i}`);   // its own dice (see the anthias' darts)
         barra.push(sw);
       }
     }
@@ -1195,8 +1200,8 @@ export async function createLife(ctx) {
         // lurched sideways or backwards and the body whipped round after it)
         s.dart -= dt;
         if (s.dart < 0) {
-          s.dart = 1.5 + Math.random() * 5; s.dartT = 0.32;
-          const a = Math.atan2(s.fwd.z, s.fwd.x) + (Math.random() - 0.5) * 1.6, pz = (Math.random() - 0.5) * 0.5;
+          s.dart = s.rng.range(1.5, 6.5); s.dartT = 0.32;
+          const a = Math.atan2(s.fwd.z, s.fwd.x) + s.rng.range(-0.8, 0.8), pz = s.rng.range(-0.25, 0.25);
           (s.dartDir || (s.dartDir = new THREE.Vector3())).set(Math.cos(a) * Math.cos(pz), Math.sin(pz), Math.sin(a) * Math.cos(pz));
         }
         if (s.dartT > 0) { s.dartT -= dt; _d.addScaledVector(s.dartDir, 0.55 * Math.sin(Math.PI * clamp(1 - s.dartT / 0.32, 0, 1))); }
@@ -1359,7 +1364,7 @@ export async function createLife(ctx) {
         if (b.state === 'toStation') {
           endHover(b);
           b.seek(station.hover, 0.5, 2.0, _d);
-          if (b.pos.distanceTo(station.hover) < 0.5) { b.state = 'cleaning'; b.cleanDur = 14 + Math.random() * 6; }
+          if (b.pos.distanceTo(station.hover) < 0.5) { b.state = 'cleaning'; b.cleanDur = b.rng.range(14, 20); }
           avoid(b, _d, 0.7, dt);
           arcSteer(b, _d, 0.9);
           swim(b, _d, dt);
@@ -1368,7 +1373,7 @@ export async function createLife(ctx) {
           // spring with almost no speed and turn after the drift at >= 1 rad/s the whole time.
           hoverAt(b, dt, station.hover, _v2.set(-station.out.x, 0.25, -station.out.z), { creep: 0.02, hold: 0.8, turn: 0.35 });
           b.cleanDur -= dt;
-          if (b.cleanDur < 0) { station.client = null; b.state = 'cruise'; b.cleanT = 60 + Math.random() * 60; b.timer = 0; }
+          if (b.cleanDur < 0) { station.client = null; b.state = 'cruise'; b.cleanT = b.rng.range(60, 120); b.timer = 0; }
         }
         clampAbove(b, 0.6, dt);
         b.calm = damp(b.calm ?? 1, b.state === 'cleaning' ? 0.06 : 1, 2.5, dt);
@@ -1381,10 +1386,10 @@ export async function createLife(ctx) {
         _v1.copy(b.fwd).multiplyScalar(b.size * 0.48).add(b.pos);
         if (_v1.distanceTo(b.target) < 0.2) { food.eat(it); env.onEat(null, it.pos.clone()); b.food = null; }
       } else if (b.timer <= 0 || b.pos.distanceTo(b.target) < 2) {
-        b.timer = 10 + Math.random() * 12;
-        const a = Math.random() * TAU, r = 6 + Math.random() * 9;
+        b.timer = b.rng.range(10, 22);
+        const a = b.rng.range(0, TAU), r = b.rng.range(6, 15);
         b.target.set(center.x + Math.cos(a) * r, 0, center.z + Math.sin(a) * r);
-        b.target.y = floorAt(b.target.x, b.target.z) + 1.4 + Math.random() * 2.5;
+        b.target.y = floorAt(b.target.x, b.target.z) + b.rng.range(1.4, 3.9);
       }
       b.seek(b.target, speed, 3, _d);
       avoid(b, _d, 0.7, dt);

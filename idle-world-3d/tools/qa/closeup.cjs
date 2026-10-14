@@ -5,7 +5,8 @@
 //   Without --name it frames the first instances of the fish meshes (geometry with the aSwim attribute),
 //   biggest fish first; --name frames that object, or the first instances of a named InstancedMesh.
 //   The camera sits beside and above each fish (or object) and looks at it.
-//   --dist is in body lengths. --gl2 1 renders as a WebGL 2 browser instead (A/B). Writes <outdir>/<world>_<k>.png.
+//   --dist is in body lengths; --yaw <deg> swings the camera round the subject (0 = off its +z side).
+//   --gl2 1 renders as a WebGL 2 browser instead (A/B). Writes <outdir>/<world>_<k>.png.
 const { chromium } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -57,7 +58,7 @@ const srv = http.createServer((req, res) => {
   await page.evaluate(() => window.__idle.simulate(4));
   for (let k = 0; k < N; k++) {
     // pick the subject, then hold the camera on it for a few rendered frames
-    const info = await page.evaluate(({ k, dist, name }) => {
+    const info = await page.evaluate(({ k, dist, name, yaw }) => {
       const I = window.__idle, inst = I.current.inst, THREE = I.current.env.THREE, scene = inst.scene;
       scene.updateMatrixWorld(true);
       const subjects = [];
@@ -77,22 +78,32 @@ const srv = http.createServer((req, res) => {
       if (!subjects.length) return { err: 'no subject' };
       const s = subjects[k % subjects.length];
       const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+      const box = new THREE.Box3(), bs = new THREE.Vector3();
       const follow = () => {
         if (s.i >= 0) { s.o.getMatrixAt(s.i, m); m.premultiply(s.o.matrixWorld); } else m.copy(s.o.matrixWorld);
         m.decompose(p, q, sc);
-        const len = Math.max(sc.x, sc.y, sc.z, 0.05) * (s.i >= 0 || s.fish ? 1 : 1.5);
+        let len = Math.max(sc.x, sc.y, sc.z, 0.05) * (s.i >= 0 || s.fish ? 1 : 1.5);
+        // a named object (a group, a skinned creature): frame what is drawn, its posed world bounds; its own
+        // matrix is only its origin and scale (a skinned fox's mesh node sits at its feet, scaled to model units)
+        if (s.i < 0 && !s.fish) {
+          s.o.updateWorldMatrix(true, true);
+          box.makeEmpty().setFromObject(s.o, true);
+          if (!box.isEmpty()) { box.getCenter(p); len = Math.max(box.getSize(bs).x, bs.y, bs.z, 0.05); }
+        }
         const side = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0);
         if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
-        side.normalize();
+        side.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw * Math.PI / 180);
         const cam = inst.camera;
         cam.position.copy(p).addScaledVector(side, len * dist).add(new THREE.Vector3(0, len * dist * 0.55, 0));
         cam.lookAt(p);
-        return { pos: [p.x, p.y, p.z].map(v => +v.toFixed(2)), len: +len.toFixed(3), mesh: s.o.name || s.o.type, verts: s.o.geometry.attributes.position.count };
+        let verts = 0;
+        s.o.traverse(o => { if (o.geometry && o.geometry.attributes.position) verts += o.geometry.attributes.position.count; });
+        return { pos: [p.x, p.y, p.z].map(v => +v.toFixed(2)), len: +len.toFixed(3), mesh: s.o.name || s.o.type, verts };
       };
       inst.view.custom = true; // the shell's camera rig lets go of the camera
       window.__follow = follow;
       return follow();
-    }, { k, dist: DIST, name: args.name || '' });
+    }, { k, dist: DIST, name: args.name || '', yaw: +(args.yaw || 0) });
     if (info.err) { console.log(`${WORLD}: ${info.err}`); break; }
     for (let f = 0; f < 6; f++) { await page.evaluate(() => window.__follow()); await page.waitForTimeout(700); }
     await page.screenshot({ path: path.join(OUT, `${WORLD}_${k}${GL2 ? '_gl2' : ''}.png`) });
