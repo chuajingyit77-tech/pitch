@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   TAU, clamp, lerp, smoothstep, damp, makeRng, createNoise, canvasTexture, normalMapFromHeight,
-  makeCanvas, noiseCanvas, GLSL, patchMaterial, createWind, addWind, softDiscTexture,
+  makeCanvas, noiseCanvas, GLSL, patchMaterial, createWind, addWind, softDiscTexture, sunDirs,
 } from '../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, createSwimDepthMaterial, Swimmer, addFinPass } from '../lib/fish.js';
 import { Heron } from './koi/heron.js';
@@ -1941,6 +1941,17 @@ class KoiPond {
   }
 
   /* ---------- time of day ---------- */
+  /** Where the sun and moon light from, every frame (allocation-free): the sun moves and shadows creep as outdoors;
+   *  colours and strengths follow in updateTimeOfDay twice a second. */
+  updateLightDirs() {
+    const sd = this._sunD || (this._sunD = new THREE.Vector3()), md = this._moonD || (this._moonD = new THREE.Vector3());
+    sunDirs(this.env.hours(), this.sunOpts || (this.sunOpts = { azimuthOffset: 0.7 }), sd, md);
+    sd.y = Math.max(sd.y, 0.04); sd.normalize(); // never light from below the ground
+    this.sun.position.copy(sd).multiplyScalar(40);
+    this.sun.target.position.set(0, 0, 0);
+    this.moon.position.copy(md).multiplyScalar(40);
+    this.moon.target.position.set(0, 0, 0);
+  }
   updateTimeOfDay(force = false) {
     const S = this.env.sun(this.sunOpts || (this.sunOpts = { azimuthOffset: 0.7 }));
     const night = S.night, day = S.day;
@@ -1949,14 +1960,9 @@ class KoiPond {
     // other side of the sky and there is no dark gap in between.
     const e = S.elevationDeg;
     const sunK = smoothstep(-3.5, 0.5, e);
-    const center = _v3.set(0, 0, 0);
-    const sd = _v.copy(S.dir); sd.y = Math.max(sd.y, 0.04); sd.normalize(); // never light from below the ground
-    this.sun.position.copy(center).addScaledVector(sd, 40);
-    this.sun.target.position.copy(center);
+    this.updateLightDirs();
     this.sun.color.copy(S.sunColor);
     this.sun.intensity = (S.sunIntensity * 1.15 + S.golden * 0.6) * sunK;
-    this.moon.position.copy(center).addScaledVector(S.moonDir, 40);
-    this.moon.target.position.copy(center);
     this.moon.intensity = 0.95 * smoothstep(0.5, -5, e);
     this.hemi.color.copy(S.skyAmbient).lerp(TOD_COLORS.nightSky, night * 0.6);
     this.hemi.groundColor.copy(S.groundAmbient).lerp(TOD_COLORS.moss, 0.4);
@@ -2026,7 +2032,7 @@ class KoiPond {
     // wrapped so the offset keeps full float precision on a screen left running all day
     this.streamAlpha.offset.y = (this.streamAlpha.offset.y - dt * 2.2) % 1;
     this.todTimer = (this.todTimer || 0) - dt;
-    if (this.todTimer <= 0) { this.todTimer = 0.5; this.updateTimeOfDay(); }
+    if (this.todTimer <= 0) { this.todTimer = 0.5; this.updateTimeOfDay(); } else this.updateLightDirs();
 
     this.updateFood(dt);
     this.updateKoi(dt, time, sclock);

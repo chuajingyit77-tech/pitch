@@ -2,7 +2,7 @@
 // Art direction borrows from Ori and the Blind Forest (glowing blue-teal nights, bioluminescence)
 // and Horizon Zero Dawn (lush, sunlit, hazy greenery).
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, damp, makeRng, createWind, addWind, patchMaterial, disposeObject, sunState } from '../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, damp, makeRng, createWind, addWind, patchMaterial, disposeObject, sunState, sunDirs } from '../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, FishInstances, Swimmer } from '../lib/fish.js';
 import { POND_FISH, mipmappedAtlas, matteFins, pushShown, clearerUnderwater } from './jungle/fish.js';
 import { cliffRockTexture, cliffSurface } from './jungle/cliff.js';
@@ -1301,12 +1301,11 @@ export default {
       scatter: new THREE.Color('#1b5a49'), scatterRain: new THREE.Color('#3a5a50'), murkRain: new THREE.Color('#20403a'),
       envGreen: new THREE.Color('#3d6a3a'), envLow: new THREE.Color('#1d2414'), envLowNight: new THREE.Color('#05090b'),
     };
-    // The shell's clock moves in whole-minute steps. Everything that only changes colour or brightness (light,
-    // fog, ambient, sky, rain, bloom, the canopy dapples and god rays) glides toward it over a few seconds
-    // instead of jumping once a minute; only the shadow-casting light keeps the stepped sun, so the shadow
-    // map is re-rendered from a new angle once a minute and never crawls.
+    // The shell's clock runs continuously; everything here follows it through a few seconds' ease (smoothHour),
+    // which also turns any small jump of the clock into a glide. The light's direction (and its shadows) is
+    // worked out every frame, so the sun moves and shadows creep as they do outdoors: no steps.
     const sunOpts = { latitude: LATITUDE, azimuthOffset: SUN_AZ };
-    const tod = { h: null, sH: null, s: null, rawH: null, rawDir: new THREE.Vector3() };
+    const tod = { h: null, sH: null, s: null, sunDir: new THREE.Vector3(0, 1, 0), moonDir: new THREE.Vector3(0, 1, 0) };
     function smoothHour(hRaw, dt, force) {
       if (force || tod.h === null) return (tod.h = hRaw);
       let dh = hRaw - tod.h;
@@ -1318,9 +1317,10 @@ export default {
     function applyTime(dt, force) {
       const hRaw = env.hours();
       const h = smoothHour(hRaw, dt, force);
-      // cached: sunState allocates, and the hour glides for ~30 s after every minute tick, so it is refreshed in
-      // steps of 2e-4 h (0.7 s of sun movement, invisible) rather than every frame
+      // cached: sunState allocates, so its colours and levels are refreshed in steps of 2e-4 h (0.7 s of the clock,
+      // invisible) rather than every frame; the directions come from sunDirs() every frame
       if (force || tod.sH === null || Math.abs(h - tod.sH) > 2e-4) { tod.sH = h; tod.s = sunState(h, sunOpts); }
+      sunDirs(h, sunOpts, tod.sunDir, tod.moonDir);
       const s = tod.s;
       const rainA = rainAmount(h);
       rainNow = rainA;
@@ -1335,7 +1335,7 @@ export default {
       // light: sun by day, moon by night. The swap happens at -3° where both are dark: the sun used to still
       // be at ~0.7 there, so at 18:14 (and 5:47) the key light snapped off and flipped direction in one frame.
       const useMoon = e < -3;
-      const L0 = useMoon ? s.moonDir : s.dir;
+      const L0 = useMoon ? tod.moonDir : tod.sunDir;
       shared.uLightDirW.value.copy(L0);
       let li;
       const lc = lightCol;
@@ -1345,12 +1345,7 @@ export default {
       sun.color.copy(lc);
       sun.intensity = li;
       shared.uLightCol.value.copy(lc).multiplyScalar(li);
-      if (hRaw !== tod.rawH) {
-        tod.rawH = hRaw;
-        const sr = sunState(hRaw, sunOpts);
-        tod.rawDir.copy(sr.elevationDeg < -3 ? sr.moonDir : sr.dir);
-      }
-      sun.position.copy(sun.target.position).addScaledVector(tod.rawDir, 70);
+      sun.position.copy(sun.target.position).addScaledVector(L0, 70);
       // ambient
       hemi.color.copy(pal.hemiSkyDay).lerp(s.skyAmbient, 0.35).lerp(pal.hemiSkyNight, night).lerp(pal.rainAmb, rainA * 0.5);
       hemi.groundColor.copy(pal.hemiGround).lerp(pal.hemiGroundNight, night);
@@ -1372,8 +1367,8 @@ export default {
       const su = sky.material.uniforms;
       su.uZenith.value.copy(s.zenith).lerp(pal.zenTint, 0.15 * day).lerp(pal.zenNight, night * 0.6).lerp(pal.zenRain, rainA * day);
       su.uHorizon.value.copy(s.horizon).lerp(fog, 0.35);
-      su.uSunDir.value.copy(s.dir); su.uSunCol.value.copy(s.sunColor).multiplyScalar(s.sunIntensity * 0.5);
-      su.uMoonDir.value.copy(s.moonDir); su.uOvercast.value = rainA; su.uDay.value = day;
+      su.uSunDir.value.copy(tod.sunDir); su.uSunCol.value.copy(s.sunColor).multiplyScalar(s.sunIntensity * 0.5);
+      su.uMoonDir.value.copy(tod.moonDir); su.uOvercast.value = rainA; su.uDay.value = day;
       // the vista: haze the colour of the sky at the horizon (as the sky shader blends it), brighter toward the sun;
       // sunlit mist curtains; open-air ambient. Rain and dawn mist thicken the air until the far ridges fade away.
       {

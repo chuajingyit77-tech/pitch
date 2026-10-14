@@ -3,7 +3,8 @@
 // NODE_PATH=$(npm root -g) node flicker.cjs [outdir] reef:13 reef:23 koi:21.5 ...
 // env: VW/VH viewport (default 640x360), Q=high|medium|low quality tier, VIEW='{"yaw":..,"pitch":..,"dist":..}',
 //      GL1=1 for the iPad's WebGL 1 path, EVAL='<js>' run in the page once each world is up (a world's test hook,
-//      e.g. EVAL='__idle.current.inst.debugGiant(0)' to measure with its giant passing)
+//      e.g. EVAL='__idle.current.inst.debugGiant(0)' to measure with its giant passing), T0=259200 to start the
+//      world clock as if the page had been open for 3 days (float32 precision of clocks that do not wrap)
 // Writes <id>_<hour>[_Q].png (screenshot) and <id>_<hour>[_Q]_flicker.png (red = pixels that flickered).
 // Metrics: nan/inf (+nanAt) count in the raw HDR scene render; maxL = brightest raw HDR luminance (+maxAt [x,y]
 // screen fractions, top-left origin); over32 = pixels brighter than 32; flickerPermille = per-mille of pixels that
@@ -53,7 +54,7 @@ const srv = http.createServer((req, resp) => {
   });
   await page.route('https://fonts.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await page.route('https://fonts.gstatic.com/**', r => r.abort());
-  await page.addInitScript(cfg => { window.__IDLE_TEST__ = cfg; try { localStorage.clear(); } catch (e) {} }, { scene: JOBS[0].id, hours: JOBS[0].h, seed: 777, quality: process.env.Q || 'high', noUI: true, manualClock: true });
+  await page.addInitScript(cfg => { window.__IDLE_TEST__ = cfg; try { localStorage.clear(); } catch (e) {} }, { scene: JOBS[0].id, hours: JOBS[0].h, seed: 777, quality: process.env.Q || 'high', noUI: true, manualClock: true, t0: +(process.env.T0 || 0) });
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);

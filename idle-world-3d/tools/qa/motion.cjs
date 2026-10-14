@@ -13,6 +13,7 @@
 //   --max 400        most movers tracked (InstancedMesh: at most 24 instances each); default 400
 //   --seed 777       world seed; default 777 (Math.random is seeded too, so runs repeat exactly)
 // env EVAL='<js>'    run in the page before each run's warm-up, e.g. a world's hook to start its giant's pass
+// env T0=259200      start the world clock as if the page had been open that long (3 days)
 //
 // Per mover (path = scene-graph path, #i = instance index):
 //   spd50/spd95  median / 95th-percentile speed (world units per second)
@@ -201,7 +202,7 @@ async function probe(cfg) {
     window.__reseed = n => { st = n >>> 0; };
     window.__reseed(cfg.seed);
     Math.random = () => { st = (st + 0x6D2B79F5) >>> 0; let t = st; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  }, { scene: WORLD, hours: HOURS, seed: SEED, quality: Q, noUI: true, noIdle: true, manualClock: true });
+  }, { scene: WORLD, hours: HOURS, seed: SEED, quality: Q, noUI: true, noIdle: true, manualClock: true, t0: +(process.env.T0 || 0) });
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.__idle && window.__idle.ready);
   await page.evaluate(() => window.__idle.ready);

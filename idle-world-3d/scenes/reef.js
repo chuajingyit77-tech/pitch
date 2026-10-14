@@ -138,9 +138,9 @@ export default {
       return out;
     };
     const cur = mkP(), tmpP = mkP();
-    // Targets are evaluated when the clock moves (once a minute). Brightness and colour then ease toward
-    // them (~1 s), so dusk and dawn glide instead of stepping every minute; directions (light, shadows,
-    // caustic projection, shafts) still step in their tiny per-minute increments, as the shell intends.
+    // Targets are evaluated as the clock moves (every ~2 s of it: env.sun() allocates), and brightness and
+    // colour ease toward them (~1 s), so dawn and dusk change the light a little at a time; directions (light,
+    // shadows, caustic projection, shafts) ease the same way (glideDir).
     const mkT = () => ({ L0: lin(0, 0, 0), glow: lin(0, 0, 0), caus: 0, fluor: 0, lightCol: C('#fff'), light: 0, sky: C('#fff'), gnd: C('#fff'), hemi: 0,
       sunCol: C('#fff'), sunI: 0, skyZen: C('#fff'), skyHor: C('#fff'), shaftCol: C('#fff'), shaftI: 0, bio: 0, night: 0, day: 1, golden: 0 });
     const tgt = mkT(), app = mkT();
@@ -211,8 +211,8 @@ export default {
       envScale = k;
       for (const [m, base] of envMats) m.envMapIntensity = base * k;
     }
-    // The environment map is rebuilt from the targets whenever they have moved enough to matter (at
-    // most once a clock minute, mostly around dawn and dusk) instead of in a visible step every 12 min.
+    // The environment map is rebuilt from the targets whenever they have moved enough to matter (mostly
+    // around dawn and dusk) instead of in a visible step every 12 min.
     const envLast = { L0: lin(-1, -1, -1), glow: lin(-1, -1, -1), sunW: new THREE.Vector3(0, -1, 0) };
     const _keepL0 = new THREE.Vector3(), _keepGlow = new THREE.Vector3();
     function envMoved() {
@@ -237,9 +237,10 @@ export default {
 
     function applyTod(force) {
       const h = env.hours();
-      if (!force && Math.abs(h - tod.hours) < 0.003) return;
-      // a changed clock setting (or the first frame) snaps; the minute tick glides
-      const jump = force || Math.abs(h - tod.hours) > 0.25;
+      const dw = Math.abs((((h - tod.hours) % 24) + 36) % 24 - 12);   // hours apart on the dial (across midnight too)
+      if (!force && dw < 5e-4) return;
+      // a changed clock setting (or the first frame) snaps; the running clock glides
+      const jump = force || dw > 0.25;
       tod.hours = h;
       const s = env.sun();
       mixP(pal.night, pal.day, s.day, tmpP);

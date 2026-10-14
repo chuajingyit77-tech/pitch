@@ -18,6 +18,7 @@ import { createSparrows, createMoths } from './meadow/fauna.js';
 import { createEnvRefresher } from '../lib/envmap.js';
 
 const FOX_SCALE = 0.0078;     // ≈1.2 m nose to tail
+const CLOUD_TAU = 300000;     // s: the sky's cloud drift runs on sin(t / CLOUD_TAU), a period of 22 days
 const WALK_REF = 115;         // walking ground speed in model units / s (× scale = m/s)
 const RUN_REF = 240;          // running ground speed / 1.45
 const CLIPS = ['Survey', 'Walk', 'Run'];
@@ -1117,7 +1118,7 @@ export default {
     const prVec = new THREE.Vector2();
     const fxCtx = { camera, target: view.target, windDir, windSpeed: 0, light: lightCol, day: 1, night: 0, golden: 0, sunDir: sunDirV, pr: 1 };
 
-    // env.hours() moves in whole-minute steps. Easing it over ~2 s turns every step into a short glide, so sun
+    // env.hours() runs continuously; this short ease also turns any small jump of the clock into a glide, so sun
     // and moon light, shadows, sky, fog, exposure and bloom never change in a single frame (around sunset one
     // minute is 5-10 % of the sunlight). Big jumps (manual time change, waking from sleep) still cut at once.
     let hS = null;
@@ -1130,8 +1131,9 @@ export default {
       else hS = (((hS + d * (1 - Math.exp(-1.6 * dt))) % 24) + 24) % 24;
       return hS;
     }
-    // The fields of util's sunState() this world reads, computed in place: during every minute's glide the sun is
-    // re-evaluated each frame, and sunState() allocates vectors and parses colours on every call (GC on the iPad).
+    // The fields of util's sunState() this world reads, computed in place: the clock runs continuously, so the sun
+    // is re-evaluated every ~0.1 s of it, and sunState() allocates vectors and parses colours on every call (GC on
+    // the iPad).
     const sunS = { dir: new THREE.Vector3(0, 1, 0), elevationDeg: 0, day: 1, night: 0, golden: 0 };
     const LAT = THREE.MathUtils.degToRad(25);
     function sunLite(hours) {
@@ -1205,9 +1207,12 @@ export default {
       su.uCloudLit.value.copy(pal.cl);
       su.uCloudDark.value.copy(pal.cd);
       su.uTime.value = t % SKY_PERIOD;
-      su.uCloudWarp.value = t * 0.003;
-      su.uCloudOff.value.x += dt * 0.004 * baseWind.x;
-      su.uCloudOff.value.y += dt * 0.004 * baseWind.y;
+      // cloud drift (0.004 /s along the wind) and warp (0.003 /s) on one slow sine of 22 days' period: their speed
+      // stays within 1% over the first 12 h and 4% over a day, and the offsets stay bounded (unbounded, a page left
+      // on for weeks fed float32 offsets so large that the fine cloud detail crept in steps)
+      const cs = Math.sin(t / CLOUD_TAU) * CLOUD_TAU;
+      su.uCloudWarp.value = cs * 0.003;
+      su.uCloudOff.value.set(baseWind.x, baseWind.y).multiplyScalar(cs * 0.004);
       su.uCloudCover.value = 0.57 + 0.06 * Math.sin(t * 0.01 + env.seed % 10) + (morning ? 0.04 * smoothstep(-6, 10, el) * (1 - smoothstep(10, 25, el)) : 0);
       // god rays toward the low sun (or the moon, faintly)
       {

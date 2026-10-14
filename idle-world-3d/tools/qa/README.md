@@ -32,6 +32,27 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
 5. **View windows**. The meadow draws only the part of its field that can be in view; every test view must
    render pixel for pixel the same as the whole field (`cullcheck.cjs`).
 
+## Long runs, the clock of day and the GPU
+
+The iPad stays on one world all day, following the real clock. Run these after changes to anything that lives for
+hours (timers, schedules, pools of creatures), to the time of day or lighting, or to what a world draws:
+
+- **Soak** (`soak.cjs`): hours of play in time-lapse with feeding, sampling NaN, flicker, renderer memory, heap and
+  page errors. Run each world from dawn and from evening (`--start 4.5`, `--start 16.5`, `--hours 6`); every world
+  must end `steady`. It found the island whale's stack overflow, which needed 15-30 minutes of play to show.
+- **Day sweep** (`daysweep.cjs`): the whole day in 2-minute steps, walked twice at different paces of the world's
+  own time; a jump of light (a lamp switching, an environment map swapped in a step) shows at the same hour, in the
+  same region and the same way, in both walks, while a creature passing or a glow breathing does not. Check what it
+  finds with the light ramp, in real time: the koi pond's busy nights still raise a few coincidences.
+- **Light ramp** (`lightramp.cjs`): a few minutes of dawn or dusk in real time, through the page's own clock (a
+  stand-in `Date`), at 30 fps. `tick share` is the part of each minute's change of light that lands in the 3 s after
+  the minute turns: about 1 when the clock stepped once a minute (each step a 2-3 s pulse: koi at 18:24, 1.03), an
+  even ramp gives 0.05 plus the noise of moving creatures (koi now 0.14-0.4). The CSV shows the clock itself; with
+  `--shots s1,s2` it saves frames, with `--every 1 --fps 60` it also counts shimmering pixels.
+- **GPU cost** (`gpucost.cjs`): what the A12 has to shade in the default view. Opaque surfaces cost one fragment per
+  visible pixel there (the GPU hides opaque overdraw); every cut-out or blended fragment in front of them costs in
+  full. Lists the costliest objects with a rough weight for their shaders and writes an overdraw heat map.
+
 ## Single tools
 
 Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header lists its options.
@@ -51,6 +72,10 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | `tour.cjs <out>` | Visits every world in one page, testing switching and dispose. |
 | `nanhunt.cjs <out> world:hour …` | Finds which objects produce NaN pixels. |
 | `thumbs.cjs world:hour …` | Re-renders the dock thumbnails in `assets/thumbs`. |
+| `soak.cjs <out> <world> [--hours 3] [--start 5.5] [--every 10]` | Hours of play in time-lapse: NaN, flicker, memory, heap, errors over time. `--t0` starts the world clock days in. |
+| `daysweep.cjs <out> <world> [--from 0] [--to 24] [--step 2]` | The day in steps, walked twice: brightness of the screen and 12 regions per step, and the jumps that come from the clock. `--from-json <world>_sweep.json` looks again at a saved sweep. |
+| `lightramp.cjs <out> <world> [--at 18:20] [--minutes 3]` | Real-time light through the page's own clock: how each minute's change of light is spread, peak change per second, shimmer (`--every 1`). |
+| `gpucost.cjs <out> world:hour …` | iPad GPU cost map: pixels per opaque object, fragments per cut-out or blended object, shader weights, overdraw heat map. |
 
 After changing anything, rebuild the stand-alone page with `python3 idle-world-3d/tools/build_standalone.py`.
 That regenerates `play.html` and `version.json`; a running iPad then reloads itself onto the new build.

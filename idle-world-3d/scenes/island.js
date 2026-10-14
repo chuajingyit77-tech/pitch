@@ -2,7 +2,7 @@
 // Art direction: Sea of Thieves water (rich reflective deep ocean, sun glitter, turquoise swell glow)
 // + Animal Crossing coziness (soft sand, palms, a little dock, hut and lantern, friendly residents).
 import * as THREE from 'three';
-import { TAU, clamp, lerp, smoothstep, createNoise, createWind, sunState } from '../lib/util.js';
+import { TAU, clamp, lerp, smoothstep, createNoise, createWind, sunState, sunDirs } from '../lib/util.js';
 import { waterUniforms, WATER_PERIOD, LAYER_NO_REFLECT } from './island/shared.js';
 import { createTerrain } from './island/terrain.js';
 import { createWater, waveHeight } from './island/water.js';
@@ -119,12 +119,12 @@ export default {
       lift: [0, 0.004, 0.012], gain: [1, 1, 1], ca: 0.0012,
       tilt: { amount: 0.22, center: 0.52, width: 0.24 },
     };
-    const tod = { hours: -1, keyHours: -1, elev: 0, day: 1, night: 0, golden: 0, lantern: 0, dusk: 0, envElev: -999, envNight: -1, timer: 0 };
+    const tod = { hours: -1, elev: 0, day: 1, night: 0, golden: 0, lantern: 0, dusk: 0, envElev: -999, envNight: -1, timer: 0 };
     const C = {
       sunCol: new THREE.Color(), moon: new THREE.Color('#9fb6ff'), tmp: new THREE.Color(), tmp2: new THREE.Color(),
       deepDay: new THREE.Color(0.0045, 0.042, 0.105), deepGold: new THREE.Color(0.012, 0.035, 0.08), deepNight: new THREE.Color(0.0012, 0.006, 0.02),
       horizon: new THREE.Color(), seaEnv: new THREE.Color(),
-      // parsed once: applyTime runs every frame while the clock glides to each new minute
+      // parsed once: applyTime runs a few times a second while the clock runs
       artZen: new THREE.Color('#1f6fd6'), artHor: new THREE.Color('#6cb8ec'), sand: new THREE.Color('#e2cfa0'),
     };
     const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3(), keyDir = new THREE.Vector3();
@@ -145,18 +145,27 @@ export default {
     }
 
     /**
-     * h: the (eased) hour all colours, the sky and the water follow; hKey: the clock's own hour, which
-     * only steps once a minute and sets the shadow-casting light's direction (stepping shadows beat
-     * shadows that slide and shimmer). Easing h over ~1 s turns each minute's small step in sky, ambient
-     * and water brightness into a glide instead of a once-a-minute pulse.
+     * The key light's direction, and with it the shadows, worked out every frame from the eased hour h: the sun
+     * moves and shadows creep as they do outdoors. Its colour and strength come with the rest in applyTime.
      */
-    function applyTime(force = false, h = env.hours(), hKey = h) {
-      if (!force && h === tod.hours && hKey === tod.keyHours) return;
-      tod.hours = h; tod.keyHours = hKey;
+    function applyKey(h) {
+      const e = sunDirs(h - SUN_SHIFT, SUN_OPTS, keyDir);
+      if (e > KEY_SWAP) {
+        if (keyDir.y < MIN_KEY_SIN) {
+          const k = Math.sqrt(1 - MIN_KEY_SIN * MIN_KEY_SIN) / (Math.hypot(keyDir.x, keyDir.z) || 1);
+          keyDir.set(keyDir.x * k, MIN_KEY_SIN, keyDir.z * k);
+        }
+      } else moonDirAt(h, keyDir);
+      sun.position.copy(keyDir).multiplyScalar(80);
+    }
+
+    /** h: the (eased) hour all colours, the sky and the water follow. */
+    function applyTime(force = false, h = env.hours()) {
+      if (!force && h === tod.hours) return;
+      tod.hours = h;
       const s = sunState(h - SUN_SHIFT, SUN_OPTS);
       sunDir.copy(s.dir);
       moonDirAt(h, moonDir);
-      const sKey = hKey === h ? s : sunState(hKey - SUN_SHIFT, SUN_OPTS);
       tod.elev = s.elevationDeg; tod.day = s.day; tod.night = s.night; tod.golden = s.golden;
       const day = s.day, night = s.night, golden = s.golden;
       tod.dusk = smoothstep(-6, 1, s.elevationDeg) * (1 - smoothstep(9, 16, s.elevationDeg));
@@ -186,20 +195,14 @@ export default {
       const sunVis = smoothstep(KEY_SWAP, 2.5, s.elevationDeg);
       const sunI = s.sunIntensity * 1.15 * sunVis;
       const moonI = 0.36 * night;
-      if (sKey.elevationDeg > KEY_SWAP) {
-        keyDir.copy(sKey.dir);
-        if (keyDir.y < MIN_KEY_SIN) {
-          const k = Math.sqrt(1 - MIN_KEY_SIN * MIN_KEY_SIN) / (Math.hypot(keyDir.x, keyDir.z) || 1);
-          keyDir.set(keyDir.x * k, MIN_KEY_SIN, keyDir.z * k);
-        }
+      if (s.elevationDeg > KEY_SWAP) {
         sun.color.copy(C.sunCol);
         sun.intensity = sunI + moonI * 0.2 * sunVis;
       } else {
-        moonDirAt(hKey, keyDir);
         sun.color.copy(C.moon);
         sun.intensity = moonI * smoothstep(KEY_SWAP, KEY_SWAP - 3.5, s.elevationDeg);
       }
-      sun.position.copy(keyDir).multiplyScalar(80);
+      applyKey(h);
       hemi.color.copy(s.skyAmbient);
       hemi.groundColor.copy(s.groundAmbient).lerp(C.sand, 0.35 * day);
       hemi.intensity = s.ambientIntensity * lerp(0.75, 0.45, day);
@@ -333,7 +336,7 @@ export default {
     }
 
     /* ---------------- per-frame ---------------- */
-    let todTimer = 0, hEased = env.hours();
+    let hEased = env.hours();
     const faunaInfo = { dusk: 0, night: 0, timeJump: false }, fxInfo = { night: 0 }, giantInfo = { glow: 0 }; // reused every frame
     const whaleNow = { on: false, x: 0, z: 0 };
     const birdInfo = { day: 1, focus: giant.focus, time: 0 }, fishInfo = { day: 1, dolphins: fauna.dolphins.list, whale: whaleNow, time: 0 };
@@ -346,15 +349,18 @@ export default {
       sky.uniforms.uTime.value = tw;
       water.setTime(t);
       wind.update(dt);
-      // ease toward the clock (it steps once a minute); snap on big jumps (time set by hand, a new day)
+      // ease toward the clock; snap on big jumps (time set by hand, a new day)
       const hClock = env.hours();
       let dh = hClock - hEased;
       if (dh > 12) dh -= 24; else if (dh < -12) dh += 24;
       const timeJump = Math.abs(dh) > 0.25;
       if (timeJump || Math.abs(dh) < 2e-5) hEased = hClock;
       else hEased = (hEased + dh * (1 - Math.exp(-dt / 0.4)) + 24) % 24;
-      todTimer -= dt;
-      if (todTimer <= 0 || hEased !== tod.hours || hClock !== tod.keyHours || timeJump) { todTimer = 0.25; applyTime(false, hEased, hClock); }
+      // the clock runs continuously: the light follows it in steps of ~0.4 s of it (each 1/150 of a minute's change,
+      // far below what can be seen) instead of re-evaluating the sun and every palette on every frame
+      const dk = Math.abs((((hEased - tod.hours) % 24) + 36) % 24 - 12);
+      if (timeJump || dk > 1e-4) applyTime(false, hEased);
+      else applyKey(hEased);
       sky.clouds.update(dt);
       // lantern + windows
       const fl = 0.89 + 0.045 * Math.sin(t * 7.3) * Math.sin(t * 4.1 + 1.3) + 0.055 * Math.sin(t * 2.3);

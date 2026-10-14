@@ -565,18 +565,16 @@ YScript.prototype.at = function (t, out) {
   const S = this.segs;
   let s = S[S.length - 1];
   for (let i = 0; i < S.length; i++) if (t < S[i].t0 + S[i].d) { s = S[i]; break; }
-  let u = t - s.t0;
-  if (u > s.d) { // past the end: carry on at the last speed
-    this.at(s.t0 + s.d, out);
-    out.y += out.v * (u - s.d);
-    return out;
-  }
-  u = Math.max(u, 0);
+  // past the end: the end state, carried on at the last speed. (This used to call itself at t0 + d, but
+  // (t0 + d) - t0 rounds above d for about a third of all segment ends: it recursed until the stack ran out,
+  // which stopped the island after 15-30 minutes on a screen left running.)
+  const tu = t - s.t0, u = Math.min(Math.max(tu, 0), s.d);
   if (s.type === 0) {
     out.y = s.c0 + u * (s.c1 + u * (s.c2 + u * (s.c3 + u * (s.c4 + u * s.c5))));
     out.v = s.c1 + u * (2 * s.c2 + u * (3 * s.c3 + u * (4 * s.c4 + u * 5 * s.c5)));
   } else if (s.type === 1) { out.y = s.y0 + s.v0 * u - 0.5 * G * u * u; out.v = s.v0 - G * u; }
   else { const e = Math.exp(-s.l * u); out.y = s.y0 + s.v0 / s.l * (1 - e); out.v = s.v0 * e; }
+  if (tu > s.d) out.y += out.v * (tu - s.d);
   return out;
 };
 /** A value eased (smoothstep) from key to key. */

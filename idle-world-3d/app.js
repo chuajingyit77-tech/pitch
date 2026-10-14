@@ -799,14 +799,16 @@ let current = null; // { meta, def, inst, env }
 let loading = false;
 let sceneStart = 0;
 const audio = new Ambience();
-// The clock the worlds see: real time in whole minutes, glided over ~2 s each time the minute ticks
-// over. The sun then neither slides every frame (shadow edges would shimmer) nor jumps once a minute
-// (long golden-hour shadows would hop by a metre).
+// The clock the worlds see: real time, continuous to the millisecond, so the sun, the sky and the light of dawn
+// and dusk move a little every frame, as real light does. (It used to move in whole minutes, each glided over
+// ~2 s: every minute's change of light then arrived as a 2-3 s pulse through dawn and dusk, lanterns brightening
+// by a notch and long golden-hour shadows sliding by up to a metre.) A small jump of the clock (set by the
+// network, a short sleep) still glides over ~2 s; a big one cuts straight to the new time.
 const clock = { shown: null };
 function targetHours() {
   if (save.timeMode === 'manual') return save.manualHour;
   const d = new Date();
-  return d.getHours() + d.getMinutes() / 60;
+  return d.getHours() + d.getMinutes() / 60 + (d.getSeconds() + d.getMilliseconds() / 1000) / 3600;
 }
 function tickHours(dt) {
   const target = targetHours();
@@ -874,7 +876,8 @@ async function enterWorld(id, { first = false } = {}) {
     // one step before compiling: worlds set their environment map, lights and time of day in update(),
     // and programs compiled before that would all be rebuilt on the first frame (hidden objects only
     // when they first appear, mid-play: a visible stall on Safari 14, which compiles synchronously)
-    elapsed = 1 / 60;
+    // (tests can start the world clock as if the page had been open for days: TEST.t0 seconds)
+    elapsed = ((TEST && TEST.t0) || 0) + 1 / 60;
     inst.update(1 / 60, elapsed);
     updateRig(1 / 60, elapsed);
     gl1ColorMipmaps(inst.scene);
@@ -1348,6 +1351,21 @@ window.__idle = {
     for (let k = 0; k < n; k++) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); applyPost(current.inst.post || {}, step); }
   },
   setView(v) { Object.assign(rig, v); if (v.yaw !== undefined) rig.yawT = v.yaw; if (v.pitch !== undefined) rig.pitchT = v.pitch; if (v.dist !== undefined) rig.distT = v.dist; },
+  /** Render one frame of the current state (tests that stop the page's own loop, manualClock, render with this). */
+  renderNow() { if (current) composer.render(1 / 60); },
+  /** One frame exactly as the page's own loop runs it, the clock of day included (tests that stop the loop and step
+   *  real time themselves, e.g. with a stand-in Date). */
+  frame(dt = 1 / 60, render = true) {
+    if (!current) return;
+    elapsed += dt;
+    tickHours(dt);
+    current.inst.update(dt, elapsed);
+    updateRig(dt, elapsed);
+    applyPost(current.inst.post || {}, dt);
+    if (render) composer.render(dt);
+  },
+  /** The clock of day the worlds see right now (hours). */
+  shownHours: () => hours(),
   /**
    * Test-only stability probe: NaN/Inf and extreme values in the HDR scene buffer, plus temporal
    * flicker (pixels that swing up then down between consecutive 60 fps frames) on the final image.

@@ -99,8 +99,9 @@ export function createShared() {
   };
 }
 
-// The shell's clock moves in whole-minute steps. The palette, light and sun ease over ~2 s toward each new
-// minute instead of jumping (a minute at sunset changes the light by ~6%, and long shadows by metres).
+// The shell's clock runs continuously. The palette, light and sun follow it through a short ease, which also
+// turns any small jump of the clock into a glide (a minute at sunset changes the light by ~6%, and long shadows
+// by metres).
 const TOD_EASE = 0.6;   // seconds (time constant)
 const LAT = THREE.MathUtils.degToRad(25);
 /** Same sun path as lib/util.js sunState() (25°N, equinox), without per-call allocations. Returns elevation (deg). */

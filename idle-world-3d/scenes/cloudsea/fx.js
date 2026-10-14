@@ -146,7 +146,7 @@ export function createSparkles(max = 800) {
     update(t, pixelScale) {
       // the particle clock is rebased every 600 s (birth times shifted with it, so nothing jumps): the raw scene
       // clock in float32 quantises particle ages to ~8 ms steps after a day and fast sparks would jitter
-      if (t - base > 600) {
+      while (t - base > 600) {
         base += 600;
         const S = aStart.array;
         for (let i = 0; i < max; i++) S[i * 4 + 3] -= 600;

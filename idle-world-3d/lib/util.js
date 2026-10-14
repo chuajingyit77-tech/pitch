@@ -231,6 +231,21 @@ const _sunKeys = [
 const _c = new THREE.Color(), _c2 = new THREE.Color();
 
 /**
+ * The sun's and the moon's directions exactly as sunState() gives them, written into the given vectors without
+ * allocating (for the lights, every frame). Returns the sun's elevation in degrees.
+ */
+export function sunDirs(hours, { latitude = 25, azimuthOffset = 0 } = {}, sunOut, moonOut) {
+  const lat = THREE.MathUtils.degToRad(latitude);
+  const H = THREE.MathUtils.degToRad((hours - 12) * 15);
+  const elevation = Math.asin(clamp(Math.cos(lat) * Math.cos(H), -1, 1));
+  const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat)) + azimuthOffset;
+  const ce = Math.cos(elevation);
+  sunOut.set(-Math.sin(az) * ce, Math.sin(elevation), Math.cos(az) * ce).normalize();
+  if (moonOut) moonOut.set(-sunOut.x, Math.max(0.25, -sunOut.y * 0.8 + 0.2), -sunOut.z).normalize();
+  return THREE.MathUtils.radToDeg(elevation);
+}
+
+/**
  * Sun state for a local hour (0..24). Uses a real solar-elevation formula for latitude ~25°N
  * at equinox: sunrise ~6:00, noon elevation ~65°, sunset ~18:00.
  * Direction convention: +x = east, -x = west, +z = south, +y = up. Pass azimuthOffset (radians)
