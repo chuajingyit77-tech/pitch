@@ -13,6 +13,7 @@ import { buildFishGeometry, paintFish, createFishMaterial, createSwimDepthMateri
 import { Heron } from './koi/heron.js';
 import { Medaka, Dragonflies, Frogs } from './koi/life.js';
 import { Mist, Shafts, GlowPools, FireflyReflections } from './koi/atmos.js';
+import { createIrisFlowers, IRIS_STEM, IRIS_BUD_STEM } from './koi/iris.js';
 
 const KINDS = {
   kohaku: { zh: '红白' }, tancho: { zh: '丹顶' }, sanke: { zh: '大正三色' }, showa: { zh: '昭和三色' },
@@ -1599,19 +1600,31 @@ class KoiPond {
     grass.receiveShadow = true;
     this.scene.add(grass);
 
-    // iris clumps at the water's edge
-    const irisLeaf = new THREE.PlaneGeometry(0.05, 0.8, 1, 5); irisLeaf.translate(0, 0.4, 0);
-    const il = irisLeaf.attributes.position;
-    for (let i = 0; i < il.count; i++) { const y = il.getY(i); il.setX(i, il.getX(i) * (1 - (y / 0.85) ** 2)); il.setZ(i, (y / 0.8) ** 2 * 0.12); }
+    // iris clumps at the water's edge: kakitsubata (koi/iris.js). The clumps, their leaves and the first three
+    // flowering stems keep the random draws they always had (and so their places); everything new draws from a
+    // stream of its own.
+    // Sword leaves, 3.6 cm across: narrower and paler where they sheathe at the foot, parallel-sided, then a long
+    // point; a fold down the middle gives the two halves their own light
+    const irisLeaf = new THREE.PlaneGeometry(0.05, 0.8, 2, 6); irisLeaf.translate(0, 0.4, 0);
+    const il = irisLeaf.attributes.position, ilc = new Float32Array(il.count * 3);
+    for (let i = 0; i < il.count; i++) {
+      const u = il.getY(i) / 0.8, x = il.getX(i) / 0.025;
+      const wd = (0.7 + 0.3 * smoothstep(0, 0.3, u)) * (1 - 0.92 * Math.pow(smoothstep(0.55, 1, u), 1.6));
+      il.setX(i, x * 0.018 * wd);
+      il.setZ(i, u * u * 0.12 + (1 - Math.abs(x)) * 0.0065 * wd);
+      const foot = 1 - smoothstep(0, 0.2, u), sh = lerp(1.04, 0.8, smoothstep(0.45, 1, u)) * (1 - 0.12 * Math.abs(x)) * (1 + 0.3 * foot);
+      ilc[i * 3] = sh * (1 + 0.12 * foot); ilc[i * 3 + 1] = sh; ilc[i * 3 + 2] = sh * (1 - 0.3 * foot);
+    }
+    irisLeaf.setAttribute('color', new THREE.BufferAttribute(ilc, 3));
     irisLeaf.computeVertexNormals();
-    const leafMat = new THREE.MeshStandardMaterial({ color: '#4f7a33', side: THREE.DoubleSide, roughness: 0.7 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: '#4f7a33', vertexColors: true, side: THREE.DoubleSide, roughness: 0.62 });
     addWind(leafMat, this.wind, { height: 0.8, amount: 0.08, stiffness: 1.8, key: 'iris' });
-    const flowerGeo = new THREE.SphereGeometry(0.06, 8, 6); flowerGeo.scale(1.4, 0.8, 1.4);
-    const flowerMat = new THREE.MeshStandardMaterial({ color: '#6d4fc4', roughness: 0.6, emissive: '#2a1660', emissiveIntensity: 0.2 });
-    const clumps = 5, leavesPer = 14;
-    const irisL = new THREE.InstancedMesh(irisLeaf, leafMat, clumps * leavesPer);
-    const irisF = new THREE.InstancedMesh(flowerGeo, flowerMat, clumps * 3);
-    let li = 0, fi = 0;
+    const fr = this.rng.fork('irisFlowers');
+    const clumps = 5, leavesPer = 14, leavesMore = 6;
+    const irisL = new THREE.InstancedMesh(irisLeaf, leafMat, clumps * (leavesPer + leavesMore));
+    const leafTone = () => { const v = fr.range(0.84, 1.12); return col.setRGB(v * fr.range(0.94, 1.08), v, v * fr.range(0.9, 1.05)); };
+    const blooms = [], buds = [], violet = new THREE.Color('#5d40a8');
+    let li = 0;
     for (let c = 0; c < clumps; c++) {
       let x = 0, z = 0, ok = false;
       for (let k = 0; k < 40 && !ok; k++) {
@@ -1620,18 +1633,51 @@ class KoiPond {
         for (let j = 0; j < 8; j++) { const d = this.sdf(x, z); this.sdfGrad(x, z, _v); x -= _v.x * (d - 0.05); z -= _v.z * (d - 0.05); }
         ok = !this.nearBridge(x, z, 1.2);
       }
+      // the clump grows beside the bank stones and the lantern's foot rather than through them: its middle moves
+      // to the nearest clear spot on the bank or in the shallows (rings of 6 cm, no random draws)
+      const lp = this.lanternPos;
+      const under = (px, pz, above) => { const top = this.rockTop(px, pz); return !!top && top.y > this.height(px, pz) + above; };
+      const free = (px, pz) => (!lp || Math.hypot(px - lp.x, pz - lp.z) > 0.62) && this.sdf(px, pz) > -0.08 && !this.nearBridge(px, pz, 1)
+        && !under(px, pz, 0.03) && !under(px + 0.1, pz, 0.03) && !under(px - 0.1, pz, 0.03) && !under(px, pz + 0.1, 0.03) && !under(px, pz - 0.1, 0.03);
+      search: for (let ri = 0; ri <= 11; ri++) {
+        for (let k = 0, nk = ri ? 12 : 1, rr = ri * 0.06; k < nk; k++) {
+          const px = x + Math.cos(k / nk * TAU) * rr, pz = z + Math.sin(k / nk * TAU) * rr;
+          if (free(px, pz)) { x = px; z = pz; break search; }
+        }
+      }
       const y = Math.max(this.height(x, z), -0.05);
       (this.irisSpots || (this.irisSpots = [])).push({ x, z });
-      for (let k = 0; k < leavesPer; k++) {
-        _m.compose(_v.set(x + r.gauss() * 0.12, y, z + r.gauss() * 0.12), _q.setFromEuler(_e.set(r.range(-0.3, 0.3), r.range(0, TAU), r.range(-0.3, 0.3))), _s.set(1, r.range(0.7, 1.2), 1));
-        irisL.setMatrixAt(li++, _m);
+      for (let k = 0; k < leavesPer + leavesMore; k++) {
+        const q = k < leavesPer ? r : fr;
+        _m.compose(_v.set(x + q.gauss() * 0.12, y, z + q.gauss() * 0.12), _q.setFromEuler(_e.set(q.range(-0.3, 0.3), q.range(0, TAU), q.range(-0.3, 0.3))), _s.set(1, q.range(0.7, 1.2), 1));
+        irisL.setMatrixAt(li, _m); irisL.setColorAt(li++, leafTone());
       }
-      for (let k = 0; k < 3; k++) {
-        _m.compose(_v.set(x + r.gauss() * 0.15, y + r.range(0.6, 0.85), z + r.gauss() * 0.15), _q.identity(), _s.setScalar(r.range(0.8, 1.2)));
-        irisF.setMatrixAt(fi++, _m);
-      }
+      // a stem rises from among the leaves, leaning a little out of the clump, its flower `h` above the ground;
+      // its foot never inside a stone or the lantern's foot, its flower never sitting on a stone (drawn again near
+      // the clump's middle until clear, or left out)
+      const clear = (bx, bz, fx, fz, h) => (!lp || (Math.hypot(bx - lp.x, bz - lp.z) > 0.48 && Math.hypot(fx - lp.x, fz - lp.z) > 0.5))
+        && !under(bx, bz, 0.03) && !under(bx + 0.035, bz, 0.03) && !under(bx - 0.035, bz, 0.03) && !under(bx, bz + 0.035, 0.03) && !under(bx, bz - 0.035, 0.03)
+        && !under(fx, fz, h - 0.14);
+      const stem = (gx, gz, h, list, H) => {
+        let bx = x + gx * 0.06, bz = z + gz * 0.06;
+        for (let k = 0; k < 16; k++) {
+          const a = Math.atan2(bz - z, bx - x) + fr.range(-0.5, 0.5), tilt = fr.range(0.03, 0.15);
+          if (clear(bx, bz, bx + Math.cos(a) * Math.sin(tilt) * h, bz + Math.sin(a) * Math.sin(tilt) * h, h)) {
+            _q.setFromAxisAngle(_v2.set(Math.sin(a), 0, -Math.cos(a)), tilt).multiply(_qFlat.setFromAxisAngle(_up, fr.range(0, TAU)));
+            _m.compose(_v.set(bx, Math.max(this.height(bx, bz), -0.05) - 0.02, bz), _q, _s.setScalar(h / H));
+            list.push({ matrix: _m.clone(), color: violet.clone().offsetHSL(fr.range(-0.012, 0.012), fr.range(-0.06, 0.04), fr.range(-0.03, 0.03)) });
+            return;
+          }
+          bx = x + fr.gauss() * 0.07; bz = z + fr.gauss() * 0.07;
+        }
+      };
+      for (let k = 0; k < 3; k++) { const gx = r.gauss(), h = r.range(0.6, 0.85), gz = r.gauss(); r.range(0.8, 1.2); stem(gx, gz, h, blooms, IRIS_STEM); }
+      // a clump in flower carries a mass of them (the first three are the old flower heads' draws)
+      for (let k = fr.int(2, 4); k > 0; k--) stem(fr.gauss() * 1.3, fr.gauss() * 1.3, fr.range(0.55, 0.85), blooms, IRIS_STEM);
+      for (let k = fr.int(1, 2); k > 0; k--) stem(fr.gauss() * 1.2, fr.gauss() * 1.2, fr.range(0.5, 0.7), buds, IRIS_BUD_STEM);
     }
-    this.scene.add(irisL, irisF);
+    irisL.count = li; irisL.name = 'irisLeaves';
+    this.scene.add(irisL, ...createIrisFlowers({ wind: this.wind, blooms, buds }));
     this.disposables.push(leafy.map, leafy.normal);
   }
 

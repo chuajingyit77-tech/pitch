@@ -7,7 +7,7 @@ import { waterize, addDetail, addFluor, addSway } from './uw.js';
 import { addTranslucency, addTriplanar, cachedTexture, paintPolyps, paintCups, paintBrain } from './surf.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0), _e = new THREE.Euler(), _n = new THREE.Vector3(), _c = new THREE.Color();
+const _up = new THREE.Vector3(0, 1, 0), _e = new THREE.Euler(), _n = new THREE.Vector3(), _c = new THREE.Color(), _c2 = new THREE.Color();
 const C = h => new THREE.Color(h);
 
 /** Write per-vertex colour and fluorescence. fn(x, y, z, i) -> [Color, fluor] */
@@ -424,28 +424,56 @@ function spongeGeo(rng, color) {
   // Tube sponges: each tube is one closed surface of revolution with a real wall: outer wall (same size
   // and flare as before), a rounded lip, a dark inner wall and floor (it was an open, paper-thin cylinder
   // drawn double-sided). Same random sequence, so clusters keep their layout.
+  // None is a turned pipe: the wall bulges and pinches in a few soft lobes that wander up the tube, the lip rides
+  // up and down round the rim, the tube bows a little as it grows, and the colour is mottled, dusky with silt at the
+  // foot and palest along the lip. The inside stays dark from any side (little light gets in). These shapes draw
+  // from a stream of their own.
+  const form = rng.fork('form');
   const parts = [];
   const n = rng.int(3, 6);
   for (let i = 0; i < n; i++) {
     const h = rng.range(0.35, 0.85), r = rng.range(0.06, 0.1);
+    // (drawn in the order they always were)
+    const a0 = (i / n) * TAU + rng.range(-0.4, 0.4), off = i === 0 ? 0 : rng.range(0.08, 0.16);
+    const cc = color.clone().offsetHSL(0, 0, rng.range(-0.06, 0.06)), silt = C('#5f6440');
     const ro = y => lerp(r * 0.85, r * 1.25, clamp(y / h, 0, 1)) * (1 + smoothstep(0.75, 1, y / h) * 0.25);
     const w = r * 0.24, prof = [], shade = [];
-    // outer wall, bottom -> lip
-    for (const t of [0, 0.25, 0.55, 0.78, 0.92, 1]) { prof.push([ro(t * h), t * h]); shade.push(lerp(0.66, 1.08, t)); }
+    // outer wall, bottom -> lip (rows close enough for the lobes)
+    for (const t of [0, 0.12, 0.25, 0.4, 0.55, 0.68, 0.78, 0.86, 0.92, 0.97, 1]) { prof.push([ro(t * h), t * h]); shade.push(lerp(0.66, 1.08, t)); }
     // rounded lip: half circle from the outer to the inner wall
     const rt = ro(h), cx = rt - w / 2;
-    for (let k = 1; k < 4; k++) { const a = (k / 4) * Math.PI; prof.push([cx + Math.cos(a) * w / 2, h + Math.sin(a) * w * 0.55]); shade.push(1.12); }
+    for (let k = 1; k < 4; k++) { const a = (k / 4) * Math.PI; prof.push([cx + Math.cos(a) * w / 2, h + Math.sin(a) * w * 0.55]); shade.push(1.14); }
     // inner wall down into the dark, then the floor
-    for (const t of [1, 0.93, 0.75, 0.45]) { prof.push([Math.max(0.004, ro(t * h) - w * (t === 1 ? 1 : 1.05)), t * h]); shade.push(lerp(0.16, 0.62, smoothstep(0.4, 1, t))); }
-    prof.push([0.0, 0.42 * h]); shade.push(0.14);
-    const g = strip(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 14));
+    for (const t of [1, 0.93, 0.75, 0.45]) { prof.push([Math.max(0.004, ro(t * h) - w * (t === 1 ? 1 : 1.05)), t * h]); shade.push(lerp(0.1, 0.42, smoothstep(0.4, 1, t))); }
+    prof.push([0.0, 0.42 * h]); shade.push(0.08);
+    const np = prof.length, inner = np - 5; // profile points from here on are inside the tube
+    let g = strip(new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 20));
+    g.deleteAttribute('normal');
+    const ph = [form.range(0, TAU), form.range(0, TAU), form.range(0, TAU), form.range(0, TAU), form.range(0, TAU), form.range(0, TAU)];
+    const bend = form.range(-0.08, 0.08) * h, bendA = form.range(0, TAU);
+    // all periodic round the tube (whole waves), so the lathe's seam closes
+    const lobe = (a, u) => 1 + 0.07 * Math.sin(2 * a + ph[0] + u * 2.3) + 0.05 * Math.sin(3 * a + ph[1] - u * 3.4) + 0.025 * Math.sin(5 * a + ph[2] + u * 6);
+    const lift = a => h * (0.05 * Math.sin(a + ph[3]) + 0.025 * Math.sin(2 * a + ph[4]));
+    const mottle = (a, u) => 1 + 0.1 * Math.sin(3 * a + ph[5] + u * 7.3) * Math.sin(2 * a - ph[0] + u * 4.1) + 0.05 * Math.sin(7 * a + ph[1] + u * 11);
+    // colour per profile point and angle, before the seam is merged (LatheGeometry walks the whole profile for
+    // every segment, x = r sin(a), z = r cos(a))
+    paint(g, (x, y, z, idx) => {
+      const j = idx % np, a = Math.atan2(x, z), u = y / h;
+      _c.copy(cc).lerp(silt, (1 - smoothstep(0, 0.22, u)) * 0.45 * (j < inner ? 1 : 0)).multiplyScalar(shade[j] * (j < inner ? mottle(a, u) : 1));
+      if (j >= np - 8 && j < inner) _c.lerp(_c2.setRGB(1, 1, 1), 0.08); // the pale lip
+      return [_c.clone(), 0.3];
+    });
+    g = mergeVertices(g);
+    const p = g.getAttribute('position');
+    for (let k = 0; k < p.count; k++) {
+      const x = p.getX(k), y = p.getY(k), z = p.getZ(k), rr = Math.hypot(x, z), u = y / h;
+      const a = Math.atan2(x, z), s = lobe(a, u), b = bend * u * u;
+      p.setXYZ(k, x * s + Math.sin(bendA) * b, y + lift(a) * smoothstep(0.55, 1, u) * (rr > 1e-5 ? 1 : 0), z * s + Math.cos(bendA) * b);
+    }
+    g.computeVertexNormals();
     g.translate(0, -0.04, 0);
-    const a = (i / n) * TAU + rng.range(-0.4, 0.4), off = i === 0 ? 0 : rng.range(0.08, 0.16);
-    g.applyQuaternion(_q.setFromEuler(_e.set(Math.sin(a) * 0.18, 0, -Math.cos(a) * 0.18)));
-    g.translate(Math.cos(a) * off, 0, Math.sin(a) * off);
-    // colour per profile point (LatheGeometry walks the whole profile for every segment)
-    const np = prof.length, cc = color.clone().offsetHSL(0, 0, rng.range(-0.06, 0.06));
-    paint(g, (x, y, z, idx) => [_c.copy(cc).multiplyScalar(shade[idx % np]).clone(), 0.3]);
+    g.applyQuaternion(_q.setFromEuler(_e.set(Math.sin(a0) * 0.18, 0, -Math.cos(a0) * 0.18)));
+    g.translate(Math.cos(a0) * off, 0, Math.sin(a0) * off);
     parts.push(g);
   }
   const g = mergeGeometries(parts);
@@ -959,7 +987,8 @@ export function buildReef(ctx) {
   /* ---- tube sponges ---- */
   // closed tubes now (outer wall, lip, inner wall), so single-sided; pores from the cups texture
   const spongeMat = stdMat(W, { vertexColors: true, roughness: 0.85 }, { key: 'sponge' });
-  addTriplanar(spongeMat, W, { tex: cupsTex(), tile: 0.12, bump: 1.0, key: 'sponge', color: 'diffuseColor.rgb *= tpT.b * 2.0;' });
+  // pores about 8 mm across: big enough to read as a sponge's skin at the usual distance (mip-mapped away beyond)
+  addTriplanar(spongeMat, W, { tex: cupsTex(), tile: 0.18, bump: 1.2, key: 'sponge', color: 'diffuseColor.rgb *= tpT.b * 2.0;' });
   const spongeGeos = [spongeGeo(rng.fork('sp1'), C('#8a3fa8')), spongeGeo(rng.fork('sp2'), C('#e08a2c')), spongeGeo(rng.fork('sp3'), C('#d8c838'))];
   const spongeLists = spongeGeos.map(() => []);
   for (let i = N(16); i > 0; i--) {
