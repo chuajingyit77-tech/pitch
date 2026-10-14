@@ -1,11 +1,8 @@
 // 栖境 — app shell: renderer, post-processing, camera rig, feeding input, residents,
 // per-computer save data, idle/screensaver mode, ambience and the HUD.
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
@@ -179,73 +176,167 @@ let qName = effectiveQuality();
 const tier = name => ({ ...QUALITY[name], shadows: QUALITY[name].shadows && IS_WEBGL2 });
 let Q = tier(qName);
 
-// Removes NaN/Inf from the HDR frame and soft-limits extreme highlights. A single NaN pixel (or a
-// one-pixel specular sparkle worth 1000×) would otherwise be smeared by bloom into flashing blocks.
-const SanitizeShader = {
-  uniforms: { tDiffuse: { value: null }, uKnee: { value: 12.0 } },
-  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+/* Post-processing in as few full-screen passes as possible. On the iPad's tile-based GPU every full-screen pass
+   carries the whole frame out to memory and back, so after the world itself there are two:
+     the world      -> its own HDR buffer (multisampled where the GPU can: WebGL 2)
+     bloom          reads that buffer straight away, at half resolution and below
+     output         the HDR buffer, cleaned, plus bloom; exposure, tone mapping, sRGB, colour grade, vignette and
+                    a static dither -> an 8-bit buffer
+     final          FXAA (WebGL 1, where there is no MSAA) or chromatic aberration and tilt-shift -> the screen
+   It used to be five, each through a half-float buffer: a cleaning copy, bloom added onto the frame in a pass of
+   its own, output, FXAA, and grade. */
+
+// NaN/Inf are cleared and extreme highlights soft-limited wherever the HDR frame is read. A single NaN pixel (or a
+// one-pixel specular sparkle worth 1000x) would otherwise be smeared by bloom into flashing blocks.
+const HDR_CLEAN = /* glsl */`
+  uniform float uKnee;
+  bool hdrBad(float x){
+    #if __VERSION__ >= 300
+      return isnan(x) || isinf(x);
+    #else
+      return !(x < 1e20 && x > -1e20); // WebGL1 has no isnan(): NaN fails every comparison
+    #endif
+  }
+  vec3 hdrClean(vec3 v){
+    if (hdrBad(v.r) || hdrBad(v.g) || hdrBad(v.b)) return vec3(0.0);
+    v = clamp(v, vec3(0.0), vec3(65000.0));
+    float m = max(max(v.r, v.g), v.b);
+    if (m > uKnee) v *= (uKnee + (m - uKnee) / (1.0 + (m - uKnee) / uKnee)) / m;
+    return v;
+  }`;
+// Static sub-LSB dither against banding, applied before the picture is stored in 8 bits. No animated film grain:
+// moving noise reads as flicker, most of all in dark scenes on phone screens.
+const DITHER = /* glsl */`
+  float dither(){ return (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0; }`;
+const QUAD_VS = /* glsl */`
+  precision highp float;
+  uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;
+  attribute vec3 position; attribute vec2 uv;
+  varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+
+// Bloom read straight from the world's buffer. Its first step samples the frame where three's bloom always did (one
+// bilinear sample per half-resolution texel), but blends the four pixels itself, each cleaned first: exactly what
+// sampling the old cleaned copy gave. (Cleaning after the filtering would let a lone sparkle bloom 30x brighter, and
+// a plain 2x2 average, a texel off on odd sizes, dimmed thin glowing lines below the threshold.) The result is left
+// at half resolution (`texture`, to add as rgb * a) instead of being blended onto the frame in a pass of its own.
+class Bloom extends UnrealBloomPass {
+  constructor(size, strength, radius, threshold) {
+    super(size, strength, radius, threshold);
+    const u = this.highPassUniforms;
+    u.uKnee = { value: 12 };
+    u.uTexel = { value: new THREE.Vector2(1 / size.x, 1 / size.y) };
+    const m = this.materialHighPassFilter, src = m.fragmentShader;
+    const read = 'vec4 texel = texture2D( tDiffuse, vUv );';
+    if (!src.includes(read)) console.warn('[post] bloom input not patched');
+    m.fragmentShader = HDR_CLEAN + '\nuniform vec2 uTexel;\n' + src.replace(read, `
+      vec2 tp = vUv / uTexel - 0.5, tf = fract(tp), t0 = (floor(tp) + 0.5) * uTexel;
+      vec3 c00 = hdrClean(texture2D(tDiffuse, t0).rgb), c10 = hdrClean(texture2D(tDiffuse, t0 + vec2(uTexel.x, 0.0)).rgb);
+      vec3 c01 = hdrClean(texture2D(tDiffuse, t0 + vec2(0.0, uTexel.y)).rgb), c11 = hdrClean(texture2D(tDiffuse, t0 + uTexel).rgb);
+      vec4 texel = vec4(mix(mix(c00, c10, tf.x), mix(c01, c11, tf.x), tf.y), 1.0);`);
+    m.needsUpdate = true;
+  }
+  setSize(w, h) { super.setSize(w, h); this.highPassUniforms.uTexel.value.set(1 / w, 1 / h); }
+  get texture() { return this.renderTargetsHorizontal[0].texture; }
+  /** UnrealBloomPass.render (three r160) up to its composite, from `tex`; the result is this.texture. */
+  renderFrom(r, tex) {
+    r.getClearColor(this._oldClearColor);
+    const oldAlpha = r.getClearAlpha(), oldAutoClear = r.autoClear;
+    r.autoClear = false;
+    r.setClearColor(this.clearColor, 0);
+    this.highPassUniforms.tDiffuse.value = tex;
+    this.highPassUniforms.luminosityThreshold.value = this.threshold;
+    this.fsQuad.material = this.materialHighPassFilter;
+    r.setRenderTarget(this.renderTargetBright); r.clear(); this.fsQuad.render(r);
+    let input = this.renderTargetBright;
+    for (let i = 0; i < this.nMips; i++) {
+      const m = this.separableBlurMaterials[i];
+      this.fsQuad.material = m;
+      m.uniforms.colorTexture.value = input.texture;
+      m.uniforms.direction.value = UnrealBloomPass.BlurDirectionX;
+      r.setRenderTarget(this.renderTargetsHorizontal[i]); r.clear(); this.fsQuad.render(r);
+      m.uniforms.colorTexture.value = this.renderTargetsHorizontal[i].texture;
+      m.uniforms.direction.value = UnrealBloomPass.BlurDirectionY;
+      r.setRenderTarget(this.renderTargetsVertical[i]); r.clear(); this.fsQuad.render(r);
+      input = this.renderTargetsVertical[i];
+    }
+    const cu = this.compositeMaterial.uniforms;
+    cu.bloomStrength.value = this.strength; cu.bloomRadius.value = this.radius; cu.bloomTintColors.value = this.bloomTintColors;
+    this.fsQuad.material = this.compositeMaterial;
+    r.setRenderTarget(this.renderTargetsHorizontal[0]); r.clear(); this.fsQuad.render(r);
+    r.setClearColor(this._oldClearColor, oldAlpha);
+    r.autoClear = oldAutoClear;
+    return this.texture;
+  }
+}
+
+// HDR frame (+ bloom) -> exposure, tone mapping (three's own, as its OutputPass), sRGB, colour grade, vignette,
+// dither -> 8 bits
+const OutputShader = {
+  uniforms: {
+    tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0 }, uKnee: { value: 12 }, toneMappingExposure: { value: 1 },
+    uRes: { value: new THREE.Vector2(1, 1) }, uVignette: { value: 0.35 }, uSat: { value: 1.04 }, uContrast: { value: 1.02 },
+    uLift: { value: new THREE.Vector3(0, 0, 0) }, uGain: { value: new THREE.Vector3(1, 1, 1) },
+  },
+  vertexShader: QUAD_VS,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uKnee; varying vec2 vUv;
-    bool bad(float x){
-      #if __VERSION__ >= 300
-        return isnan(x) || isinf(x);
-      #else
-        return !(x < 1e20 && x > -1e20); // WebGL1 has no isnan(): NaN fails every comparison
+    precision highp float;
+    uniform sampler2D tScene, tBloom; uniform float uBloom;
+    uniform vec2 uRes; uniform float uVignette, uSat, uContrast; uniform vec3 uLift, uGain;
+    varying vec2 vUv;
+    ${HDR_CLEAN}
+    ${DITHER}
+    #include <tonemapping_pars_fragment>
+    #include <colorspace_pars_fragment>
+    vec3 toneMapped(vec2 uv){
+      vec4 c = vec4(hdrClean(texture2D(tScene, uv).rgb), 1.0);
+      if (uBloom > 0.5) { vec4 b = texture2D(tBloom, uv); c.rgb += b.rgb * b.a; }
+      #ifdef LINEAR_TONE_MAPPING
+        c.rgb = LinearToneMapping(c.rgb);
+      #elif defined( REINHARD_TONE_MAPPING )
+        c.rgb = ReinhardToneMapping(c.rgb);
+      #elif defined( CINEON_TONE_MAPPING )
+        c.rgb = OptimizedCineonToneMapping(c.rgb);
+      #elif defined( ACES_FILMIC_TONE_MAPPING )
+        c.rgb = ACESFilmicToneMapping(c.rgb);
+      #elif defined( AGX_TONE_MAPPING )
+        c.rgb = AgXToneMapping(c.rgb);
       #endif
+      #ifdef SRGB_TRANSFER
+        c = sRGBTransferOETF(c);
+      #endif
+      return c.rgb;
     }
     void main(){
-      vec4 c = texture2D(tDiffuse, vUv);
-      vec3 v = c.rgb;
-      if (bad(v.r) || bad(v.g) || bad(v.b)) v = vec3(0.0);
-      v = clamp(v, vec3(0.0), vec3(65000.0));
-      float m = max(max(v.r, v.g), v.b);
-      if (m > uKnee) v *= (uKnee + (m - uKnee) / (1.0 + (m - uKnee) / uKnee)) / m;
-      gl_FragColor = vec4(v, 1.0);
+      vec2 dc = vUv - 0.5;
+      vec3 col = toneMapped(vUv);
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(l), col, uSat);
+      col = (col - 0.5) * uContrast + 0.5;
+      col = col * uGain + uLift * (1.0 - col);
+      float vig = smoothstep(0.95, 0.2, length(dc * vec2(uRes.x / uRes.y, 1.0) * 0.82));
+      col *= mix(1.0, vig, uVignette);
+      gl_FragColor = vec4(clamp(col + dither(), 0.0, 1.0), 1.0);
     }`,
 };
 
-// Renders the world into its own multisampled HDR buffer, then writes a sanitized copy into the
-// composer's (single-sample) chain. Only this pass pays for MSAA; bloom and grading stay cheap.
-class ScenePass extends Pass {
-  constructor(samples) {
-    super();
-    this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera();
-    this.target = new THREE.WebGLRenderTarget(1, 1, { type: HDR_TYPE, samples });
-    this.target.texture.name = 'scene';
-    this.quad = new FullScreenQuad(new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.clone(SanitizeShader.uniforms),
-      vertexShader: SanitizeShader.vertexShader, fragmentShader: SanitizeShader.fragmentShader,
-      depthTest: false, depthWrite: false,
-    }));
-  }
-  setSize(w, h) { this.target.setSize(w, h); }
-  render(r, writeBuffer) {
-    r.setRenderTarget(this.target);
-    r.clear();
-    r.render(this.scene, this.camera);
-    this.quad.material.uniforms.tDiffuse.value = this.target.texture;
-    r.setRenderTarget(this.renderToScreen ? null : writeBuffer);
-    this.quad.render(r);
-  }
-  dispose() { this.target.dispose(); this.quad.material.dispose(); this.quad.dispose(); }
-}
-
+// The last pass where the GPU multisamples: chromatic aberration and tilt-shift blur of the graded picture (with a
+// fresh dither where it was blurred: the blur's average needs one before the screen's 8 bits)
 const FinalShader = {
   uniforms: {
     tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(1, 1) },
-    uVignette: { value: 0.35 }, uSat: { value: 1.04 }, uContrast: { value: 1.02 },
-    uLift: { value: new THREE.Vector3(0, 0, 0) }, uGain: { value: new THREE.Vector3(1, 1, 1) },
     uCA: { value: 0 }, uTilt: { value: 0 }, uTiltCenter: { value: 0.5 }, uTiltWidth: { value: 0.18 },
   },
-  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  vertexShader: QUAD_VS,
   fragmentShader: /* glsl */`
+    precision highp float;
     uniform sampler2D tDiffuse; uniform vec2 uRes;
-    uniform float uVignette, uSat, uContrast, uCA, uTilt, uTiltCenter, uTiltWidth;
-    uniform vec3 uLift, uGain;
+    uniform float uCA, uTilt, uTiltCenter, uTiltWidth;
     varying vec2 vUv;
+    ${DITHER}
+    float blurAt(vec2 uv){ return uTilt * smoothstep(uTiltWidth, uTiltWidth + 0.38, abs(uv.y - uTiltCenter)); }
     vec3 tap(vec2 uv){
-      float blur = uTilt * smoothstep(uTiltWidth, uTiltWidth + 0.38, abs(uv.y - uTiltCenter));
+      float blur = blurAt(uv);
       if (blur < 0.02) return texture2D(tDiffuse, uv).rgb;
       vec3 acc = vec3(0.0);
       for (int i = 0; i < 12; i++) {
@@ -258,16 +349,7 @@ const FinalShader = {
     void main(){
       vec2 uv = vUv; vec2 dc = uv - 0.5;
       vec3 col = uCA > 0.0 ? vec3(tap(uv + dc * uCA).r, tap(uv).g, tap(uv - dc * uCA).b) : tap(uv);
-      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(l), col, uSat);
-      col = (col - 0.5) * uContrast + 0.5;
-      col = col * uGain + uLift * (1.0 - col);
-      float vig = smoothstep(0.95, 0.2, length(dc * vec2(uRes.x / uRes.y, 1.0) * 0.82));
-      col *= mix(1.0, vig, uVignette);
-      // Static sub-LSB dither against banding. No animated film grain: moving noise reads as flicker,
-      // most of all in dark scenes on phone screens.
-      float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-      col += (n - 0.5) / 255.0;
+      if (blurAt(uv) >= 0.02) col += dither();
       gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
     }`,
 };
@@ -277,29 +359,92 @@ const FinalShader = {
 // similar surfaces kept its stair-steps: a white fox's jaw over its chest, a misty ridge against a grey sky, a giant
 // in haze. At 0.06 those edges are smoothed too. Textures stay as sharp (it follows long edges, not texture grain),
 // and the flicker probe measured less flicker in 10 of 12 world/hour views (none above 0.7 per mille).
-const FXAA_SHADER = { ...FXAAShader, fragmentShader: FXAAShader.fragmentShader.replace('const float edgeDetectionQuality = .2;', 'const float edgeDetectionQuality = .06;') };
-if (FXAA_SHADER.fragmentShader === FXAAShader.fragmentShader) console.warn('[post] FXAA edge threshold not applied');
+// Where it runs, FXAA is the last pass, so the chromatic aberration is folded into it: red and blue are each smoothed
+// at their own shifted spot, which is FXAA first and the aberration after, as the two passes used to do. (Shifting
+// before FXAA fringed leaves with bright purple and orange pixels; leaving it out let edges near the corners flicker
+// more: its sub-pixel shifts soften them, reef 0.70 -> 0.93 per mille without it.)
+const FXAA_MAIN = /* glsl */`
+  uniform float uCA;
+  void main() {
+    const float q = .06;
+    vec4 g = FxaaPixelShader(vUv, tDiffuse, resolution, q, 1. / q);
+    if (uCA > 0.0) {
+      vec2 dc = vUv - 0.5;
+      g.r = FxaaPixelShader(vUv + dc * uCA, tDiffuse, resolution, q, 1. / q).r;
+      g.b = FxaaPixelShader(vUv - dc * uCA, tDiffuse, resolution, q, 1. / q).b;
+    }
+    gl_FragColor = vec4(g.rgb, 1.0);
+  }`;
+const FXAA_SHADER = { ...FXAAShader, uniforms: { ...FXAAShader.uniforms, uCA: { value: 0 } }, fragmentShader: FXAAShader.fragmentShader.replace(/void main\(\) \{[\s\S]*$/, FXAA_MAIN) };
+if (!FXAA_SHADER.fragmentShader.includes('uniform float uCA;') || !FXAAShader.fragmentShader.includes('const float edgeDetectionQuality = .2;')) console.warn('[post] FXAA not patched');
 
-let composer, scenePass, bloomPass, outputPass, fxaaPass, finalPass;
+class PostChain {
+  constructor(samples, w, h) {
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera();
+    this.target = new THREE.WebGLRenderTarget(w, h, { type: HDR_TYPE, samples });   // the world, in HDR
+    this.target.texture.name = 'scene';
+    this.ldr = new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });          // graded, 8 bits
+    this.ldr.texture.name = 'graded';
+    this.bloom = new Bloom(new THREE.Vector2(w, h), 0.3, 0.6, 0.85);
+    this.bloomOn = false;
+    const mat = sh => new THREE.RawShaderMaterial({ uniforms: THREE.UniformsUtils.clone(sh.uniforms), vertexShader: sh.vertexShader, fragmentShader: sh.fragmentShader, depthTest: false, depthWrite: false });
+    this.output = mat(OutputShader);
+    this.final = mat(FinalShader);
+    // FXAA only where the GPU cannot multisample the HDR buffer
+    this.fxaa = samples === 0 ? new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(FXAA_SHADER.uniforms), vertexShader: FXAA_SHADER.vertexShader, fragmentShader: FXAA_SHADER.fragmentShader, depthTest: false, depthWrite: false }) : null;
+    this.quad = new FullScreenQuad(this.output);
+    this.tm = this.cs = null;
+    this.setSize(w, h);
+  }
+  setSize(w, h) {
+    this.target.setSize(w, h);
+    this.ldr.setSize(w, h);
+    this.bloom.setSize(w, h);
+    this.output.uniforms.uRes.value.set(w, h);
+    this.final.uniforms.uRes.value.set(w, h);
+    if (this.fxaa) this.fxaa.uniforms.resolution.value.set(1 / w, 1 / h);
+  }
+  render() {
+    const r = renderer;
+    r.setRenderTarget(this.target);
+    r.clear();
+    r.render(this.scene, this.camera);
+    const ou = this.output.uniforms;
+    if (this.bloomOn) { ou.tBloom.value = this.bloom.renderFrom(r, this.target.texture); ou.uBloom.value = 1; } else ou.uBloom.value = 0;
+    // tone mapping and colour space as three's OutputPass sets them up
+    if (this.tm !== r.toneMapping || this.cs !== r.outputColorSpace) {
+      this.tm = r.toneMapping; this.cs = r.outputColorSpace;
+      const d = {};
+      if (THREE.ColorManagement.getTransfer(this.cs) === THREE.SRGBTransfer) d.SRGB_TRANSFER = '';
+      const k = { [THREE.LinearToneMapping]: 'LINEAR', [THREE.ReinhardToneMapping]: 'REINHARD', [THREE.CineonToneMapping]: 'CINEON', [THREE.ACESFilmicToneMapping]: 'ACES_FILMIC', [THREE.AgXToneMapping]: 'AGX' }[this.tm];
+      if (k) d[k + '_TONE_MAPPING'] = '';
+      this.output.defines = d;
+      this.output.needsUpdate = true;
+    }
+    ou.tScene.value = this.target.texture;
+    ou.toneMappingExposure.value = r.toneMappingExposure;
+    this.quad.material = this.output;
+    r.setRenderTarget(this.ldr);
+    this.quad.render(r);
+    const fin = this.fxaa || this.final;
+    fin.uniforms.tDiffuse.value = this.ldr.texture;
+    this.quad.material = fin;
+    r.setRenderTarget(null);
+    this.quad.render(r);
+  }
+  dispose() {
+    this.target.dispose(); this.ldr.dispose(); this.bloom.dispose();
+    this.output.dispose(); this.final.dispose(); if (this.fxaa) this.fxaa.dispose();
+    this.quad.dispose();
+  }
+}
+// (composer: the chain; scenePass: the same object, for the world's buffer, scene and camera)
+let composer, scenePass;
 function buildComposer() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  if (composer) {
-    for (const p of composer.passes) p.dispose?.();
-    composer.dispose();
-  }
-  composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: HDR_TYPE }));
-  scenePass = new ScenePass(Math.min(Q.samples, MAX_SAMPLES));
-  bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.3, 0.6, 0.85);
-  outputPass = new OutputPass();
-  fxaaPass = new ShaderPass(FXAA_SHADER);
-  finalPass = new ShaderPass(FinalShader);
-  composer.addPass(scenePass);
-  composer.addPass(bloomPass);
-  composer.addPass(outputPass);
-  composer.addPass(fxaaPass);
-  composer.addPass(finalPass);
-  // FXAA only where the GPU cannot multisample the HDR buffer
-  fxaaPass.enabled = scenePass.target.samples === 0;
+  if (composer) composer.dispose();
+  composer = scenePass = new PostChain(Math.min(Q.samples, MAX_SAMPLES), size.x, size.y);
   if (current) { scenePass.scene = current.inst.scene; scenePass.camera = current.inst.camera; }
   post.snap = true;
 }
@@ -399,11 +544,8 @@ function resize(force = false) {
   view.w = w; view.h = h;
   renderer.setPixelRatio(pr);
   renderer.setSize(w, h, false);
-  composer.setPixelRatio(pr);
-  composer.setSize(w, h);
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  finalPass.uniforms.uRes.value.set(size.x, size.y);
-  fxaaPass.material.uniforms.resolution.value.set(1 / size.x, 1 / size.y);
+  composer.setSize(size.x, size.y);
   if (current) {
     const cam = current.inst.camera;
     cam.aspect = w / h;
@@ -433,23 +575,28 @@ function applyPost(p = {}, dt = 0) {
   const lift = p.lift || [0, 0, 0], gain = p.gain || [1, 1, 1];
   for (let i = 0; i < 3; i++) { post.lift[i] = ease(post.lift[i], clamp(lift[i] ?? 0, -0.2, 0.2)); post.gain[i] = ease(post.gain[i], clamp(gain[i] ?? 1, 0.5, 1.5)); }
 
-  bloomPass.strength = post.strength;
-  bloomPass.radius = post.radius;
-  bloomPass.threshold = post.threshold;
-  bloomPass.enabled = CAN_HALF && post.strength > 0.001; // bloom's own buffers need half-float support
+  const bloom = composer.bloom;
+  bloom.strength = post.strength;
+  bloom.radius = post.radius;
+  bloom.threshold = post.threshold;
+  composer.bloomOn = CAN_HALF && post.strength > 0.001; // bloom's own buffers need half-float support
   renderer.toneMappingExposure = post.exposure;
   const tm = p.toneMapping === 'agx' ? THREE.AgXToneMapping : p.toneMapping === 'linear' ? THREE.LinearToneMapping : THREE.ACESFilmicToneMapping;
   if (renderer.toneMapping !== tm) renderer.toneMapping = tm;
-  const u = finalPass.uniforms;
+  const u = composer.output.uniforms;
   u.uVignette.value = post.vignette;
   u.uSat.value = post.sat;
   u.uContrast.value = post.contrast;
   u.uLift.value.set(post.lift[0], post.lift[1], post.lift[2]);
   u.uGain.value.set(post.gain[0], post.gain[1], post.gain[2]);
-  u.uCA.value = post.ca;
-  u.uTilt.value = post.tilt;
-  u.uTiltCenter.value = tilt.center ?? 0.5;
-  u.uTiltWidth.value = tilt.width ?? 0.18;
+  // chromatic aberration in whichever pass comes last (FXAA's, or the final one); tilt-shift only in the final one
+  // (it is off on the iPad's tier anyway)
+  if (composer.fxaa) composer.fxaa.uniforms.uCA.value = post.ca;
+  const f = composer.final.uniforms;
+  f.uCA.value = post.ca;
+  f.uTilt.value = post.tilt;
+  f.uTiltCenter.value = tilt.center ?? 0.5;
+  f.uTiltWidth.value = tilt.width ?? 0.18;
 }
 
 /* Cut-out foliage (alpha-tested leaves, petals, grass cards) gets anti-aliased edges: with MSAA on, the
@@ -1366,6 +1513,8 @@ window.__idle = {
   },
   /** The clock of day the worlds see right now (hours). */
   shownHours: () => hours(),
+  /** The post-processing chain (tests that look at its buffers). */
+  get post() { return composer; },
   /**
    * Test-only stability probe: NaN/Inf and extreme values in the HDR scene buffer, plus temporal
    * flicker (pixels that swing up then down between consecutive 60 fps frames) on the final image.

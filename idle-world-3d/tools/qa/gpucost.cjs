@@ -133,6 +133,8 @@ function measure() {
         uniforms, defines: Object.assign({}, m.defines), side: m.side,
       });
       c.extensions = Object.assign({}, m.extensions);
+      // the flags that change the vertex stage's prefix (vertex colours declare the colour attribute)
+      c.vertexColors = m.vertexColors; c.fog = m.fog; c.lights = m.lights; c.clipping = m.clipping;
     } else {
       const ud = m.userData; m.userData = {};
       c = m.clone();
