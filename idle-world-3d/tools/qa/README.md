@@ -40,8 +40,8 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 |---|---|
 | `ios14.cjs <out> [worlds]` | iPad / Safari 14 emulation of `play.html`. With `FEED=1` it also feeds each world. |
 | `ipadshot.cjs <out.png> <world> [hour] [dpr]` | One iPad screenshot at a fixed hour and seed, plus the frame's draw cost. `VIEW='{"dist":0}'` is the closest zoom; `dpr 0.734` emulates the old 0.5 MP picture. |
-| `flicker.cjs <out> world:hour …` | NaN/Inf, brightest pixel and temporal flicker heatmaps. Env: `GL1=1` (iPad path), `Q`, `VW`/`VH`, `VIEW`. |
-| `motion.cjs <out> <world>` | Per-mover motion statistics, compared at 60 and 30 fps. |
+| `flicker.cjs <out> world:hour …` | NaN/Inf, brightest pixel and temporal flicker heatmaps. Env: `GL1=1` (iPad path), `Q`, `VW`/`VH`, `VIEW`, `EVAL` (page code run once each world is up, e.g. `__idle.current.inst.debugGiant(0)`). |
+| `motion.cjs <out> <world>` | Per-mover motion statistics, compared at 60 and 30 fps. Env `EVAL` as above, run before each run. |
 | `skin_parity.cjs <out> [worlds]` | Silhouettes of skinned creatures in WebGL 1 vs WebGL 2. |
 | `cullcheck.cjs [world] [--gl2 1]` | Fields drawn only where they can be in view (the meadow's susuki): every view rendered with and without the view window must match pixel for pixel, at calm, in a storm and with grass pressed just outside the view. Prints the triangles saved. |
 | `closeup.cjs <out> <world>` | iPad close-ups of fish (or `--name obj`), `--gl2 1` for the WebGL 2 A/B. |

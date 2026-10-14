@@ -2,7 +2,8 @@
 // Stability probe: for each world/hour, NaN/Inf in the HDR buffer and temporal flicker of the final image.
 // NODE_PATH=$(npm root -g) node flicker.cjs [outdir] reef:13 reef:23 koi:21.5 ...
 // env: VW/VH viewport (default 640x360), Q=high|medium|low quality tier, VIEW='{"yaw":..,"pitch":..,"dist":..}',
-//      GL1=1 for the iPad's WebGL 1 path
+//      GL1=1 for the iPad's WebGL 1 path, EVAL='<js>' run in the page once each world is up (a world's test hook,
+//      e.g. EVAL='__idle.current.inst.debugGiant(0)' to measure with its giant passing)
 // Writes <id>_<hour>[_Q].png (screenshot) and <id>_<hour>[_Q]_flicker.png (red = pixels that flickered).
 // Metrics: nan/inf (+nanAt) count in the raw HDR scene render; maxL = brightest raw HDR luminance (+maxAt [x,y]
 // screen fractions, top-left origin); over32 = pixels brighter than 32; flickerPermille = per-mille of pixels that
@@ -61,6 +62,7 @@ const srv = http.createServer((req, resp) => {
     await page.evaluate(hh => window.__idle.setHours(hh), h);
     if (id !== cur) { await page.evaluate(wid => window.__idle.enterWorld(wid), id); cur = id; }
     await page.evaluate(() => window.__idle.simulate(3));
+    if (process.env.EVAL) await page.evaluate(code => { (0, eval)(code); window.__idle.simulate(0.5); }, process.env.EVAL);
     if (process.env.VIEW) await page.evaluate(v => { window.__idle.setView(v); window.__idle.simulate(1.5); }, JSON.parse(process.env.VIEW));
     const r = await page.evaluate(() => window.__idle.diagnose({ frames: 8, heatmap: true }));
     const tag = `${id}_${h}${process.env.Q ? '_' + process.env.Q : ''}${GL1 ? '_gl1' : ''}`;

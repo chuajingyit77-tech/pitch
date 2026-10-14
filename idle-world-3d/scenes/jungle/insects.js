@@ -6,6 +6,8 @@ import { JG_GLSL } from './shading.js';
 
 /* ------------------------------------------------------------------ */
 /* Wing atlas: rows = species, columns = dorsal | ventral               */
+/* (256 x 512, power of two: WebGL 1 on the iPad would otherwise squash  */
+/* it to 256 x 256 for mipmaps; the fourth row is left empty)           */
 /* ------------------------------------------------------------------ */
 function wingPath(g, o) {
   // right wing pair in a 128x128 cell; root at left middle, forewing on top (toward the head)
@@ -27,7 +29,7 @@ function eyespot(g, x, y, r) {
   g.fillStyle = '#f4f0e0'; g.beginPath(); g.arc(x + r * 0.15, y - r * 0.15, r * 0.22, 0, TAU); g.fill();
 }
 export function makeWingAtlas() {
-  const W = 256, H = 384;
+  const W = 256, H = 512;
   const c = makeCanvas(W, H);
   const g = c.getContext('2d');
   // --- morpho dorsal
@@ -167,9 +169,9 @@ export function createButterflyMesh(shared, max, tex) {
           gl_FragColor = vec4(jgFog(c, vWorldP), 1.0);
           return;
         }
-        float row = 2.0 - floor(vKind + 0.5);
-        vec2 cell = vec2(gl_FrontFacing ? 0.0 : 0.5, row / 3.0);
-        vec4 tex = texture2D(tWings, cell + vUv * vec2(0.5, 1.0 / 3.0));
+        float row = 3.0 - floor(vKind + 0.5);  // canvas rows 0..2 from the top (flipY), a quarter of the atlas each
+        vec2 cell = vec2(gl_FrontFacing ? 0.0 : 0.5, row / 4.0);
+        vec4 tex = texture2D(tWings, cell + vUv * vec2(0.5, 0.25));
         if (tex.a < 0.5) discard;
         float diff = max(dot(N, L), 0.0);
         float thru = max(dot(-N, L), 0.0) * 0.45;
@@ -186,6 +188,7 @@ export function createButterflyMesh(shared, max, tex) {
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.InstancedMesh(geo, mat, max);
+  mesh.name = 'butterflies'; // (named for the QA tools: closeup --name, motion probe keys)
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.count = 0;
   mesh.frustumCulled = false;

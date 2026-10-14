@@ -12,6 +12,7 @@
 //   --feed 6         feed at this many seconds into the recording (5 taps around the screen centre); off by default
 //   --max 400        most movers tracked (InstancedMesh: at most 24 instances each); default 400
 //   --seed 777       world seed; default 777 (Math.random is seeded too, so runs repeat exactly)
+// env EVAL='<js>'    run in the page before each run's warm-up, e.g. a world's hook to start its giant's pass
 //
 // Per mover (path = scene-graph path, #i = instance index):
 //   spd50/spd95  median / 95th-percentile speed (world units per second)
@@ -216,6 +217,8 @@ async function probe(cfg) {
       await page.waitForFunction(w => window.__idle.sceneId === w, WORLD);
     }
     await page.evaluate(hh => window.__idle.setHours(hh), HOURS);
+    // a world's test hook (EVAL='__idle.current.inst.debugGiant(0)'): the same call before every run
+    if (process.env.EVAL) await page.evaluate(code => (0, eval)(code), process.env.EVAL);
     const t0 = Date.now();
     const res = await page.evaluate(probe, { ...CFG, dt: 1 / fps });
     fs.writeFileSync(path.join(OUT, `${WORLD}_${fps}.json`), JSON.stringify(res, null, 1));
