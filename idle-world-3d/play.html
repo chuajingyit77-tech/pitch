@@ -86,7 +86,7 @@ body.noui .hud,body.noui .clock{display:none}
 .card .key{position:absolute;top:7px;right:9px;font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums}
 
 /* clock */
-.clock{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);text-align:right;pointer-events:none;text-shadow:0 2px 30px rgba(0,0,0,.45);transition:transform 4s ease,bottom 1.2s ease}
+.clock{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);text-align:right;pointer-events:none;text-shadow:0 2px 30px rgba(0,0,0,.45);transition:transform 4s ease,bottom 1.2s ease,opacity 1.2s ease}
 .clock .time{font-family:var(--serif);font-weight:300;font-size:clamp(56px,8.5vw,128px);line-height:.9;letter-spacing:.02em;font-variant-numeric:tabular-nums}
 .clock .date{margin-top:10px;font-size:14px;letter-spacing:.24em;color:var(--ink-2)}
 .clock .where{margin-top:6px;font-size:12px;letter-spacing:.18em;color:var(--ink-3)}
@@ -101,7 +101,7 @@ body.hide-clock .clock{display:none}
 .title-card .ref{margin-top:18px;font-family:var(--latin);font-style:italic;font-size:17px;color:var(--ink-3);letter-spacing:.04em}
 
 /* veil for transitions */
-#veil{position:fixed;inset:0;background:#000;opacity:1;pointer-events:none;transition:opacity .9s ease;display:grid;place-items:center}
+#veil{position:fixed;inset:0;background:#000;opacity:1;pointer-events:none;transition:opacity .9s ease;display:grid;place-items:center;z-index:10}
 #veil.clear{opacity:0}
 #veil .spin{width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.15);border-top-color:var(--gold);animation:spin 1s linear infinite;opacity:.8}
 #veil .msg{position:absolute;top:calc(50% + 34px);left:0;right:0;text-align:center;font-size:13px;color:var(--ink-3);letter-spacing:.2em}
@@ -142,6 +142,113 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 .credits b{color:var(--ink-2);font-weight:500}
 .close{align-self:flex-end;margin-top:-8px}
 
+/* the guardians' lessons (lib/guide.js): the 学习 button, the marker over a guardian, the board, the dialogue */
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);margin:-12px -6px 0 -2px;box-shadow:0 0 0 2px rgba(14,16,20,.9)}
+.pill .dot[hidden]{display:none}
+body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer-events:none}
+.guide-mark{position:fixed;left:0;top:0;width:0;height:0;opacity:0;pointer-events:none;transition:opacity .5s ease;z-index:3}
+.guide-mark.on{opacity:1}
+.guide-mark button{position:absolute;left:-24px;top:-54px;width:48px;height:48px;display:grid;place-items:center;pointer-events:none}
+.guide-mark.on button{pointer-events:auto}
+.guide-mark i{position:relative;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--gold);color:var(--gold-ink);font:700 18px/1 var(--serif);font-style:normal;box-shadow:0 0 0 5px rgba(230,193,122,.2),0 6px 16px rgba(0,0,0,.45);animation:markbob 2.6s ease-in-out infinite}
+.guide-mark i::after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-top-color:var(--gold);border-bottom:0}
+@keyframes markbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+
+.talk{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);width:min(780px,calc(100% - 24px));transform:translate(-50%,18px);opacity:0;pointer-events:none;transition:opacity .45s ease,transform .45s ease;z-index:4;cursor:pointer}
+.talk.open{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.talk.open.dim{opacity:0;transform:translate(-50%,10px);pointer-events:none}
+.talk .box{position:relative;padding:26px 28px 20px;border-radius:18px;background:linear-gradient(180deg,rgba(19,21,26,.9),rgba(10,12,15,.95));border:1px solid rgba(230,193,122,.28);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.talk .who{position:absolute;left:22px;top:-17px;display:flex;align-items:baseline;gap:10px;max-width:calc(100% - 90px);padding:6px 16px 6px 14px;border-radius:999px;background:#17140e;border:1px solid rgba(230,193,122,.55);box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:nowrap;overflow:hidden}
+.talk .who b{font:700 16px/1.25 var(--serif);color:var(--gold);letter-spacing:.14em}
+.talk .who span{font-size:12px;color:var(--ink-3);letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis}
+.talk .bar{position:absolute;left:20px;right:20px;bottom:-1px;height:2px;border-radius:2px;overflow:hidden;background:rgba(230,193,122,.1)}
+.talk .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,rgba(230,193,122,.35),var(--gold));transition:width .6s ease}
+.talk .x{position:absolute;right:10px;top:10px;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3);transition:background .2s,color .2s}
+.talk .x:hover{color:var(--ink);background:rgba(255,255,255,.08)}
+.talk .x svg{width:16px;height:16px}
+.talk .say{position:relative}
+.talk .text{font-family:var(--serif);font-size:19px;line-height:1.85;letter-spacing:.04em;color:var(--ink);min-height:3.7em;padding-right:30px;overflow-wrap:break-word}
+.talk .box.ask .text{min-height:0}
+.talk .text b{color:var(--gold);font-weight:700}
+.talk .text .h{visibility:hidden}
+.talk .text.keypts{padding-right:0;min-height:0}
+.talk .nw{white-space:nowrap}
+.talk .text.narr{color:var(--ink-2);font-size:16px;letter-spacing:.08em}
+.talk .next{position:absolute;right:0;bottom:7px;width:14px;height:10px;opacity:0;transition:opacity .25s;pointer-events:none}
+.talk .next.on{opacity:1;animation:nudge 1.6s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateY(-1px)}50%{transform:translateY(3px)}}
+.talk .opts{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.talk .opts[hidden]{display:none}
+.talk .opt{display:flex;align-items:flex-start;gap:12px;width:100%;padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.045);text-align:left;font-size:16px;line-height:1.6;color:var(--ink);transition:background .2s,border-color .2s,opacity .3s}
+.talk .opt:hover:not([disabled]){background:rgba(255,255,255,.09);border-color:rgba(230,193,122,.5)}
+.talk .opt[hidden]{display:none}
+.talk .opt .k{flex:0 0 auto;width:24px;height:24px;margin-top:1px;border-radius:50%;display:grid;place-items:center;font:600 12px/1 var(--sans);color:var(--gold);border:1px solid rgba(230,193,122,.55)}
+.talk .opt[disabled]{cursor:default}
+.talk .opt[disabled]:not(.ok):not(.no){opacity:.38}
+.talk .opt[disabled]:not(.ok):not(.no) .tx{text-decoration:line-through;text-decoration-color:rgba(245,242,234,.45)}
+.talk .opt.ok{border-color:rgba(156,208,136,.75);background:rgba(110,170,100,.16)}
+.talk .opt.ok .k{background:#9fd08a;border-color:#9fd08a;color:#16210f}
+.talk .opt.no{border-color:rgba(226,138,116,.65);background:rgba(200,90,70,.13)}
+.talk .opt.no .k{background:#e08a74;border-color:#e08a74;color:#2a120c}
+.talk .got{align-self:flex-end;margin-top:4px}
+.sum h3{margin:0 0 12px;font:500 15px/1.4 var(--serif);letter-spacing:.24em;color:var(--gold)}
+.sum ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sum li{padding:12px 13px 13px;border-radius:12px;background:rgba(230,193,122,.07);border:1px solid rgba(230,193,122,.24)}
+.sum li b{display:block;font:700 26px/1 var(--serif);color:var(--gold);margin-bottom:8px}
+.sum li span{display:block;font:400 14px/1.6 var(--sans);letter-spacing:.02em;color:var(--ink-2)}
+
+/* in the lower part of the picture, where the dialogue was: the guardian stays in view above it */
+.banner{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 30px);width:min(92vw,680px);transform:translate(-50%,12px);text-align:center;pointer-events:none;opacity:0;transition:opacity .8s ease,transform 1.4s cubic-bezier(.2,.8,.2,1);z-index:5;text-shadow:0 2px 24px rgba(0,0,0,.7)}
+.banner::before{content:"";position:absolute;left:-12%;right:-12%;top:-30%;bottom:-30%;background:radial-gradient(closest-side,rgba(5,7,10,.62),rgba(5,7,10,0));z-index:-1}
+.banner.show{opacity:1;transform:translate(-50%,0)}
+.banner .eb{font-size:12px;letter-spacing:.6em;margin-right:-.6em;color:var(--gold)}
+.banner .t{margin:10px -.4em 0 0;font:300 clamp(42px,6.6vw,80px)/1.15 var(--serif);letter-spacing:.4em;color:#fbf3e0}
+.banner .ln{height:1px;margin:18px auto;width:min(70vw,440px);background:linear-gradient(90deg,transparent,rgba(230,193,122,.85),transparent)}
+.banner .stars{font-size:28px;letter-spacing:.32em;margin-right:-.32em}
+.banner .rw{margin-top:12px;font-size:14px;letter-spacing:.1em;color:var(--ink)}
+.stars b{color:var(--gold);font-weight:400}
+.stars i{color:rgba(230,193,122,.22);font-style:normal}
+
+.board{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 16px) 12px calc(env(safe-area-inset-bottom,0px) + 16px);background:rgba(4,6,9,.55);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:6}
+.board.open{opacity:1;pointer-events:auto}
+.board .sheet{position:relative;width:min(640px,100%);max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:20px;background:linear-gradient(180deg,rgba(21,23,28,.97),rgba(12,14,17,.98));border:1px solid rgba(230,193,122,.22);box-shadow:0 30px 80px rgba(0,0,0,.5);padding:26px 26px 22px;transform:translateY(12px);transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.board.open .sheet{transform:none}
+.board .x{position:absolute;right:12px;top:12px}
+.board .eb{font-size:12px;letter-spacing:.5em;color:var(--gold)}
+.board h2{margin:8px 0 6px;font:500 24px/1.3 var(--serif);letter-spacing:.18em}
+.board .lead{margin:0 0 18px;font-size:13.5px;line-height:1.75;color:var(--ink-3)}
+.gd{display:flex;align-items:center;gap:14px;margin:4px 0 14px}
+.gd .pt{flex:0 0 auto;width:66px;height:66px;border-radius:50%;background:#1d2428 center/cover no-repeat;border:1.5px solid rgba(230,193,122,.6);box-shadow:0 0 0 4px rgba(230,193,122,.08)}
+.gd .nm{font:700 19px/1.3 var(--serif);letter-spacing:.14em}
+.gd .tt{margin-top:4px;font-size:12.5px;line-height:1.5;color:var(--ink-3);letter-spacing:.04em}
+.ls{position:relative;padding:16px 16px 14px;margin-bottom:10px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09)}
+.ls.done{border-color:rgba(230,193,122,.3);background:rgba(230,193,122,.04)}
+.ls .tl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:500 17px/1.4 var(--serif);letter-spacing:.06em}
+.ls .tag{font:500 11px/1 var(--sans);padding:4px 7px;border-radius:6px;background:rgba(255,255,255,.08);color:var(--ink-3);letter-spacing:.12em}
+.ls .ky{margin-top:6px;font:500 14px/1.4 var(--serif);letter-spacing:.3em;color:var(--gold)}
+.ls .ab{margin-top:6px;font-size:13.5px;line-height:1.7;color:var(--ink-2)}
+.ls .mt{margin-top:6px;font-size:12px;line-height:1.65;color:var(--ink-3)}
+.ls .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px}
+.ls .st{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:4px}
+.ls .st .stars{font-size:15px;letter-spacing:.1em}
+.ls .bt{display:flex;gap:8px;margin-left:auto}
+.ls .sum{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.ls .sum ol{grid-template-columns:repeat(2,1fr)}
+.marks{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.marks .h{font-size:12px;letter-spacing:.32em;color:var(--ink-3);margin-bottom:10px}
+.marks .list{display:flex;gap:10px;flex-wrap:wrap}
+.seal{width:64px;height:64px;padding:8px;border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;font:700 14px/1.2 var(--serif);letter-spacing:.08em;color:#f3d79a;background:radial-gradient(circle at 30% 25%,rgba(230,193,122,.24),rgba(230,193,122,.06));border:1.5px solid rgba(230,193,122,.65)}
+.seal.no{color:rgba(245,242,234,.25);border-color:rgba(255,255,255,.12);background:none;font-weight:400}
+
+@media (max-width:720px){
+  .talk{bottom:calc(env(safe-area-inset-bottom,0px) + 10px);width:calc(100% - 16px)}
+  .talk .box{padding:24px 18px 16px}
+  .talk .text{font-size:17px;line-height:1.8}
+  .talk .opt{font-size:15px;padding:10px 12px}
+  .sum ol{grid-template-columns:repeat(2,1fr)}
+  .board .sheet{padding:22px 18px 18px}
+}
+
 @media (max-width:1240px) and (min-width:721px){
   body:not(.idle) .clock{bottom:calc(env(safe-area-inset-bottom,0px) + 170px)}
   .clock .time{font-size:clamp(48px,7vw,96px)}
@@ -154,7 +261,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
   .logo{font-size:16px}
   #toasts{top:calc(env(safe-area-inset-top,0px) + 150px)}
 }
-@media (prefers-reduced-motion:reduce){.hud,.title-card,#veil{transition:none}.heart,.toast{animation-duration:.01s}}
+@media (prefers-reduced-motion:reduce){.hud,.title-card,#veil,.talk,.board,.banner{transition:none}.heart,.toast{animation-duration:.01s}.guide-mark i,.talk .next.on{animation:none}}
 </style>
 
 <canvas id="gl" aria-label="可投喂的 3D 待机世界。拖动旋转视角，滚轮缩放，点击水面或地面投喂。"></canvas>
@@ -173,6 +280,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
     <div class="status-line glass" id="statusLine">正在唤醒世界…</div>
     <button class="pill primary" id="btnFeed"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="7" cy="14" r="2.2"/><circle cx="13" cy="10" r="2.2"/><circle cx="17" cy="16" r="2.2"/><circle cx="11" cy="17.5" r="1.6"/><circle cx="16" cy="6" r="1.4"/></svg><span id="feedLabel">撒一把</span></button>
     <button class="pill ghost glass" id="btnAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>新居民</button>
+    <button class="pill ghost glass" id="btnLearn" title="跟世界里的守护者学东西"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 6.5C9.8 5 7 4.6 3.5 5v13c3.5-.4 6.3 0 8.5 1.5 2.2-1.5 5-1.9 8.5-1.5V5c-3.5-.4-6.3 0-8.5 1.5zM12 6.5v13"/></svg>学习<i class="dot" id="learnDot" hidden></i></button>
   </div>
   <nav class="dock glass" id="dock" aria-label="切换世界"></nav>
 </div>
@@ -180,6 +288,31 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 <div class="clock" id="clock"><div class="time" id="clockTime">--:--</div><div class="date" id="clockDate"></div><div class="where" id="clockWhere"></div></div>
 
 <div class="title-card" id="titleCard"><div class="eyebrow" id="tcEyebrow"></div><h1 id="tcName"></h1><div class="sub" id="tcSub"></div><div class="ref" id="tcRef"></div></div>
+
+<div class="guide-mark" id="guideMark"><button type="button" aria-label="跟守护者说话"><i>!</i></button></div>
+
+<section class="talk" id="talk" role="dialog" aria-label="对话" aria-hidden="true">
+  <div class="box" id="talkBox">
+    <div class="who"><b id="talkName"></b><span id="talkTitle"></span></div>
+    <button class="x" id="talkClose" type="button" title="先到这里（进度会保存）" aria-label="先到这里"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="say"><div class="text" id="talkText" aria-live="polite"></div><svg class="next" id="talkNext" viewBox="0 0 14 10" aria-hidden="true"><path d="M1 1h12L7 9z" fill="#e6c17a"/></svg></div>
+    <div class="opts" id="talkOpts" hidden></div>
+    <div class="bar"><i id="talkBar"></i></div>
+  </div>
+</section>
+
+<div class="banner" id="banner" aria-live="polite"><div class="eb">学 成</div><div class="t">课程完成</div><div class="ln"></div><div id="bannerStars"></div><div class="rw" id="bannerGifts"></div></div>
+
+<section class="board" id="board" role="dialog" aria-label="学习" aria-hidden="true">
+  <div class="sheet">
+    <button class="icon-btn x" id="boardClose" type="button" title="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="eb">学 习</div>
+    <h2>守护者的课</h2>
+    <p class="lead">世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。</p>
+    <div id="boardList"></div>
+    <div class="marks"><div class="h">徽 章</div><div class="list" id="boardBadges"></div></div>
+  </div>
+</section>
 
 <div id="tag" class="glass" hidden></div>
 <div id="toasts" aria-live="polite"></div>
@@ -220,7 +353,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
   </div>
   <div class="row">
     <label class="h">操作</label>
-    <div class="hint">拖动旋转视角 · 滚轮或双指缩放 · 点击水面或地面投喂 · 空格撒一把 · 数字键 1–6 切换世界 · F 全屏 · M 声音 · H 隐藏界面</div>
+    <div class="hint">拖动旋转视角 · 滚轮或双指缩放 · 点击水面或地面投喂 · 空格撒一把 · 数字键 1–6 切换世界 · F 全屏 · M 声音 · H 隐藏界面 · 「学习」或点世界里头上有 ! 的守护者，可以跟它学东西（对话时点屏幕继续，Esc 先到这里）</div>
   </div>
   <div class="row">
     <label class="h">放在多台电脑上</label>

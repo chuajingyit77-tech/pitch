@@ -558,13 +558,15 @@ const PAINT = {
     // dark grey tail, white under-tail coverts
     c = mix3(c, C.greyD, smoothstep(0.76, 0.84, a) * smoothstep(0.3, 0.55, q));
     c = mix3(c, C.white, smoothstep(0.7, 0.8, a) * (1 - smoothstep(0.2, 0.35, q)) * 0.6);
-    const f = featherRows(a, b, 26, 22, 1.2);
-    const edge = smoothstep(0.7, 0.98, f.f);
-    c = mul3(c, 1 - 0.09 * edge + 0.05 * n + 0.03 * (hash1(f.id) - 0.5));
+    // soft contour feathers, long and overlapping, each a shade of its own: a heron's body looks smooth and silky up
+    // close, not scaled (a sharp edge to every feather read as a fish's scales)
+    const f = featherRows(a, b, 16, 26, 1.1);
+    const edge = smoothstep(0.84, 0.995, f.f);
+    c = mul3(c, 1 - 0.035 * edge + 0.05 * n + 0.025 * (hash1(f.id) - 0.5));
     // breast streaks (lanceolate feathers): long dark dashes on the white breast
     const st = (1 - smoothstep(0.0, 0.25, a)) * (1 - smoothstep(0.25, 0.45, q)) * smoothstep(0.6, 0.85, Math.sin(b * TAU * 9 + n * 2) * 0.5 + 0.5);
     c = mix3(c, C.dark, st * 0.35);
-    return [c, 0.5 + 0.35 * Math.pow(f.f, 1.6) - 0.15 * edge];
+    return [c, 0.5 + 0.1 * Math.pow(f.f, 2) - 0.04 * edge + 0.05 * n];
   },
   // a = along (front .. wingtips), b = across (0 left lip .. 0.5 back .. 1 right lip)
   panel(a, b, n) {
@@ -574,20 +576,21 @@ const PAINT = {
     const carpal = (1 - smoothstep(0.1, 0.2, a)) * smoothstep(0.45, 0.6, m);
     c = mix3(c, C.black, carpal * 0.92);
     c = mix3(c, C.white, (1 - smoothstep(0.04, 0.09, a)) * smoothstep(0.3, 0.5, m) * 0.7);
-    // long pale scapular plumes along the back
+    // long pale scapular plumes along the back: silky, a little wavy, each its own shade
     const sc = (1 - smoothstep(0.18, 0.4, m)) * smoothstep(0.15, 0.3, a) * (1 - smoothstep(0.55, 0.7, a));
-    c = mix3(c, C.greyL, sc * (0.55 + 0.25 * Math.sin(b * 160 + n * 3)));
+    const strand = Math.sin(b * 150 + Math.sin(a * 9 + b * 20) * 1.6 + n * 3) * 0.5 + 0.5;
+    c = mix3(c, C.greyL, sc * (0.4 + 0.3 * strand));
     // tertials darker, primaries (wingtips) near black
     c = mix3(c, C.slate, smoothstep(0.55, 0.66, a) * 0.7);
     c = mix3(c, C.blackS, smoothstep(0.68, 0.78, a));
     let ht = 0.5;
     if (a < 0.68) {
-      const f = featherRows(a, b, 24, 26, 1.4);
-      const edge = smoothstep(0.72, 0.98, f.f);
-      c = mul3(c, 1 - 0.1 * edge + 0.05 * n + 0.04 * (hash1(f.id) - 0.5));
-      // pale fringes on the coverts
-      c = mix3(c, C.greyL, smoothstep(0.86, 0.96, f.f) * 0.25 * (1 - carpal));
-      ht = 0.5 + 0.4 * Math.pow(f.f, 1.5) - 0.2 * edge;
+      // the coverts: smooth grey, soft overlapping tips with faint pale fringes (scales no longer)
+      const f = featherRows(a, b, 14, 18, 1.4);
+      const edge = smoothstep(0.85, 0.995, f.f);
+      c = mul3(c, 1 - 0.045 * edge + 0.05 * n + 0.03 * (hash1(f.id) - 0.5));
+      c = mix3(c, C.greyL, smoothstep(0.9, 0.985, f.f) * 0.12 * (1 - carpal) * (1 - sc));
+      ht = 0.5 + 0.12 * Math.pow(f.f, 2) - 0.05 * edge + 0.04 * n + 0.03 * sc * strand;
     } else {
       // primaries: long feathers along the wing, rachis and a lighter outer edge
       const fq = (b * 9) % 1;
@@ -635,19 +638,28 @@ const PAINT = {
   },
   // a = round (0.5 front), b = along (base .. head)
   neck(a, b, n) {
-    let c = mix3(C.white, C.pale, smoothstep(0.32, 0.0, Math.abs(a - 0.0) < 0.5 ? Math.min(a, 1 - a) : 0.5) * 0.8);
-    // a double line of black streaks down the front of the neck
-    for (const off of [-0.026, 0.026]) {
-      const du = Math.abs(a - 0.5 - off);
-      const P = 0.052, ph = ((b + hash1(Math.floor(b / P) + off * 100) * 0.02) / P) % 1;
-      const dash = smoothstep(0.0, 0.12, ph) * (1 - smoothstep(0.5, 0.68, ph));
-      const w = lerp(0.016, 0.009, b);
-      const k = (1 - smoothstep(w * 0.5, w, du)) * dash * (1 - smoothstep(0.62, 0.8, b));
-      c = mix3(c, C.black, k * 0.92);
+    // white, washed pale grey down the back of the neck, shading into the breast at its foot
+    const fr = 1 - Math.abs(a - 0.5) * 2; // 1 down the front .. 0 down the back
+    let c = mix3(C.white, C.pale, Math.pow(1 - fr, 1.5) * 0.55);
+    c = mix3(c, C.offWhite, (1 - smoothstep(0.0, 0.22, b)) * 0.35);
+    // silky feathers: long soft tips, barely there (the old ring of ridges made the neck look like a hose)
+    const f = featherRows(b, a, 30, 16, 0.9);
+    c = mul3(c, 1 - 0.03 * smoothstep(0.82, 0.99, f.f) + 0.035 * n + 0.02 * (hash1(f.id) - 0.5));
+    // the black streaks down the front: two rows of long marks (a third between them lower down), each mark its own
+    // length, width and place, broadening toward the breast
+    let st = 0;
+    for (const off of [-0.032, 0.032, 0]) {
+      if (off === 0 && b > 0.42) continue;
+      const P = 0.06, y = b / P + off * 9, k0 = Math.floor(y), ph = y - k0;
+      const h = hash1(k0 * 7.31 + off * 53), len = lerp(0.55, 0.9, h);
+      const dash = smoothstep(0.0, 0.14, ph) * (1 - smoothstep(len - 0.18, len, ph));
+      const w = lerp(0.024, 0.011, b) * lerp(0.75, 1.25, hash1(k0 * 3.17 + off * 91 + 5));
+      const du = Math.abs(a - 0.5 - off - (h - 0.5) * 0.012);
+      st = Math.max(st, (1 - smoothstep(w * 0.35, w, du)) * dash);
     }
-    c = mul3(c, 1 + 0.04 * n);
-    const fq = (b * 44 + Math.sin(a * TAU * 3) * 0.3) % 1;
-    return [c, 0.5 + 0.08 * Math.sin(fq * TAU)];
+    st *= smoothstep(0.02, 0.1, b) * (1 - smoothstep(0.64, 0.8, b));
+    c = mix3(c, C.blackS, st * 0.85);
+    return [c, 0.5 + 0.05 * n + 0.012 * f.f];
   },
   // a = along (nape .. bill tip), b = round (0 chin, 0.5 crown)
   head(a, b, n) {
@@ -666,7 +678,7 @@ const PAINT = {
       c = mix3(c, C.lore, lore * 0.8);
       c = mix3(c, C.bill, smoothstep(BILL_Z - 0.01, BILL_Z, z) * 0.8);
       const f = (z * 400 + Math.sin(th * 7) * 0.4) % 1;
-      return [mul3(c, 1 + 0.03 * n), 0.5 + 0.06 * Math.sin(f * TAU) * (1 - smoothstep(0.02, 0.04, z))];
+      return [mul3(c, 1 + 0.03 * n), 0.5 + 0.025 * Math.sin(f * TAU) * (1 - smoothstep(0.02, 0.04, z))];
     }
     // bill: yellow, darker culmen, pale lower mandible, a dark gape line
     let c = up > 0 ? C.bill : C.billL;
@@ -766,6 +778,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 // long-lived pose values get their own vectors (the helpers below reuse _a.._z freely)
 const _dl = new THREE.Vector3(), _hp = new THREE.Vector3(), _knee = new THREE.Vector3(), _ankle = new THREE.Vector3(), _foot = new THREE.Vector3(), _ft = new THREE.Vector3(), _dir = new THREE.Vector3(), _seg = new THREE.Vector3();
 const easeIO = t => t * t * (3 - 2 * t);
+/** 0 -> 1 -> 0 over [a, b] of t, easing in and out (a reaction's shape) */
+const bump = (t, a, b) => smoothstep(a, a + 0.5, t) * (1 - smoothstep(b - 0.7, b, t));
 
 /** quaternion from a basis given by its Y (axis) and an approximate Z (forward) */
 function basisYZ(q, Y, Zhint) {
@@ -889,6 +903,9 @@ export class Heron {
     this.rngWet = rng.fork('wet'); this.rngStep = rng.fork('steps'); this.rngHunt = rng.fork('hunt');
     this.visits = 0;
     this.lastSpot = -1;
+    // lessons (lib/guide.js): called in, it stays while someone talks with it, turned to them
+    this.summoned = false; this.talking = false; this.speaking = false; this.mood = null;
+    this.stepsLeft = 0;
     this.frozen = false;                    // test only: hold the pose for a close-up
     this.ff = false;                        // test only: a visit is being fast-forwarded (no rings, drops or sounds)
     this.tmpCam = new THREE.PerspectiveCamera(42, 4 / 3, 0.1, 200);
@@ -991,8 +1008,9 @@ export class Heron {
     if (this.frozen) return;
     if (this.state === 'away') {
       this.wait -= dt;
+      if (this.summoned) this.wait = 0;
       if (this.wait > 0 || !this.spots.length) return;
-      this.beginVisit();
+      if (this.summoned) this.beginVisit(this.viewSpot(), Infinity); else this.beginVisit();
     }
     this.prevBody.copy(this.bodyPos.x);
     this.carried = false; this.headDriven = false;
@@ -1065,6 +1083,21 @@ export class Heron {
     this.flightNeck(true);
     this.present = false;
     this.prey = null; this.held = null;
+  }
+  /** The landing spot that shows best in the camera's current view (a visit someone called it for). */
+  viewSpot() {
+    const cam = this.pond.camera;
+    cam.updateMatrixWorld();
+    let best = 0, bs = -Infinity;
+    for (let i = 0; i < this.spots.length; i++) {
+      const s = this.spots[i];
+      _a.set(s.pos.x, s.pos.y + 0.5, s.pos.z).project(cam);
+      if (_a.z > 1) continue;
+      const out = Math.abs(_a.x) > 0.75 || Math.abs(_a.y) > 0.75 ? 3 : 0;
+      const sc = s.score * 0.4 - Math.abs(_a.x) * 1.4 - Math.abs(_a.y - 0.05) * 0.8 - out;
+      if (sc > bs) { bs = sc; best = i; }
+    }
+    return best;
   }
   /** heading in profile to the current camera (offset 0 or PI picks which way it faces) */
   profileYaw(off = 0) {
@@ -1220,9 +1253,10 @@ export class Heron {
       for (const o of opts) { x -= o[1]; if (x <= 0) { type = o[0]; break; } }
       if (type === prev && type !== 'still') type = 'still';
     }
-    const durs = { still: [4, 10], look: [3, 5], stretch: [3, 5], tilt: [2.5, 4.5], preen: [4, 7], hunt: [5, 11], walk: [0, 0], turn: [0, 0] };
+    const durs = { still: [4, 10], look: [3, 5], stretch: [3, 5], tilt: [2.5, 4.5], preen: [4, 7], hunt: [5, 11], walk: [0, 0], turn: [0, 0], talk: [0, 0] };
     const d = durs[type];
     this.act = { type, t: 0, dur: dur || r.range(d[0], d[1]), k: 0, side: r.chance(0.5) ? 1 : -1, n: 0, next: 0 };
+    if (type === 'talk') { this.act.turnAt = 0; this.act.nod = 9; this.act.nodT = 0.5; }
     if (type === 'walk') this.planWalk(r.int(2, 5));
     if (type === 'turn') {
       const y = this.yaw.x;
@@ -1236,6 +1270,8 @@ export class Heron {
   }
   updateStay(dt, time) {
     this.stayT += dt;
+    // someone has started talking with it, or stopped
+    if (this.talking !== (this.act.type === 'talk')) this.switchTalk();
     const A = this.act;
     A.t += dt;
     const leaving = this.stayT > this.stayDur;
@@ -1284,6 +1320,42 @@ export class Heron {
         break;
       }
       case 'hunt': this.updateHunt(dt, A); ({ bodyLean, bodyLow, neckExt, headDown, headYaw, neckW, headFwd } = A.pose); break;
+      case 'talk': {
+        // three-quarters on to whoever it talks with (stepping round on its planted feet when they move off to one
+        // side), standing tall and still; its head turned to them, one eye toward them and the bill a little past
+        const cam = this.pond.camera.position, c = this.center, y = this.yaw.x;
+        const toCam = Math.atan2(cam.x - c.x, cam.z - c.z);
+        if (A.t >= A.turnAt && !(this.stepsLeft > 0) && this.bothPlanted()) {
+          A.turnAt = A.t + 1.5;
+          const a = nearAngle(toCam + 0.75, y), b = nearAngle(toCam - 0.75, y);
+          const tgt = Math.abs(a - y) <= Math.abs(b - y) ? a : b;
+          if (Math.abs(tgt - y) > 0.45) this.planTurn(tgt - y, true);
+        }
+        // (the head turns to them at once, the body following round on its feet)
+        const rel = clamp(nearAngle(toCam - y, 0), -1.65, 1.65), side = rel >= 0 ? 1 : -1;
+        headYaw = rel - side * 0.45 + A.lookYaw * 0.2;
+        headDown = 0.04 + A.lookPitch * 0.3; headRoll = -side * 0.1;
+        neckExt = 0.56; neckW = 3.8; crest = 0.1;
+        // speaking: a slow nod now and then
+        if (this.speaking) {
+          A.nodT -= dt;
+          if (A.nodT <= 0) { A.nodT = r.range(1.4, 2.6); if (A.nod > 1) A.nod = 0; }
+          crest += 0.08;
+        }
+        A.nod += dt;
+        const nod = A.nod < 0.9 ? Math.sin(Math.PI * A.nod / 0.9) : 0;
+        headDown += nod * 0.2; neckExt -= nod * 0.05;
+        // a reaction: the crest raised and a nod (a right answer), a puzzled tilt (a wrong one), drawn up tall (done)
+        const M = this.mood;
+        if (M) {
+          M.t += dt;
+          if (M.kind === 'yes') { crest += 0.4 * bump(M.t, 0, 2); if (!M.nodded) { M.nodded = true; A.nod = 0; } }
+          else if (M.kind === 'no') { const k = bump(M.t, 0, 2.6); headRoll += side * 0.38 * k; headDown += 0.14 * k; headYaw += side * 0.15 * k; }
+          else if (M.kind === 'done') { const k = bump(M.t, 0.2, 3.4); neckExt = lerp(neckExt, 0.98, k); headDown = lerp(headDown, -0.1, k); crest += 0.45 * k; }
+          if (M.t > 3.6) this.mood = null;
+        }
+        break;
+      }
       case 'walk': case 'turn': {
         neckExt = 0.46; headDown = 0.28; neckW = 4; bodyLean = 0.16; bodyLow = 0.012;
         if (this.stepsLeft <= 0 && this.bothPlanted()) A.dur = Math.min(A.dur, A.t);
@@ -1404,12 +1476,15 @@ export class Heron {
     this.walkTurn = clamp((tgt - y) * 0.3 + this.rngStep.range(-0.08, 0.08), -0.18, 0.18);
     this.stepPause = 0.3;
   }
-  planTurn(total) {
+  /** Turn on the spot by `total` (rad): short steps, each foot in turn set down further round, the last two bringing
+   *  both feet to the full turn. (Each step used to aim from the body's own heading, which lags the feet, and a turn
+   *  fell a third short.) Quick: someone is talking with it. */
+  planTurn(total, quick = false) {
     const n = Math.max(2, Math.ceil(Math.abs(total) / 0.45));
-    this.stepsLeft = n;
-    this.turnPer = total / n;
+    this.stepsLeft = n + 1;
+    this.turnFrom = this.yaw.x; this.turnBy = total; this.turnN = n; this.turnI = 0; this.turnQuick = quick;
     this.walkTurn = 0;
-    this.stepPause = 0.15;
+    this.stepPause = quick ? 0.05 : 0.15;
     this.turning = true;
   }
   stepFeet(dt) {
@@ -1442,7 +1517,7 @@ export class Heron {
     const d0 = f0.pos.x * fx + f0.pos.z * fz, d1 = f1.pos.x * fx + f1.pos.z * fz;
     const mover = d0 <= d1 ? f0 : f1, stance = mover === f0 ? f1 : f0;
     let newYaw = yaw, len;
-    if (this.turning) { newYaw = yaw + this.turnPer; len = 0.04; }
+    if (this.turning) { this.turnI++; newYaw = this.turnFrom + this.turnBy * Math.min(1, this.turnI / this.turnN); len = 0.04; }
     else { newYaw = yaw + this.walkTurn; len = this.rngStep.range(0.17, 0.23); }
     const s = mover.si === 0 ? 1 : -1;
     const nfx = Math.sin(newYaw), nfz = Math.cos(newYaw);
@@ -1456,7 +1531,7 @@ export class Heron {
     mover.from.copy(mover.pos); mover.fromYaw = mover.yaw;
     mover.to.set(tx, this.floorAt(tx, tz) + FOOT_DROP, tz);
     mover.toYaw = newYaw;
-    mover.t = 0; mover.dur = this.turning ? this.rngStep.range(0.7, 0.9) : this.rngStep.range(1.0, 1.3);
+    mover.t = 0; mover.dur = this.turning ? this.rngStep.range(0.7, 0.9) * (this.turnQuick ? 0.75 : 1) : this.rngStep.range(1.0, 1.3);
     mover.lift = this.turning ? 0.06 : this.rngStep.range(0.12, 0.17);
     mover.planted = false;
     this.yawTarget = newYaw;
@@ -1541,6 +1616,45 @@ export class Heron {
     _c.copy(target).addScaledVector(_b, -0.16);
     this.headW.step(_c, w, dt);
     void yaw;
+  }
+
+  /* ---------- lessons (lib/guide.js): called in, it stays while someone talks with it ---------- */
+  /** 'away' (not here), 'leaving' (taking off or flying off), 'coming' (flying in or landing) or 'ready' (standing) */
+  lessonState() {
+    if (this.state === 'stay') return 'ready';
+    if (this.state === 'takeoff' || this.state === 'leave') return 'leaving';
+    return this.state === 'away' && !this.summoned ? 'away' : 'coming';
+  }
+  /** Called for a lesson: it comes now, to a spot in the current view, or stays on where it stands. (Taking off or
+   *  already leaving, it finishes leaving and comes straight back.) */
+  summon() {
+    this.summoned = true;
+    if (this.state === 'arrive' || this.state === 'settle' || this.state === 'stay') this.stayDur = Infinity;
+  }
+  /** Someone talks with it (it turns to them and attends) or has finished (it goes back to its own business). */
+  talk(on) {
+    this.talking = !!on;
+    if (this.talking) this.summon(); else this.speaking = false;
+  }
+  /** What was just said: 'yes' (a right answer), 'no' (a wrong one) or 'done' (the lesson is over). */
+  react(kind) {
+    this.mood = { kind, t: 0, nodded: false };
+    if (kind === 'done') this.ruffle = 1;
+  }
+  /** The lesson is over (or put off): it stays a while longer, then leaves as it always does. */
+  release() {
+    this.summoned = false; this.talking = false; this.speaking = false;
+    if (this.state === 'stay') this.stayDur = this.stayT + this.rng.range(20, 40);
+    else if (this.state === 'arrive' || this.state === 'settle') this.stayDur = this.rng.range(30, 60);
+  }
+  /** Into the talk once a step or a strike in progress is over; out of it at once. */
+  switchTalk() {
+    const A = this.act;
+    if (!this.talking) { A.dur = Math.min(A.dur, A.t); this.mood = null; return; }
+    if (A.type === 'walk' || A.type === 'turn') { this.stepsLeft = 0; this.turning = false; if (!this.bothPlanted()) return; }
+    if (A.type === 'hunt' && (A.phase === 'strike' || this.held)) return;
+    this.prey = null; this.pendingPrey = null;
+    this.nextAct('talk', Infinity);
   }
 
   /* ---------- leaving ---------- */

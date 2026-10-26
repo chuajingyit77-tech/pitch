@@ -36,6 +36,22 @@ screensaver, and anyone walking past can feed the residents.
   rate does it settle at an even 30 fps, which looks smoother than a ragged 40. Each world remembers
   its level and starts there next time.
 
+## Learning from the guardians
+
+Each world can have a guardian, an animal that lives there and teaches short lessons the way NPCs do in a
+game (the koi pond's old grey heron is the first). The **学习** button opens a board of the guardians and their
+lessons; a guardian standing in its world wears a small gold **!** while it has lessons left, and tapping it
+starts a conversation. Picking a lesson calls the guardian in: the heron flies to the pond, the camera closes
+in, and it talks line by line (a tap goes on), asks questions with a few answers to choose from (a wrong answer
+is explained, then asked again), shows a card of the key points, and the first time a lesson is finished gives
+a badge and a new resident (the heron's gift swims across in front of it). Stars count the questions answered
+right first time. Progress, stars and badges are saved per computer; a lesson put down halfway carries on from
+there. The board keeps each finished lesson's key points to look up later.
+
+The content is in `lessons/index.js` (two demonstration lessons to replace with the company's own procedures;
+`lessons/README.md`, in Chinese, explains the format and gives a prompt for turning a procedure into a lesson).
+A board or conversation left open on an unattended screen is put away after two minutes, progress kept.
+
 ## Stability (no flashing)
 
 The picture is kept steady on purpose:
@@ -119,6 +135,10 @@ npx http-server idle-world-3d -p 8080
   koi varieties, a swim shader with travelling body waves, instancing and steering.
 - `lib/audio.js` — synthesised ambience (waves, rain, wind, birds, insects, chimes, pads).
 - `scenes/*.js` — one world per module. See `SCENES.md` for the authoring guide.
+- `lib/guide.js` — the guardians' lessons: the board, the conversation (typed lines, questions, the key-point
+  card, the completion banner and rewards), the marker over a guardian and saved progress. A world with a
+  guardian describes it as `guardian` in its build() result (`scenes/koi.js`: the heron).
+- `lessons/index.js` — the guardians and their lessons (content only).
 
 ## Credits
 

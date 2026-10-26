@@ -85,12 +85,40 @@ export default {
   update(dt, t),                       // dt capped at 0.05 s
   feed(raycaster),                     // user clicked: intersect your water/ground, spawn food, return the hit point (Vector3) or null
   feedRandom(n),                       // optional "撒一把": spawn n foods near the action, return n
-  addMember(member),                   // a new resident was added at runtime
-  creatures(),                         // [{ member?, label?, pos: Vector3, radius }] for hover name tags
+  addMember(member, at?),              // a new resident was added at runtime (at: where it comes in, a lesson's gift)
+  creatures(),                         // [{ member?, label?, guardian?, pos: Vector3, radius }] for hover name tags
+  guardian?,                           // optional: the animal that teaches this world's lessons (see below)
   dispose(),                           // free anything not reachable from scene (render targets, mixers, listeners)
   resize?(w, h),
 }
 ```
+
+#### A guardian (lessons)
+
+A world can give one of its animals the lessons listed for it in `lessons/index.js` (`GUARDIANS[].world`).
+`lib/guide.js` drives the conversation; the world only has to make the animal come, stand and attend. The koi
+pond's heron is the example (`scenes/koi.js`, `guardian`, and `Heron.talk` in `scenes/koi/heron.js`):
+
+```js
+guardian: {
+  id: 'heron',                         // GUARDIANS[].id
+  state(),                             // 'away' | 'leaving' | 'coming' | 'ready' (standing, can talk now)
+  summon(),                            // come now (into the current view), or stay where it is
+  talk(on),                            // turn to the camera and attend / go back to its own business
+  speak(on),                           // a line is being typed: small nods, frame-rate independent
+  react(kind),                         // 'yes' | 'no' | 'done': a right answer, a wrong one, the end
+  release(),                           // the lesson is over: linger a while, then leave as usual
+  anchor(out),                         // world point above its head (the gold ! marker)
+  view(yaw),                           // { target, yaw, pitch, dist }: the conversation camera, clear of obstacles
+  look(out),                           // the camera target every frame (the animal shifts as it turns)
+  rewardAt?(out), welcome?(member),    // where a gift resident comes in, and showing it in the picture
+}
+```
+
+Mark the animal in `creatures()` with `guardian: id` so a tap talks with it. The conversation camera should
+frame the animal in the upper part of the picture (the dialogue covers the lower third; more of it on a phone
+held upright, `camera.aspect < 0.9`), and everything the animal does while talking must be as smooth and
+frame-rate independent as its normal behaviour. `tools/qa/lesson.cjs` plays a lesson through.
 
 The shell renders the scene into its own MSAA half-float target, then runs a sanitize step: NaN/Inf
 become 0 and values above 12 get a soft knee. After that come `UnrealBloom → OutputPass (tone mapping) →

@@ -1,5 +1,5 @@
 // 栖境 — app shell: renderer, post-processing, camera rig, feeding input, residents,
-// per-computer save data, idle/screensaver mode, ambience and the HUD.
+// per-computer save data, idle/screensaver mode, ambience, the HUD and the guardians' lessons (lib/guide.js).
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
@@ -8,6 +8,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { makeRng, hashString, sunState, disposeObject, clamp, lerp, damp, TAU } from './lib/util.js';
 import { Ambience } from './lib/audio.js';
+import { createGuide } from './lib/guide.js';
 
 // Point and spot lights get a small physical radius (25 cm). Without it, a surface a few centimetres from
 // a lamp (the inside of a stone lantern, a leaf next to a glow) receives hundreds of times the light, and
@@ -891,7 +892,7 @@ const loadHDR = path => cached('h:' + path, () => rgbeLoader.loadAsync(asset(pat
 /* ------------------------------------------------------------------ */
 /* Camera rig                                                          */
 /* ------------------------------------------------------------------ */
-const rig = { target: new THREE.Vector3(), yaw: 0, pitch: 0.3, dist: 10, yawT: 0, pitchT: 0.3, distT: 10, view: null, idlePhase: 0, wasIdle: false, bobW: 0 };
+const rig = { target: new THREE.Vector3(), yaw: 0, pitch: 0.3, dist: 10, yawT: 0, pitchT: 0.3, distT: 10, view: null, idlePhase: 0, wasIdle: false, bobW: 0, focus: null, before: null };
 function vec3(v, fallback = [0, 0, 0]) { if (!v) v = fallback; return v.isVector3 ? v : new THREE.Vector3(v[0], v[1], v[2]); }
 function configureRig(view) {
   rig.view = view || {};
@@ -901,7 +902,22 @@ function configureRig(view) {
   rig.pitch = rig.pitchT = v.pitch ?? 0.3;
   rig.dist = rig.distT = v.dist ?? 10;
   rig.idlePhase = 0;
+  rig.focus = rig.before = null;
   if (current && v.fov) { current.inst.camera.fov = v.fov; current.inst.camera.updateProjectionMatrix(); }
+}
+/* While a guardian talks (lib/guide.js) the camera is lent to it: { target, yaw, pitch, dist }, the target following
+   the animal. The view can still be turned and zoomed a little; afterwards it goes back to where it was. */
+function focusRig(f) {
+  if (f) {
+    if (!rig.focus) rig.before = { yaw: rig.yawT, pitch: rig.pitchT, dist: rig.distT };
+    rig.focus = f;
+    rig.yawT = f.yaw; rig.pitchT = f.pitch; rig.distT = f.dist;
+  } else if (rig.focus) {
+    rig.focus = null;
+    const b = rig.before;
+    if (b) { rig.yawT = b.yaw; rig.pitchT = b.pitch; rig.distT = b.dist; }
+    rig.before = null;
+  }
 }
 function updateRig(dt, t) {
   const v = rig.view;
@@ -918,13 +934,15 @@ function updateRig(dt, t) {
     if (v.idleDist !== undefined) rig.distT = damp(rig.distT, v.idleDist, 0.2, dt);
   }
   rig.wasIdle = idle;
+  const F = rig.focus;
   if (v.yawRange) rig.yawT = clamp(rig.yawT, v.yawRange[0], v.yawRange[1]);
-  if (v.pitchRange) rig.pitchT = clamp(rig.pitchT, v.pitchRange[0], v.pitchRange[1]);
-  if (v.distRange) rig.distT = clamp(rig.distT, v.distRange[0], v.distRange[1]);
+  if (v.pitchRange) rig.pitchT = clamp(rig.pitchT, F ? Math.min(0.12, v.pitchRange[0]) : v.pitchRange[0], v.pitchRange[1]);
+  if (F) rig.distT = clamp(rig.distT, F.dist * 0.7, F.dist * 2.2);
+  else if (v.distRange) rig.distT = clamp(rig.distT, v.distRange[0], v.distRange[1]);
   rig.yaw = damp(rig.yaw, rig.yawT, 3.5, dt);
   rig.pitch = damp(rig.pitch, rig.pitchT, 3.5, dt);
   rig.dist = damp(rig.dist, rig.distT, 3, dt);
-  const tgt = vec3(v.target);
+  const tgt = F ? F.target : vec3(v.target);
   rig.target.lerp(tgt, 1 - Math.exp(-2 * dt));
   // a slow breathing bob only while the screensaver runs: with someone looking, the camera stays put
   // (even sub-pixel motion makes thin grass and fins crawl)
@@ -995,6 +1013,7 @@ async function enterWorld(id, { first = false } = {}) {
   const meta = WORLDS.find(w => w.id === id) || WORLDS[0];
   if (current && current.meta.id === meta.id && !first) return;
   loading = true;
+  guide.leaveWorld();
   hideTitleCard();
   $('veilMsg').textContent = `正在前往 · ${meta.name}`;
   $('veil').classList.remove('clear');
@@ -1052,6 +1071,8 @@ async function enterWorld(id, { first = false } = {}) {
     }
     window.__idle.sceneId = meta.id;
     window.__idle.error = null;
+    loading = false;
+    try { guide.worldReady(); } catch (e) { console.error('[guide]', e); }
   } catch (e) {
     console.error('[scene]', meta.id, e);
     window.__idle.error = String(e && e.stack || e);
@@ -1171,7 +1192,7 @@ function pickCreature(clientX, clientY) {
 }
 function updateTag() {
   const tag = $('tag');
-  if (!hover || idle || !current) { if (!tag.hidden) tag.hidden = true; return; }
+  if (!hover || idle || !current || guide.open) { if (!tag.hidden) tag.hidden = true; return; }
   const c = hover;
   const s = toScreen(_proj.copy(c.pos).add(new THREE.Vector3(0, (c.radius || 0.5) * 1.1, 0)));
   if (!s) { if (!tag.hidden) tag.hidden = true; return; }
@@ -1186,6 +1207,9 @@ function updateTag() {
       const kind = current.def.kinds[m.kind]?.zh || '';
       const days = Math.max(1, Math.round((Date.now() - (m.born || Date.now())) / 864e5));
       tag.innerHTML = `<span class="nm">${m.name}</span><span class="kd">${kind}</span><div class="meter"><i style="width:${f}%"></i></div><div class="ln">饱腹 ${f}% · 吃过 ${m.eaten} 顿 · 来了 ${days} 天</div>`;
+    } else if (c.guardian && guide.who(c.guardian)) {
+      const g = guide.who(c.guardian);
+      tag.innerHTML = `<span class="nm">${g.name}</span><span class="kd">${g.title}</span><div class="ln">点一下，跟它学东西</div>`;
     } else tag.innerHTML = `<span class="nm">${c.label}</span>`;
   }
 }
@@ -1230,7 +1254,7 @@ const endPointer = e => {
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
   canvas.classList.remove('dragging');
-  if (p && press && press.moved <= 6 && performance.now() - press.t < 700) feedAt(e.clientX, e.clientY);
+  if (p && press && press.moved <= 6 && performance.now() - press.t < 700 && !guide.tap(e.clientX, e.clientY)) feedAt(e.clientX, e.clientY);
   if (pointers.size < 2) pinchDist = 0;
   press = null;
 };
@@ -1274,9 +1298,26 @@ function addResident() {
   updateStatus();
 }
 
+/** A resident given for a finished lesson (lib/guide.js): this kind, this name if it is free, coming in at `at` (a
+ *  point in the world, or anywhere). Nothing when the world is full. */
+function grantResident(kind, name, at) {
+  if (!current) return null;
+  const def = current.def, ms = current.env.members;
+  if (!def.kinds || !def.kinds[kind] || ms.length >= (def.maxMembers || 16)) return null;
+  const m = makeMember(def, kind, makeRng(randomSeed()), ms.map(x => x.name));
+  if (name && !ms.some(x => x.name === name)) m.name = name;
+  m.lastAte = Date.now(); // fed: it shows itself instead of begging at the shore
+  ms.push(m);
+  dirty = true;
+  current.inst.addMember?.(m, at || undefined);
+  updateStatus();
+  return m;
+}
+
 window.addEventListener('keydown', e => {
   wake();
   if (e.target.closest && e.target.closest('input, select, textarea')) return;
+  if (guide.key(e)) return;
   const n = parseInt(e.key, 10);
   if (n >= 1 && n <= WORLDS.length) enterWorld(WORLDS[n - 1].id);
   else if (e.key === ' ') { e.preventDefault(); feedHandful(); }
@@ -1442,7 +1483,7 @@ function frame(now) {
     }
   }
   // idle state
-  const idleNow = !(TEST && TEST.noIdle) && performance.now() - lastInput > 8000 && !$('settings').classList.contains('open') && document.activeElement?.tagName !== 'INPUT';
+  const idleNow = !(TEST && TEST.noIdle) && performance.now() - lastInput > 8000 && !$('settings').classList.contains('open') && !guide.open && document.activeElement?.tagName !== 'INPUT';
   if (idleNow !== idle) { idle = idleNow; document.body.classList.toggle('idle', idle); }
   // 30 fps in screensaver mode when chosen in the settings, or on the last resolution step; otherwise
   // every refresh, at most ~75 fps (120/144 Hz screens would run a phone hot rendering twice as many
@@ -1474,6 +1515,7 @@ function frame(now) {
     tickHours(dt);
     try { current.inst.update(dt, elapsed); } catch (e) { console.error(e); window.__idle.error = String(e.stack || e); }
     updateRig(dt, elapsed);
+    guide.tick(dt);
     applyPost(current.inst.post || {}, dt);
     composer.render(dt);
     if (lastRenderAt) dynSample(now - lastRenderAt, now, throttled);
@@ -1485,6 +1527,15 @@ function frame(now) {
 /* ------------------------------------------------------------------ */
 /* Boot                                                                */
 /* ------------------------------------------------------------------ */
+/* The guardians' lessons */
+const guide = createGuide({
+  save: () => save, markDirty: () => { dirty = true; }, persist,
+  worlds: WORLDS, world: () => (loading ? null : current), loading: () => loading, enterWorld,
+  focus: focusRig, rigYaw: () => rig.yawT, toScreen, pick: pickCreature,
+  wake, idle: () => idle, lastInput: () => lastInput,
+  toast, sfx: name => audio.sfx(name), hours, grant: grantResident, asset,
+});
+
 window.__idle = {
   ready: null, sceneId: null, error: null,
   enterWorld, feedAt, feedHandful, addResident,
@@ -1508,6 +1559,7 @@ window.__idle = {
     tickHours(dt);
     current.inst.update(dt, elapsed);
     updateRig(dt, elapsed);
+    guide.tick(dt);
     applyPost(current.inst.post || {}, dt);
     if (render) composer.render(dt);
   },
@@ -1635,6 +1687,8 @@ window.__idle = {
     });
   },
   get current() { return current; },
+  /** the guardians' lessons (tools/qa/lesson.cjs) */
+  guide: guide.test,
   bleedStats, gl1MipStats,
   get rig() { return rig; },
   renderer,

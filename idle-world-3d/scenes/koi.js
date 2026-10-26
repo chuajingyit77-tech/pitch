@@ -721,9 +721,25 @@ class KoiPond {
       update: (dt, t) => this.update(dt, t),
       feed: ray => this.feed(ray),
       feedRandom: n => this.feedRandom(n),
-      addMember: m => this.addKoi(m, true),
+      addMember: (m, at) => this.addKoi(m, true, at),
       creatures: () => this.creatures(),
       dispose: () => this.dispose(),
+      // the pond's guardian in lessons (lib/guide.js, lessons/index.js): the heron, called in by whoever wants to learn,
+      // turned to them while they talk
+      guardian: {
+        id: 'heron',
+        state: () => this.heron.lessonState(),
+        summon: () => this.heron.summon(),
+        talk: on => this.heron.talk(on),
+        speak: on => { this.heron.speaking = !!on; },
+        react: kind => this.heron.react(kind),
+        release: () => this.heron.release(),
+        anchor: out => { out.copy(this.heron.headW.x); out.y += 0.24; return out; },
+        view: yaw => this.guardianView(yaw),
+        look: out => this.guardianTarget(out),
+        rewardAt: out => this.guardianRewardAt(out),
+        welcome: member => this.guardianWelcome(member),
+      },
       // test hook: start a heron visit now and run it t seconds in (spot: index into its landing spots, -1 = choose)
       debugGiant: (t = 14, spot = -1, stay = 120) => this.heron.debug(t, spot, stay),
       debug: this, // test probes read the pond's state (koi, food, petals, pads) through this
@@ -1013,6 +1029,83 @@ class KoiPond {
   preyScatter(p) { this.medaka?.scatter(p); this.frogs?.scare(p, 1.6); }
   onHeronLanded(H) { this.medaka?.scatter(H.center); this.frogs?.scare(H.center, 4.5); }
   onHeronLeft(H) { this.medaka?.scatter(H.center); }
+  /** Point the lesson camera looks at: by the standing heron, low, so the bird stands in the upper part of the picture
+   *  (the dialogue covers the lower part; more of it on a phone held upright). */
+  guardianTarget(out) {
+    const H = this.heron, c = H.center, floor = Math.min(H.feet[0].pos.y, H.feet[1].pos.y);
+    return out.set(c.x, floor + (this.camera.aspect < 0.9 ? 0.42 : 0.55), c.z);
+  }
+  /**
+   * The camera for a lesson with the heron: closer in, from the side the camera is already on, turned a little where
+   * the bridge, the lantern, the tree, a stone or a shrub would stand between, or where it would end up in the bamboo.
+   */
+  guardianView(yaw) {
+    // as one talks with someone: at the height of its eyes, close enough that it fills the picture above the dialogue
+    // (head and neck high up, the body over the dialogue's top edge), looking a little down past it onto the water
+    const v = { target: this.guardianTarget(new THREE.Vector3()), yaw, pitch: 0.25, dist: this.camera.aspect < 0.9 ? 2.8 : 1.95 };
+    const lo = this.yaw0 - 1.15, hi = this.yaw0 + 1.15;
+    for (const d of [0, 0.3, -0.3, 0.6, -0.6, 0.9, -0.9, 1.2, -1.2]) {
+      const y = clamp(yaw + d, lo, hi);
+      if (this.guardianClear(v.target, y, v.pitch, v.dist)) { v.yaw = y; break; }
+    }
+    return v;
+  }
+  guardianClear(t, yaw, pitch, dist) {
+    const H = this.heron, floor = Math.min(H.feet[0].pos.y, H.feet[1].pos.y), cp = Math.cos(pitch);
+    const cam = _v.set(t.x + dist * cp * Math.sin(yaw), t.y + dist * Math.sin(pitch), t.z + dist * cp * Math.cos(yaw));
+    if (cam.y < this.height(cam.x, cam.z) + 0.4) return false;
+    const bam = this.bambooMesh;
+    if (bam) for (let i = 0; i < bam.count; i++) {
+      bam.getMatrixAt(i, _m);
+      if (Math.hypot(_m.elements[12] - cam.x, _m.elements[14] - cam.z) < 0.9) return false;
+    }
+    const ray = this._gRay || (this._gRay = new THREE.Raycaster());
+    const occ = this._gOcc || (this._gOcc = [this.bridge, this.lanternGroup, this.trunk, this.azaleaMesh, ...(this.rockMeshes || [])].filter(Boolean));
+    for (const h of [0.3, 0.85]) {
+      _v2.set(H.center.x, floor + h, H.center.z);
+      _v3.subVectors(cam, _v2);
+      const len = _v3.length();
+      ray.set(_v2, _v3.divideScalar(len)); ray.far = len;
+      if (ray.intersectObjects(occ, true).length) return false;
+    }
+    return true;
+  }
+  /**
+   * Where a koi given for a finished lesson comes into the pond, and where it swims to while it shows itself: open
+   * water round the heron that the lesson camera sees above the dialogue, one place to one side of the bird and the
+   * other to the other side, so the new koi crosses the picture.
+   */
+  guardianRewardAt(out) {
+    const c = this.heron.center, cam = this.camera;
+    cam.updateMatrixWorld();
+    _v3.copy(c).project(cam);
+    const hx = _v3.x;
+    let a = null, b = null;
+    for (let ring = 0; ring < 9; ring++) for (let i = 0; i < 18; i++) {
+      const r = 1.0 + ring * 0.2, ang = (i / 18) * TAU;
+      const x = c.x + Math.sin(ang) * r, z = c.z + Math.cos(ang) * r;
+      if (this.sdf(x, z) > -0.55 || this.obstacleGap(x, z) < 0.5) continue;
+      _v.set(x, WATER_Y - 0.15, z).project(cam);
+      if (_v.z > 1 || Math.abs(_v.x) > 0.8 || _v.y < -0.3 || _v.y > 0.55) continue;
+      const side = _v.x - hx, sc = -Math.abs(Math.abs(side) - 0.38) - Math.abs(_v.y - 0.1) * 0.6 - r * 0.08;
+      const p = { x, z, sc };
+      if (side < 0 && (!a || sc > a.sc)) a = p;
+      if (side > 0 && (!b || sc > b.sc)) b = p;
+    }
+    const from = a || b, to = a && b ? b : null;
+    if (!from) { this.rewardTo = null; return this.openWaterPoint(this.fxRng, 1.0, out); }
+    this.rewardTo = to ? new THREE.Vector3(to.x, WATER_Y - 0.18, to.z) : null;
+    return out.set(from.x, WATER_Y - 0.15, from.z);
+  }
+  /** The new koi shows itself: near the surface, it swims across in front of the camera for a while, unafraid of the
+   *  heron, before it goes about its life like the others. */
+  guardianWelcome(member) {
+    const k = this.koi.find(o => o.member === member);
+    if (!k) return;
+    k.sw.pos.y = WATER_Y - 0.15;
+    k.depth = 0.18;
+    if (this.rewardTo) { k.target.copy(this.rewardTo); k.debut = 9; k.retarget = 9; }
+  }
   /**
    * Mist lies in a thin layer over the pond: every surface that can be inside it gets the mist term (koi are under
    * the water, whose surface carries the mist for them; things standing above the layer are skipped).
@@ -1323,7 +1416,7 @@ class KoiPond {
     barkMap.repeat.set(1, 3);
     const bark = new THREE.MeshStandardMaterial({ map: barkMap, color: '#c9bdb6', roughness: 0.92 });
     this.disposables.push(barkMap);
-    const trunk = new THREE.Mesh(mergeGeometries(geos), bark);
+    const trunk = this.trunk = new THREE.Mesh(mergeGeometries(geos), bark);
     trunk.castShadow = true; trunk.receiveShadow = true;
     this.scene.add(trunk);
     geos.forEach(g => g.dispose());
@@ -1511,6 +1604,7 @@ class KoiPond {
     im.count = ci; leaves.count = li;
     im.castShadow = true; leaves.castShadow = true;
     this.scene.add(im, leaves);
+    this.bambooMesh = im;
     this.disposables.push(tex, leafTex);
   }
 
@@ -1550,6 +1644,7 @@ class KoiPond {
     });
     im.castShadow = true; im.receiveShadow = true;
     this.scene.add(im);
+    this.azaleaMesh = im;
 
     // grass / fern tufts along the shore and around stones
     const blade = new THREE.PlaneGeometry(0.03, 0.3, 1, 4);
@@ -1910,7 +2005,7 @@ class KoiPond {
     this.butterflyGeo = buildFishGeometry('koiButterfly', { detail: this.q >= 0.6 ? 1 : 0.65 });
     for (const m of this.env.members) this.addKoi(m, false);
   }
-  addKoi(member, fresh) {
+  addKoi(member, fresh, at = null) {
     const r = makeRng(member.seed || 1);
     let variety = member.kind;
     let shape = 'koi';
@@ -1925,6 +2020,7 @@ class KoiPond {
     addFinPass(mesh);
     this.scene.add(mesh);
     const start = this.randomInPond(r, 0.9, new THREE.Vector3());
+    if (at) start.set(at.x, start.y, at.z); // (drawn all the same: the koi's own dice stay as they were)
     this.pushOutOfObstacles(start, 0.65);
     const depth = r.range(0.2, 0.6);
     start.y = WATER_Y - depth;
@@ -2346,6 +2442,12 @@ class KoiPond {
           // gulping air at the surface (its own timer: it used to share the wake-ripple timer)
           k.gulpT -= dt;
           if (k.gulpT <= 0 && sw.pos.distanceTo(this.begSpot) < 1.5) { k.gulpT = 1.5 + k.tr.next() * 2.5; this.startGulp(k); this.addRipple(sw.pos.x + sw.fwd.x * 0.3 * k.scale, sw.pos.z + sw.fwd.z * 0.3 * k.scale, 0.5); }
+        } else if (k.debut > 0) {
+          // a lesson's new koi showing itself (guardianWelcome): slowly across the picture, near the surface
+          k.mode = 'cruise';
+          k.debut -= dt;
+          sw.seek(k.target, 0.2, 1.2, desired);
+          if (sw.pos.distanceTo(k.target) < 0.5) k.debut = 0;
         } else {
           k.mode = 'cruise';
           if (k.retarget <= 0 || sw.pos.distanceTo(k.target) < 0.6) {
@@ -2368,7 +2470,7 @@ class KoiPond {
       }
       // the heron: koi notice it and keep their distance (bolder for food), darting off when it lands or strikes
       const H = this.heron;
-      if (H && H.present) {
+      if (H && H.present && !(k.debut > 0)) {
         // judged a moment ahead along its course, so a koi bends away early instead of grazing past (they used to
         // skirt the island stone a metre below a heron standing on it)
         const dx = sw.pos.x + sw.vel.x * 0.8 - H.center.x, dz = sw.pos.z + sw.vel.z * 0.8 - H.center.z, d = Math.hypot(dx, dz);
@@ -2584,7 +2686,9 @@ class KoiPond {
   }
   creatures() {
     const out = this.koi.map(k => ({ member: k.member, pos: k.sw.pos, radius: 0.32 * k.scale + 0.1 }));
-    if (this.heron && this.heron.obj.visible) out.push({ member: null, label: '苍鹭', pos: this.heron.bodyPos.x, radius: 0.45 });
+    // the heron (the pond's guardian: a tap talks with it), picked between its body and its head
+    const H = this.heron;
+    if (H && H.obj.visible) out.push({ member: null, label: '苍鹭', guardian: 'heron', pos: (this._hPick || (this._hPick = new THREE.Vector3())).copy(H.bodyPos.x).lerp(H.headW.x, 0.45), radius: 0.5 });
     return out;
   }
 }

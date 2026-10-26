@@ -21,4 +21,9 @@ echo "== 4. Skinned creatures: WebGL 1 pose = WebGL 2 pose"
 timeout 2400 node "$QA/skin_parity.cjs" "$OUT/parity" meadow cloudsea
 echo "== 5. Fields drawn only where in view: identical to the whole field in every test view"
 case " $WORLDS " in *" meadow "*) timeout 3000 node "$QA/cullcheck.cjs" meadow | tail -1 ;; esac
+echo "== 6. The guardians' lessons: a lesson played through on the iPad and on a phone"
+case " $WORLDS " in *" koi "*)
+  timeout 3000 node "$QA/lesson.cjs" "$OUT/lesson_ipad" | tail -4
+  timeout 3000 node "$QA/lesson.cjs" "$OUT/lesson_phone" --phone | tail -4 ;;
+esac
 echo "done: $OUT"

@@ -31,6 +31,8 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
    (IoU 1.000).
 5. **View windows**. The meadow draws only the part of its field that can be in view; every test view must
    render pixel for pixel the same as the whole field (`cullcheck.cjs`).
+6. **The guardians' lessons** (`lesson.cjs`), on the iPad and on a phone held upright: a whole lesson played
+   through. It must end `PASS` with no console problems. Look at the screenshots.
 
 ## Long runs, the clock of day and the GPU
 
@@ -72,6 +74,8 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | `tour.cjs <out>` | Visits every world in one page, testing switching and dispose. |
 | `nanhunt.cjs <out> world:hour …` | Finds which objects produce NaN pixels. |
 | `thumbs.cjs world:hour …` | Re-renders the dock thumbnails in `assets/thumbs`. |
+| `lesson.cjs <out> [--phone]` | Plays a guardian's lesson through in the iPad emulation (or on a phone held upright): screenshots of the board, the guardian flying in, the close-up, a wrong and a right answer, the key-point card, the completion with the new resident, the marker, the guardian's own menu and a lesson put down halfway. Checks the saved progress, stars, badge and new resident, and that there were no errors. |
+| `portrait.cjs [--world koi] [--id heron]` | Renders a guardian's portrait for the lessons board (`assets/guardians/<id>.jpg`). |
 | `soak.cjs <out> <world> [--hours 3] [--start 5.5] [--every 10]` | Hours of play in time-lapse: NaN, flicker, memory, heap, errors over time. `--t0` starts the world clock days in. |
 | `daysweep.cjs <out> <world> [--from 0] [--to 24] [--step 2]` | The day in steps, walked twice: brightness of the screen and 12 regions per step, and the jumps that come from the clock. `--from-json <world>_sweep.json` looks again at a saved sweep. |
 | `lightramp.cjs <out> <world> [--at 18:20] [--minutes 3]` | Real-time light through the page's own clock: how each minute's change of light is spread, peak change per second, shimmer (`--every 1`). |
