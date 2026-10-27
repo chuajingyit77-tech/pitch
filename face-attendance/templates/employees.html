@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}员工{% endblock %}
+{% block body %}
+<h1>员工</h1>
+<div class="card">
+  <form method="post" class="row">
+    <input name="name" placeholder="姓名 *" required>
+    <input name="emp_no" placeholder="工号（可选）">
+    <input name="department" placeholder="部门（可选）">
+    <button>+ 添加员工</button>
+  </form>
+</div>
+<div class="tbl"><table>
+  <tr><th></th><th>工号</th><th>姓名</th><th>部门</th><th>人脸照片</th><th>状态</th><th></th></tr>
+  {% for e in employees %}
+  <tr>
+    <td>{% if e.photo %}<img class="thumb" src="{{ url_for('data_file', path=e.photo) }}">{% else %}<div class="thumb"></div>{% endif %}</td>
+    <td>{{ e.emp_no }}</td><td>{{ e.name }}</td><td>{{ e.department }}</td>
+    <td>{% if e.face_count %}{{ e.face_count }} 张{% else %}<span class="pill warn">未登记</span>{% endif %}</td>
+    <td>{% if e.active %}<span class="pill in">在职</span>{% else %}<span class="pill absent">停用</span>{% endif %}</td>
+    <td><a class="btn ghost" href="{{ url_for('employee', emp_id=e.id) }}">管理 / 登记人脸</a></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

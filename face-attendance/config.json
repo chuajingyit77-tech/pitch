@@ -1,0 +1,26 @@
+{
+  "company_name": "我的公司",
+  "admin_password": "admin123",
+
+  "camera_source": 0,
+  "camera_width": 1280,
+  "camera_height": 720,
+
+  "work_start": "09:00",
+  "work_end": "18:00",
+  "late_grace_minutes": 5,
+
+  "match_threshold": 0.42,
+  "min_face_size": 60,
+  "confirm_hits": 3,
+  "cooldown_minutes": 3,
+  "process_every_n_frames": 3,
+
+  "save_unknown_faces": true,
+  "unknown_cooldown_seconds": 30,
+
+  "webhook_url": "",
+
+  "host": "0.0.0.0",
+  "port": 8000
+}

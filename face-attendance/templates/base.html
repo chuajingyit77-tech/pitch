@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}考勤管理{% endblock %} · {{ company }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav>
+  <span class="brand">{{ company }} · 人脸考勤</span>
+  {% set ep = request.endpoint %}
+  <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}">今日概况</a>
+  <a href="{{ url_for('employees') }}" class="{{ 'on' if ep in ('employees','employee') }}">员工</a>
+  <a href="{{ url_for('records') }}" class="{{ 'on' if ep=='records' }}">打卡记录</a>
+  <a href="{{ url_for('report') }}" class="{{ 'on' if ep=='report' }}">考勤报表</a>
+  <a href="{{ url_for('kiosk') }}">签到屏</a>
+  <span class="sp"></span>
+  {% if logged_in %}<a href="{{ url_for('logout') }}">退出</a>{% endif %}
+</nav>
+<main>
+  {% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

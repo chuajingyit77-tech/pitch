@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}打卡记录{% endblock %}
+{% block body %}
+<h1>打卡记录</h1>
+<div class="card">
+  <form class="row">
+    <input type="date" name="from" value="{{ d_from }}"> 至 <input type="date" name="to" value="{{ d_to }}">
+    <select name="emp"><option value="">全部员工</option>
+      {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if e.id==emp_id }}>{{ e.name }}</option>{% endfor %}
+    </select>
+    <label><input type="checkbox" name="unknown" value="1" {{ 'checked' if show_unknown }}> 显示陌生人</label>
+    <button>查询</button>
+  </form>
+</div>
+<details class="card"><summary><b>手动补卡</b>（员工忘记打卡、摄像头故障时用）</summary>
+  <form method="post" class="row" style="margin-top:12px">
+    <input type="hidden" name="action" value="add">
+    <select name="employee_id" required>{% for e in employees %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select>
+    <input type="date" name="day" value="{{ d_to }}" required>
+    <input type="time" name="time" required>
+    <select name="event_type"><option value="IN">进入（上班）</option><option value="OUT">离开（下班）</option></select>
+    <input name="note" placeholder="原因">
+    <button>补卡</button>
+  </form>
+</details>
+<div class="tbl"><table>
+  <tr><th>抓拍</th><th>时间</th><th>姓名</th><th>部门</th><th>类型</th><th>相似度</th><th>备注</th><th></th></tr>
+  {% for e in events %}
+  <tr>
+    <td>{% if e.photo %}<a href="{{ url_for('data_file', path=e.photo) }}" target="_blank"><img class="thumb" src="{{ url_for('data_file', path=e.photo) }}"></a>{% endif %}</td>
+    <td>{{ e.ts }}</td><td>{{ e.name or '—' }}</td><td>{{ e.department or '' }}</td>
+    <td>{% if e.event_type=='IN' %}<span class="pill in">进入</span>{% elif e.event_type=='OUT' %}<span class="pill out">离开</span>{% else %}<span class="pill bad">陌生人</span>{% endif %}</td>
+    <td class="muted">{{ e.score if e.score is not none }}</td>
+    <td class="muted">{{ e.note }}</td>
+    <td><form method="post" onsubmit="return confirm('删除这条记录？')"><input type="hidden" name="action" value="delete"><input type="hidden" name="event_id" value="{{ e.id }}"><button class="small ghost">删除</button></form></td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">这段时间没有记录</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

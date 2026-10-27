@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% block title %}{{ emp.name }}{% endblock %}
+{% block body %}
+<h1>{{ emp.name }}</h1>
+<div class="grid2">
+  <div>
+    <div class="card">
+      <h2 style="margin-top:0">① 用柜台摄像头登记（推荐）</h2>
+      <p class="muted">让 {{ emp.name }} 站在摄像头前，正对镜头，然后点“拍照登记”。建议拍 3–5 张：正脸、稍微左转、稍微右转、戴/不戴眼镜。</p>
+      <img class="live" src="{{ url_for('video') }}">
+      <form method="post" style="margin-top:10px"><input type="hidden" name="action" value="capture"><button>📸 拍照登记</button></form>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">② 或者上传照片</h2>
+      <form method="post" enctype="multipart/form-data" class="row">
+        <input type="hidden" name="action" value="upload">
+        <input type="file" name="photos" accept="image/*" multiple required>
+        <button>上传登记</button>
+      </form>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2 style="margin-top:0">已登记的人脸（{{ faces|length }}）</h2>
+      <div class="faces">
+        {% for f in faces %}
+        <figure><img src="{{ url_for('data_file', path=f.photo) }}">
+          <form method="post" onsubmit="return confirm('删除这张？')"><input type="hidden" name="action" value="delete_face"><input type="hidden" name="face_id" value="{{ f.id }}"><button class="small ghost">删除</button></form>
+        </figure>
+        {% else %}<p class="muted">还没有登记，系统暂时认不出 TA。</p>{% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">资料</h2>
+      <form method="post">
+        <input type="hidden" name="action" value="save">
+        <p><input name="name" value="{{ emp.name }}" placeholder="姓名" required></p>
+        <p><input name="emp_no" value="{{ emp.emp_no or '' }}" placeholder="工号"></p>
+        <p><input name="department" value="{{ emp.department or '' }}" placeholder="部门"></p>
+        <p><label><input type="checkbox" name="active" value="1" {{ 'checked' if emp.active }}> 在职（取消勾选 = 停用，不再识别）</label></p>
+        <button>保存</button>
+      </form>
+      <form method="post" onsubmit="return confirm('确定删除 {{ emp.name }}？人脸数据会删除，打卡历史保留。')" style="margin-top:16px">
+        <input type="hidden" name="action" value="delete"><button class="danger small">删除员工</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

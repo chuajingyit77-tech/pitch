@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}考勤报表{% endblock %}
+{% block body %}
+<h1>考勤报表</h1>
+<div class="card">
+  <form class="row">
+    <input type="date" name="from" value="{{ d_from }}"> 至 <input type="date" name="to" value="{{ d_to }}">
+    <button>查询</button>
+    <a class="btn ghost" href="{{ url_for('report', **{'from': d_from, 'to': d_to, 'format': 'csv'}) }}">⬇ 导出 Excel (CSV)</a>
+  </form>
+  <p class="muted" style="margin-bottom:0">上班时间 {{ cfg.work_start }}（{{ cfg.late_grace_minutes }} 分钟宽限），下班时间 {{ cfg.work_end }}。工时 = 每一段“进入→离开”的时间加起来（中途外出不算）。</p>
+</div>
+<h2>汇总</h2>
+<div class="tbl"><table>
+  <tr><th>姓名</th><th>部门</th><th>出勤天数</th><th>总工时</th><th>平均每天</th><th>迟到</th><th>早退</th><th>漏打下班卡</th></tr>
+  {% for s in summary %}
+  <tr><td>{{ s.name }}</td><td>{{ s.department }}</td><td>{{ s.days }}</td><td>{{ '%.1f'|format(s.hours) }} 小时</td>
+    <td>{{ '%.1f'|format(s.hours / s.days) }} 小时</td>
+    <td>{% if s.late %}<span class="pill bad">{{ s.late }}</span>{% else %}0{% endif %}</td>
+    <td>{% if s.early %}<span class="pill warn">{{ s.early }}</span>{% else %}0{% endif %}</td>
+    <td>{% if s.missing %}<span class="pill warn">{{ s.missing }}</span>{% else %}0{% endif %}</td></tr>
+  {% else %}<tr><td colspan="8" class="muted">没有数据</td></tr>{% endfor %}
+</table></div>
+<h2>每日明细</h2>
+<div class="tbl"><table>
+  <tr><th>日期</th><th>姓名</th><th>部门</th><th>上班</th><th>下班</th><th>工时</th><th>打卡次数</th><th>情况</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.day }}</td><td>{{ r.name }}</td><td>{{ r.department }}</td><td>{{ r.first_in }}</td><td>{{ r.last_out }}</td>
+    <td>{{ '%.2f'|format(r.hours) }}</td><td>{{ r.punches }}</td>
+    <td>{% if r.late %}<span class="pill bad">迟到</span> {% endif %}{% if r.early_leave %}<span class="pill warn">早退</span> {% endif %}{% if r.missing_out %}<span class="pill warn">漏打下班卡</span>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

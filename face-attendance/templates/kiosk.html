@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>签到屏 · {{ company }}</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0b1020;color:#e5e7eb;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;overflow:hidden}
+  .wrap{display:grid;grid-template-columns:1fr 380px;height:100vh}
+  .cam{position:relative;background:#000;display:flex;align-items:center;justify-content:center}
+  .cam img{max-width:100%;max-height:100vh;transform:scaleX(-1)} /* 镜像，像照镜子 */
+  .hint{position:absolute;bottom:24px;left:0;right:0;text-align:center;font-size:22px;color:#cbd5e1;text-shadow:0 2px 6px #000}
+  .err{position:absolute;top:20px;left:20px;right:20px;background:#7f1d1d;padding:12px 16px;border-radius:10px;display:none}
+  .side{padding:28px 24px;display:flex;flex-direction:column;gap:20px;background:#111827}
+  .co{font-size:18px;color:#94a3b8}
+  .clock{font-size:64px;font-weight:700;letter-spacing:2px;line-height:1}
+  .date{color:#94a3b8}
+  .greet{border-radius:16px;padding:22px;background:#1f2937;min-height:150px;transition:background .3s}
+  .greet.ok{background:#14532d}.greet.out{background:#1e3a8a}.greet.seen{background:#374151}
+  .greet .n{font-size:40px;font-weight:700;margin:6px 0}
+  .greet .t{font-size:20px;color:#d1d5db}
+  .list{flex:1;overflow:hidden}
+  .list h3{margin:0 0 10px;font-size:15px;color:#94a3b8;font-weight:500}
+  .row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #1f2937}
+  .row img{width:44px;height:44px;border-radius:50%;object-fit:cover;background:#374151}
+  .row .nm{flex:1;font-size:17px}
+  .tag{font-size:13px;padding:2px 8px;border-radius:999px}
+  .IN{background:#166534}.OUT{background:#1e40af}
+  .admin{color:#475569;font-size:13px;text-decoration:none}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr;grid-template-rows:60vh 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="cam">
+    <img src="{{ url_for('video') }}" alt="摄像头">
+    <div class="hint" id="hint">请看向摄像头 · 自动识别打卡</div>
+    <div class="err" id="err"></div>
+  </div>
+  <div class="side">
+    <div class="co">{{ company }}</div>
+    <div><div class="clock" id="clock">--:--:--</div><div class="date" id="date"></div></div>
+    <div class="greet" id="greet"><div class="t">欢迎</div><div class="n">—</div><div class="t">走到门口，看一下摄像头即可</div></div>
+    <div class="list"><h3>最近打卡</h3><div id="recent"></div></div>
+    <a class="admin" href="{{ url_for('dashboard') }}">管理后台 →</a>
+  </div>
+</div>
+<script>
+let lastKey = null, greetTimer = null, first = true;
+const $ = id => document.getElementById(id);
+
+function hello(name, type) {
+  const h = new Date().getHours();
+  if (type === 'OUT') return '辛苦了，' + name;
+  return (h < 12 ? '早上好，' : h < 18 ? '下午好，' : '晚上好，') + name;
+}
+function speak(text) {
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function showGreet(cls, top, name, bottom, ms) {
+  const g = $('greet');
+  g.className = 'greet ' + cls;
+  g.innerHTML = `<div class="t">${top}</div><div class="n">${name}</div><div class="t">${bottom}</div>`;
+  clearTimeout(greetTimer);
+  greetTimer = setTimeout(() => {
+    greetTimer = null;
+    g.className = 'greet';
+    g.innerHTML = '<div class="t">欢迎</div><div class="n">—</div><div class="t">走到门口，看一下摄像头即可</div>';
+  }, ms);
+}
+
+async function poll() {
+  try {
+    const r = await fetch('{{ url_for("api_status") }}', {cache: 'no-store'});
+    const s = await r.json();
+    $('clock').textContent = s.time;
+    $('date').textContent = s.date;
+    $('err').style.display = s.error ? 'block' : 'none';
+    $('err').textContent = s.error;
+
+    const ev = s.recent[0];
+    const key = ev ? ev.employee_id + '@' + ev.time : null;
+    if (key && key !== lastKey && !first) {
+      const label = ev.type === 'IN' ? '进入打卡成功 ✓' : '离开打卡成功 ✓';
+      showGreet(ev.type === 'IN' ? 'ok' : 'out', ev.time, hello(ev.name, ev.type), label, 6000);
+      speak(ev.name + (ev.type === 'IN' ? '，打卡成功' : '，再见'));
+    } else {
+      const seen = s.current.find(c => c.state === 'already');
+      const checking = s.current.find(c => c.state === 'checking');
+      if (seen && !greetTimer) showGreet('seen', '', seen.name, '刚刚已经打过卡了', 3000);
+      $('hint').textContent = checking ? '正在识别，请稍等…' :
+        s.current.some(c => c.state === 'unknown') ? '未识别，请正对摄像头（新员工请联系管理员登记）' :
+        '请看向摄像头 · 自动识别打卡';
+    }
+    lastKey = key; first = false;
+
+    $('recent').innerHTML = s.recent.slice(0, 8).map(e =>
+      `<div class="row"><img src="/data/${e.photo}"><span class="nm">${e.name}</span>
+       <span class="tag ${e.type}">${e.type === 'IN' ? '进入' : '离开'}</span><span>${e.time.slice(0,5)}</span></div>`).join('');
+  } catch (e) {
+    $('err').style.display = 'block';
+    $('err').textContent = '连不上考勤程序，请检查黑色窗口是否被关闭';
+  }
+}
+setInterval(poll, 700);
+poll();
+</script>
+</body>
+</html>
