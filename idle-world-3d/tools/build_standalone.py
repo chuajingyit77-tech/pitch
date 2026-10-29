@@ -43,13 +43,14 @@ page = f"""<!doctype html>
 """
 open(os.path.join(ROOT, 'play.html'), 'w', encoding='utf-8').write(page)
 
-# version = hash of every runtime file (not the docs, the tools or the generated page itself)
+# version = hash of every runtime file (not the docs, the tools, the admin page or the generated page itself: a change
+# there is no reason for the screens to reload)
 h = hashlib.sha256()
 for dp, dns, fns in os.walk(ROOT):
     dns[:] = sorted(d for d in dns if d not in {'tools', '.git', 'node_modules'})
     for fn in sorted(fns):
         rel = os.path.relpath(os.path.join(dp, fn), ROOT)
-        if rel in {'play.html', 'version.json'} or fn.endswith(('.md', '.glb')):
+        if rel in {'play.html', 'version.json', 'admin.html', 'admin.js'} or fn.endswith(('.md', '.glb', '.sql', '.mjs')):
             continue
         h.update(rel.encode())
         h.update(open(os.path.join(dp, fn), 'rb').read())

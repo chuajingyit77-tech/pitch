@@ -1,8 +1,9 @@
 {
   "name": "qijing-qa",
   "private": true,
-  "description": "Test tools for 栖境 (idle-world-3d): iPad / Safari 14 emulation, flicker, motion and parity probes",
+  "description": "Test tools for 栖境 (idle-world-3d): iPad / Safari 14 emulation, flicker, motion and parity probes, and a local stand-in for the learning backend",
   "dependencies": {
-    "three": "0.160.0"
+    "three": "0.160.0",
+    "pg": "8.23.1"
   }
 }

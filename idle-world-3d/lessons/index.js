@@ -1,7 +1,10 @@
-// 栖境 · 守护者的课（内容文件）
-// The lessons the worlds' guardians teach (played by lib/guide.js). Content only: edit freely, see lessons/README.md.
+// 栖境 · 守护者的示范课
+// The demo lessons the worlds' guardians teach on a screen not connected to the company (played by lib/guide.js).
+// The company's own lessons are written on the admin page (admin.html) and kept in the learning backend, never here:
+// this repository is public. See lessons/README.md.
 //
-// 怎么改（详细说明见 lessons/README.md）：
+// 公司的课不要写在这里（这个仓库是公开的）：在管理页面 admin.html 里写、审核、发布，详见 lessons/README.md。
+// 这里的示范课只给还没连接公司学习的屏幕用。格式：
 //   - GUARDIANS：每位守护者住在一个世界里（world），讲一组课（lessons 里写课程的 id）。
 //   - LESSONS：每节课由 steps 一步一步组成，按顺序播放：
 //       { say: '守护者说的一句话' }                              点一下继续
@@ -14,7 +17,7 @@
 //   - 文字里用 **两个星号** 包起来的字，会用金色强调。
 //   - badge 是徽章名；reward 是第一次学完时住进这个世界的新居民（kind 是居民种类，name 是它的名字，
 //     what 是说给人听的种类名）。居民住满时只给徽章。
-//   - demo: true 表示示范课（「学习」里会标出「示范」）。换成公司自己的 SOP 后删掉这一行。
+//   - demo: true 表示示范课（「学习」里会标出「示范」）。
 
 export const GUARDIANS = [
   {

@@ -16,6 +16,7 @@
   color-scheme:dark;
 }
 html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+[hidden]{display:none!important}
 /* no tap-highlight flash, text selection or long-press callout when people tap the world on a phone */
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input{-webkit-user-select:text;user-select:text}
@@ -123,6 +124,11 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 .confirm{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(230,193,122,.4);background:rgba(230,193,122,.08);font-size:13px;line-height:1.6}
 .confirm .acts{display:flex;gap:8px}
 .check{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--ink-2)}
+.code-row{display:flex;gap:8px;margin-top:10px}
+.code-row .field{flex:1;min-width:0;letter-spacing:.18em;text-transform:uppercase}
+.code-row .field::placeholder{letter-spacing:.04em;text-transform:none;color:var(--ink-3)}
+#settings .hint.err{color:#f0a48f}
+#settings .hint.msg{margin-top:8px}
 .credits{font-size:11.5px;color:var(--ink-3);line-height:1.7}
 .credits b{color:var(--ink-2);font-weight:500}
 .close{align-self:flex-end;margin-top:-8px}
@@ -224,6 +230,67 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
 .marks .list{display:flex;gap:10px;flex-wrap:wrap}
 .seal{width:64px;height:64px;padding:8px;border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;font:700 14px/1.2 var(--serif);letter-spacing:.08em;color:#f3d79a;background:radial-gradient(circle at 30% 25%,rgba(230,193,122,.24),rgba(230,193,122,.06));border:1.5px solid rgba(230,193,122,.65)}
 .seal.no{color:rgba(245,242,234,.25);border-color:rgba(255,255,255,.12);background:none;font-weight:400}
+.ls .tag.new{background:rgba(230,193,122,.16);color:var(--gold)}
+.board .empty{margin:6px 0;font-size:13px;line-height:1.75;color:var(--ink-3)}
+.pane-foot{display:flex;justify-content:center;margin-top:20px}
+.av{flex:0 0 auto;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font:700 17px/1 var(--serif);color:var(--gold-ink);background:linear-gradient(160deg,#f2d79c,#c79f57);box-shadow:0 0 0 3px rgba(230,193,122,.14)}
+.me-bar{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin:2px 0 16px;padding:12px 14px;border-radius:14px;background:rgba(230,193,122,.07);border:1px solid rgba(230,193,122,.26)}
+.me-bar .mb-t{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 220px}
+.me-bar .mb-t>b{font:500 15px/1.3 var(--serif);letter-spacing:.12em}
+.me-bar .mb-t>span:not(.av){font-size:12.5px;line-height:1.55;color:var(--ink-3)}
+.me-bar .mb-t.me{flex-direction:row;align-items:center;gap:12px}
+.mb-n{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mb-n b{font:700 17px/1.25 var(--serif);letter-spacing:.12em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mb-n span{font-size:12px;color:var(--ink-3);letter-spacing:.08em}
+.me-bar .mb-a{display:flex;align-items:center;gap:16px;margin-left:auto}
+.find{width:100%;margin:0 0 12px}
+.who-groups .dh{margin:14px 0 8px;font-size:12px;letter-spacing:.32em;color:var(--ink-3)}
+.who-groups .dh:first-child{margin-top:2px}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:10px}
+.nm-btn{display:flex;align-items:center;gap:10px;min-height:60px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);text-align:left;transition:background .2s,border-color .2s}
+.nm-btn:active{background:rgba(230,193,122,.09);border-color:rgba(230,193,122,.5)}
+@media (hover:hover){.nm-btn:hover{background:rgba(230,193,122,.09);border-color:rgba(230,193,122,.5)}.pad .k:hover{border-color:rgba(230,193,122,.55)}}
+.nm-btn .av{width:36px;height:36px;font-size:15px}
+.nm-btn .n{font:500 16px/1.3 var(--serif);letter-spacing:.08em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#panePin:not([hidden]){display:flex;flex-direction:column;align-items:center;text-align:center}
+.pin-dept{margin-top:-2px;font-size:13px;letter-spacing:.24em;color:var(--ink-3)}
+.board .pin-lead{margin:12px 0 18px}
+.dots{display:flex;gap:18px;margin:0 0 6px}
+.dots i{width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(230,193,122,.75);transition:background .15s ease}
+.dots i.on{background:var(--gold)}
+.dots.busy i{animation:pinwait 1s ease-in-out infinite}
+.dots.busy i:nth-child(2){animation-delay:.12s}.dots.busy i:nth-child(3){animation-delay:.24s}.dots.busy i:nth-child(4){animation-delay:.36s}
+.dots.shake{animation:shake .45s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(3px)}}
+@keyframes pinwait{0%,100%{opacity:1}50%{opacity:.3}}
+.pin-msg{min-height:22px;margin:6px 0 14px;font-size:13.5px;line-height:1.6;color:var(--ink-2)}
+.pin-msg.err{color:#f0a48f}
+.pad{display:grid;grid-template-columns:repeat(3,76px);gap:14px 18px;justify-content:center}
+.pad .k{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;font:300 30px/1 var(--serif);color:var(--ink);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.13);transition:background .15s,border-color .15s,transform .1s}
+.pad .k:active{transform:scale(.94);background:rgba(230,193,122,.2)}
+.pad .k.del{background:none;border-color:transparent;color:var(--ink-2)}
+.pad .k.del svg{width:30px;height:30px}
+.me-head{display:flex;align-items:center;gap:14px;margin:2px 0 16px}
+.me-head .av{width:52px;height:52px;font-size:22px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.tile{padding:14px 8px 12px;border-radius:14px;text-align:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09)}
+.tile b{display:block;font:500 21px/1.25 var(--serif);color:var(--gold);white-space:nowrap}
+.tile span{display:block;margin-top:6px;font-size:12px;letter-spacing:.06em;color:var(--ink-3)}
+.me-sec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.me-sec h3{margin:0 0 12px;font-size:12px;font-weight:400;letter-spacing:.32em;color:var(--ink-3)}
+.me-sec .list{display:flex;gap:10px;flex-wrap:wrap}
+.miss{margin-bottom:10px;padding:14px 15px 12px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(226,138,116,.3)}
+.miss .mt{font-size:12px;letter-spacing:.06em;color:var(--ink-3)}
+.miss .q{margin-top:6px;font:500 15.5px/1.75 var(--serif);letter-spacing:.03em}
+.miss .was{margin-top:6px;font-size:13px;line-height:1.6;color:var(--ink-3)}
+.miss .was s{color:#f0a48f;text-decoration-color:rgba(240,164,143,.55)}
+.miss .row,.me-sec .row.all{display:flex;justify-content:flex-end;margin-top:10px}
+.me-ls{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid rgba(255,255,255,.06)}
+.me-ls:last-child{border-bottom:0}
+.me-ls .tl{font:500 15px/1.45 var(--serif);letter-spacing:.04em}
+.me-ls .st{flex:0 0 auto;display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)}
+.me-ls .stars{font-size:14px;letter-spacing:.08em}
+.me-ls .tag{font:500 11px/1 var(--sans);padding:4px 7px;border-radius:6px;letter-spacing:.12em}
 
 @media (max-width:720px){
   .talk{bottom:calc(env(safe-area-inset-bottom,0px) + 10px);width:calc(100% - 16px)}
@@ -232,6 +299,10 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
   .talk .opt{font-size:15px;padding:10px 12px}
   .sum ol{grid-template-columns:repeat(2,1fr)}
   .board .sheet{padding:22px 18px 18px}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .names{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pad{grid-template-columns:repeat(3,70px);gap:12px 16px}
+  .pad .k{width:70px;height:70px;font-size:28px}
 }
 
 @media (max-width:1240px) and (min-width:721px){
@@ -246,7 +317,7 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
   .logo{font-size:16px}
   #toasts{top:calc(env(safe-area-inset-top,0px) + 150px)}
 }
-@media (prefers-reduced-motion:reduce){.hud,.title-card,#veil,.talk,.board,.banner{transition:none}.heart,.toast{animation-duration:.01s}.guide-mark i,.talk .next.on{animation:none}}
+@media (prefers-reduced-motion:reduce){.hud,.title-card,#veil,.talk,.board,.banner{transition:none}.heart,.toast{animation-duration:.01s}.guide-mark i,.talk .next.on,.dots.shake,.dots.busy i{animation:none}}
 </style>
 
 <canvas id="gl" aria-label="可投喂的 3D 待机世界。拖动旋转视角，滚轮缩放，点击水面或地面投喂。"></canvas>
@@ -289,13 +360,19 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
 <div class="banner" id="banner" aria-live="polite"><div class="eb">学 成</div><div class="t">课程完成</div><div class="ln"></div><div id="bannerStars"></div><div class="rw" id="bannerGifts"></div></div>
 
 <section class="board" id="board" role="dialog" aria-label="学习" aria-hidden="true">
-  <div class="sheet">
+  <div class="sheet" id="boardSheet">
     <button class="icon-btn x" id="boardClose" type="button" title="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <div class="eb">学 习</div>
-    <h2>守护者的课</h2>
-    <p class="lead">世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。</p>
-    <div id="boardList"></div>
-    <div class="marks"><div class="h">徽 章</div><div class="list" id="boardBadges"></div></div>
+    <h2 id="boardTitle">守护者的课</h2>
+    <div class="me-bar" id="meBar" hidden></div>
+    <div id="paneLessons">
+      <p class="lead" id="boardLead">世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。</p>
+      <div id="boardList"></div>
+      <div class="marks"><div class="h">徽 章</div><div class="list" id="boardBadges"></div></div>
+    </div>
+    <div id="paneWho" hidden></div>
+    <div id="panePin" hidden></div>
+    <div id="paneMe" hidden></div>
   </div>
 </section>
 
@@ -316,6 +393,21 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
     <div class="hint">每台电脑第一次打开时都会生成独一无二的地形、珊瑚、锦鲤花纹和居民名字，保存在这台电脑的浏览器里。</div>
     <div class="confirm" id="reseedConfirm" hidden>重新生成后，这台电脑的所有世界和居民都会换成新的，喂养记录也会清空。
       <div class="acts"><button class="pill primary" id="reseedYes">确定重新生成</button><button class="pill ghost" id="reseedNo">取消</button></div>
+    </div>
+  </div>
+  <div class="row">
+    <label class="h" for="schoolCode">公司学习</label>
+    <div id="schoolOff">
+      <div class="hint">这台设备现在显示的是示范课。输入管理员给的登记码，就能连上公司自己的课程：员工点自己的名字、输入 4 位密码学习，学到哪里、答得怎样，都存进各自的学习档案。</div>
+      <div class="code-row"><input class="field mono" id="schoolCode" placeholder="登记码 XXXX-XXXX" maxlength="11" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false"><button class="pill primary" id="schoolJoin" type="button">连接</button></div>
+      <div class="hint msg" id="schoolMsg" hidden></div>
+    </div>
+    <div id="schoolOn" hidden>
+      <div class="seed"><span id="schoolDev"></span><button class="link" id="schoolForget" type="button">断开</button></div>
+      <div class="hint" id="schoolHint"></div>
+      <div class="confirm" id="schoolConfirm" hidden><span id="schoolConfirmText"></span>
+        <div class="acts"><button class="pill primary" id="schoolForgetYes" type="button">确定断开</button><button class="pill ghost" id="schoolForgetNo" type="button">取消</button></div>
+      </div>
     </div>
   </div>
   <div class="row">
