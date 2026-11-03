@@ -1,5 +1,6 @@
 // 栖境 — app shell: renderer, post-processing, camera rig, feeding input, residents,
-// per-computer save data, idle/screensaver mode, ambience, the HUD and the guardians' lessons (lib/guide.js).
+// per-computer save data, idle/screensaver mode, ambience, the HUD and the guardians' lessons (lib/guide.js), with the
+// company's own lessons and learning records when the screen is connected to them (lib/school.js).
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
@@ -9,6 +10,8 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { makeRng, hashString, sunState, disposeObject, clamp, lerp, damp, TAU } from './lib/util.js';
 import { Ambience } from './lib/audio.js';
 import { createGuide } from './lib/guide.js';
+import { createSchool } from './lib/school.js';
+import { BACKEND } from './lessons/backend.js';
 
 // Point and spot lights get a small physical radius (25 cm). Without it, a surface a few centimetres from
 // a lamp (the inside of a stone lantern, a leaf next to a glow) receives hundreds of times the light, and
@@ -1379,6 +1382,9 @@ function openSettings() {
   $('settings').classList.add('open');
   $('settings').setAttribute('aria-hidden', 'false');
   $('pcName2').value = save.name;
+  renderSchoolRow();
+  $('schoolMsg').hidden = true;
+  $('schoolConfirm').hidden = true;
   $('seedText').textContent = '#' + (save.seed >>> 0).toString(16).toUpperCase().padStart(8, '0').replace(/(.{4})/, '$1-');
   seg('segTime', save.timeMode, v => { save.timeMode = v; dirty = true; $('manualTime').hidden = v !== 'manual'; });
   $('manualTime').hidden = save.timeMode !== 'manual';
@@ -1454,6 +1460,7 @@ async function checkForUpdate() {
 let last = performance.now(), elapsed = 0, acc = 0, minuteTimer = 0, lastRenderAt = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  school.tick();
   const rawMs = now - last;
   last = now;
   dynTick(rawMs);
@@ -1527,14 +1534,82 @@ function frame(now) {
 /* ------------------------------------------------------------------ */
 /* Boot                                                                */
 /* ------------------------------------------------------------------ */
-/* The guardians' lessons */
+/* The company's lessons and learning records (a screen registered with the learning backend), and the guardians who
+   teach them (or the demo lessons) */
+const school = createSchool({
+  backend: (TEST && TEST.backend) || BACKEND,
+  signOut: (TEST && TEST.signOut) || undefined,
+  lastInput: () => lastInput,
+  onChange: what => {
+    try { guide.onSchool(what); } catch (e) { console.error('[guide]', e); }
+    if ($('settings').classList.contains('open')) renderSchoolRow();
+  },
+});
 const guide = createGuide({
+  school,
   save: () => save, markDirty: () => { dirty = true; }, persist,
   worlds: WORLDS, world: () => (loading ? null : current), loading: () => loading, enterWorld,
   focus: focusRig, rigYaw: () => rig.yawT, toScreen, pick: pickCreature,
   wake, idle: () => idle, lastInput: () => lastInput,
   toast, sfx: name => audio.sfx(name), hours, grant: grantResident, asset,
 });
+
+// Settings → 公司学习: connect this screen with a code, or let it go
+function renderSchoolRow() {
+  const d = school.device();
+  $('schoolOff').hidden = !!d;
+  $('schoolOn').hidden = !d;
+  if (!d) return;
+  $('schoolDev').textContent = `已连接 · ${d.label || '这台设备'}`;
+  $('schoolHint').textContent = d.personal
+    ? '个人设备：登录一次就一直保持登录（30 天不用才需要重新登录）。课程每 10 分钟更新一次。'
+    : '共享设备：员工 3 分钟不操作会自动退出登录。员工名单和课程每 10 分钟更新一次。';
+}
+async function joinSchool(code) {
+  const msg = $('schoolMsg');
+  msg.hidden = false; msg.className = 'hint msg'; msg.textContent = '正在连接…';
+  $('schoolJoin').disabled = true;
+  const r = await school.register(code);
+  $('schoolJoin').disabled = false;
+  if (r.ok) {
+    msg.hidden = true;
+    $('schoolCode').value = '';
+    renderSchoolRow();
+    toast(`已连上公司学习 · ${r.device.label || '这台设备'}`);
+    return;
+  }
+  msg.className = 'hint msg err';
+  msg.textContent = r.error === 'code' ? '登记码不对，或者已经用过、过期了。请向管理员要一个新的。'
+    : r.error === 'busy' ? '尝试次数太多，请 10 分钟后再试。'
+    : r.error === 'net' ? '连不上网络，请检查网络后再试。' : '暂时连不上，请稍后再试。';
+}
+$('schoolJoin').addEventListener('click', () => joinSchool($('schoolCode').value));
+$('schoolCode').addEventListener('keydown', e => { if (e.key === 'Enter') joinSchool($('schoolCode').value); });
+$('schoolForget').addEventListener('click', () => {
+  const n = school.pending;
+  $('schoolConfirmText').textContent = n
+    ? `断开后，这台设备回到示范课。还有 ${n} 条学习记录没送出，会先试着送出；没有网络的话，这些记录会丢失。`
+    : '断开后，这台设备回到示范课。员工的学习记录都在公司后台，不会丢失；要再连上，需要管理员给一个新的登记码。';
+  $('schoolConfirm').hidden = false;
+});
+$('schoolForgetNo').addEventListener('click', () => { $('schoolConfirm').hidden = true; });
+$('schoolForgetYes').addEventListener('click', async () => {
+  $('schoolConfirm').hidden = true;
+  await school.forget();
+  renderSchoolRow();
+  toast('已断开公司学习，现在显示示范课');
+});
+// A link ending in #join=XXXX-XXXX (a team code an admin shared with the staff) connects this screen once; the code
+// leaves the address so a reload does not use it again.
+(function joinFromLink() {
+  const m = /(?:^#|&)join=([0-9A-Za-z-]{8,12})/.exec(location.hash || '');
+  if (!m) return;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  const later = text => { const t = setInterval(() => { if ($('veil').classList.contains('clear')) { clearInterval(t); toast(text); } }, 400); };
+  if (school.registered) { later('这台设备已经连上公司学习了'); return; }
+  school.register(m[1]).then(r => later(r.ok ? `已连上公司学习 · ${r.device.label || '这台设备'}`
+    : r.error === 'net' ? '连不上网络，没能连上公司学习，请稍后再打开这个链接' : '这个链接里的码已经用完或过期了，请向管理员要一个新的'));
+})();
 
 window.__idle = {
   ready: null, sceneId: null, error: null,
@@ -1689,6 +1764,8 @@ window.__idle = {
   get current() { return current; },
   /** the guardians' lessons (tools/qa/lesson.cjs) */
   guide: guide.test,
+  /** the company connection (tools/qa/school.cjs) */
+  school: Object.assign({ api: school }, school.test),
   bleedStats, gl1MipStats,
   get rig() { return rig; },
   renderer,

@@ -6,8 +6,10 @@ world.
 
 ## Setup (once per machine)
 
-    npm install --prefix idle-world-3d/tools/qa        # three@0.160.0, served in place of the jsDelivr CDN
+    npm install --prefix idle-world-3d/tools/qa        # three@0.160.0 (served in place of the jsDelivr CDN) and pg
     export NODE_PATH=$(npm root -g)                    # playwright is used from the global install
+    node idle-world-3d/tools/qa/fakebase.cjs --init    # a local PostgreSQL 16 for the learning backend's tests
+                                                       # (apt install postgresql-16; the cluster is made as the user postgres)
 
 ## Before every push
 
@@ -33,6 +35,10 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
    render pixel for pixel the same as the whole field (`cullcheck.cjs`).
 6. **The guardians' lessons** (`lesson.cjs`), on the iPad and on a phone held upright: a whole lesson played
    through. It must end `PASS` with no console problems. Look at the screenshots.
+7. **The learning backend**, on a local stand-in for it (`fakebase.cjs`: a fresh database with `backend/*.sql`
+   applied, behind a small server that answers as Supabase's API does): every function the screens and the admin page
+   call (`backend_rpc.cjs`), the company's lessons on the iPad and on a phone (`school.cjs`) and the admin page
+   (`admin.cjs`). Each must end `PASS` with no console problems. Look at the screenshots.
 
 ## Long runs, the clock of day and the GPU
 
@@ -76,6 +82,10 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | `thumbs.cjs world:hour …` | Re-renders the dock thumbnails in `assets/thumbs`. |
 | `lesson.cjs <out> [--phone]` | Plays a guardian's lesson through in the iPad emulation (or on a phone held upright): screenshots of the board, the guardian flying in, the close-up, a wrong and a right answer, the key-point card, the completion with the new resident, the marker, the guardian's own menu and a lesson put down halfway. Checks the saved progress, stars, badge and new resident, and that there were no errors. |
 | `portrait.cjs [--world koi] [--id heron]` | Renders a guardian's portrait for the lessons board (`assets/guardians/<id>.jpg`). |
+| `fakebase.cjs [--init] [--port 54330]` | A local stand-in for the learning backend: `--init` makes and starts a PostgreSQL 16 cluster once (`/var/lib/postgresql/qjtest`, port 54329); without it, serves a fresh database with `backend/*.sql` applied, answering `POST /rest/v1/rpc/<function>` as Supabase does (run as `anon`, arguments checked). Tests use `require('./fakebase.cjs').start()`. |
+| `backend_rpc.cjs` | Every backend function, called as the screens and the admin page call them: accounts, screens and codes, staff and PIN locks, lesson records and batches, the learning record and its wrong answers, reports, drafts, publishing and versions, and what the API role cannot do. |
+| `school.cjs <out> [--skip-phone]` | The company's lessons on the iPad emulation: connecting with a setup code, the names and the PIN pad, a lesson with the heron, the learning record, the wrong-answer review, a lesson half done offline and sent later, the shared screen signing out, the screen taken off; then a phone joining with a team-code link. |
+| `admin.cjs <out>` | The admin page on a desktop and a phone: the first account, staff (one and a pasted list), screen and team codes, an AI draft pasted in, edited and published, reports, a guardian's lines, the password, invites. |
 | `soak.cjs <out> <world> [--hours 3] [--start 5.5] [--every 10]` | Hours of play in time-lapse: NaN, flicker, memory, heap, errors over time. `--t0` starts the world clock days in. |
 | `daysweep.cjs <out> <world> [--from 0] [--to 24] [--step 2]` | The day in steps, walked twice: brightness of the screen and 12 regions per step, and the jumps that come from the clock. `--from-json <world>_sweep.json` looks again at a saved sweep. |
 | `lightramp.cjs <out> <world> [--at 18:20] [--minutes 3]` | Real-time light through the page's own clock: how each minute's change of light is spread, peak change per second, shimmer (`--every 1`). |

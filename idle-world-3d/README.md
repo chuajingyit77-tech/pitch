@@ -48,9 +48,36 @@ a badge and a new resident (the heron's gift swims across in front of it). Stars
 right first time. Progress, stars and badges are saved per computer; a lesson put down halfway carries on from
 there. The board keeps each finished lesson's key points to look up later.
 
-The content is in `lessons/index.js` (two demonstration lessons to replace with the company's own procedures;
-`lessons/README.md`, in Chinese, explains the format and gives a prompt for turning a procedure into a lesson).
 A board or conversation left open on an unattended screen is put away after two minutes, progress kept.
+
+A screen that is not connected to the company shows the two demonstration lessons in `lessons/index.js`, with
+progress saved on that screen. The company's own lessons never go into this repository (it is public): they live
+in the learning backend, described next.
+
+## The company's lessons and learning records (学习管理)
+
+A screen connected to the learning backend (Supabase project `qijing-learning`; the database is in `backend/`, the
+connection in `lessons/backend.js`) shows the company's published lessons instead of the demonstration ones, and
+whoever learns signs in first: they tap their name and enter a 4-digit PIN. Everything they do in a lesson goes into
+their own learning record (学习档案): where they are in each lesson, stars, badges, every first answer, time spent.
+The board then shows them their record, and the questions they got wrong, to answer again with the guardian (错题回顾).
+The heron greets them by name. A screen that loses the network keeps what happened and sends it when it can; each
+batch is counted once, even if it has to be sent twice.
+
+- **Shared screens** (the office iPad) are connected once with a setup code from the admin page, typed in Settings →
+  公司学习. The person learning is signed out after 3 minutes without a touch.
+- **The staff's own phones and computers** are connected with a team code: the admin page makes a link ending in
+  `#join=XXXX-XXXX`, to share in a work chat. These personal screens stay signed in.
+- **The admin page**, `admin.html` (the same address as `play.html` with `admin.html` at the end), is where admins
+  sign in with a login and password (the first account is made with an invite code) to write and publish lessons
+  (by hand, or from an AI's draft of a procedure pasted in), see how each lesson goes question by question, add the
+  staff (one by one or a whole pasted list), connect screens and read everyone's learning record.
+- **Drafts from Google Drive**: a scheduled Claude task can read a Drive folder of procedures and cases each morning
+  and leave a draft lesson for each new or changed document (`backend/README.md`, "The drafting job"). Nothing reaches
+  a screen until an admin publishes it.
+
+Everything a screen or the admin page asks of the backend goes through functions that check a device, session or
+admin token first; the tables themselves cannot be read through the API at all (`backend/README.md`).
 
 ## Stability (no flashing)
 

@@ -26,4 +26,9 @@ case " $WORLDS " in *" koi "*)
   timeout 3000 node "$QA/lesson.cjs" "$OUT/lesson_ipad" | tail -4
   timeout 3000 node "$QA/lesson.cjs" "$OUT/lesson_phone" --phone | tail -4 ;;
 esac
+echo "== 7. The learning backend: every function (on a local stand-in), the company's lessons on the iPad and a phone, the admin page"
+node "$QA/fakebase.cjs" --init >/dev/null || { echo "no local PostgreSQL 16: see tools/qa/README.md"; exit 1; }
+timeout 900 node "$QA/backend_rpc.cjs" | tail -1
+case " $WORLDS " in *" koi "*) timeout 3600 node "$QA/school.cjs" "$OUT/school" | tail -3 ;; esac
+timeout 900 node "$QA/admin.cjs" "$OUT/admin" | tail -2
 echo "done: $OUT"
