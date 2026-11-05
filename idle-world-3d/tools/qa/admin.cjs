@@ -67,8 +67,9 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
     const page = await ctx.newPage();
     page.setDefaultTimeout(15000);
+    let missingFn = false; // a function the backend does not have yet, on purpose: its 404 is expected
     const watch = (pg, tag) => {
-      pg.on('console', m => { if (m.type() === 'error') logs.push(`[${tag}] ${m.text().slice(0, 300)}`); });
+      pg.on('console', m => { if (m.type() === 'error' && !(missingFn && /status of 404/.test(m.text()))) logs.push(`[${tag}] ${m.text().slice(0, 300)}`); });
       pg.on('pageerror', e => logs.push(`[${tag} pageerror] ${e.message}`));
       pg.on('dialog', d => d.accept());
     };
@@ -92,6 +93,8 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     const btn = (label, scope = 'body') => page.locator(`${scope} button`, { hasText: label }).first();
     const dialogBtn = label => page.locator('#dialog .foot button', { hasText: label }).first();
     const waitToast = async t => page.locator('#toasts .toast', { hasText: t }).first().waitFor();
+    // a field clicked before it is typed into: a fill while the dialog is still opening could land in the field before
+    const fillIn = async (loc, v) => { await loc.click(); await loc.fill(v); };
 
     // ---- the first admin account, from an invite
     const [{ c: invite }] = await fb.sql(`select qj.new_invite('owner') c`);
@@ -114,9 +117,9 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     // ---- staff: one, then a pasted list
     await page.click('#tabs a[data-v=people]');
     await btn('添加员工').click();
-    await page.locator('#dialog input').nth(0).fill('小明');
-    await page.locator('#dialog input').nth(1).fill('客服');
-    await page.locator('#dialog input').nth(2).fill('专员');
+    await fillIn(page.locator('#dialog input').nth(0), '小明');
+    await fillIn(page.locator('#dialog input').nth(1), '客服');
+    await fillIn(page.locator('#dialog input').nth(2), '专员');
     const pin1 = await page.locator('#dialog input.mono').inputValue();
     ok(/^[0-9]{4}$/.test(pin1), 'a new employee gets a random 4-digit PIN', pin1);
     await dialogBtn('添加').click();
@@ -141,11 +144,33 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     ok(rows === 6, 'six people on the list', rows);
     // an edit without a new PIN: saved, the dialog closes
     await page.locator('main tbody tr', { hasText: '李雷' }).locator('button', { hasText: '编辑' }).click();
-    await page.locator('#dialog input').nth(2).fill('组长');
+    await fillIn(page.locator('#dialog input').nth(2), '组长');
     await dialogBtn('保存').click();
     await waitToast('已保存');
     await page.waitForTimeout(300);
     ok(await page.isHidden('#modal') && (await text('main table')).includes('组长'), 'an edit without a new PIN saves and closes');
+    // a name added by mistake is deleted; while the backend has no delete yet (its migration not applied), the dialog
+    // says what to do instead and stays usable
+    await btn('添加员工').click();
+    await fillIn(page.locator('#dialog input').nth(0), '误加的人');
+    await fillIn(page.locator('#dialog input').nth(1), '客服');
+    await dialogBtn('添加').click();
+    await page.waitForSelector('#dialog .code');
+    await dialogBtn('好').click();
+    missingFn = true;
+    await page.route('**/rest/v1/rpc/admin_delete_employee', r => r.fulfill({ status: 404, contentType: 'application/json', body: '{"code":"PGRST202"}' }));
+    await page.locator('main tbody tr', { hasText: '误加的人' }).locator('button', { hasText: '编辑' }).click();
+    await dialogBtn('删除').click();
+    await page.waitForSelector('#dialog .msg.err');
+    await snap('delete_not_yet', page, false);
+    ok((await text('#dialog .msg')).includes('还在等后台更新') && await dialogBtn('删除').isEnabled() && await page.isVisible('#modal'),
+      'no delete in the backend yet: the dialog says so and stays usable', await text('#dialog .msg'));
+    await page.unroute('**/rest/v1/rpc/admin_delete_employee');
+    missingFn = false;
+    await dialogBtn('删除').click();
+    await waitToast('已删除');
+    await page.waitForTimeout(300);
+    ok(await page.isHidden('#modal') && !(await text('main table')).includes('误加的人'), 'a name added by mistake is deleted');
 
     // ---- screens: a setup code; a team code and its link
     await page.click('#tabs a[data-v=devices]');
@@ -317,6 +342,39 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     await snap('phone_editor', ph, false);
     const overflow = await ph.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     ok(overflow <= 0, 'no sideways scrolling on a phone', overflow);
+
+    // ---- and on the office iPad (iOS 14, Safari 14), held either way
+    const pad = await browser.newPage({ viewport: { width: 1112, height: 834 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+      userAgent: 'Mozilla/5.0 (iPad; CPU OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1' });
+    watch(pad, 'ipad');
+    await fonts(pad);
+    await pad.addInitScript(c => { window.__ADMIN_TEST__ = { backend: { url: c.url, key: 'sb_publishable_test' } }; }, cfg);
+    await pad.goto(`${base}/admin.html`);
+    await pad.fill('#lgName', 'chen');
+    await pad.fill('#lgPass', 'new-pass-2026');
+    await pad.click('#formLogin button[type=submit]');
+    await pad.waitForSelector('.tiles');
+    await snap('ipad_overview', pad, false);
+    await pad.goto(`${base}/admin.html#/people`);
+    await pad.waitForSelector('main tbody tr');
+    await snap('ipad_people', pad, false);
+    let padOver = await pad.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    await pad.setViewportSize({ width: 834, height: 1112 });
+    await pad.goto(`${base}/admin.html#/lesson/${L.id}`);
+    await pad.waitForSelector('.editor');
+    await snap('ipad_editor_portrait', pad, false);
+    padOver = Math.max(padOver, await pad.evaluate(() => document.documentElement.scrollWidth - window.innerWidth));
+    ok(padOver <= 0, 'no sideways scrolling on the iPad, either way up', padOver);
+    // Safari before 16.2 drops color-mix(): every one in the page comes after a plain value for the same property
+    const bare = [];
+    for (const rule of fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8').match(/[^{}]*\{[^{}]*color-mix[^{}]*\}/g) || []) {
+      const decls = rule.slice(rule.indexOf('{') + 1, -1).split(';');
+      decls.forEach((d, i) => {
+        const m = d.match(/^\s*([\w-]+)\s*:[^;]*color-mix/);
+        if (m && !decls.slice(0, i).some(x => new RegExp(`^\\s*${m[1]}\\s*:(?![^;]*color-mix)`).test(x))) bare.push(rule.trim().slice(0, 80));
+      });
+    }
+    ok(bare.length === 0, 'every color-mix() has a fallback for Safari 14', bare);
   } catch (e) {
     failed++; console.log('  ERROR', e.stack);
   } finally {

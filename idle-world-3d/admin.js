@@ -148,13 +148,17 @@ async function rpc(fn, body) {
   const r = await fetch(`${API.url}/rest/v1/rpc/${fn}`, {
     method: 'POST', cache: 'no-store', headers: { apikey: API.key, 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`${fn}: HTTP ${r.status}`);
+  if (!r.ok) { const e = new Error(`${fn}: HTTP ${r.status}`); e.status = r.status; throw e; }
   return r.json();
 }
-/** A call as the admin signed in: a session that has ended signs out; a network failure says so. */
+/** A call as the admin signed in: a session that has ended signs out; a network failure says so, and so does a
+ *  function the backend does not have yet (a migration not applied). */
 async function call(fn, body) {
   let r;
-  try { r = await rpc(fn, Object.assign({ token: S.token }, body || {})); } catch (e) { toast('连不上后台，请检查网络后再试', true); throw e; }
+  try { r = await rpc(fn, Object.assign({ token: S.token }, body || {})); } catch (e) {
+    toast(e.status === 404 ? '后台还没有装好这个功能，其他功能照常可用' : '连不上后台，请检查网络后再试', true);
+    throw e;
+  }
   if (r && r.ok === false && r.error === 'auth') { signOut('登录已过期，请重新登录'); throw new Error('auth'); }
   return r;
 }
@@ -241,7 +245,13 @@ function dialog(title, lead, body, actions, wide) {
   const foot = h('div', { class: 'foot' });
   for (const a of actions || [{ text: '关闭' }]) {
     foot.appendChild(h('button', { class: a.primary ? 'btn primary' : a.danger ? 'btn danger' : 'btn', type: 'button', text: a.text, onclick: async ev => {
-      if (a.run) { ev.target.disabled = true; const keep = await a.run(); ev.target.disabled = false; if (keep === false) return; }
+      if (a.run) {
+        ev.target.disabled = true;
+        let keep;
+        try { keep = await a.run(); } catch (e) { keep = false; } // (a failed call has said so already; the dialog stays)
+        ev.target.disabled = false;
+        if (keep === false) return;
+      }
       closeDialog();
     } }));
   }
@@ -788,7 +798,11 @@ function editPerson(e) {
     msg);
   const actions = [{ text: '取消' }];
   if (e) actions.unshift({ text: '删除', danger: true, run: async () => {
-    const r = await call('admin_delete_employee', { employee: e.id });
+    let r;
+    try { r = await call('admin_delete_employee', { employee: e.id }); } catch (err) {
+      if (err.status === 404) { msg.className = 'msg err'; msg.textContent = `删除还在等后台更新。${e.name} 不在职的话，可以先取消勾选「在职」：不能登录，学习记录保留。`; }
+      return false;
+    }
     if (!r.ok) { msg.className = 'msg err'; msg.textContent = r.error === 'records' ? `${e.name} 已经有学习记录，不能删除；不在职了可以取消勾选「在职」。` : '没能删除'; return false; }
     toast(`已删除 ${e.name}`); await reload(); route(); return true;
   } });

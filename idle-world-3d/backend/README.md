@@ -15,9 +15,12 @@ Applied in order (Supabase SQL editor, or the Supabase connector's `apply_migrat
 | `002_demo_seed.sql` | the heron and the two demo lessons (made from `lessons/index.js` by `seed_demo.mjs`; re-running it updates the heron and leaves lessons alone) |
 | `003_api_anon_only.sql` | the API functions callable by the publishable key's role only |
 | `004_record_batches.sql` | `kiosk_send`: a batch of learning events counts once; first-answer figures in the record; personal screens' sessions kept alive |
-| `005_admin_overview.sql` | the admin overview's figures; deleting a name added by mistake |
+| `005_admin_overview.sql` | the admin overview's figures |
+| `006_delete_employee.sql` | deleting a name added by mistake (only while it has no learning record) |
 
-A new migration is a new numbered file; the test stand-in (`tools/qa/fakebase.cjs`) applies every `NNN_*.sql` here in
+A migration that deletes rows, even only inside a function (006), waits for the owner's confirmation when applied through
+the Supabase connector; until it is applied, the admin page says that feature is waiting for the update. A new migration
+is a new numbered file; the test stand-in (`tools/qa/fakebase.cjs`) applies every `NNN_*.sql` here in
 order, so the tests always run against what production has.
 
 ## How it is kept safe
