@@ -438,7 +438,7 @@ function aiDraft() {
       h('div', { class: 'hint', text: '指令里已经包含资料原文和课程格式，AI 会只回复一节课的内容。' })),
     h('div', { class: 'field' }, h('label', { text: '③ 粘贴 AI 的回复' }), reply),
     msg);
-  dialog('用 AI 起草一节课', '资料不会存进这个页面：AI 起草的课先成为草稿，你看过、改好再发布。以后也可以让 Claude 每天自动从 Google Drive 的资料文件夹起草（资料来源页有说明）。', body, [
+  dialog('用 AI 起草一节课', '资料不会存进这个页面：AI 起草的课先成为草稿，你看过、改好再发布。Claude 每天也会自动从 Google Drive 资料库起草（资料来源页有说明）。', body, [
     { text: '取消' },
     { text: '导入为草稿', primary: true, run: async () => {
       let L;
@@ -969,13 +969,15 @@ function renameDevice(x) {
 /* ---------- 资料来源 ---------- */
 function pageSources() {
   const d = S.data;
-  const v = page('资料来源', '自动起草用过的资料（例如 Google Drive 里的 SOP 和案例）。每份资料起草成一节课草稿（一本长的手册，按章节起草成几节），在「课程」里审核后发布；资料更新了，会再起草新的草稿。');
-  v.appendChild(h('div', { class: 'card pad', style: 'margin-bottom:16px' }, h('h2', { style: 'font-size:16px;margin-bottom:8px', text: '怎么让资料自动变成课' }),
+  const v = page('资料来源', '自动起草用过的资料（例如 Google Drive 里的 SOP 和案例），和员工的学习情况。每份资料起草成课程草稿（一本长的手册，按章节起草成几节），在「课程」里审核后发布；资料更新了，会再起草新的草稿。');
+  v.appendChild(h('div', { class: 'card pad', style: 'margin-bottom:16px' }, h('h2', { style: 'font-size:16px;margin-bottom:8px', text: '资料怎样自动变成课' }),
     h('ol', { class: 'how' },
-      h('li', { text: '在 Google Drive 里建一个文件夹（例如「栖境课程资料」），团队把 SOP、案例、制度放进去。' }),
-      h('li', { text: '让 Claude 每天早上看一遍这个文件夹：新的或改过的资料，会起草成课程草稿，出现在「课程」里。' }),
+      h('li', { text: '团队把 SOP、制度和案例放进公司 Google Drive 资料库约定的文件夹。机密文件、归档、客户档案和已签合同不会读取。' }),
+      h('li', { text: 'Claude 每天夜里看一遍：新的或改过的资料，起草成课程草稿，出现在「课程」里；表格、表单、索引这类不适合做课的，记为「跳过」，并写明原因。' }),
+      h('li', { text: '资料和公司手册说法不一致时，课按手册讲，不一致的地方写在下面这份资料的说明里。' }),
+      h('li', { text: '员工常答错的题（最近 30 天至少 3 人答过、第一次答对不到六成），会起草一节「巩固」课，换个角度再讲一遍。' }),
       h('li', { text: '你审核、修改，满意了就发布。没有审核的草稿，员工看不到。' })),
-    h('p', { class: 'muted', style: 'font-size:13px;margin:10px 0 0', text: '暂时没有设置自动起草的话，也可以在「课程 → 用 AI 起草」里，把资料原文粘贴进去手动起草。' })));
+    h('p', { class: 'muted', style: 'font-size:13px;margin:10px 0 0', text: '也可以随时在「课程 → 用 AI 起草」里，把资料原文粘贴进去，手动起草一节。' })));
   const box = h('div', { class: 'card table-wrap' });
   if (!d.sources.length) box.appendChild(h('div', { class: 'empty', text: '还没有自动起草过的资料。' }));
   else box.appendChild(h('table', null, h('thead', null, h('tr', null, h('th', { text: '资料' }), h('th', { text: '状态' }), h('th', { text: '草稿' }), h('th', { class: 'num', text: '资料修改' }), h('th', { class: 'num', text: '起草时间' }))),

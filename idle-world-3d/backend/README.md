@@ -61,31 +61,45 @@ The admin page: `admin_claim` (an account from an invite) · `admin_login` · `a
 - **Backups**: the dashboard's Database → Backups (daily on paid plans). For a copy at any time: SQL editor, then
   export the `qj` tables, or `pg_dump --schema=qj`.
 
-## The drafting job (Google Drive → draft lessons)
+## The drafting job (Google Drive and learning records → draft lessons)
 
-A scheduled Claude task with the Google Drive and Supabase connectors turns the company's documents into draft
-lessons. Each run:
+A scheduled Claude task turns the company's documents, and the questions staff keep getting wrong, into draft
+lessons. It runs every night in the owner's Claude session, which holds the Google Drive and Supabase connectors (a
+task that starts a fresh session cannot carry connectors on this account). Its full instructions (which Drive
+folders, which ones are never read, the lesson rules) are stored in the task itself, not here: the folder names and
+ids are the company's. Each run:
 
-1. Lists the files in the agreed Drive folder (and its subfolders) with their ids and modified times, and compares
-   them with `select id, modified_at, status from qj.sources;` (a file's source id is `drive:<file id>`).
-2. For each file that is new, or modified since it was drafted: reads it, and writes one lesson the way the admin
-   page's "用 AI 起草" prompt asks (`DRAFT_PROMPT` in `admin.js`: the heron's voice, 4–8 `say` lines, 2–3 `ask`
-   questions with three options, exactly one `"ok": true`, a `reply` for every option, a closing `card`, nothing that
-   is not in the document).
-3. Saves it as a draft, with where it came from:
+1. Reads its bookkeeping, `select id, name, modified_at, processed_at, status, note, lesson_id from qj.sources;`, and
+   what is already taught (`qj.lessons` that are not archived).
+2. Lists the library's files and compares each one's modified time with its rows. Source ids: `drive:<file id>`, or
+   `drive:<file id>#1`, `#2` … for a long document drafted as several lessons (names say which part:
+   `<file name> · 第4章`); `learning:<lesson id>#<step>` for a reinforcement lesson (step 5).
+3. For each new or changed file:
+   - not lesson material (an index, a form, a spreadsheet of records, a template, a placeholder, a copy of something
+     already drafted): noted as skipped, with the reason:
+     `insert into qj.sources (id, name, url, mime, modified_at, processed_at, status, note) values (…, now(), 'skipped', '<why>')
+     on conflict (id) do update set name = excluded.name, url = excluded.url, mime = excluded.mime, modified_at = excluded.modified_at, processed_at = now(), status = 'skipped', note = excluded.note;`
+   - changed, but nothing the lesson teaches changed: only `modified_at`, `processed_at` and a note are updated;
+   - otherwise one lesson per document (or per part of a long one), written the way `DRAFT_PROMPT` in `admin.js` asks
+     (the heron's voice, 4–8 `say` lines, 2–3 `ask` questions with three options, exactly one `"ok": true`, a `reply`
+     for every option, a closing `card`, nothing that is not in the document), and saved as a draft:
 
-       select qj.import_draft(
-         '{"guardian":"heron","title":"…","keys":"…","about":"…","minutes":3,"badge":"…","steps":[…],"outro":"…"}'::jsonb,
-         '{"id":"drive:<file id>","name":"<file name>","url":"<webViewLink>","mime":"<mimeType>","modified":"<modifiedTime>"}'::jsonb);
+         select qj.import_draft(
+           '{"guardian":"heron","title":"…","keys":"…","about":"…","minutes":4,"badge":"…","steps":[…],"outro":"…","tags":[…],"sort":300}'::jsonb,
+           '{"id":"drive:<file id>","name":"<file name>","url":"<webViewLink>","mime":"<mimeType>","modified":"<modifiedTime>"}'::jsonb);
 
-   A long document (a whole manual) becomes several lessons, one per part: their source ids are `drive:<file id>#1`,
-   `#2`, … and their names say which part (`<file name> · 第4章`). When the file changes, every part is drafted again.
-4. A file that cannot become a lesson (a form, a spreadsheet of numbers, a scan with no text) is noted instead:
-   `insert into qj.sources (id, name, url, mime, modified_at, processed_at, status, note) values (…, now(), 'skipped', '<why>')
-   on conflict (id) do update set modified_at = excluded.modified_at, processed_at = now(), status = 'skipped', note = excluded.note;`
+     then checked with `qj.lesson_problems`. Where a document disagrees with the company manual, the lesson follows the
+     manual and the source's note says what disagrees.
+4. Sort bands: 100s the new-staff week, 200s the advanced course, 300–379 role lessons (300s everyone, then one band
+   of ten per role), 400s the team's own cases, 500s reinforcement.
+5. Learning: a question in a published lesson that at least 3 people answered in the last 30 days, with fewer than
+   60% right the first time (answers in wrong-answer reviews do not count), gets a short reinforcement lesson that
+   teaches the point again and answers the most-chosen wrong option; at most two a night, and not the same question
+   again within 30 days. Its source row's note keeps the evidence (第一次答对率, people, answers, the wrong option).
 
-Drafts appear on the admin page (课程, 草稿 · 等你审核; 资料来源 lists what was drafted from what). Nothing reaches a
-screen until an admin publishes it.
+Drafts appear on the admin page (课程, 草稿 · 等你审核; 资料来源 lists what was drafted from what, and why a file was
+skipped). Nothing reaches a screen until an admin publishes it. The job never publishes, archives or deletes, and
+never writes to the repository.
 
 ## Testing
 

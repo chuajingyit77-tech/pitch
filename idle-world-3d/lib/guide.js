@@ -33,6 +33,13 @@ const LEAD = {
   demo: '世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。',
   company: '公司的课：世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。',
 };
+// lessons for one role carry the tags [ROLE_TAG, role]; the words in a department's name that mean that role
+const ROLE_TAG = '岗位课', EVERYONE = '全员';
+const ROLE_WORDS = {
+  营销: ['营销', '市场', '品牌', 'marketing'], 销售: ['销售', '商务', '业务', 'BD', 'sales'], 方案: ['方案', '售前', '规划', 'planner', 'proposal'],
+  合同: ['合同', '法务', '行政', 'legal', 'admin'], 项目: ['项目', '交付', '实施', 'project'], 财务: ['财务', '会计', '出纳', 'finance', 'account'],
+  技术伙伴: ['技术', '伙伴', '供应链', '采购', 'technical', 'partner'],
+};
 // the demo lessons, shaped like the company's (an id and a version each)
 const DEMO = { company: false, guardians: GUARDIANS, lessons: {} };
 for (const id of Object.keys(LESSONS)) DEMO.lessons[id] = Object.assign({ id, version: 1 }, LESSONS[id]);
@@ -50,7 +57,8 @@ export function createGuide(host) {
   };
   // mode: 'closed' | 'board' | 'talk'; pane: what the board shows; sess: the conversation under way; pending: a lesson
   // (or a review) waiting for its world; afterLogin: what to do once someone has signed in
-  const S = { mode: 'closed', pane: 'lessons', sess: null, pending: null, afterLogin: null, pin: null, markOn: false, markGid: null, speed: 1 };
+  // open: the folded courses opened on the board, for whoever is learning (openFor)
+  const S = { mode: 'closed', pane: 'lessons', sess: null, pending: null, afterLogin: null, pin: null, markOn: false, markGid: null, speed: 1, open: {}, openFor: '' };
   const _anchor = new THREE.Vector3();
   const school = host.school || null;
 
@@ -185,8 +193,59 @@ export function createGuide(host) {
     el.sheet.scrollTop = 0;
     if (name !== 'pin') S.pin = null;
   }
+  /** A guardian's lessons in courses, by their first tag (新员工七天训练, 进阶 · 名企之道, 岗位课 and a role, 案例, 巩固 …;
+   *  lessons without tags, like the demo ones, are one course). Each course keeps the lessons' order; the courses go by
+   *  their first lesson, except that the lessons for everyone and the learner's own role come right after the new-staff
+   *  week. Other roles' lessons are folded away until opened. */
+  function courses(g) {
+    const map = new Map();
+    for (const L of lessonsOf(g)) {
+      const t = Array.isArray(L.tags) ? L.tags : [];
+      const role = t[0] === ROLE_TAG ? t[1] || EVERYONE : null;
+      const key = role ? `${ROLE_TAG} · ${role}` : t[0] || '';
+      if (!map.has(key)) map.set(key, { key, role, list: [], rank: Infinity });
+      const c = map.get(key);
+      c.list.push(L);
+      c.rank = Math.min(c.rank, typeof L.sort === 'number' ? L.sort : c.list.length);
+    }
+    const out = [...map.values()];
+    for (const c of out) {
+      c.mine = !!c.role && c.role !== EVERYONE && isMine(c.role);
+      if (c.role === EVERYONE || c.mine) c.rank = 150 + (c.mine ? 1 : 0);
+      c.folded = !!c.role && c.role !== EVERYONE && !c.mine;
+    }
+    return out.sort((a, b) => a.rank - b.rank);
+  }
+  /** whether a role's lessons are the signed-in learner's own (by the department the admin gave them) */
+  function isMine(role) {
+    const w = learner();
+    const d = w ? String(w.dept || '').toUpperCase() : '';
+    return !!d && (ROLE_WORDS[role] || [role]).some(x => d.indexOf(x.toUpperCase()) >= 0);
+  }
+  function courseHead(c, box) {
+    const head = node('div', 'cg');
+    head.appendChild(node('span', 'cg-t', c.key || '示范课'));
+    const n = c.list.length, done = c.list.filter(L => prog(L).done).length;
+    head.appendChild(node('span', 'cg-n', company() && !learner() ? `${n} 节` : `已学会 ${done} / ${n}`));
+    if (c.folded) {
+      const open = !!S.open[c.key];
+      box.hidden = !open;
+      const b = button('pill ghost glass cg-b', open ? '收起' : '展开', () => {
+        S.open[c.key] = box.hidden;
+        box.hidden = !box.hidden;
+        b.textContent = box.hidden ? '展开' : '收起';
+        b.setAttribute('aria-expanded', String(!box.hidden));
+      });
+      b.setAttribute('aria-expanded', String(open));
+      head.appendChild(b);
+    }
+    return head;
+  }
   function renderBoard() {
     const c = C();
+    // courses opened by someone else stay folded for the next person
+    const who = learner() ? learner().id || learner().name : '';
+    if (S.openFor !== who) { S.open = {}; S.openFor = who; }
     el.lead.textContent = c.company ? LEAD.company : LEAD.demo;
     renderMeBar();
     el.list.textContent = '';
@@ -202,7 +261,14 @@ export function createGuide(host) {
       info.appendChild(node('div', 'tt', wn ? `${g.title} · 住在${wn}` : g.title));
       head.appendChild(pt); head.appendChild(info);
       sec.appendChild(head);
-      for (const L of lessonsOf(g)) sec.appendChild(lessonItem(L, g.world === here));
+      const groups = courses(g);
+      for (const cs of groups) {
+        const box = node('div', 'cgl');
+        // one course only (the demo lessons): no heading
+        if (groups.length > 1) sec.appendChild(courseHead(cs, box));
+        for (const L of cs.list) box.appendChild(lessonItem(L, g.world === here));
+        sec.appendChild(box);
+      }
       el.list.appendChild(sec);
     }
     if (!c.guardians.length) el.list.appendChild(node('p', 'empty', '这里还没有发布的课。管理员发布以后，会出现在这里。'));

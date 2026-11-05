@@ -37,8 +37,8 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
    through. It must end `PASS` with no console problems. Look at the screenshots.
 7. **The learning backend**, on a local stand-in for it (`fakebase.cjs`: a fresh database with `backend/*.sql`
    applied, behind a small server that answers as Supabase's API does): every function the screens and the admin page
-   call (`backend_rpc.cjs`), the company's lessons on the iPad and on a phone (`school.cjs`) and the admin page
-   (`admin.cjs`). Each must end `PASS` with no console problems. Look at the screenshots.
+   call (`backend_rpc.cjs`), the company's lessons on the iPad and on a phone (`school.cjs`), the board's courses
+   (`board.cjs`) and the admin page (`admin.cjs`). Each must end `PASS` with no console problems. Look at the screenshots.
 
 ## Long runs, the clock of day and the GPU
 
@@ -85,6 +85,7 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | `fakebase.cjs [--init] [--port 54330]` | A local stand-in for the learning backend: `--init` makes and starts a PostgreSQL 16 cluster once (`/var/lib/postgresql/qjtest`, port 54329); without it, serves a fresh database with `backend/*.sql` applied, answering `POST /rest/v1/rpc/<function>` as Supabase does (run as `anon`, arguments checked). Tests use `require('./fakebase.cjs').start()`. |
 | `backend_rpc.cjs` | Every backend function, called as the screens and the admin page call them: accounts, screens and codes, staff and PIN locks, lesson records and batches, the learning record and its wrong answers, reports, drafts, publishing and versions, and what the API role cannot do. |
 | `school.cjs <out> [--skip-phone]` | The company's lessons on the iPad emulation: connecting with a setup code, the names and the PIN pad, a lesson with the heron, the learning record, the wrong-answer review, a lesson half done offline and sent later, the shared screen signing out, the screen taken off; then a phone joining with a team-code link. |
+| `board.cjs <out>` | The board of a connected screen with lessons in several courses (made-up lessons tagged the way the drafting job tags them), on the iPad and a phone: one heading per course in order, every role's lessons but everyone's folded until opened, the signed-in learner's own role (from their department, Chinese or English) right after the new-staff week and open, 展开 and 收起, what one person opened folded again for the next, nothing scrolling sideways. |
 | `admin.cjs <out>` | The admin page on a desktop and a phone: the first account, staff (one and a pasted list), screen and team codes, an AI draft pasted in, edited and published, reports, a guardian's lines, the password, invites. |
 | `soak.cjs <out> <world> [--hours 3] [--start 5.5] [--every 10]` | Hours of play in time-lapse: NaN, flicker, memory, heap, errors over time. `--t0` starts the world clock days in. |
 | `daysweep.cjs <out> <world> [--from 0] [--to 24] [--step 2]` | The day in steps, walked twice: brightness of the screen and 12 regions per step, and the jumps that come from the clock. `--from-json <world>_sweep.json` looks again at a saved sweep. |

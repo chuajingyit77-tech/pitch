@@ -72,9 +72,14 @@ batch is counted once, even if it has to be sent twice.
   sign in with a login and password (the first account is made with an invite code) to write and publish lessons
   (by hand, or from an AI's draft of a procedure pasted in), see how each lesson goes question by question, add the
   staff (one by one or a whole pasted list), connect screens and read everyone's learning record.
-- **Drafts from Google Drive**: a scheduled Claude task can read a Drive folder of procedures and cases each morning
-  and leave a draft lesson for each new or changed document (`backend/README.md`, "The drafting job"). Nothing reaches
-  a screen until an admin publishes it.
+- **Drafts from Google Drive and from how staff learn**: a scheduled Claude task reads the company's Drive library
+  every night and leaves a draft lesson for each new or changed procedure or case, and a short reinforcement lesson
+  for a question staff keep getting wrong (`backend/README.md`, "The drafting job"). Nothing reaches a screen until an
+  admin publishes it.
+- **Courses on the board**: a lesson's first tag names its course (the new-staff week, the advanced course, 岗位课 and
+  a role, cases, reinforcement), and the board shows one heading per course with how much of it the learner has done.
+  The lessons for everyone and the learner's own role (matched from the department the admin gave them) come right
+  after the new-staff week; other roles' lessons are folded until opened.
 
 Everything a screen or the admin page asks of the backend goes through functions that check a device, session or
 admin token first; the tables themselves cannot be read through the API at all (`backend/README.md`).
