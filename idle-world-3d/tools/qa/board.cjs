@@ -7,6 +7,11 @@
 //   sales signs in: their role comes right after the week and is open, the others stay folded, progress per course ·
 //   展开 opens a folded course and 收起 folds it again · someone whose department is written in English (Finance)
 //   gets their role too · a course opened by one person is folded again for the next · nothing scrolls sideways.
+// Then the heron, called in the world with this many lessons, offers what to do next instead of every lesson:
+//   iPad: the next lesson (her own courses first), the board or later · she starts it, answers wrong once and puts it
+//   down · called again: carry on, the next one, the wrong answer, the board, later (A–E, all on screen) · 看全部课程
+//   opens the board · phone, with the record she made on the iPad: the same five · the wrong answer again · carry on
+//   from where she left off and finish it · then only the next one, the board and later · 下次再说 ends the talk.
 // Ends PASS when every check holds and there were no page errors. Screenshots in <outdir>.
 //
 // NODE_PATH=$(npm root -g) node board.cjs <outdir>
@@ -153,6 +158,88 @@ const ORDER_NOBODY = '示范课 | 新员工七天训练 | 岗位课 · 全员 | 
       ok(g.find(x => x.t === '岗位课 · 营销').folded, 'what 小明 opened is folded again for her', g);
       const sw = await page.evaluate(() => { const s = document.getElementById('boardSheet'); return s.scrollWidth - s.clientWidth; });
       ok(sw <= 0, 'nothing scrolls sideways', sw);
+
+      // the heron called in the world (the page's own loop is stopped: frames are stepped here)
+      const T = 1 / 30;
+      const frames = (n, render = false) => page.evaluate(([n, dt, render]) => { for (let i = 0; i < n; i++) window.__idle.frame(dt, render && i === n - 1); }, [n, T, render]);
+      const G = () => page.evaluate(() => window.__idle.guide.state());
+      const call = (fn, ...a) => page.evaluate(([fn, a]) => window.__idle.guide[fn](...a), [fn, a]);
+      // on through lines, the card and the banner until the choices are up (or the talk is over)
+      const until = async () => {
+        for (let k = 0; k < 150; k++) {
+          const s = await G();
+          if (s.mode !== 'talk') return s;
+          if (s.typing) { await frames(18); if ((await G()).typing) await call('next'); continue; }
+          if (s.after === 'opts') return s;
+          if (s.after === 'next' || s.after === 'card') { await call('next'); await frames(6); continue; }
+          await frames(10);
+        }
+        return G();
+      };
+      const opts = s => s.options.map(o => o.text).join(' | ');
+      const shot = async name => { await frames(1, true); await page.waitForTimeout(700); await frames(1, true); await page.screenshot({ path: path.join(OUT, `${dev}_${name}.png`) }); };
+      // every choice and the line above them on screen
+      const onScreen = () => page.evaluate(() => [document.getElementById('talkText'), ...document.querySelectorAll('#talkOpts .opt')]
+        .every(e => { const r = e.getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth; }));
+      const FIVE = 'A接着学：第1天 · 认识公司（学到一半） | B下一课：第2天 · 项目流程 | C把答错的题再练一遍（1 题） | D看全部课程 | E下次再说';
+      await page.evaluate(() => window.__idle.guide.closeBoard());
+      await call('talk', 'heron');
+      let s = await until();
+      if (dev === 'ipad') {
+        ok(opts(s) === 'A下一课：第1天 · 认识公司 | B看全部课程 | C下次再说', 'the heron, 12 lessons: the next one (her courses first, the demo ones later), the board, later', opts(s));
+        ok(/^Aisha，/.test(s.text), 'it greets her by name', s.text);
+        await shot('heron_next');
+        await call('pick', 0);
+        s = await until();
+        ok(!!s.lesson && s.text === '哪一个是对的？', 'the next lesson starts', s.text);
+        await call('pick', 1); // wrong
+        s = await until();
+        await call('close'); // put down halfway
+        await frames(30);
+        await call('talk', 'heron');
+        s = await until();
+        ok(opts(s) === FIVE, 'called again: carry on, the next one, the wrong answer, the board, later', opts(s));
+        ok(await onScreen(), 'five choices, all on screen');
+        await shot('heron_five');
+        await call('pick', 3);
+        await frames(10);
+        s = await G();
+        ok(s.mode === 'board' && s.pane === 'lessons' && !(await G()).lesson, '看全部课程 puts the talk away and opens the board', `${s.mode}/${s.pane}`);
+        await page.evaluate(() => window.__idle.guide.closeBoard());
+        // her record to the backend, for the phone
+        for (let t = 0; t < 100 && (await page.evaluate(() => window.__idle.school.state().queue)); t++) { await page.evaluate(() => window.__idle.school.api.flush()); await page.waitForTimeout(100); }
+        ok((await page.evaluate(() => window.__idle.school.state().queue)) === 0, 'her record sent');
+      } else {
+        ok(opts(s) === FIVE, 'on the phone, with her record from the iPad: the same five', opts(s));
+        ok(await onScreen(), 'five choices, all on screen');
+        await shot('heron_five');
+        await call('pick', 2); // the wrong answer again
+        s = await until();
+        ok(s.review && s.text === '哪一个是对的？', 'the question she got wrong, again', s);
+        await call('pick', 0);
+        s = await until();
+        ok(s.mode !== 'talk', 'answered right: the review is over', s.mode);
+        await frames(30);
+        await call('talk', 'heron');
+        s = await until();
+        ok(opts(s) === 'A接着学：第1天 · 认识公司（学到一半） | B下一课：第2天 · 项目流程 | C看全部课程 | D下次再说', 'the wrong answer gone from the choices', opts(s));
+        await call('pick', 0);
+        await frames(3);
+        s = await G();
+        ok(s.lesson && s.text === '我们接着上次说。', 'carry on: from where she left off', s.text);
+        s = await until();
+        ok(s.text === '哪一个是对的？' && s.options.length === 3, 'at the question she was on', s.text);
+        await call('pick', 0);
+        s = await until();
+        ok(s.mode !== 'talk', 'the lesson finished', s.mode);
+        await frames(30);
+        await call('talk', 'heron');
+        s = await until();
+        ok(opts(s) === 'A下一课：第2天 · 项目流程 | B看全部课程 | C下次再说', 'then: the next one, the board, later', opts(s));
+        await call('pick', 2);
+        s = await until();
+        ok(s.mode !== 'talk' && !s.lesson, '下次再说: the heron says goodbye and the talk ends', s.mode);
+      }
       ok(logs.length === 0, 'no page errors', logs);
       await ctx.close();
     }

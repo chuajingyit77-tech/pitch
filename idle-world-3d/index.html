@@ -189,8 +189,8 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
 .sum li span{display:block;font:400 14px/1.6 var(--sans);letter-spacing:.02em;color:var(--ink-2)}
 .sum li .nw{font-style:normal;white-space:nowrap}
 /* five to eight points in even rows (3+2, 3+3, 4+3, 4+4), never a full row and one left over; in two columns (the
-   board's list, phones) an odd last one takes the whole row */
-@media (min-width:721px){
+   board's list, phones) an odd last one takes the whole row. A phone held sideways has the width for the rows too. */
+@media (min-width:721px),(max-height:520px) and (min-width:560px){
   .talk .sum ol.n5,.talk .sum ol.n7{grid-template-columns:repeat(12,1fr)}
   .talk .sum ol.n5 li{grid-column:span 4}
   .talk .sum ol.n5 li:nth-child(n+4){grid-column:span 6}
@@ -324,6 +324,30 @@ body.talking .hud,body.talking .clock,body.talking .title-card{opacity:0;pointer
   .names{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pad{grid-template-columns:repeat(3,70px);gap:12px 16px}
   .pad .k{width:70px;height:70px;font-size:28px}
+}
+/* a short screen (a phone held sideways): the talk made compact, so that the longest line, question, menu and card of
+   key points fit with the guardian's name above them */
+@media (max-height:520px){
+  .talk{bottom:calc(env(safe-area-inset-bottom,0px) + 8px)}
+  .talk .box{padding:17px 20px 12px}
+  .talk .who{top:-15px;padding:4px 14px 4px 12px}
+  .talk .x{top:5px;right:5px}
+  .talk .text{font-size:16px;line-height:1.6;min-height:0}
+  .talk .opts{gap:6px;margin-top:8px}
+  .talk .opt{padding:6px 12px;font-size:14.5px;line-height:1.5}
+  .talk .opt .k{width:22px;height:22px;margin-top:0}
+  .talk .sum h3{margin-bottom:6px}
+  .talk .sum ol{gap:8px}
+  .talk .sum li{padding:7px 10px 8px}
+  .talk .sum li b{font-size:18px;margin-bottom:4px}
+  .talk .sum li span{font-size:13px;line-height:1.45}
+  .talk .got{margin-top:2px}
+}
+@media (max-height:520px) and (min-width:560px){
+  .talk .opts.many:not([hidden]){display:grid;grid-template-columns:1fr 1fr}
+  .talk .opts.many .opt:last-child:nth-child(odd){grid-column:1/-1}
+  .talk .sum ol{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+  .talk .sum li:last-child:nth-child(odd){grid-column:auto}
 }
 
 @media (max-width:1240px) and (min-width:721px){

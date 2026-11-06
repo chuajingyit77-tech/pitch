@@ -26,13 +26,16 @@ const CPS = 30;
 const PAUSE = { '，': 0.12, '、': 0.12, '：': 0.16, '；': 0.2, '。': 0.32, '！': 0.32, '？': 0.32, '…': 0.2, '—': 0.08 };
 // the board or a lesson left open on a screen nobody is using is put away after this long (progress is kept)
 const IDLE_CLOSE = 120e3;
-const KEYS = 'ABCD';
+const KEYS = 'ABCDEF';
 const EMPTY = { step: 0, done: false, stars: 0, slips: 0 };
 const TITLES = { lessons: '守护者的课', who: '你是哪位？', pin: '', me: '我的档案' };
 const LEAD = {
   demo: '世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。',
   company: '公司的课：世界里的动物守护者，会用对话和小题目，教你工作里的门道。选一课开始；在世界里看见它的时候，也可以直接点它。',
 };
+// a guardian called in the world lists every lesson up to this many; with more it offers what to do next (either way
+// five choices at most, which fit the smallest phones)
+const MENU_ALL = 3;
 // lessons for one role carry the tags [ROLE_TAG, role]; the words in a department's name that mean that role
 const ROLE_TAG = '岗位课', EVERYONE = '全员';
 const ROLE_WORDS = {
@@ -660,8 +663,14 @@ export function createGuide(host) {
     for (const x of g.hello || []) if ((h >= x.from && h < x.to) || (h + 24 >= x.from && h + 24 < x.to)) return x.text;
     return '想学点什么？';
   }
+  /** What a guardian offers when it is called in the world. Up to three lessons (the demo ones): each of them. More (a
+   *  company's courses): what to do next, so the choices stay a handful however many lessons there are: carry on with
+   *  the lesson put down halfway, the next one (the learner's courses in the board's order, then the demo lessons, then
+   *  other roles'), the wrong answers to answer again, or the whole board. */
   async function menuFlow(s) {
-    const g = s.g, ls = lessonsOf(g), ms = misses(g);
+    const g = s.g, ls = lessonsOf(g);
+    if (ls.length > MENU_ALL) { await nextFlow(s); return; }
+    const ms = misses(g);
     const opts = ls.map(L => {
       const r = prog(L);
       return { text: L.title + (r.done ? '（已学会）' : r.step > 0 ? '（学到一半）' : '') };
@@ -673,6 +682,28 @@ export function createGuide(host) {
     if (ms.length && i === ls.length) { s.review = ms; await reviewFlow(s); return; }
     if (i >= ls.length) { await say(g.bye || '好。'); return; }
     s.lesson = ls[i]; s.lid = s.lesson.id;
+    await lessonFlow(s, false);
+  }
+  async function nextFlow(s) {
+    const g = s.g, ms = misses(g), cs = courses(g);
+    const flat = list => list.reduce((a, c) => a.concat(c.list), []);
+    const own = flat(cs.filter(c => !c.folded));
+    const order = own.filter(L => !L.demo).concat(own.filter(L => L.demo), flat(cs.filter(c => c.folded)));
+    const half = order.find(L => { const r = prog(L); return !r.done && r.step > 0; });
+    const next = order.find(L => L !== half && !prog(L).done);
+    const acts = [];
+    if (half) acts.push({ text: `接着学：${half.title}（学到一半）`, lesson: half });
+    if (next) acts.push({ text: `下一课：${next.title}`, lesson: next });
+    if (ms.length) acts.push({ text: `把答错的题再练一遍（${ms.length} 题）`, review: true });
+    acts.push({ text: '看全部课程', board: true });
+    acts.push({ text: g.later || '下次再说' });
+    const i = await question(withName(half || next ? greeting(g) : g.allDone || greeting(g)), acts.map(a => ({ text: a.text })), false);
+    if (i === CANCEL) return;
+    const a = acts[i];
+    if (a.review) { s.review = ms; await reviewFlow(s); return; }
+    if (a.board) { closeTalk(false); openBoard(); return; }
+    if (!a.lesson) { await say(g.bye || '好。'); return; }
+    s.lesson = a.lesson; s.lid = a.lesson.id;
     await lessonFlow(s, false);
   }
   async function lessonFlow(s, direct) {
@@ -843,6 +874,7 @@ export function createGuide(host) {
   }
   function renderOpts(options) {
     clearOpts();
+    el.opts.classList.toggle('many', options.length > 3); // (a menu: two columns on a short screen)
     options.forEach((o, i) => {
       const b = button('opt', undefined, () => choose(i));
       b.disabled = !!o.off;
@@ -857,7 +889,7 @@ export function createGuide(host) {
       if (j === i) { b.classList.add(ok ? 'ok' : 'no'); b.disabled = true; } else b.hidden = true;
     });
   }
-  function clearOpts() { el.opts.textContent = ''; el.opts.hidden = true; }
+  function clearOpts() { el.opts.textContent = ''; el.opts.hidden = true; el.opts.classList.remove('many'); }
   function showNext(on) { el.next.classList.toggle('on', !!on); }
   function progress(f) { el.bar.style.width = (Math.max(0, Math.min(1, f)) * 100).toFixed(1) + '%'; }
   function choose(i) {
@@ -975,7 +1007,7 @@ export function createGuide(host) {
     if (e.key === 'Escape') { closeTalk(true); return true; }
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); advance(); return true; }
     const k = e.key.length === 1 ? e.key.toLowerCase() : '';
-    const i = k ? '1234'.indexOf(k) >= 0 ? '1234'.indexOf(k) : 'abcd'.indexOf(k) : -1;
+    const i = k ? '123456'.indexOf(k) >= 0 ? '123456'.indexOf(k) : 'abcdef'.indexOf(k) : -1;
     if (i >= 0) { choose(i); return true; }
     return /^[0-9]$/.test(e.key);
   }

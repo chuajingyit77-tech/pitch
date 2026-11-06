@@ -80,6 +80,14 @@ batch is counted once, even if it has to be sent twice.
   a role, cases, reinforcement), and the board shows one heading per course with how much of it the learner has done.
   The lessons for everyone and the learner's own role (matched from the department the admin gave them) come right
   after the new-staff week; other roles' lessons are folded until opened.
+- **Calling the guardian in the world**: with up to three lessons it offers each of them; with more (a company's
+  courses) it offers what to do next, at most five choices: carry on with the lesson put down halfway, the next one (the
+  learner's own courses in the board's order, then the demonstration lessons, then other roles'), the wrong answers
+  to answer again, the whole board, or later.
+
+On a short screen (a phone held sideways) the conversation is laid out compactly, so that the longest line, question,
+menu and card of key points still fit with the guardian's name above them (`tools/qa/talkfit.cjs` checks ten screen
+sizes).
 
 Everything a screen or the admin page asks of the backend goes through functions that check a device, session or
 admin token first; the tables themselves cannot be read through the API at all (`backend/README.md`).
