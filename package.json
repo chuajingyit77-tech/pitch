@@ -1,12 +1,16 @@
 {
   "name": "gradient-town",
   "version": "1.0.0",
-  "description": "A living town of 66 AI agents: they study, graduate, get hired, and run the place.",
+  "description": "A town of 66 AI agents: the map you can look at, and the review system your company can actually run.",
   "type": "module",
   "scripts": {
     "test": "node --test",
     "build": "node build.js",
-    "start": "node build.js && echo 'Open index.html (dev) or dist/gradient-town.html (bundled)'"
+    "start": "node build.js && echo 'Open index.html (dev) or dist/gradient-town.html (bundled)'",
+    "town": "node town/bin/town.js",
+    "town:doctor": "node town/bin/town.js doctor",
+    "town:run": "node town/bin/town.js run",
+    "town:sops": "node town/tools/write-sops.js"
   },
   "license": "MIT"
 }

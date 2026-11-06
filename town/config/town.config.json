@@ -1,0 +1,33 @@
+{
+  "company": "Prospek Cerah Technology",
+
+  "drive": {
+    "backend": "local",
+    "_comment": "Point these at your Google Drive for Desktop folders. On a Mac usually /Users/<you>/Library/CloudStorage/GoogleDrive-<account>/Shared drives/...; on Windows usually G:\\Shared drives\\...  Relative paths resolve from the repository root.",
+    "inbox": "town/_demo/inbox",
+    "library": "town/_demo/library",
+    "reports": null,
+    "manifest": null,
+    "move": false
+  },
+
+  "model": {
+    "_comment": "preset picks the endpoint; TOWN_PRESET / TOWN_MODEL / TOWN_API_KEY in the environment always win. Presets: claude, deepseek, qwen, moonshot, groq, together, openrouter, ollama, local. Leave preset null to run the rule layer only, free.",
+    "preset": null,
+    "model": null,
+    "temperature": 0,
+    "maxTokens": 1200,
+    "retries": 2,
+    "timeoutMs": 90000
+  },
+
+  "review": {
+    "concurrency": 4,
+    "_comment": "only/skip accept agent ids (astra) or guild ids (lumen). Empty means everyone whose check applies to the document type.",
+    "only": [],
+    "skip": []
+  },
+
+  "projects": [],
+  "types": ["proposal", "contract", "design", "report", "copy", "other"]
+}

@@ -16,11 +16,22 @@ ground, who walks to their posting the day they are hired.
 
 ![the town](docs/town.png)
 
+There are two halves to this repository:
+
+- **The town you look at** — the isometric world below, as a single self-contained HTML file.
+- **The system your company runs** — [`town/`](town/README.md): colleagues submit work, it is
+  sorted onto your hard disk through Google Drive, and the 66 agents read it and write a review
+  report back. Portable, model-agnostic, no dependencies. Start at
+  [`town/README.md`](town/README.md).
+
 ## Run it
 
 ```bash
-npm run build      # bundle to dist/gradient-town.html (single self-contained file)
-npm test           # 53 tests covering the town's guarantees
+npm run build          # bundle the world to dist/gradient-town.html (one file)
+npm test               # 108 tests covering both halves
+
+npm run town:doctor    # check the review system's config, model and folders
+npm run town:run       # process the submission inbox
 ```
 
 Open `index.html` for the dev version (ES modules), or `dist/gradient-town.html` — one file,
@@ -253,3 +264,44 @@ The world is isometric SVG over an animated canvas sky (stars, drifting nebulae,
 Architecture varies by guild: Aether builds glowing spires, Lumen and Mender build domes, Ledger
 and Hearth build tiered pagodas, Wayfinder builds ringed towers. Click any citizen — on the isles
 or in the roster — to open their dossier: transcript, aptitudes, posting and full record.
+
+---
+
+## The review system
+
+`town/` is the working half: a portable pipeline that takes whatever a colleague uploads and
+turns it into a filed, named, reviewed document on your hard disk.
+
+```
+_收件/门店扩张__提案__张三__第一版.pdf
+   ↓  read (.pdf .docx .pptx .xlsx .md, images to a vision model)
+   ↓  classify  (project · type · author · date — guesses always declared)
+   ↓  file      01_作品档案/门店扩张/提案/2026-11-06_张三_第一版.pdf
+   ↓  review    14 deterministic rules, then 50 model checks
+   ↓  report    .../提案/_评审/2026-11-06_张三_第一版.评审.md
+   ↓  index     01_作品档案/清单.csv
+```
+
+The folders live inside a Google Drive for Desktop directory, so Google does the syncing and
+"every submission lands on my hard disk automatically" needs no code at all.
+
+**Each of the 66 agents has one job and a written SOP** — role, when it runs, the steps it
+follows, what `pass`/`flag`/`fail` mean for it, what it must not do, and the literal prompt.
+See [`town/agents/README.md`](town/agents/README.md).
+
+**Swapping models is one environment variable.** Claude, DeepSeek, Qwen, Moonshot, Groq,
+Together, OpenRouter, any OpenAI-compatible endpoint, or Ollama on your own machine. With no
+model at all, 14 rule-based checks still run — free, instant, identical every time. A cheaper
+model loses judgement depth, never coverage: the roster, the steps and the output shape are
+fixed in the SOPs, not in the model.
+
+```bash
+TOWN_PRESET=deepseek TOWN_API_KEY=sk-... npm run town:run
+TOWN_PRESET=ollama   TOWN_MODEL=qwen2.5:14b npm run town:run
+npm run town:run     # no model: rule layer only, free
+```
+
+Three guarantees, enforced by tests rather than by good intentions: never move the only copy of
+someone's work, never review an empty string, and never let one bad file stop the batch. A quote
+in a report is always verified against the source text — a model that paraphrases instead of
+copying gets its quotation removed and the removal recorded.
