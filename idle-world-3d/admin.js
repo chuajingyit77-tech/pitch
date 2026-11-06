@@ -20,6 +20,7 @@ const PLAY = new URL('./play.html', location.href).href;
 const KINDS = {
   koi: [['kohaku', '红白锦鲤'], ['tancho', '丹顶锦鲤'], ['sanke', '大正三色锦鲤'], ['showa', '昭和三色锦鲤'], ['ogon', '黄金锦鲤'],
     ['platinum', '白金锦鲤'], ['asagi', '浅黄锦鲤'], ['chagoi', '茶鲤'], ['kigoi', '黄鲤'], ['benigoi', '红鲤'], ['hirenaga', '蝶尾锦鲤']],
+  island: [['dolphin', '海豚'], ['turtle', '海龟'], ['hermit', '寄居蟹'], ['crab', '螃蟹'], ['gull', '海鸥']],
 };
 // what a guardian says besides the lessons (lines in qj.guardians)
 const LINES = [
@@ -33,8 +34,14 @@ const LINES = [
   ['gift', '送新居民时（{what} 种类，{name} 名字）', '池里多了一位新朋友：{what}「{name}」。算是我送你的。'],
   ['review', '错题回顾开始时', '我们把上次没答对的题，再过一遍。'],
   ['reviewDone', '错题回顾结束时', '都答对了。记住了，这些就是你的了。'],
+  ['handoff', '这里的课学完、下一课在别的世界时（{world} 那个世界，{who} 那里的守护者）', '我这里的课，你都学完了。下一课在{world}，去找{who}吧。'],
 ];
-const DRAFT_PROMPT = `你要为「栖境」写一节员工培训课。课由锦鲤池的守护者「老苍鹭」用对话来讲：它沉稳、亲切，爱用池塘和水打比方，像一位老前辈在池边讲给新人听。
+// how each guardian talks (the AI writes the lesson in its voice); a guardian not listed gets a plain, kind voice
+const VOICE = {
+  heron: '它沉稳、亲切，爱用池塘和水打比方，像一位老前辈在池边讲给新人听',
+  dolphin: '它活泼、热情、反应快，爱用大海、潮水和鱼群打比方，像一位跑在前线的老同事，边游边讲给新人听',
+};
+const DRAFT_PROMPT = `你要为「栖境」写一节员工培训课。课由{WHO}用对话来讲：{VOICE}。
 
 请把下面的公司资料改写成一节 3–5 分钟的课，只输出一个 JSON 对象（不要任何别的文字，也不要 \`\`\` 代码块标记），格式如下：
 {
@@ -423,16 +430,25 @@ async function setStatus(L, status) {
 }
 
 /* ---------- 用 AI 起草 ---------- */
+/** the instruction for the AI: this guardian's voice, this material */
+function draftPrompt(g, text) {
+  const who = g ? `${g.title}「${g.name}」` : '守护者';
+  return DRAFT_PROMPT.replace('{WHO}', who).replace('{VOICE}', (g && VOICE[g.id]) || '口吻亲切、简洁').replace('{TEXT}', text);
+}
 function aiDraft() {
+  const gs = S.data.guardians || [];
+  let gid = (gs[0] || { id: 'heron' }).id;
+  const who = gs.length > 1 ? h('select', { class: 'select', onchange: e => { gid = e.target.value; } }, gs.map(x => h('option', { value: x.id, text: `${x.name} · ${x.title}` }))) : null;
   const text = h('textarea', { class: 'textarea', rows: 8, placeholder: '把 SOP、案例或制度的原文粘贴在这里（一份资料起草一节课）' });
   const reply = h('textarea', { class: 'textarea', rows: 6, placeholder: 'AI 回复的整段内容（以 { 开头、} 结尾）粘贴在这里' });
   const msg = h('div', { class: 'msg' });
   const body = h('div', { class: 'form' },
+    who ? h('div', { class: 'field' }, h('label', { text: '哪位守护者讲' }), who, h('div', { class: 'hint', text: 'AI 会用它的口吻写这节课。' })) : null,
     h('div', { class: 'field' }, h('label', { text: '① 公司资料原文' }), text),
     h('div', { class: 'field' }, h('label', { text: '② 复制给 AI 的指令' }),
       h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', icon: 'copy', onclick: () => {
         if (!text.value.trim()) { msg.className = 'msg err'; msg.textContent = '先把资料原文粘贴到 ①'; return; }
-        copy(DRAFT_PROMPT.replace('{TEXT}', text.value.trim()), '指令');
+        copy(draftPrompt(gs.find(x => x.id === gid), text.value.trim()), '指令');
         msg.className = 'msg ok'; msg.textContent = '已复制。打开 Claude（claude.ai）或其他 AI 对话，粘贴、发送，然后把它的回复整段复制回来。';
       } }, ' 复制指令')),
       h('div', { class: 'hint', text: '指令里已经包含资料原文和课程格式，AI 会只回复一节课的内容。' })),
@@ -442,7 +458,7 @@ function aiDraft() {
     { text: '取消' },
     { text: '导入为草稿', primary: true, run: async () => {
       let L;
-      try { L = parseDraft(reply.value); } catch (e) { msg.className = 'msg err'; msg.textContent = e.message; return false; }
+      try { L = parseDraft(reply.value, gid); } catch (e) { msg.className = 'msg err'; msg.textContent = e.message; return false; }
       const r = await call('admin_save_lesson', { lesson: L });
       if (!r.ok) { msg.className = 'msg err'; msg.textContent = '没能保存，请稍后再试'; return false; }
       await reload();
@@ -453,7 +469,7 @@ function aiDraft() {
   ], true);
 }
 /** The AI's reply as a lesson for admin_save_lesson (with what it got wrong explained in Chinese). */
-function parseDraft(t) {
+function parseDraft(t, gid = 'heron') {
   let s = String(t || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
   if (a < 0 || b < a) throw new Error('没有找到课的内容：请把 AI 的回复整段粘贴进来（以 { 开头、} 结尾）');
@@ -467,7 +483,7 @@ function parseDraft(t) {
     return null;
   }).filter(Boolean);
   return {
-    guardian: 'heron', title: String(o.title || '').slice(0, 80), keys: String(o.keys || '').slice(0, 80), about: String(o.about || '').slice(0, 400),
+    guardian: gid, title: String(o.title || '').slice(0, 80), keys: String(o.keys || '').slice(0, 80), about: String(o.about || '').slice(0, 400),
     minutes: Math.max(1, Math.min(60, parseInt(o.minutes, 10) || 3)), badge: o.badge ? String(o.badge).slice(0, 40) : null, steps,
     outro: String(o.outro || '').slice(0, 400), tags: [], sort: 100,
   };
@@ -517,16 +533,26 @@ function pageLesson(id) {
   const field = (label, input, hint) => h('div', { class: 'field' }, h('label', { text: label }), input, hint ? h('div', { class: 'hint', text: hint }) : null);
   const inp = (key, attrs) => h('input', Object.assign({ class: 'input', value: L[key] == null ? '' : L[key], oninput: e => { L[key] = e.target.value; changed(); } }, attrs || {}));
   const kinds = () => KINDS[g().world] || [];
+  const rewardName = h('input', { class: 'input', maxlength: 8, placeholder: '它的名字，例如：金麟', value: (L.reward && L.reward.name) || '', disabled: !L.reward,
+    oninput: e => { if (L.reward) { L.reward.name = e.target.value; changed(); } } });
   const rewardKind = h('select', { class: 'select', onchange: e => {
     const k = e.target.value;
     if (!k) L.reward = null;
     else { const kd = kinds().find(x => x[0] === k); L.reward = { kind: k, name: (L.reward && L.reward.name) || '', what: kd ? kd[1] : '' }; }
     rewardName.disabled = !L.reward; changed();
-  } }, h('option', { value: '', text: '不送（只给徽章）' }), kinds().map(k => h('option', { value: k[0], text: k[1], selected: !!(L.reward && L.reward.kind === k[0]) })));
-  const rewardName = h('input', { class: 'input', maxlength: 8, placeholder: '它的名字，例如：金麟', value: (L.reward && L.reward.name) || '', disabled: !L.reward,
-    oninput: e => { if (L.reward) { L.reward.name = e.target.value; changed(); } } });
+  } });
+  // the residents of the guardian's world (a reward from another world is dropped when the guardian changes)
+  const fillKinds = () => {
+    if (L.reward && !kinds().some(k => k[0] === L.reward.kind)) L.reward = null;
+    rewardKind.textContent = '';
+    rewardKind.appendChild(h('option', { value: '', text: '不送（只给徽章）' }));
+    for (const k of kinds()) rewardKind.appendChild(h('option', { value: k[0], text: k[1], selected: !!(L.reward && L.reward.kind === k[0]) }));
+    rewardKind.value = L.reward ? L.reward.kind : '';
+    rewardName.disabled = !L.reward;
+  };
+  fillKinds();
   const meta = h('div', { class: 'card pad meta' },
-    S.data.guardians.length > 1 ? field('哪位守护者讲', h('select', { class: 'select', onchange: e => { L.guardian = e.target.value; changed(); } }, S.data.guardians.map(x => h('option', { value: x.id, text: `${x.name} · ${x.title}`, selected: x.id === L.guardian })))) : null,
+    S.data.guardians.length > 1 ? field('哪位守护者讲', h('select', { class: 'select', onchange: e => { L.guardian = e.target.value; fillKinds(); changed(); } }, S.data.guardians.map(x => h('option', { value: x.id, text: `${x.name} · ${x.title}`, selected: x.id === L.guardian }))), '它住的世界决定送哪种新居民。') : null,
     field('课名', inp('title', { maxlength: 80, placeholder: '例如：接待投诉的四个字' })),
     h('div', { class: 'grid2' },
       field('关键字', inp('keys', { maxlength: 80, placeholder: '例如：听 · 认 · 办 · 跟' }), '金色显示在课名下面，帮员工记住。'),

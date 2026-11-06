@@ -234,7 +234,16 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     ok((await text('.probs-box')).includes('第 7 步：题目是空的'), 'a new empty question is a problem to fix', await text('.probs-box'));
     await snap('editor_problem');
     await page.locator('.step.ask').nth(1).locator('.tools button[title="删掉这一步"]').click();
-    await page.locator('.meta select').first().selectOption('kohaku');
+    // which guardian teaches it: the dolphin offers the island's residents, the heron the pond's koi
+    const guard = page.locator('.meta .field', { hasText: '哪位守护者讲' }).locator('select');
+    ok((await guard.locator('option').allTextContents()).join(' | ') === '老苍鹭 · 锦鲤池的守护者 | 海豚 · 晴岛的守护者', 'two guardians to choose from', await guard.locator('option').allTextContents());
+    const reward = page.locator('.meta .field', { hasText: '送一位新居民' }).locator('select');
+    await guard.selectOption('dolphin');
+    await page.waitForTimeout(200);
+    ok((await reward.locator('option').allTextContents()).includes('海龟'), 'the dolphin\'s lesson gives an island resident', await reward.locator('option').allTextContents());
+    await guard.selectOption('heron');
+    await page.waitForTimeout(200);
+    await reward.selectOption('kohaku');
     await page.locator('.meta input[placeholder^="它的名字"]').fill('朱砂');
     await btn('保存并发布', '.savebar').click();
     await waitToast('已发布');

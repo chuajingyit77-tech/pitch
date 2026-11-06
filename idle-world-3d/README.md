@@ -80,10 +80,15 @@ batch is counted once, even if it has to be sent twice.
   a role, cases, reinforcement), and the board shows one heading per course with how much of it the learner has done.
   The lessons for everyone and the learner's own role (matched from the department the admin gave them) come right
   after the new-staff week; other roles' lessons are folded until opened.
+- **Guardians in other worlds**: the island (晴岛) has its own, a bottlenose dolphin that now and then swims in to the
+  dock and holds its head out of the water; it teaches the company's marketing and sales lessons (a lesson's
+  guardian is chosen on the admin page). The board puts first the guardian whose lessons come next for the learner,
+  and marks the one that teaches their own role (你的岗位课).
 - **Calling the guardian in the world**: with up to three lessons it offers each of them; with more (a company's
   courses) it offers what to do next, at most five choices: carry on with the lesson put down halfway, the next one (the
   learner's own courses in the board's order, then the demonstration lessons, then other roles'), the wrong answers
-  to answer again, the whole board, or later.
+  to answer again, the whole board, or later. When the next lesson is another guardian's, it says so
+  (下一课：…（去晴岛找海豚）) and picking it takes the learner to that world, where that guardian comes.
 
 On a short screen (a phone held sideways) the conversation is laid out compactly, so that the longest line, question,
 menu and card of key points still fit with the guardian's name above them (`tools/qa/talkfit.cjs` checks ten screen
@@ -177,7 +182,8 @@ npx http-server idle-world-3d -p 8080
 - `scenes/*.js` — one world per module. See `SCENES.md` for the authoring guide.
 - `lib/guide.js` — the guardians' lessons: the board, the conversation (typed lines, questions, the key-point
   card, the completion banner and rewards), the marker over a guardian and saved progress. A world with a
-  guardian describes it as `guardian` in its build() result (`scenes/koi.js`: the heron).
+  guardian describes it as `guardian` in its build() result (`scenes/koi.js`: the heron; `scenes/island.js`: the
+  dolphin, built in `scenes/island/guardian.js`).
 - `lessons/index.js` — the guardians and their lessons (content only).
 
 ## Credits

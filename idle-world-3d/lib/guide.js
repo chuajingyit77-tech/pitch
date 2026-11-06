@@ -44,7 +44,8 @@ const ROLE_WORDS = {
   技术伙伴: ['技术', '伙伴', '供应链', '采购', 'technical', 'partner'],
 };
 // the demo lessons, shaped like the company's (an id and a version each)
-const DEMO = { company: false, guardians: GUARDIANS, lessons: {} };
+// (a guardian without demo lessons, like the island's dolphin, teaches only the company's lessons)
+const DEMO = { company: false, guardians: GUARDIANS.filter(g => g.lessons.some(id => LESSONS[id])), lessons: {} };
 for (const id of Object.keys(LESSONS)) DEMO.lessons[id] = Object.assign({ id, version: 1 }, LESSONS[id]);
 
 export function createGuide(host) {
@@ -118,6 +119,9 @@ export function createGuide(host) {
   /** a line said to the learner by name (the company's lessons) */
   const withName = t => { const w = learner(); return w && t ? `${w.name}，${t}` : t; };
   function worldName(id) { const w = host.worlds.find(x => x.id === id); return w ? `${w.name} · ${w.sub}` : ''; }
+  function worldShort(id) { const w = host.worlds.find(x => x.id === id); return w ? w.name : ''; }
+  /** every lesson taught here, each guardian's in turn */
+  const allLessons = () => C().guardians.reduce((a, g) => a.concat(lessonsOf(g)), []);
   function adapterFor(gid) {
     const w = host.world();
     const a = w && w.inst && w.inst.guardian;
@@ -200,9 +204,10 @@ export function createGuide(host) {
    *  lessons without tags, like the demo ones, are one course). Each course keeps the lessons' order; the courses go by
    *  their first lesson, except that the lessons for everyone and the learner's own role come right after the new-staff
    *  week. Other roles' lessons are folded away until opened. */
-  function courses(g) {
+  function courses(g) { return coursesOf(lessonsOf(g)); }
+  function coursesOf(list) {
     const map = new Map();
-    for (const L of lessonsOf(g)) {
+    for (const L of list) {
       const t = Array.isArray(L.tags) ? L.tags : [];
       const role = t[0] === ROLE_TAG ? t[1] || EVERYONE : null;
       const key = role ? `${ROLE_TAG} · ${role}` : t[0] || '';
@@ -224,6 +229,24 @@ export function createGuide(host) {
     const w = learner();
     const d = w ? String(w.dept || '').toUpperCase() : '';
     return !!d && (ROLE_WORDS[role] || [role]).some(x => d.indexOf(x.toUpperCase()) >= 0);
+  }
+  /** Every lesson here, whichever guardian teaches it, in the order a learner goes through them: their courses in the
+   *  board's order (the new-staff week, the lessons for everyone and their own role, the advanced course, cases,
+   *  reinforcement), then the demo lessons, then other roles'. */
+  function pathOrder() {
+    const cs = coursesOf(allLessons());
+    const flat = list => list.reduce((a, c) => a.concat(c.list), []);
+    const own = flat(cs.filter(c => !c.folded));
+    return own.filter(L => !L.demo).concat(own.filter(L => L.demo), flat(cs.filter(c => c.folded)));
+  }
+  /** The guardians on the board: for someone signed in, the one whose lessons come next on their path first (the
+   *  heron and its new-staff week for a newcomer, then the guardian of their own role), those with nothing left last. */
+  function guardianOrder() {
+    const gs = C().guardians.slice();
+    if (!learner() || gs.length < 2) return gs;
+    const order = pathOrder(), first = new Map();
+    order.forEach((L, i) => { const g = guardianOf(L.id); if (g && !first.has(g) && !prog(L).done) first.set(g, i); });
+    return gs.map((g, i) => ({ g, i, k: first.has(g) ? first.get(g) : Infinity })).sort((a, b) => a.k - b.k || a.i - b.i).map(x => x.g);
   }
   function courseHead(c, box) {
     const head = node('div', 'cg');
@@ -253,13 +276,15 @@ export function createGuide(host) {
     renderMeBar();
     el.list.textContent = '';
     const here = host.world() ? host.world().meta.id : '';
-    for (const g of c.guardians) {
+    for (const g of guardianOrder()) {
       const sec = node('section', 'gsec');
       const head = node('div', 'gd');
       const pt = node('div', 'pt');
       if (g.portrait) pt.style.backgroundImage = `url("${host.asset(g.portrait)}")`;
       const info = node('div', 'gi');
-      info.appendChild(node('div', 'nm', g.name));
+      const nm = info.appendChild(node('div', 'nm', g.name));
+      // the guardian of the signed-in learner's own role
+      if (c.guardians.length > 1 && courses(g).some(x => x.mine)) nm.appendChild(node('span', 'tag mine', '你的岗位课'));
       const wn = worldName(g.world);
       info.appendChild(node('div', 'tt', wn ? `${g.title} · 住在${wn}` : g.title));
       head.appendChild(pt); head.appendChild(info);
@@ -663,13 +688,12 @@ export function createGuide(host) {
     for (const x of g.hello || []) if ((h >= x.from && h < x.to) || (h + 24 >= x.from && h + 24 < x.to)) return x.text;
     return '想学点什么？';
   }
-  /** What a guardian offers when it is called in the world. Up to three lessons (the demo ones): each of them. More (a
-   *  company's courses): what to do next, so the choices stay a handful however many lessons there are: carry on with
-   *  the lesson put down halfway, the next one (the learner's courses in the board's order, then the demo lessons, then
-   *  other roles'), the wrong answers to answer again, or the whole board. */
+  /** What a guardian offers when it is called in the world. The demo lessons (up to three): each of them. The
+   *  company's courses: what to do next, so the choices stay a handful however many lessons and guardians there are
+   *  (nextFlow). */
   async function menuFlow(s) {
     const g = s.g, ls = lessonsOf(g);
-    if (ls.length > MENU_ALL) { await nextFlow(s); return; }
+    if (company() || ls.length > MENU_ALL) { await nextFlow(s); return; }
     const ms = misses(g);
     const opts = ls.map(L => {
       const r = prog(L);
@@ -684,25 +708,39 @@ export function createGuide(host) {
     s.lesson = ls[i]; s.lid = s.lesson.id;
     await lessonFlow(s, false);
   }
+  /** What to do next, along the learner's whole path (pathOrder), whichever guardian teaches it: carry on with the
+   *  lesson put down halfway (this guardian's own first), the next one, this guardian's own next one when the path
+   *  goes on elsewhere, the wrong answers to answer again, the whole board, or later. A lesson another guardian
+   *  teaches is taken up in its world: the learner is taken there and that guardian is called in. Five choices at
+   *  most (they fit the smallest phones). */
   async function nextFlow(s) {
-    const g = s.g, ms = misses(g), cs = courses(g);
-    const flat = list => list.reduce((a, c) => a.concat(c.list), []);
-    const own = flat(cs.filter(c => !c.folded));
-    const order = own.filter(L => !L.demo).concat(own.filter(L => L.demo), flat(cs.filter(c => c.folded)));
-    const half = order.find(L => { const r = prog(L); return !r.done && r.step > 0; });
+    const g = s.g, ms = misses(g), order = pathOrder();
+    const here = L => g.lessons.indexOf(L.id) >= 0;
+    const elsewhere = L => { const o = guardianOf(L.id); return o && o !== g ? o : null; };
+    const halfIn = list => list.find(L => { const r = prog(L); return !r.done && r.step > 0; });
+    const half = halfIn(order.filter(here)) || halfIn(order);
     const next = order.find(L => L !== half && !prog(L).done);
+    const own = next && elsewhere(next) ? order.find(L => here(L) && L !== half && !prog(L).done) : null;
+    const whereTo = L => { const o = elsewhere(L); return o ? `去${worldShort(o.world) || o.title}找${o.name}` : ''; };
     const acts = [];
-    if (half) acts.push({ text: `接着学：${half.title}（学到一半）`, lesson: half });
-    if (next) acts.push({ text: `下一课：${next.title}`, lesson: next });
+    if (half) acts.push({ text: elsewhere(half) ? `接着学：${half.title}（${whereTo(half)}）` : `接着学：${half.title}（学到一半）`, lesson: half });
+    if (next) acts.push({ text: elsewhere(next) ? `下一课：${next.title}（${whereTo(next)}）` : `下一课：${next.title}`, lesson: next });
+    if (own) acts.push({ text: `我这里的课：${own.title}`, lesson: own, own: true });
     if (ms.length) acts.push({ text: `把答错的题再练一遍（${ms.length} 题）`, review: true });
     acts.push({ text: '看全部课程', board: true });
     acts.push({ text: g.later || '下次再说' });
-    const i = await question(withName(half || next ? greeting(g) : g.allDone || greeting(g)), acts.map(a => ({ text: a.text })), false);
+    if (acts.length > 5) acts.splice(acts.findIndex(a => a.own), 1);
+    // nothing left here, the path goes on elsewhere: the guardian says where; nothing left at all: it says so
+    const o = next && elsewhere(next);
+    const line = o && !own && !half ? fill(g.handoff || '我这里的课，你都学完了。下一课在{world}，去找{who}吧。', { world: worldShort(o.world), who: o.name })
+      : half || next ? greeting(g) : g.allDone || greeting(g);
+    const i = await question(withName(line), acts.map(a => ({ text: a.text })), false);
     if (i === CANCEL) return;
     const a = acts[i];
     if (a.review) { s.review = ms; await reviewFlow(s); return; }
     if (a.board) { closeTalk(false); openBoard(); return; }
     if (!a.lesson) { await say(g.bye || '好。'); return; }
+    if (elsewhere(a.lesson)) { closeTalk(false); startLesson(a.lesson.id); return; }
     s.lesson = a.lesson; s.lid = a.lesson.id;
     await lessonFlow(s, false);
   }
@@ -962,7 +1000,12 @@ export function createGuide(host) {
       S.markOn = on;
       el.mark.classList.toggle('on', on);
       const d = data();
-      if (on && !d.guideHinted) { d.guideHinted = true; host.markDirty(); host.toast(`${guardian(S.markGid).name}来了 · 点它，可以跟它学东西`); }
+      if (on && d.guideHinted === true) d.guideHinted = { heron: true }; // (one flag for all, before there were several guardians)
+      if (on && !(d.guideHinted && d.guideHinted[S.markGid])) {
+        d.guideHinted = Object.assign({}, d.guideHinted, { [S.markGid]: true });
+        host.markDirty();
+        host.toast(`${guardian(S.markGid).name}来了 · 点它，可以跟它学东西`);
+      }
     }
   }
   /** The company's lessons, the learner or their record changed (lib/school.js). */

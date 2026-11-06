@@ -17,6 +17,7 @@ Applied in order (Supabase SQL editor, or the Supabase connector's `apply_migrat
 | `004_record_batches.sql` | `kiosk_send`: a batch of learning events counts once; first-answer figures in the record; personal screens' sessions kept alive |
 | `005_admin_overview.sql` | the admin overview's figures |
 | `006_delete_employee.sql` | deleting a name added by mistake (only while it has no learning record) |
+| `007_guardians.sql` | the island's dolphin, the second guardian (teaches marketing and sales; shown once it has published lessons) |
 
 A migration that deletes rows, even only inside a function (006), waits for the owner's confirmation when applied through
 the Supabase connector; until it is applied, the admin page says that feature is waiting for the update. A new migration
@@ -81,7 +82,8 @@ ids are the company's. Each run:
      on conflict (id) do update set name = excluded.name, url = excluded.url, mime = excluded.mime, modified_at = excluded.modified_at, processed_at = now(), status = 'skipped', note = excluded.note;`
    - changed, but nothing the lesson teaches changed: only `modified_at`, `processed_at` and a note are updated;
    - otherwise one lesson per document (or per part of a long one), written the way `DRAFT_PROMPT` in `admin.js` asks
-     (the heron's voice, 4–8 `say` lines, 2–3 `ask` questions with three options, exactly one `"ok": true`, a `reply`
+     (in the voice of the guardian who teaches it, `VOICE` in `admin.js`: the heron for the new-staff week, everyone's
+     lessons and the rest; the dolphin, `"guardian":"dolphin"`, for marketing and sales; 4–8 `say` lines, 2–3 `ask` questions with three options, exactly one `"ok": true`, a `reply`
      for every option, a closing `card`, nothing that is not in the document), and saved as a draft:
 
          select qj.import_draft(

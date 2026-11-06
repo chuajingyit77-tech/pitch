@@ -142,7 +142,7 @@ export class Ambience {
     o.start(now); o.stop(now + dur + 0.05);
   }
 
-  /** One-shot effects: drop, splash, eat, chirp, chime, pop, tok */
+  /** One-shot effects: drop, splash, eat, chirp, whistle, chime, pop, tok */
   sfx(name) {
     if (!this.enabled || !this.ctx) return;
     const ctx = this.ctx, now = ctx.currentTime;
@@ -155,6 +155,8 @@ export class Ambience {
       case 'thud': this._burst(dest, 400, 0.08, 0.2); break;
       case 'eat': this._tone(dest, { f0: 240, f1: 620, dur: 0.09, gain: 0.12 }); this._tone(dest, { f0: 520, f1: 900, t: 0.07, dur: 0.07, gain: 0.05 }); break;
       case 'chirp': for (let i = 0; i < 3; i++) this._tone(dest, { f0: rand(2600, 3400), f1: rand(3800, 4600), t: i * 0.09, dur: 0.07, gain: 0.05 }); break;
+      // a dolphin's whistle: a quick rise and fall, soft
+      case 'whistle': { const f = rand(1350, 1650); this._tone(dest, { f0: f, f1: f * 1.75, dur: 0.17, gain: 0.032, attack: 0.02 }); this._tone(dest, { f0: f * 1.7, f1: f * 1.25, t: 0.16, dur: 0.16, gain: 0.026, attack: 0.015 }); break; }
       case 'chime': [880, 1318.5, 1760].forEach((f, i) => this._tone(dest, { f0: f, t: i * 0.06, dur: 2.2, gain: 0.05, attack: 0.01 })); break;
       case 'pop': this._tone(dest, { f0: 520, f1: 1200, dur: 0.06, gain: 0.08 }); break;
       case 'tok': this._tone(dest, { f0: 780, f1: 640, dur: 0.18, gain: 0.25 }); this._burst(dest, 2500, 0.02, 0.15); break;

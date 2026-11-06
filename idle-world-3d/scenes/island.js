@@ -16,6 +16,7 @@ import { createWhaleFx } from './island/whalefx.js';
 import { createAtmos } from './island/atmos.js';
 import { createSeabirds } from './island/seabirds.js';
 import { createFlyingFish } from './island/flyingfish.js';
+import { Dolphin } from './island/guardian.js';
 
 export default {
   id: 'island',
@@ -54,6 +55,8 @@ export default {
     const fx = createFx(env, terrain, props);
     const fauna = await createFauna(env, { terrain, props, fx, flora });
     for (const m of env.members) fauna.addMember(m);
+    // the island's guardian in lessons (lib/guide.js): a bottlenose dolphin that comes to the dock (island/guardian.js)
+    const dolphin = new Dolphin({ env, scene, terrain, props, fx, camera, rng: rng.fork('dolphin') });
     scene.add(terrain.mesh, terrain.deep, water.mesh, sky.sky, sky.clouds.mesh, flora.group, props.group, fx.group, fauna.group);
 
     /* ---------------- lights ---------------- */
@@ -375,6 +378,7 @@ export default {
       b.rotation.y = bb.yaw + Math.sin(t * 0.21) * 0.06;
       faunaInfo.dusk = tod.dusk; faunaInfo.night = tod.night; faunaInfo.timeJump = timeJump;
       fauna.update(dt, t, faunaInfo);
+      dolphin.update(dt, t);
       fxInfo.night = smoothstep(0.4, 0.95, tod.night);
       fx.update(dt, t, fxInfo);
       giantInfo.glow = fxInfo.night;
@@ -397,16 +401,33 @@ export default {
       update,
       feed,
       feedRandom,
-      addMember: m => fauna.addMember(m),
-      creatures: () => fauna.creatures(),
+      addMember: (m, at) => fauna.addMember(m, at),
+      // the residents, and the dolphin while it is at the surface (a tap on it talks with it)
+      creatures: () => { const c = fauna.creatures(), g = dolphin.pickTarget(); if (g) c.push(g); return c; },
+      // the island's guardian in lessons: the dolphin, called in to the dock, turned to whoever talks with it
+      guardian: {
+        id: 'dolphin',
+        state: () => dolphin.lessonState(),
+        summon: () => dolphin.summon(),
+        talk: on => dolphin.talk(on),
+        speak: on => { dolphin.speaking = !!on; },
+        react: kind => dolphin.react(kind),
+        release: () => dolphin.release(),
+        anchor: out => dolphin.anchor(out),
+        view: yaw => dolphin.view(yaw),
+        look: out => dolphin.look(out),
+        rewardAt: out => dolphin.rewardAt(out),
+      },
+      /** Test hook: the dolphin comes to the dock now, played t seconds in (it stays `stay` seconds once there). */
+      debugGuardian: (t = 12, stay = 120) => dolphin.debug(t, stay),
       resize() { water.resize(); },
       /** Test hook: start a whale pass now (if none is on) and play it to pass time t (s); returns its timeline. */
       debugGiant: (t = 0, opts = {}) => giant.debug(t, opts),
       giantTimeline: () => giant.timeline(),
-      _debug: { terrain, props, fx, fauna, water, sky, flora, giant, whaleFx, atmos, boobies, flyfish },
+      _debug: { terrain, props, fx, fauna, water, sky, flora, giant, whaleFx, atmos, boobies, flyfish, dolphin },
       dispose() {
         water.dispose(); sky.dispose(); terrain.dispose(); flora.dispose(); props.dispose(); fx.dispose(); fauna.dispose();
-        giant.dispose(); whaleFx.dispose(); atmos.dispose(); boobies.dispose(); flyfish.dispose();
+        giant.dispose(); whaleFx.dispose(); atmos.dispose(); boobies.dispose(); flyfish.dispose(); dolphin.dispose();
         normalTex.dispose();
         if (scene.environment) scene.environment = null;
       },

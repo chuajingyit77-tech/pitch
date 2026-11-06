@@ -1437,12 +1437,13 @@ export async function createFauna(env, ctx) {
   birds.addGull(null, env.seed ^ 0xa2);
   const ambientDolphin = dolphins.add(null);
 
-  function addMember(member) {
+  /** a resident; `at` (a point in the water, for one given for a lesson): a turtle or a dolphin starts there */
+  function addMember(member, at) {
     switch (member.kind) {
       case 'crab': case 'hermit': return crabs.add(member);
       case 'gull': return birds.addGull(member, member.seed || 3);
-      case 'turtle': return turtles.add(member);
-      case 'dolphin': return dolphins.add(member);
+      case 'turtle': { const tr = turtles.add(member); if (at && tr) tr.pos.set(at.x, -0.45, at.z); return tr; }
+      case 'dolphin': { const d = dolphins.add(member); if (at && d) d.pos.set(at.x, -0.85, at.z); return d; }
     }
     return null;
   }

@@ -41,7 +41,34 @@ export const GUARDIANS = [
     coming: '远处传来翅膀扇动的声音……老苍鹭正往池边飞来。',
     returning: '老苍鹭刚飞起来，听见你在叫它……它兜一圈，就飞回来。',
     gift: '池里多了一位新朋友：{what}「{name}」。算是我送你的。',
+    // 自己的课都学完、下一课在别的世界时（{world} 是那个世界，{who} 是那里的守护者）
+    handoff: '我这里的课，你都学完了。下一课在{world}，去找{who}吧。',
     lessons: ['complaint', 'phishing'],
+  },
+  {
+    id: 'dolphin',               // scenes/island.js 里的 guardian：码头边的海豚，教营销、销售（公司的课，没有示范课）
+    world: 'island',
+    name: '海豚',
+    title: '晴岛的守护者',
+    portrait: 'guardians/dolphin.jpg',
+    hello: [
+      { from: 5, to: 11, text: '早！潮水刚涨上来，鱼群都醒了。想学点什么？' },
+      { from: 11, to: 17, text: '嘿，你来啦！我刚从外海兜了一圈回来。想学点什么？' },
+      { from: 17, to: 20, text: '太阳快落进海里了。趁着还有光，学一样吧？' },
+      { from: 20, to: 29, text: '这么晚还没走？月亮把海面照亮了。想学点什么，我陪你。' },
+    ],
+    allDone: '我会的，都教给你啦。想重温哪一课？',
+    start: '好，我们开始吧！',
+    resume: '上次说到一半，我们接着来。',
+    later: '下次再说',
+    bye: '好！我就在这片海里，想学的时候喊我一声。',
+    coming: '远处一道背鳍划开水面……海豚正往码头游过来。',
+    returning: '海豚刚要游走，听见你在叫它……它掉个头，又游回来了。',
+    gift: '海里多了一位新朋友：{what}「{name}」。送给你的！',
+    review: '我们把上次没答对的题，再过一遍。',
+    reviewDone: '都答对啦！这些就是你的了。',
+    handoff: '我这里的课，你都学会啦。下一课在{world}，去找{who}吧！',
+    lessons: [],
   },
 ];
 

@@ -34,7 +34,7 @@ const ok = (cond, what, got) => { checks++; if (!cond) { failed++; console.log('
     const login2 = await call('admin_login', { login_name: 'OWNER', password: 'secret-pass-1' });
     ok(login2.ok && login2.session && login2.session !== adm, 'admin login: ok', login2);
     let st = await call('admin_state', { token: adm });
-    ok(st.ok && st.lessons.length === 2 && st.guardians.length === 1 && st.employees.length === 0 && st.admins.length === 1, 'admin state: demo content', st);
+    ok(st.ok && st.lessons.length === 2 && st.guardians.map(g => g.id).join(',') === 'heron,dolphin' && st.employees.length === 0 && st.admins.length === 1, 'admin state: demo content, the heron and the dolphin', st);
     ok(st.lessons.every(l => l.status === 'published' && l.demo && l.problems.length === 0), 'demo lessons published, no problems', st.lessons);
     ok((await call('admin_logout', { token: login2.session })).ok, 'admin logout');
     ok((await call('admin_state', { token: login2.session })).error === 'auth', 'admin state after logout: auth');

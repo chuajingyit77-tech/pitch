@@ -956,7 +956,9 @@ function updateRig(dt, t) {
     rig.target.x + rig.dist * cp * Math.sin(rig.yaw),
     rig.target.y + rig.dist * Math.sin(rig.pitch) + bob,
     rig.target.z + rig.dist * cp * Math.cos(rig.yaw));
-  if (v.minY !== undefined && cam.position.y < v.minY) cam.position.y = v.minY;
+  // (a guardian's close-up may come lower than the world's own view: the dolphin talks at the waterline)
+  const minY = F && F.minY !== undefined ? F.minY : v.minY;
+  if (minY !== undefined && cam.position.y < minY) cam.position.y = minY;
   cam.lookAt(rig.target);
 }
 
@@ -1624,6 +1626,8 @@ window.__idle = {
     for (let k = 0; k < n; k++) { elapsed += step; current.inst.update(step, elapsed); updateRig(step, elapsed); applyPost(current.inst.post || {}, step); }
   },
   setView(v) { Object.assign(rig, v); if (v.yaw !== undefined) rig.yawT = v.yaw; if (v.pitch !== undefined) rig.pitchT = v.pitch; if (v.dist !== undefined) rig.distT = v.dist; },
+  /** Lend the camera to a guardian's view ({ target, yaw, pitch, dist, minY }), or give it back (null). */
+  focus: v => focusRig(v),
   /** Render one frame of the current state (tests that stop the page's own loop, manualClock, render with this). */
   renderNow() { if (current) composer.render(1 / 60); },
   /** One frame exactly as the page's own loop runs it, the clock of day included (tests that stop the loop and step
