@@ -38,19 +38,23 @@ node town/bin/town.js doctor
 
 编辑 `town/config/town.config.json`，或用环境变量（环境变量永远优先）：
 
+你们共享硬盘已经用 00–11 编号（01 是品牌与营销，所以档案库不要放 01），建议新开一个 `12_作品提交与评审`：
+
 ```bash
 # macOS
-export TOWN_INBOX="$HOME/Library/CloudStorage/GoogleDrive-exec@prospekcerah.com/Shared drives/Prospek Cerah Technology/00_公司总控与SOP/_收件"
-export TOWN_LIBRARY="$HOME/Library/CloudStorage/GoogleDrive-exec@prospekcerah.com/Shared drives/Prospek Cerah Technology/01_作品档案"
+export TOWN_INBOX="$HOME/Library/CloudStorage/GoogleDrive-exec@prospekcerah.com/My Drive/作品提交表单 (File responses)"
+export TOWN_LIBRARY="$HOME/Library/CloudStorage/GoogleDrive-exec@prospekcerah.com/Shared drives/Prospek Cerah Technology/12_作品提交与评审/档案库"
 
 # Windows
-set TOWN_INBOX=G:\Shared drives\Prospek Cerah Technology\00_公司总控与SOP\_收件
-set TOWN_LIBRARY=G:\Shared drives\Prospek Cerah Technology\01_作品档案
+set TOWN_INBOX=G:\My Drive\作品提交表单 (File responses)
+set TOWN_LIBRARY=G:\Shared drives\Prospek Cerah Technology\12_作品提交与评审\档案库
 ```
 
-`_收件` 就是 Google 表单的附件落点，或者同事直接拖文件进去的地方。
+收件夹在 **My Drive** 而不是共享硬盘，是 Google 表单的限制：表单的上传文件只能存进表单拥有者的 My Drive，搬进共享硬盘会让上传失效。Drive 桌面版两边都会同步，系统照样读得到。
 
-### 接上 Google 表单（同事不需要任何账号）
+### 接上 Google 表单（同事只需要公司 Google 账号）
+
+表单的「文件上传」题要求填写人登录 Google — 你们是 Workspace，同事本来就有公司账号，不用另外注册任何东西。
 
 1. 在 Drive 里建一个表单：**项目**（下拉）、**类型**（下拉）、**一句话说明**（短答）、**上传文件**（文件上传）
 2. 表单的「文件上传」会自动在 Drive 建一个回应夹 — 把 `TOWN_INBOX` 指向它

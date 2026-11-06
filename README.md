@@ -276,10 +276,10 @@ turns it into a filed, named, reviewed document on your hard disk.
 _收件/门店扩张__提案__张三__第一版.pdf
    ↓  read (.pdf .docx .pptx .xlsx .md, images to a vision model)
    ↓  classify  (project · type · author · date — guesses always declared)
-   ↓  file      01_作品档案/门店扩张/提案/2026-11-06_张三_第一版.pdf
+   ↓  file      12_作品提交与评审/档案库/门店扩张/提案/2026-11-06_张三_第一版.pdf
    ↓  review    14 deterministic rules, then 50 model checks
    ↓  report    .../提案/_评审/2026-11-06_张三_第一版.评审.md
-   ↓  index     01_作品档案/清单.csv
+   ↓  index     12_作品提交与评审/档案库/清单.csv
 ```
 
 The folders live inside a Google Drive for Desktop directory, so Google does the syncing and
