@@ -18,6 +18,7 @@ Applied in order (Supabase SQL editor, or the Supabase connector's `apply_migrat
 | `005_admin_overview.sql` | the admin overview's figures |
 | `006_delete_employee.sql` | deleting a name added by mistake (only while it has no learning record) |
 | `007_guardians.sql` | the island's dolphin, the second guardian (teaches marketing and sales; shown once it has published lessons) |
+| `008_macaw.sql` | the rainforest's macaw, the third guardian (teaches the contract lessons; shown once it has published lessons) |
 
 A migration that deletes rows, even only inside a function (006), waits for the owner's confirmation when applied through
 the Supabase connector; until it is applied, the admin page says that feature is waiting for the update. A new migration
@@ -83,11 +84,13 @@ ids are the company's. Each run:
    - changed, but nothing the lesson teaches changed: only `modified_at`, `processed_at` and a note are updated;
    - otherwise one lesson per document (or per part of a long one), written the way `DRAFT_PROMPT` in `admin.js` asks
      (in the voice of the guardian who teaches it, `VOICE` in `admin.js`: the heron for the new-staff week, everyone's
-     lessons and the rest; the dolphin, `"guardian":"dolphin"`, for marketing and sales; 4–8 `say` lines, 2–3 `ask` questions with three options, exactly one `"ok": true`, a `reply`
-     for every option, a closing `card`, nothing that is not in the document), and saved as a draft:
+     lessons and the rest; the dolphin, `"guardian":"dolphin"`, for marketing and sales; the macaw, `"guardian":"macaw"`,
+     for contracts; a resident of that guardian's own world as the reward; 4–8 `say` lines, 2–3 `ask` questions with
+     three options, exactly one `"ok": true`, a `reply` for every option, a closing `card` whose keywords fit on a phone,
+     nothing that is not in the document), and saved as a draft:
 
          select qj.import_draft(
-           '{"guardian":"heron","title":"…","keys":"…","about":"…","minutes":4,"badge":"…","steps":[…],"outro":"…","tags":[…],"sort":300}'::jsonb,
+           '{"guardian":"heron","title":"…","keys":"…","about":"…","minutes":4,"badge":"…","reward":{"kind":"kohaku","name":"…","what":"红白锦鲤"},"steps":[…],"outro":"…","tags":[…],"sort":300}'::jsonb,
            '{"id":"drive:<file id>","name":"<file name>","url":"<webViewLink>","mime":"<mimeType>","modified":"<modifiedTime>"}'::jsonb);
 
      then checked with `qj.lesson_problems`. Where a document disagrees with the company manual, the lesson follows the

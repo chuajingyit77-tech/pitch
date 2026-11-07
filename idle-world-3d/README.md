@@ -81,9 +81,11 @@ batch is counted once, even if it has to be sent twice.
   The lessons for everyone and the learner's own role (matched from the department the admin gave them) come right
   after the new-staff week; other roles' lessons are folded until opened.
 - **Guardians in other worlds**: the island (晴岛) has its own, a bottlenose dolphin that now and then swims in to the
-  dock and holds its head out of the water; it teaches the company's marketing and sales lessons (a lesson's
-  guardian is chosen on the admin page). The board puts first the guardian whose lessons come next for the learner,
-  and marks the one that teaches their own role (你的岗位课).
+  dock and holds its head out of the water; it teaches the company's marketing and sales lessons. The rainforest (雨林)
+  has a scarlet macaw that now and then flies in to one of the low branches over the pool, folds its wings and looks
+  about; it teaches the contract lessons (it bobs its head at a right answer, shakes it at a wrong one, and spreads its
+  wings when a lesson is learnt). A lesson's guardian is chosen on the admin page. The board puts first the guardian
+  whose lessons come next for the learner, and marks the one that teaches their own role (你的岗位课).
 - **Calling the guardian in the world**: with up to three lessons it offers each of them; with more (a company's
   courses) it offers what to do next, at most five choices: carry on with the lesson put down halfway, the next one (the
   learner's own courses in the board's order, then the demonstration lessons, then other roles'), the wrong answers
@@ -183,7 +185,7 @@ npx http-server idle-world-3d -p 8080
 - `lib/guide.js` — the guardians' lessons: the board, the conversation (typed lines, questions, the key-point
   card, the completion banner and rewards), the marker over a guardian and saved progress. A world with a
   guardian describes it as `guardian` in its build() result (`scenes/koi.js`: the heron; `scenes/island.js`: the
-  dolphin, built in `scenes/island/guardian.js`).
+  dolphin, built in `scenes/island/guardian.js`; `scenes/jungle.js`: the macaw, built in `scenes/jungle/guardian.js`).
 - `lessons/index.js` — the guardians and their lessons (content only).
 
 ## Credits

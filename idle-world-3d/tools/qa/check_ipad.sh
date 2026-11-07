@@ -26,12 +26,13 @@ case " $WORLDS " in *" koi "*)
   timeout 3000 node "$QA/lesson.cjs" "$OUT/lesson_ipad" | tail -4
   timeout 3000 node "$QA/lesson.cjs" "$OUT/lesson_phone" --phone | tail -4 ;;
 esac
-echo "== 7. The learning backend: every function (on a local stand-in), the company's lessons on the iPad and a phone, the board's courses and the heron's menu, the talk on ten screen sizes, the island's dolphin, the admin page"
+echo "== 7. The learning backend: every function (on a local stand-in), the company's lessons on the iPad and a phone, the board's courses and the heron's menu, the talk on ten screen sizes, the island's dolphin, the rainforest's macaw, the admin page"
 node "$QA/fakebase.cjs" --init >/dev/null || { echo "no local PostgreSQL 16: see tools/qa/README.md"; exit 1; }
 timeout 900 node "$QA/backend_rpc.cjs" | tail -1
 case " $WORLDS " in *" koi "*) timeout 3600 node "$QA/school.cjs" "$OUT/school" | tail -3 ;; esac
 case " $WORLDS " in *" koi "*) timeout 1200 node "$QA/board.cjs" "$OUT/board" | tail -1 ;; esac
 case " $WORLDS " in *" koi "*) timeout 1200 node "$QA/talkfit.cjs" "$OUT/talkfit" | tail -1 ;; esac
 case " $WORLDS " in *" island "*) timeout 2400 node "$QA/dolphin.cjs" "$OUT/dolphin" | tail -1 ;; esac
+case " $WORLDS " in *" jungle "*) timeout 2400 node "$QA/macaw.cjs" "$OUT/macaw" | tail -1 ;; esac
 timeout 900 node "$QA/admin.cjs" "$OUT/admin" | tail -2
 echo "done: $OUT"

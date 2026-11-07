@@ -142,7 +142,7 @@ export class Ambience {
     o.start(now); o.stop(now + dur + 0.05);
   }
 
-  /** One-shot effects: drop, splash, eat, chirp, whistle, chime, pop, tok */
+  /** One-shot effects: drop, splash, eat, chirp, whistle, squawk, chime, pop, tok */
   sfx(name) {
     if (!this.enabled || !this.ctx) return;
     const ctx = this.ctx, now = ctx.currentTime;
@@ -158,6 +158,11 @@ export class Ambience {
       // a dolphin's whistle: a quick rise and fall, soft
       case 'whistle': { const f = rand(1350, 1650); this._tone(dest, { f0: f, f1: f * 1.75, dur: 0.17, gain: 0.032, attack: 0.02 }); this._tone(dest, { f0: f * 1.7, f1: f * 1.25, t: 0.16, dur: 0.16, gain: 0.026, attack: 0.015 }); break; }
       case 'chime': [880, 1318.5, 1760].forEach((f, i) => this._tone(dest, { f0: f, t: i * 0.06, dur: 2.2, gain: 0.05, attack: 0.01 })); break;
+      // a macaw's call, kept soft: a rough upward squawk (two near tones beating) and a shorter one falling
+      case 'squawk': { const f = rand(820, 960);
+        for (const d of [0, 23]) this._tone(dest, { type: 'triangle', f0: f + d, f1: (f + d) * 1.45, dur: 0.16, gain: 0.03, attack: 0.012 });
+        for (const d of [0, 19]) this._tone(dest, { type: 'triangle', f0: (f + d) * 1.38, f1: (f + d) * 1.05, t: 0.2, dur: 0.12, gain: 0.024, attack: 0.01 });
+        this._burst(dest, 2400, 0.12, 0.012); break; }
       case 'pop': this._tone(dest, { f0: 520, f1: 1200, dur: 0.06, gain: 0.08 }); break;
       case 'tok': this._tone(dest, { f0: 780, f1: 640, dur: 0.18, gain: 0.25 }); this._burst(dest, 2500, 0.02, 0.15); break;
       default: this._tone(dest, { f0: 660, dur: 0.1, gain: 0.05 });

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// NaN hunt (tags each material; reports which ones output NaN/Inf). Same usage as flicker.cjs, env FRAMES.
+// NaN hunt (tags each material; reports which ones output NaN/Inf). Same usage as flicker.cjs, env FRAMES,
+// GL1=1 (WebGL 1 only, as on the iPad), EVAL='<js run in the page after the warm-up, e.g. to call a guardian in>'.
 // Stability probe: for each world/hour, NaN/Inf in the HDR buffer and temporal flicker of the final image.
 // NODE_PATH=$(npm root -g) node flicker.cjs [outdir] reef:13 reef:23 koi:21.5 ...
 // env: VW/VH viewport (default 640x360), Q=high|medium|low quality tier, VIEW='{"yaw":..,"pitch":..,"dist":..}'
@@ -35,7 +36,7 @@ const srv = http.createServer((req, resp) => {
 (async () => {
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const port = srv.address().port;
-  const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', ...(process.env.GL1 ? ['--disable-webgl2'] : [])] });
   const page = await browser.newPage({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(900000);
   let logs = [];
@@ -57,6 +58,7 @@ const srv = http.createServer((req, resp) => {
     await page.evaluate(hh => window.__idle.setHours(hh), h);
     if (id !== cur) { await page.evaluate(wid => window.__idle.enterWorld(wid), id); cur = id; }
     await page.evaluate(() => window.__idle.simulate(3));
+    if (process.env.EVAL) await page.evaluate(code => { (0, eval)(code); window.__idle.simulate(0.5); }, process.env.EVAL);
     if (process.env.VIEW) await page.evaluate(v => { window.__idle.setView(v); window.__idle.simulate(1.5); }, JSON.parse(process.env.VIEW));
     const r = await page.evaluate(n => window.__idle.nanHunt({ frames: n }), +(process.env.FRAMES || 24));
     const tag = `${id}_${h}${process.env.Q ? '_' + process.env.Q : ''}`;

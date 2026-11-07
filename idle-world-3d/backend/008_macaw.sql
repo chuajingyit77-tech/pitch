@@ -1,0 +1,5 @@
+-- 栖境 · the rainforest's macaw, the third guardian: it teaches the company's contract lessons (it has no demo lessons).
+-- A guardian without published lessons does not show on any screen, so this can be applied before lessons are given to
+-- it. Its lines can be changed on the admin page; re-running this leaves them as they are.
+insert into qj.guardians (id, world, name, title, portrait, lines, sort) values ('macaw', 'jungle', '金刚鹦鹉', '雨林的守护者', 'guardians/macaw.jpg', $j${"hello":[{"from":5,"to":11,"text":"早！林子刚醒，叶子上的露水还没干。想学点什么？"},{"from":11,"to":17,"text":"你来啦！我在这根树枝上等你好一会儿了。想学点什么？"},{"from":17,"to":20,"text":"天快黑了，鸟都在回巢。趁着还亮，学一样吧？"},{"from":20,"to":29,"text":"这么晚还在？萤火虫都出来了。想学点什么，我陪你。"}],"allDone":"该记的，我都教给你了。想重温哪一课？","start":"好，开始。听仔细，听仔细。","resume":"上次说到一半，我们接着来。","later":"下次再说","bye":"好。我就在这片林子里，想学的时候来找我。","coming":"林梢闪过一抹红……金刚鹦鹉正朝这根树枝飞过来。","returning":"金刚鹦鹉刚要飞走，听见你在叫它……它在空中转了个弯，又飞回来了。","gift":"林子里多了一位新朋友：{what}「{name}」。送给你的！","review":"上次没答对的题，我们再过一遍。","reviewDone":"都答对了！好，好。这些就是你的了。","handoff":"我这里的课，你都学会了。下一课在{world}，去找{who}吧！"}$j$::jsonb, 2)
+on conflict (id) do nothing;

@@ -22,6 +22,7 @@ import { createVistaUniforms, setVistaClock } from './jungle/far.js';
 import { buildVista } from './jungle/vista.js';
 import { createGiants } from './jungle/giants.js';
 import { createEgrets } from './jungle/egrets.js';
+import { MacawGuardian } from './jungle/guardian.js';
 
 /* ------------------------------------------------------------------ */
 /* Weather schedule (shared by the scene and the ambience helper)       */
@@ -239,8 +240,9 @@ export default {
       const r0 = t.rTrunk(y0) * 0.3;
       bgParts.push(taperTube(curve, u => lerp(r0, 0.07, Math.pow(u, 0.8)), { tubular: 22, radial: 9, tintFn: (u, nn) => { const m = clamp(nn.y, 0, 1); return [lerp(1, 0.6, m), lerp(1, 1.15, m), lerp(1, 0.45, m)]; }, uvScale: [2, 0.4] }));
       for (const u of [0.45, 0.62, 0.8]) {
-        const p = curve.getPointAt(u);
-        lowPerches.push({ pos: p.add(new THREE.Vector3(0, lerp(r0, 0.07, Math.pow(u, 0.8)) * 0.9, 0)), r: 0.1 });
+        const p = curve.getPointAt(u), rad = lerp(r0, 0.07, Math.pow(u, 0.8));
+        // (the branch's own axis and radius there: the guardian grips the branch, not a point)
+        lowPerches.push({ pos: p.clone().add(new THREE.Vector3(0, rad * 0.9, 0)), r: 0.1, axis: p, rad, tan: curve.getTangentAt(u) });
       }
       t.hangs.push(curve.getPointAt(0.55), curve.getPointAt(0.85));
     }
@@ -862,7 +864,7 @@ export default {
 
     // perches for macaws: limb perches facing the clearing + cliff rim spots
     const perches = [];
-    for (const p of lowPerches) perches.push({ pos: p.pos.clone(), face: new THREE.Vector3(camPos0.x - p.pos.x, 0, camPos0.z - p.pos.z).normalize(), taken: null, low: true });
+    for (const p of lowPerches) perches.push({ pos: p.pos.clone(), face: new THREE.Vector3(camPos0.x - p.pos.x, 0, camPos0.z - p.pos.z).normalize(), taken: null, low: true, axis: p.axis, rad: p.rad, tan: p.tan });
     for (const t of trees.slice(0, 4)) for (const p of t.perches) {
       if (p.pos.y < 3.5 || p.pos.y > 11 || Math.abs(camAng(p.pos.x, p.pos.z)) > 0.62) continue;
       const face = new THREE.Vector3(VIEW_TARGET.x - p.pos.x, 0, VIEW_TARGET.z + 8 - p.pos.z).normalize();
@@ -875,6 +877,14 @@ export default {
       perches.push({ pos: p, face: new THREE.Vector3(0, 0, 1), taken: null, rim: true });
     }
     perches.forEach(p => { p.camD = p.pos.distanceTo(camPos0); });
+    // the rainforest's guardian in lessons (lib/guide.js): a scarlet macaw that comes to the thinner ends of the low
+    // branches over the pool (jungle/guardian.js); the close-up camera keeps clear of the bark and the vines
+    const guardian = new MacawGuardian({
+      env, scene, camera, shared, rng: R('guardian'),
+      perches: perches.filter(p => p.low && p.rad < 0.135),
+      occluders: [treeMesh, vineMesh].filter(Boolean),
+      daylight: () => 1 - night,
+    });
 
     const frogs = [], macaws = [], butterflies = [];
     const homeB = new THREE.Vector3(POND.cx, 1.6, POND.cz + 3);
@@ -1203,14 +1213,28 @@ export default {
       return free.length ? free[m.rng.int(0, free.length - 1)] : perches[0];
     };
 
-    const spawnMember = (member) => {
+    const spawnMember = (member, at = null) => {
       if (member.kind === 'frog') frogs.push(new Frog(member));
       else if (member.kind === 'macaw') {
         const m = new Macaw(macawKit, member, R('macaw' + member.id), { shadows: env.shadows });
-        let free = perches.filter(p => !p.taken && p.low);
-        if (!free.length) free = perches.filter(p => !p.taken);
-        m.placeAt(free.length ? free[R('mp' + member.id).int(0, free.length - 1)] : perches[0], true);
-        m.timer = m.rng.range(3, 12);
+        if (at) {
+          // a lesson's gift: it flies in high over the far side of the pool to a free branch a few metres from the
+          // guardian (in the background of the close-up, never across the camera; in view once the talk is over)
+          // (measured from the guardian itself as well as from the reward point, which sits a metre off its branch)
+          const free = perches.filter(p => !p.taken), g = guardian.perch ? guardian.pos : null;
+          const d = p => g ? Math.min(p.pos.distanceTo(at), p.pos.distanceTo(g)) : p.pos.distanceTo(at);
+          const p = free.filter(q => d(q) > 3).sort((a, b) => d(a) - d(b))[0] || free.sort((a, b) => d(b) - d(a))[0] || perches[0];
+          p.taken = m;
+          m.pos.set(lerp(POND.cx, p.pos.x, 0.5), p.pos.y + 3.5, POND.cz - 4);
+          m.vel.set(p.pos.x - m.pos.x, 0, p.pos.z - m.pos.z).setLength(5);
+          m.state = 'fly'; m.yaw = Math.atan2(m.vel.x, m.vel.z);
+          m.flyTo(m.perchPoint(p, _v), { land: true, arrive: mm => mm.placeAt(p) });
+        } else {
+          let free = perches.filter(p => !p.taken && p.low);
+          if (!free.length) free = perches.filter(p => !p.taken);
+          m.placeAt(free.length ? free[R('mp' + member.id).int(0, free.length - 1)] : perches[0], true);
+          m.timer = m.rng.range(3, 12);
+        }
         scene.add(m.mesh);
         macaws.push(m);
       } else if (member.kind === 'morpho') {
@@ -1489,8 +1513,9 @@ export default {
       frogKit.mesh.count = frogs.length;
       frogKit.mesh.instanceMatrix.needsUpdate = true;
       frogKit.pose.needsUpdate = true;
-      // macaws
+      // macaws, and the guardian
       for (let i = 0; i < macaws.length; i++) macaws[i].update(dt, t, macawCtx);
+      guardian.update(dt, simT);
       // fruit: after the macaws, so a carried fruit sits in this frame's beak (it trailed a frame behind:
       // 10 cm at 60 fps, 20 cm at 30 fps)
       fruits.update(dt, t, fruitHooks);
@@ -1671,7 +1696,24 @@ export default {
         }
         return n;
       },
-      addMember(member) { spawnMember(member); },
+      addMember(member, at) { spawnMember(member, at || null); },
+      // the rainforest's guardian in lessons: the macaw, called in to a branch, turned to whoever talks with it
+      guardian: {
+        id: 'macaw',
+        state: () => guardian.lessonState(),
+        summon: () => guardian.summon(),
+        talk: on => guardian.talk(on),
+        speak: on => { guardian.speaking = !!on; },
+        react: kind => guardian.react(kind),
+        release: () => guardian.release(),
+        anchor: out => guardian.anchor(out),
+        view: yaw => guardian.view(yaw),
+        look: out => guardian.look(out),
+        rewardAt: out => guardian.rewardAt(out),
+      },
+      /** Test hook: the macaw comes to a branch now, played t seconds in (it stays `stay` seconds once there). */
+      debugGuardian: (t = 8, stay = 120) => guardian.debug(t, stay),
+      _debug: { perches, lowPerches, camPos0, POND, guardian },
       /** Test hook: send the gentle giants across now, fast-forwarded `ahead` seconds into their pass
        * (opts.variant 0 / 1 near ridge, 2 far ridge; opts.dir 1 left to right, -1 right to left). */
       debugGiant(ahead = 30, opts = {}) { return giants.debug(simT, simT, ahead, opts); },
@@ -1681,6 +1723,8 @@ export default {
         pickPool.length = 0;
         for (const f of frogs) pickPool.push({ member: f.member, pos: f.pos, radius: 0.45 });
         for (const m of macaws) pickPool.push({ member: m.member, pos: m.mesh.position, radius: 0.7 });
+        const gp = guardian.pickTarget();
+        if (gp) pickPool.push(gp);
         for (const b of butterflies) if (b.member) pickPool.push({ member: b.member, pos: b.pos, radius: 0.35 });
         return pickPool;
       },
@@ -1703,6 +1747,7 @@ export default {
         frogKit.mesh.customDepthMaterial?.dispose();
         macawKit.geo.dispose(); macawKit.mat.dispose();
         vista.dispose(); giants.dispose(); egrets.dispose();
+        guardian.dispose();
       },
     };
   },

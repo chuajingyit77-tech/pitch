@@ -38,8 +38,8 @@ It first checks the syntax of every app file (`syncheck.sh`; plain `node --check
 7. **The learning backend**, on a local stand-in for it (`fakebase.cjs`: a fresh database with `backend/*.sql`
    applied, behind a small server that answers as Supabase's API does): every function the screens and the admin page
    call (`backend_rpc.cjs`), the company's lessons on the iPad and on a phone (`school.cjs`), the board's courses and
-   the heron's menu (`board.cjs`), the talk on ten screen sizes (`talkfit.cjs`), the island's dolphin (`dolphin.cjs`)
-   and the admin page (`admin.cjs`). Each must end `PASS` with no console problems. Look at the screenshots.
+   the heron's menu (`board.cjs`), the talk on ten screen sizes (`talkfit.cjs`), the island's dolphin (`dolphin.cjs`),
+   the rainforest's macaw (`macaw.cjs`) and the admin page (`admin.cjs`). Each must end `PASS` with no console problems. Look at the screenshots.
 
 ## Long runs, the clock of day and the GPU
 
@@ -79,7 +79,7 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | `shoot.cjs --scene <id> …` | Desktop screenshot. Options include hours, view, feed, quality and UI. |
 | `phone.cjs …` | Same as `shoot.cjs`, emulating an iPhone 13. |
 | `tour.cjs <out>` | Visits every world in one page, testing switching and dispose. |
-| `nanhunt.cjs <out> world:hour …` | Finds which objects produce NaN pixels. |
+| `nanhunt.cjs <out> world:hour …` | Finds which objects produce NaN pixels (on WebGL 2: WebGL 1 has no `isnan`, so there they show as untagged). Takes `EVAL` like `flicker.cjs`, e.g. to call a guardian into its close-up first, and `GL1=1`. |
 | `thumbs.cjs world:hour …` | Re-renders the dock thumbnails in `assets/thumbs`. |
 | `lesson.cjs <out> [--phone]` | Plays a guardian's lesson through in the iPad emulation (or on a phone held upright): screenshots of the board, the guardian flying in, the close-up, a wrong and a right answer, the key-point card, the completion with the new resident, the marker, the guardian's own menu and a lesson put down halfway. Checks the saved progress, stars, badge and new resident, and that there were no errors. |
 | `portrait.cjs [--world koi] [--id heron]` | Renders a guardian's portrait for the lessons board (`assets/guardians/<id>.jpg`). |
@@ -88,6 +88,7 @@ Run each tool with `node idle-world-3d/tools/qa/<tool>`. Each file's header list
 | `school.cjs <out> [--skip-phone]` | The company's lessons on the iPad emulation: connecting with a setup code, the names and the PIN pad, a lesson with the heron, the learning record, the wrong-answer review, a lesson half done offline and sent later, the shared screen signing out, the screen taken off; then a phone joining with a team-code link. |
 | `board.cjs <out>` | The board of a connected screen with lessons in several courses (made-up lessons tagged the way the drafting job tags them), on the iPad and a phone: one heading per course in order, every role's lessons but everyone's folded until opened, the signed-in learner's own role (from their department, Chinese or English) right after the new-staff week and open, 展开 and 收起, what one person opened folded again for the next, nothing scrolling sideways. Then the heron called in the world: what to do next instead of every lesson (the next one, carry on, the wrong answers, the board, later; A–E all on screen), with the record made on the iPad carried on on the phone. |
 | `dolphin.cjs <out>` | The island's guardian on a connected screen, iPad and phone: the board (the guardian of the learner's role first, marked 你的岗位课, its portrait), the heron sending the learner on to the island (下一课：…（去晴岛找海豚）), the dolphin swimming in to the dock, the close-up low over the water, a lesson with it (a wrong answer: it shakes its head; the right one: it nods; the card; the banner: it leaps or spins high out of the water; the gift: a turtle), its own menu after; its head above the dialogue and the camera above the swell throughout. |
+| `macaw.cjs <out>` | The rainforest's guardian on a connected screen, iPad and phone: the board (the guardian of the learner's role first, marked 你的岗位课, its portrait), the heron sending the learner on to the rainforest (下一课：…（去雨林找金刚鹦鹉）), the macaw flying in to a low branch, the close-up, a lesson with it (a wrong answer: it shakes its head; the right one: it bobs; the card; the banner: it spreads its wings; the gift: a new macaw flying in, high over the pool and clear of the close-up camera, to a branch a few metres from the guardian), its own menu after; its head above the dialogue throughout. |
 | `talkfit.cjs <out>` | A guardian's talk as long as the longest content the company's lessons have (line, question, options, reply, a six-point card, the five-choice menu, 15-character titles), looked at on ten screens from the iPad to the smallest phones, upright and held sideways, below Safari's bars: the name above the box, the box and its choices all on screen. |
 | `admin.cjs <out>` | The admin page on a desktop and a phone: the first account, staff (one and a pasted list), screen and team codes, an AI draft pasted in, edited and published, reports, a guardian's lines, the password, invites. |
 | `soak.cjs <out> <world> [--hours 3] [--start 5.5] [--every 10]` | Hours of play in time-lapse: NaN, flicker, memory, heap, errors over time. `--t0` starts the world clock days in. |
