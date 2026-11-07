@@ -16,7 +16,7 @@
 const num = s => Number(String(s).replace(/,/g, ''));
 const MAG = '(万|萬|億|亿|千|百万|百萬|million|billion)';
 const CURRENCY = new RegExp(
-  `(?:RM|MYR|USD|SGD|AUD|US\\$|S\\$|\\$|HK\\$|RMB|CNY|EUR|GBP|¥|€|£)\\s?([\\d][\\d,]*(?:\\.\\d+)?)\\s*${MAG}?` +
+  `(?:\\b(?:RM|MYR|USD|SGD|AUD|RMB|CNY|EUR|GBP)|US\\$|S\\$|HK\\$|\\$|¥|€|£)\\s?([\\d][\\d,]*(?:\\.\\d+)?)\\s*${MAG}?` +
   `|([\\d][\\d,]*(?:\\.\\d+)?)\\s*${MAG}?\\s*(?:令吉|元|万元|美元|新币|港币|ringgit|dollars?)`,
   'gi');
 
@@ -31,6 +31,20 @@ function amountOf(m) {
 const DATE = /\b(?:19|20)\d{2}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}\s*日?|\b\d{1,2}\s*[-/]\s*\d{1,2}\s*[-/]\s*(?:19|20)?\d{2}\b|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\b|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+(?:19|20)\d{2}\b|\b(?:19|20)\d{2}\s*年\s*\d{1,2}\s*月/gi;
 const DURATION = /(\d+)\s*(?:个)?\s*(days?|weeks?|months?|years?|天|日|周|週|个月|個月|年|工作日|working\s+days?|business\s+days?)/gi;
 const SOURCE_HINT = /来源|資料來源|数据来自|資料來自|根据|依据|據|引自|出自|参见|參見|source|sources|according to|based on|per the|cited|reference|\[\d+\]|（\s*\d{4}\s*）|\(\s*\d{4}\s*\)/i;
+
+// A number that reads as a statistic: a percentage, a magnitude, a grouped
+// figure, or a free-standing number of three digits or more. "FT050" (a road
+// code) and "Phase 2" are not statistics.
+const STAT = /\d[\d,]*(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*(?:万|萬|億|亿|千|倍|million|billion|thousand)|\b\d{1,3}(?:,\d{3})+\b|\b[1-9]\d{2,}\b/i;
+
+// Undo hard wrapping: re-join hyphenated words and lines that continue in
+// lowercase. Line structure is kept in ctx.text for the rules that need it
+// (tables, headings); sentence-level rules and quotes use the reflowed text.
+export function reflow(text) {
+  return String(text || '')
+    .replace(/(\p{L})-\n+[ \t]*(\p{Ll})/gu, '$1$2')
+    .replace(/([^\n.。!！?？:：;；|])[ \t]*\n+[ \t]*(?=\p{Ll})/gu, '$1 ');
+}
 
 function sentences(text) {
   return text
@@ -75,13 +89,13 @@ export const RULES = {
     if (missing.length) {
       return result('flag', `有金额，但缺：${missing.join('、')}。`, {
         severity: missing.length > 1 ? 'medium' : 'low',
-        evidence: quoteAround(ctx.text, CURRENCY),
+        evidence: quoteAround(ctx.flow ?? ctx.text, CURRENCY),
         ask: `补上${missing.join('和')}。`,
         data: { amounts: amounts.length },
       });
     }
     return result('pass', `金额、货币、含税说明${needsValidity ? '、报价有效期' : ''}都有（共 ${amounts.length} 处金额）。`, {
-      severity: 'low', evidence: quoteAround(ctx.text, CURRENCY), data: { amounts: amounts.length },
+      severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, CURRENCY), data: { amounts: amounts.length },
     });
   },
 
@@ -151,12 +165,12 @@ export const RULES = {
     const missing = [!schedule && '分期比例或触发条件', !late && '逾期处理'].filter(Boolean);
     if (missing.length) {
       return result('flag', `有付款条款，但缺：${missing.join('、')}。`, {
-        severity: 'medium', evidence: quoteAround(ctx.text, pay),
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, pay),
         ask: `补上${missing.join('和')}。`,
       });
     }
     return result('pass', '付款节点、触发条件、逾期处理都写了。', {
-      severity: 'low', evidence: quoteAround(ctx.text, pay),
+      severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, pay),
     });
   },
 
@@ -257,14 +271,14 @@ export const RULES = {
 
     if (openEnded.length) {
       return result('fail', `有开口条款 ${openEnded.length} 处（${[...new Set(openEnded)].slice(0, 3).join('、')}），范围可以无限膨胀。`, {
-        severity: 'high', evidence: quoteAround(ctx.text, /等等|等相关|及相关|etc\.?|无限次|修改至满意|until\s+satisf/i),
+        severity: 'high', evidence: quoteAround(ctx.flow ?? ctx.text, /等等|等相关|及相关|etc\.?|无限次|修改至满意|until\s+satisf/i),
         ask: '把开口的地方改成具体数量，并写明超出之后怎么算。',
         data: { openEnded: [...new Set(openEnded)] },
       });
     }
     if (quantified < 2) {
       return result('flag', '有交付物清单，但多数没有数量（几份、几页、几轮修改）。', {
-        severity: 'medium', evidence: quoteAround(ctx.text, marker),
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, marker),
         ask: '给每一项交付物加上数量和交付格式。',
         data: { quantified },
       });
@@ -284,7 +298,7 @@ export const RULES = {
     const unlimited = /无限责任|無限責任|不受限制|全部损失|全部損失|一切损失|一切損失|一切后果|一切後果|unlimited\s+liabilit|without\s+limitation.{0,40}liabilit|all\s+(?:losses|damages|costs)\s+whatsoever/i;
     if (has(ctx.text, unlimited)) {
       return result('fail', '出现了无上限的责任措辞。等于把公司押上去。', {
-        severity: 'high', evidence: quoteAround(ctx.text, unlimited),
+        severity: 'high', evidence: quoteAround(ctx.flow ?? ctx.text, unlimited),
         ask: '把责任上限设为合同总额（或其倍数），并排除间接与利润损失。这一条请律师看。',
       });
     }
@@ -292,17 +306,17 @@ export const RULES = {
     const indirect = /间接损失|間接損失|利润损失|利潤損失|预期利益|預期利益|indirect|consequential|loss\s+of\s+profit/i;
     if (!has(ctx.text, capped)) {
       return result('fail', '有责任条款，但没有金额上限。', {
-        severity: 'high', evidence: quoteAround(ctx.text, liability),
+        severity: 'high', evidence: quoteAround(ctx.flow ?? ctx.text, liability),
         ask: '加一句上限：例如责任总额不超过本合同总价。',
       });
     }
     if (!has(ctx.text, indirect)) {
       return result('flag', '有责任上限，但没有排除间接损失与利润损失（这是标准做法）。', {
-        severity: 'medium', evidence: quoteAround(ctx.text, capped),
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, capped),
         ask: '补上排除间接损失、附带损失与利润损失的条款。',
       });
     }
-    return result('pass', '责任有金额上限，并排除了间接损失。', { severity: 'low', evidence: quoteAround(ctx.text, capped) });
+    return result('pass', '责任有金额上限，并排除了间接损失。', { severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, capped) });
   },
 
   termination(ctx) {
@@ -322,11 +336,11 @@ export const RULES = {
       return result(missing.includes('双方均可终止') ? 'fail' : 'flag',
         `有终止条款，但缺：${missing.join('、')}。`, {
         severity: missing.includes('双方均可终止') ? 'high' : 'medium',
-        evidence: quoteAround(ctx.text, term),
+        evidence: quoteAround(ctx.flow ?? ctx.text, term),
         ask: `补上${missing.join('和')}。`,
       });
     }
-    return result('pass', '双方可终止、有通知期、有收尾安排。', { severity: 'low', evidence: quoteAround(ctx.text, term) });
+    return result('pass', '双方可终止、有通知期、有收尾安排。', { severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, term) });
   },
 
   parties_named(ctx) {
@@ -350,7 +364,7 @@ export const RULES = {
     const missing = [!has(ctx.text, regNo) && '商业登记号', !has(ctx.text, address) && '注册地址', ctx.type === 'contract' && !has(ctx.text, signatory) && '签署人职位'].filter(Boolean);
     if (missing.length) {
       return result('flag', `找到法人名称（${matches.slice(0, 2).join('、') || '见原文'}），但缺：${missing.join('、')}。`, {
-        severity: 'medium', evidence: quoteAround(ctx.text, entity),
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, entity),
         ask: `补上${missing.join('和')}。`, data: { entities: matches.slice(0, 6) },
       });
     }
@@ -360,7 +374,9 @@ export const RULES = {
   },
 
   confidentiality(ctx) {
-    const conf = /保密|機密|机密|不得泄露|不得洩露|非公开|非公開|confidential|non[\s-]?disclosure|NDA|proprietary\s+information/i;
+    // Case-sensitive on purpose, so the acronym NDA never matches inside
+    // "Foundation" or "Kandar"; the English words spell out their own cases.
+    const conf = /保密|機密|机密|不得泄露|不得洩露|非公开|非公開|[Cc]onfidential|CONFIDENTIAL|[Nn]on[\s-]?[Dd]isclosure|NON[\s-]?DISCLOSURE|[Pp]roprietary\s+[Ii]nformation|\bNDA\b/;
     const personal = /个人资料|個人資料|个人信息|個人信息|隐私|privacy|personal\s+data|PDPA|GDPR|data\s+protection/i;
     const touchesData = personal.test(ctx.text) || /客户名单|客戶名單|数据库|資料庫|数据|資料|customer\s+(?:list|data)|database|records/i.test(ctx.text);
     if (!has(ctx.text, conf)) {
@@ -375,10 +391,10 @@ export const RULES = {
     const missing = [!has(ctx.text, mutual) && '双向保密', !has(ctx.text, period) && '保密期限', (touchesData && !has(ctx.text, personal)) && '个人资料处理安排'].filter(Boolean);
     if (missing.length) {
       return result('flag', `有保密条款，但缺：${missing.join('、')}。`, {
-        severity: 'medium', evidence: quoteAround(ctx.text, conf), ask: `补上${missing.join('和')}。`,
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, conf), ask: `补上${missing.join('和')}。`,
       });
     }
-    return result('pass', '双向保密、期限明确、涵盖个人资料处理。', { severity: 'low', evidence: quoteAround(ctx.text, conf) });
+    return result('pass', '双向保密、期限明确、涵盖个人资料处理。', { severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, conf) });
   },
 
   governing_law(ctx) {
@@ -394,16 +410,16 @@ export const RULES = {
     const places = [...new Set((ctx.text.match(/Malaysia|马来西亚|馬來西亞|Singapore|新加坡|Hong\s*Kong|香港|China|中国|中國|England|英国|英國|New\s*York|Delaware|UAE|Dubai|Indonesia|印尼|Thailand|泰国/gi) || []).map(s => s.trim()))];
     if (!has(ctx.text, law)) {
       return result('flag', '有仲裁或调解安排，但没写适用哪一地的法律。', {
-        severity: 'medium', evidence: quoteAround(ctx.text, arb), ask: '补上适用法律条款。', data: { places },
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, arb), ask: '补上适用法律条款。', data: { places },
       });
     }
     if (places.length > 1) {
       return result('flag', `提到多个法域（${places.slice(0, 4).join('、')}）。请确认适用法律与管辖地是同一个。`, {
-        severity: 'medium', evidence: quoteAround(ctx.text, law), ask: '核对适用法律与争议地点是否一致。', data: { places },
+        severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, law), ask: '核对适用法律与争议地点是否一致。', data: { places },
       });
     }
     return result('pass', `适用法律与管辖安排明确${places[0] ? `（${places[0]}）` : ''}。`, {
-      severity: 'low', evidence: quoteAround(ctx.text, law), data: { places },
+      severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, law), data: { places },
     });
   },
 
@@ -418,7 +434,7 @@ export const RULES = {
     }
     if (!has(ctx.text, auto)) {
       return result('pass', '有续约条款，但不是自动续约（需双方另行同意）。', {
-        severity: 'low', evidence: quoteAround(ctx.text, renew),
+        severity: 'low', evidence: quoteAround(ctx.flow ?? ctx.text, renew),
       });
     }
 
@@ -430,7 +446,7 @@ export const RULES = {
 
     if (!noticeText) {
       return result('fail', '自动续约，但找不到不续约的通知期。等于默认一直续下去。', {
-        severity: 'high', evidence: quoteAround(ctx.text, auto),
+        severity: 'high', evidence: quoteAround(ctx.flow ?? ctx.text, auto),
         ask: '查清不续约要提前多久通知，并把这个日期记进日历。',
       });
     }
@@ -445,13 +461,13 @@ export const RULES = {
     const priceRisk = !has(ctx.text, priceClause);
     if (tight || priceRisk) {
       return result('fail', `自动续约，通知期 ${noticeText}${tight ? '（偏短）' : ''}${priceRisk ? '，而且续约后价格没有封顶' : ''}。`, {
-        severity: 'high', evidence: quoteAround(ctx.text, auto),
+        severity: 'high', evidence: quoteAround(ctx.flow ?? ctx.text, auto),
         ask: `在到期前 ${noticeText} 之前决定是否续约${priceRisk ? '；要求续约期价格上限写进合同' : ''}。`,
         data: { noticeText, noticeDays: asDays },
       });
     }
     return result('flag', `自动续约，通知期 ${noticeText}，价格有约束。记得把通知截止日记进日历。`, {
-      severity: 'medium', evidence: quoteAround(ctx.text, auto),
+      severity: 'medium', evidence: quoteAround(ctx.flow ?? ctx.text, auto),
       ask: `把「到期前 ${noticeText}」这一天设成提醒。`,
       data: { noticeText, noticeDays: asDays },
     });
@@ -460,7 +476,13 @@ export const RULES = {
   data_freshness(ctx) {
     const thisYear = new Date().getFullYear();
     const DATA_SENT = /数据|數據|统计|統計|调查|調查|研究|报告|報告|市场|市場|份额|份額|规模|規模|增长率|增長率|调研|調研|survey|statistic|market\s+size|report|study|research|forecast|data/i;
-    const sents = ctx.sentences.filter(s => DATA_SENT.test(s) && /\d/.test(s));
+    // "Dashboard 2018-03-16" is a label, not a statistic: keep only sentences
+    // that still hold a number once their dates and years are taken out.
+    const sents = ctx.sentences.filter(s => {
+      if (!DATA_SENT.test(s)) return false;
+      const rest = s.replace(DATE, ' ').replace(/\b(?:19|20)\d{2}\b\s*年?/g, ' ');
+      return STAT.test(rest);
+    });
     if (!sents.length) {
       return result('skip', '文件里没有需要判断时效的数据。', { severity: 'low' });
     }
@@ -492,7 +514,7 @@ export const RULES = {
   },
 
   figures_sourced(ctx) {
-    const sents = sentences(ctx.text);
+    const sents = ctx.sentences;
     const withNumbers = sents.filter(s => {
     if (!/\d/.test(s)) return false;
     // A statistic, a price or a magnitude -- not a bare year or a date.
@@ -539,7 +561,8 @@ export function runRule(ruleId, ctx) {
 }
 
 export function makeContext({ text, type = 'other', name = '' }) {
-  return { text: text || '', type, name, sentences: sentences(text || '') };
+  const flow = reflow(text || '');
+  return { text: text || '', flow, type, name, sentences: sentences(flow) };
 }
 
 export const RULE_IDS = Object.keys(RULES);

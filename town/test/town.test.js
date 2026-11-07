@@ -539,3 +539,43 @@ test('a missing config file is not fatal', async () => {
   const cfg = await loadConfig('/nowhere/at/all.json', {});
   assert.ok(cfg.drive.inbox.endsWith(join('town', '_demo', 'inbox')));
 });
+
+// ------------------------------------------- regressions from a real proposal
+// Each of these was a wrong finding on the first real company document the
+// town read. The snippets are paraphrased, not copied from that document.
+
+test('the acronym NDA is not found inside ordinary words', () => {
+  const text = 'The Digital Foundation layer serves the Kandar economic zone and its platform.';
+  const r = RULES.confidentiality(makeContext({ text, type: 'proposal' }));
+  assert.notEqual(r.verdict, 'flag', 'Foundation and Kandar are not confidentiality clauses');
+  assert.ok(!/^有保密条款/.test(r.finding));
+  const real = RULES.confidentiality(makeContext({ text: 'Both parties shall sign an NDA before kickoff.', type: 'proposal' }));
+  assert.match(real.finding, /^有保密条款/);
+});
+
+test('a dated screenshot label is not stale data', () => {
+  const text = 'Big data platform\n\nData visualization 2018-03-16\n\nTraffic flow dashboard';
+  const r = RULES.data_freshness(makeContext({ text, type: 'report' }));
+  assert.notEqual(r.verdict, 'fail');
+  assert.notEqual(r.verdict, 'flag');
+});
+
+test('hard-wrapped text is reflowed before quoting', () => {
+  const text = 'The system achieves coverage\n\nof over 80% of road sections, with event detec-\n\ntion accuracy of 95%.';
+  const r = RULES.figures_sourced(makeContext({ text, type: 'proposal' }));
+  assert.match(r.evidence, /^The system achieves coverage of over 80%/);
+  assert.match(r.evidence, /detection accuracy/);
+});
+
+test('a currency code inside a word is not money', () => {
+  const r = RULES.price_stated(makeContext({ text: 'Deploy the platform 2 and platform 3 modules.', type: 'proposal' }));
+  assert.equal(r.verdict, 'fail', '"platform 2" must not read as RM 2');
+});
+
+test('a road code is not a statistic', () => {
+  const text = 'The system integrates infrastructure data from the FT050 highway onto GIS maps.';
+  const r = RULES.data_freshness(makeContext({ text, type: 'proposal' }));
+  assert.equal(r.verdict, 'skip');
+  const stat = RULES.data_freshness(makeContext({ text: 'Survey data show about 300,000 daily crossings.', type: 'proposal' }));
+  assert.equal(stat.verdict, 'flag', 'an undated statistic should still be flagged');
+});
