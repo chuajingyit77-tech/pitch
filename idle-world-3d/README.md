@@ -84,7 +84,12 @@ batch is counted once, even if it has to be sent twice.
   dock and holds its head out of the water; it teaches the company's marketing and sales lessons. The rainforest (雨林)
   has a scarlet macaw that now and then flies in to one of the low branches over the pool, folds its wings and looks
   about; it teaches the contract lessons (it bobs its head at a right answer, shakes it at a wrong one, and spreads its
-  wings when a lesson is learnt). A lesson's guardian is chosen on the admin page. The board puts first the guardian
+  wings when a lesson is learnt). In the cloud sea (云海) an old master tortoise practises tai chi on the jade terrace
+  under the peach tree, his disciples (the resident tortoises) round him; called, he turns to whoever has come and
+  bows, and he teaches the finance lessons, the 名企之道 course and the KPI lessons (a slow nod and a stroke of his white
+  beard at a right answer, a shake of the head and a raised palm at a wrong one; when a lesson is learnt he draws a
+  great circle with both arms and gathers a ball of golden qi between his palms that rises and bursts). A lesson's
+  guardian is chosen on the admin page. The board puts first the guardian
   whose lessons come next for the learner, and marks the one that teaches their own role (你的岗位课).
 - **Calling the guardian in the world**: with up to three lessons it offers each of them; with more (a company's
   courses) it offers what to do next, at most five choices: carry on with the lesson put down halfway, the next one (the
@@ -185,7 +190,9 @@ npx http-server idle-world-3d -p 8080
 - `lib/guide.js` — the guardians' lessons: the board, the conversation (typed lines, questions, the key-point
   card, the completion banner and rewards), the marker over a guardian and saved progress. A world with a
   guardian describes it as `guardian` in its build() result (`scenes/koi.js`: the heron; `scenes/island.js`: the
-  dolphin, built in `scenes/island/guardian.js`; `scenes/jungle.js`: the macaw, built in `scenes/jungle/guardian.js`).
+  dolphin, built in `scenes/island/guardian.js`; `scenes/jungle.js`: the macaw, built in `scenes/jungle/guardian.js`;
+  `scenes/cloudsea.js`: the tortoise, built in `scenes/cloudsea/guardian.js`). `lib/rig.js` is the guardians' shared
+  building kit (parametric surfaces into one skinned mesh, exact springs).
 - `lessons/index.js` — the guardians and their lessons (content only).
 
 ## Credits

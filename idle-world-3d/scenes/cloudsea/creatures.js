@@ -280,6 +280,7 @@ class Stepper {
   }
 }
 
+const T_SCALE = 1.08;
 class Tortoise {
   constructor(sys, member, rigDef, geo, index) {
     this.sys = sys; this.member = member; this.kind = 'tortoise';
@@ -287,9 +288,10 @@ class Tortoise {
     const inst = rigDef.instantiate(geo, creatureMaterial(sys.shared, this.uniforms));
     Object.assign(this, inst);
     this.mesh.castShadow = sys.env.shadows;
-    this.scale = 1.42 * (member ? member.size || 1 : 1);
+    // (the disciples: a head shorter than their master, the old tortoise on the terrace)
+    this.scale = T_SCALE * (member ? member.size || 1 : 1);
     this.mesh.scale.setScalar(this.scale);
-    this.home = sys.world.taijiSpot(index);
+    this.home = sys.world.taijiSpot(index + 1);   // (round the terrace: the old master stands on it, cloudsea/guardian.js)
     this.pos = this.home.p.clone();
     this.yaw = this.home.yaw;
     this.state = 'taichi';
@@ -327,7 +329,7 @@ class Tortoise {
   }
   update(dt, t) {
     const sys = this.sys, B = this.B, R = this.rest, W = sys.world, S = this.scale;
-    if (this.member) { const s = 1.42 * (this.member.size || 1); if (s !== this.scale) { this.scale = s; this.mesh.scale.setScalar(s); } }
+    if (this.member) { const s = T_SCALE * (this.member.size || 1); if (s !== this.scale) { this.scale = s; this.mesh.scale.setScalar(s); } }
     this.glow = Math.max(0, this.glow - dt * 0.12);
     this.uniforms.uGlowAmt.value = this.glow * 0.8;
     this.uniforms.uShellGlow.value = lerp(0.03, 0.5, sys.tod.night) + this.glow * 0.6;
@@ -1250,11 +1252,19 @@ export function createCreatures(env, shared, world, fx) {
     },
   };
   let birdCount = 0;
-  function addMember(m) {
+  /** a new resident; `at` (optional): where one given for a lesson comes in, beside the guardian (a tortoise walks
+   *  from there to its place round the terrace, a crane flies in and lands there) */
+  function addMember(m, at = null) {
     if (m.kind === 'tortoise') {
       const tt = new Tortoise(sys, m, tRig, tGeo, sys.tortoises.length);
       tt.mesh.name = 'tortoise' + sys.tortoises.length;
       sys.tortoises.push(tt); group.add(tt.mesh);
+      if (at) {
+        const g = world.mainGround(at.x, at.z);
+        tt.pos.set(at.x, g === null ? at.y : g, at.z);
+        tt.yaw = Math.atan2(tt.home.p.x - at.x, tt.home.p.z - at.z);
+        tt.state = 'walk'; tt.walkGoal.copy(tt.home.p); tt.afterWalk = 'taichi';
+      }
     } else if (m.kind === 'crane') {
       const c = new Crane(sys, m, cRig, cGeo, rng.fork(m.id));
       c.orbit.a = 2.9 + sys.cranes.length * 2.1;
@@ -1264,8 +1274,9 @@ export function createCreatures(env, shared, world, fx) {
       c.resetFlight();
       c.mesh.name = 'crane' + sys.cranes.length;
       sys.cranes.push(c); group.add(c.mesh);
+      if (at) c.planLanding(at, 0);
       // start some cranes on the ground for a calmer first impression
-      if (sys.cranes.length % 3 === 0) {
+      else if (sys.cranes.length % 3 === 0) {
         const spot = world.landingSpot(c.rng, null);
         if (spot) { c.pos.copy(spot); c.state = 'stand'; c.vel.set(0, 0, 0); c.resetFlight(); c.pose.fly = 0; c.pose.fold = 1; c.pose.air = 0; c.timer = 0; c.restTime = c.rng.range(15, 40); }
       }

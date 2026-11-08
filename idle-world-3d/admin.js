@@ -22,6 +22,7 @@ const KINDS = {
     ['platinum', '白金锦鲤'], ['asagi', '浅黄锦鲤'], ['chagoi', '茶鲤'], ['kigoi', '黄鲤'], ['benigoi', '红鲤'], ['hirenaga', '蝶尾锦鲤']],
   island: [['dolphin', '海豚'], ['turtle', '海龟'], ['hermit', '寄居蟹'], ['crab', '螃蟹'], ['gull', '海鸥']],
   jungle: [['frog', '红眼树蛙'], ['macaw', '金刚鹦鹉'], ['morpho', '蓝闪蝶']],
+  cloudsea: [['tortoise', '神龟'], ['crane', '仙鹤'], ['bird', '青鸟']],
 };
 // what a guardian says besides the lessons (lines in qj.guardians)
 const LINES = [
@@ -42,6 +43,7 @@ const VOICE = {
   heron: '它沉稳、亲切，爱用池塘和水打比方，像一位老前辈在池边讲给新人听',
   dolphin: '它活泼、热情、反应快，爱用大海、潮水和鱼群打比方，像一位跑在前线的老同事，边游边讲给新人听',
   macaw: '它机灵、较真、说话干脆，爱把要紧的话重复一遍，爱用雨林、藤蔓和雨季打比方，像一位一丝不苟的老法务，站在树枝上一条一条讲给新人听',
+  tortoise: '它沉静、从容，说话慢，从不着急，爱用云海、太极和四季打比方，讲道理像打一趟拳：先放慢，再看清，像一位见过大风浪的老前辈，在玉台上慢慢讲给新人听',
 };
 const DRAFT_PROMPT = `你要为「栖境」写一节员工培训课。课由{WHO}用对话来讲：{VOICE}。
 

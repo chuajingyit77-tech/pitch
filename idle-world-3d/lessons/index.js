@@ -95,6 +95,31 @@ export const GUARDIANS = [
     handoff: '我这里的课，你都学会了。下一课在{world}，去找{who}吧！',
     lessons: [],
   },
+  {
+    id: 'tortoise',              // scenes/cloudsea.js 里的 guardian：在玉台上打太极的老龟，教财务、名企之道、KPI（公司的课，没有示范课）
+    world: 'cloudsea',
+    name: '太极龟',
+    title: '云海的守护者',
+    portrait: 'guardians/tortoise.jpg',
+    hello: [
+      { from: 5, to: 11, text: '早。云海才刚翻起来，正好打一趟拳。想学点什么？' },
+      { from: 11, to: 17, text: '来了？不急。这一趟拳我打了几百年，慢慢来。想学点什么？' },
+      { from: 17, to: 20, text: '日头西沉，云海都染成金色了。趁天光还在，学一样吧。' },
+      { from: 20, to: 29, text: '夜深了，灯笼都亮了。慢慢来，想学点什么，我陪你。' },
+    ],
+    allDone: '该说的，我都说给你听了。想重温哪一课？',
+    start: '好。慢慢来，一步一步走。',
+    resume: '上次说到一半，我们接着往下说。',
+    later: '下次再说',
+    bye: '去吧。我一直在这玉台上，想学的时候再来。',
+    coming: '老龟收住拳势，缓缓转过身来……',
+    returning: '老龟刚回到拳架里，听见你在叫它……又转过身来。',
+    gift: '云海里多了一位新朋友：{what}「{name}」。算是我送你的。',
+    review: '上次没答对的题，我们再走一遍。不急。',
+    reviewDone: '都答对了。好，好。这些就是你的了。',
+    handoff: '我这里的课，你都学会了。下一课在{world}，去找{who}吧。',
+    lessons: [],
+  },
 ];
 
 export const LESSONS = {

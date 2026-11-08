@@ -234,10 +234,10 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     ok((await text('.probs-box')).includes('第 7 步：题目是空的'), 'a new empty question is a problem to fix', await text('.probs-box'));
     await snap('editor_problem');
     await page.locator('.step.ask').nth(1).locator('.tools button[title="删掉这一步"]').click();
-    // which guardian teaches it: the dolphin offers the island's residents, the macaw the rainforest's, the heron the
-    // pond's koi
+    // which guardian teaches it: the dolphin offers the island's residents, the macaw the rainforest's, the tortoise the
+    // cloud sea's, the heron the pond's koi
     const guard = page.locator('.meta .field', { hasText: '哪位守护者讲' }).locator('select');
-    ok((await guard.locator('option').allTextContents()).join(' | ') === '老苍鹭 · 锦鲤池的守护者 | 海豚 · 晴岛的守护者 | 金刚鹦鹉 · 雨林的守护者', 'three guardians to choose from', await guard.locator('option').allTextContents());
+    ok((await guard.locator('option').allTextContents()).join(' | ') === '老苍鹭 · 锦鲤池的守护者 | 海豚 · 晴岛的守护者 | 金刚鹦鹉 · 雨林的守护者 | 太极龟 · 云海的守护者', 'four guardians to choose from', await guard.locator('option').allTextContents());
     const reward = page.locator('.meta .field', { hasText: '送一位新居民' }).locator('select');
     await guard.selectOption('dolphin');
     await page.waitForTimeout(200);
@@ -245,6 +245,9 @@ const ok = (cond, what, got) => { checks++; console.log(`  ${cond ? 'ok  ' : 'FA
     await guard.selectOption('macaw');
     await page.waitForTimeout(200);
     ok((await reward.locator('option').allTextContents()).join('|').includes('红眼树蛙|金刚鹦鹉|蓝闪蝶'), 'the macaw\'s lesson gives a rainforest resident', await reward.locator('option').allTextContents());
+    await guard.selectOption('tortoise');
+    await page.waitForTimeout(200);
+    ok((await reward.locator('option').allTextContents()).join('|').includes('神龟|仙鹤|青鸟'), 'the tortoise\'s lesson gives a cloud sea resident', await reward.locator('option').allTextContents());
     await guard.selectOption('heron');
     await page.waitForTimeout(200);
     await reward.selectOption('kohaku');

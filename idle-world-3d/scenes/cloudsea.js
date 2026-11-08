@@ -8,6 +8,7 @@ import { createSky, createEnvironment } from './cloudsea/sky.js';
 import { createCloudSea, createPuffs, towerPuffs, bankPuffs, mistFall } from './cloudsea/clouds.js';
 import { createGarden } from './cloudsea/garden.js';
 import { createCreatures } from './cloudsea/creatures.js';
+import { TortoiseGuardian } from './cloudsea/guardian.js';
 import { createSparkles, createPetals, createMotes, createSkyLanterns, createPeaches, createHalos, SKYL_PERIOD } from './cloudsea/fx.js';
 import { createKun } from './cloudsea/kun.js';
 import { createRays, createMistBands } from './cloudsea/atmos.js';
@@ -193,9 +194,16 @@ export default {
       { x: garden.Bp.x, z: garden.Bp.z, r: 4.4, top: garden.Bp.y + 6.5 },
     ];
     const lanternsAt = [-1, 1].map(s => ({ x: tj.x + 1.2, z: tj.z + s * 3.2 }));
+    // the old master's place (cloudsea/guardian.js): on the terrace, a step out from its middle (clear of the peach
+    // tree's lowest boughs), facing out from the tree; his disciples practise round the terrace (taijiSpot)
+    const master = (() => {
+      const yaw = Math.atan2(tj.x - trunk.x, tj.z - trunk.z);
+      return { p: new THREE.Vector3(tj.x + Math.sin(yaw) * 0.95, garden.taijiFloor, tj.z + Math.cos(yaw) * 0.95), yaw };
+    })();
     // circles a walker steers around on the main lawn (a goal inside one is walked straight into)
     const walkObs = [
       { x: trunk.x, z: trunk.z, r: 1.25 },
+      { x: master.p.x, z: master.p.z, r: 0.85 },           // (the old master at his practice)
       { x: garden.pavPos.x, z: garden.pavPos.z, r: 3.3 },
       { x: garden.poolC.x, z: garden.poolC.z, r: 1.55 },
       ...lanternsAt.map(l => ({ x: l.x, z: l.z, r: 0.42 })),
@@ -206,6 +214,7 @@ export default {
       groundAt: (x, z) => floorAt(x, z, garden.groundAt(x, z)),
       treeTop: garden.tree.top.clone().add(new THREE.Vector3(0, 1.2, 0)),
       perches: garden.perches.length ? garden.perches : [garden.tree.top.clone()],
+      masterSpot: master,
       taijiSpot(i) {
         const tr = garden.treePos;
         const yaw = Math.atan2(tj.x - tr.x, tj.z - tr.z);
@@ -234,6 +243,7 @@ export default {
         }
         for (const b of builds) if (y < b.top + m && Math.hypot(x - b.x, z - b.z) < b.r + m) return true;
         for (const l of lanternsAt) if (Math.hypot(x - l.x, z - l.z) < 0.5 + m && y < garden.taijiFloor + 2.1 + m) return true;
+        if (Math.hypot(x - master.p.x, z - master.p.z) < 0.7 + m && y < garden.taijiFloor + 2.2 + m) return true;   // (the old master)
         const g = garden.groundAt(x, z);
         if (g !== null && y < g + 0.3) return true;
         for (const il of islets) if (Math.hypot(x - il.x, z - il.z) < il.R - 1.5 && y < il.top && y > il.bottom) return true;
@@ -287,6 +297,9 @@ export default {
     };
     const creatures = createCreatures(env, shared, world, fx);
     scene.add(creatures.group);
+    // the cloud sea's guardian in lessons (lib/guide.js): the old master tortoise at his tai chi on the jade terrace,
+    // his disciples (the resident tortoises) round him (cloudsea/guardian.js)
+    const guardian = new TortoiseGuardian({ env, scene, camera, shared, world, fx, rng: rng.fork('guardian'), night: () => tod.night });
 
     /* ---- the Kun (鲲): a colossal sky whale passing through the cloud sea now and then ---- */
     const cyl = (x, z, r, y0, y1) => ({ type: 'cyl', x, z, r, y0, y1 });
@@ -431,6 +444,7 @@ export default {
 
       // residents & food
       creatures.update(dt, t, camera, tod);
+      guardian.update(dt, t);
       swallows.update(dt, t, tod, creatures.sys);
       butterflies.update(dt, t, tod);
       for (let i = foods.length - 1; i >= 0; i--) {
@@ -527,10 +541,30 @@ export default {
         }
         return k;
       },
-      creatures: () => creatures.list(),
-      addMember(m) { creatures.addMember(m); },
+      creatures() {
+        const l = creatures.list();
+        l.push(guardian.pickTarget());
+        return l;
+      },
+      addMember(m, at) { creatures.addMember(m, at || null); },
+      // the cloud sea's guardian in lessons: the old master tortoise, who turns from his tai chi to whoever talks with him
+      guardian: {
+        id: 'tortoise',
+        state: () => guardian.lessonState(),
+        summon: () => guardian.summon(),
+        talk: on => guardian.talk(on),
+        speak: on => { guardian.speaking = !!on; },
+        react: kind => guardian.react(kind),
+        release: () => guardian.release(),
+        anchor: out => guardian.anchor(out),
+        view: yaw => guardian.view(yaw),
+        look: out => guardian.look(out),
+        rewardAt: out => guardian.rewardAt(out),
+      },
+      /** Test hook: play the master t seconds now (talking to the camera if `talk`). */
+      debugGuardian: (t = 4, talk = false) => guardian.debug(t, talk),
       // test handle (motion probes read the creatures' state through it)
-      debug: { sys: creatures.sys, foods, garden, world, kun },
+      debug: { sys: creatures.sys, foods, garden, world, kun, guardian },
       /** Test hook: bring the Kun out now, on a pass planned for the current view, `tau` s into it (default: the
        *  middle of its pass). Returns the plan. */
       debugGiant(tau, force) { return kun.debug(camera, target, env.isIdle(), tau, tod, force); },
@@ -538,6 +572,7 @@ export default {
         kun.dispose();
         envMap.dispose();
         creatures.dispose();
+        guardian.dispose();
         garden.dispose();
         for (const k of ['billow', 'detail']) tex[k].tex.dispose();
         tex.cirrus.dispose(); tex.noise.dispose(); tex.rock.dispose();
