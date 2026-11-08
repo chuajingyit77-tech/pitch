@@ -66,7 +66,7 @@ export function createLocalDrive({ inbox, library, reports = null }) {
       return [
         `收件夹   ${INBOX}`,
         `档案库   ${LIBRARY}`,
-        REPORTS ? `报告夹   ${REPORTS}` : `报告夹   随档案放在各自的 ${REVIEW_DIR}/ 里`,
+        REPORTS ? `报告夹   ${REPORTS}（按提交人分开：<人>/<项目>/<类型>/）` : `报告夹   随档案放在各自的 ${REVIEW_DIR}/ 里`,
       ].join('\n');
     },
     paths: { inbox: INBOX, library: LIBRARY, reports: REPORTS },
@@ -100,8 +100,8 @@ export function createLocalDrive({ inbox, library, reports = null }) {
       return { path: target, rel: relative(LIBRARY, target) };
     },
 
-    async writeReport(filedPath, { project, type, filename, markdown }) {
-      const dir = REPORTS ? join(REPORTS, project, type) : join(LIBRARY, project, type, REVIEW_DIR);
+    async writeReport(filedPath, { project, type, filename, markdown, author = '未署名' }) {
+      const dir = REPORTS ? join(REPORTS, author, project, type) : join(LIBRARY, project, type, REVIEW_DIR);
       await mkdir(dir, { recursive: true });
       const out = join(dir, `${basename(filename, extname(filename))}.评审.md`);
       await writeFile(out, markdown, 'utf8');

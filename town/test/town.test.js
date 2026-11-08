@@ -579,3 +579,177 @@ test('a road code is not a statistic', () => {
   const stat = RULES.data_freshness(makeContext({ text: 'Survey data show about 300,000 daily crossings.', type: 'proposal' }));
   assert.equal(stat.verdict, 'flag', 'an undated statistic should still be flagged');
 });
+
+// ------------------------------------------------------- learning, phase one
+
+import { recurringFor, historyOf, checklistFor, checklistMarkdown, recurringSection, scrubAnswer, makeDrill, drillCandidates } from '../core/learning.js';
+
+function stateWith(rows) {
+  const seen = {};
+  rows.forEach((r, i) => { seen[`k${i}`] = { at: `2026-11-0${1 + i}T00:00:00Z`, ...r }; });
+  return { version: 1, seen };
+}
+
+test('a check failed twice recently is a recurring miss', () => {
+  const state = stateWith([
+    { author: '张三', verdicts: { scrip: 'fail', aureus: 'pass' } },
+    { author: '张三', verdicts: { scrip: 'fail', aureus: 'pass' } },
+  ]);
+  const { weak } = recurringFor(state, '张三');
+  assert.deepEqual(weak.map(w => w.agent), ['scrip']);
+  assert.equal(weak[0].fails, 2);
+});
+
+test('three passes in a row put a recurring miss behind you', () => {
+  const state = stateWith([
+    { author: '张三', verdicts: { scrip: 'fail' } },
+    { author: '张三', verdicts: { scrip: 'fail' } },
+    { author: '张三', verdicts: { scrip: 'pass' } },
+    { author: '张三', verdicts: { scrip: 'pass' } },
+    { author: '张三', verdicts: { scrip: 'pass' } },
+  ]);
+  const { weak, cleared } = recurringFor(state, '张三');
+  assert.equal(weak.length, 0);
+  assert.deepEqual(cleared.map(c => c.agent), ['scrip'], 'progress must be visible, not just disappear');
+});
+
+test('a skip neither counts as a miss nor breaks a streak', () => {
+  const state = stateWith([
+    { author: '张三', verdicts: { scrip: 'fail' } },
+    { author: '张三', verdicts: { scrip: 'skip' } },
+    { author: '张三', verdicts: { scrip: 'fail' } },
+  ]);
+  assert.equal(recurringFor(state, '张三').weak[0].of, 2);
+});
+
+test('unidentified authors never get a shared history', () => {
+  const state = stateWith([
+    { author: '未署名', verdicts: { scrip: 'fail' } },
+    { author: '未署名', verdicts: { scrip: 'fail' } },
+  ]);
+  assert.equal(historyOf(state, '未署名').length, 0);
+  assert.equal(recurringFor(state, '未署名').weak.length, 0);
+});
+
+test("one person's record never counts toward another's", () => {
+  const state = stateWith([
+    { author: '张三', verdicts: { scrip: 'fail' } },
+    { author: '张三', verdicts: { scrip: 'fail' } },
+    { author: '李四', verdicts: { scrip: 'pass' } },
+  ]);
+  assert.equal(recurringFor(state, '李四').weak.length, 0);
+  assert.equal(recurringFor(state, '张三').weak.length, 1);
+});
+
+test('the checklist holds only checks a person can settle by looking', () => {
+  for (const item of checklistFor('proposal')) {
+    assert.notEqual(AGENT_BY_ID.get(item.agent).engine, 'llm', `${item.agent} needs a model; it does not belong on a self-check`);
+  }
+});
+
+test("a person's recurring misses go to the top of their checklist, whatever their layer", () => {
+  const weak = [{ agent: 'halo', fails: 3, of: 4 }, { agent: 'scrip', fails: 2, of: 3 }];
+  const items = checklistFor('proposal', weak);
+  assert.deepEqual(items.slice(0, 2).map(i => i.agent).sort(), ['halo', 'scrip']);
+  assert.ok(items[0].weak && items[0].note.includes('漏了'));
+  const md = checklistMarkdown('proposal', { author: '张三', weak });
+  assert.match(md, /⚠/);
+  assert.match(md, /不会用在考绩上/);
+});
+
+test('the report says whether a recurring miss was fixed this time', () => {
+  const weak = [
+    { agent: 'scrip', name: 'Scrip', title: '付款条件检查员', duty: 'x', fails: 2, of: 2 },
+    { agent: 'aureus', name: 'Aureus', title: '报价完整性检查员', duty: 'y', fails: 2, of: 3 },
+  ];
+  const md = recurringSection(weak, [{ agent: 'scrip', verdict: 'pass' }, { agent: 'aureus', verdict: 'fail' }]);
+  assert.match(md, /付款条件检查员.*✓ 这次过了/);
+  assert.match(md, /报价完整性检查员.*✗ 又出现了/);
+  assert.equal(recurringSection([], []), '', 'nothing to say means no section at all');
+});
+
+test('every must-fix in a report says why it matters', async () => {
+  const r = await review({ name: 'x.md', type: 'proposal', text: '我们会尽力做好。'.repeat(20) }, null);
+  const md = reportMarkdown(r);
+  const musts = md.split('## 值得留意')[0];
+  const fails = (musts.match(/^### /gm) || []).length;
+  assert.ok(fails > 0);
+  // Each must-fix says why -- either in its own words or in a 为什么 line.
+  for (const block of musts.split(/^### /m).slice(1)) {
+    const agent = AGENTS.find(a => block.includes(`${a.name}（`));
+    assert.ok(agent, 'each must-fix names its agent');
+    assert.ok(block.includes(agent.duty), `${agent.id} must say why it matters`);
+    assert.ok((block.match(new RegExp(agent.duty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length === 1, 'and say it once');
+  }
+});
+
+test('a drill answer gives away nobody', () => {
+  const report = [
+    '> **自动判断的部分：** 提交人（来自文件名）。',
+    '# 评审报告：2026-11-06_张三_第一版.pdf',
+    '- 提交人：张三',
+    '## 你的老毛病，这次怎样',
+    '- **付款条件检查员**：✗ 又出现了',
+    '## 必须处理',
+    '### 张三写的报价没有有效期',
+  ].join('\n');
+  const out = scrubAnswer(report, { author: '张三', filename: '2026-11-06_张三_第一版.pdf' });
+  assert.ok(!out.includes('张三'));
+  assert.ok(!out.includes('老毛病'));
+  assert.ok(!out.includes('提交人'));
+  assert.match(out, /## 必须处理/, 'the findings themselves must survive');
+});
+
+test('the whole loop: recurring misses reach the third report, and only that person sees them', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'town-learn-'));
+  const inbox = join(root, 'inbox'), library = join(root, 'library'), reports = join(root, 'reports');
+  await mkdir(inbox, { recursive: true });
+  const body = '# 提案\n我们建议分三期做。总价 RM 10,000，含 SST，报价有效期 30 天。\n';
+  const drive = createLocalDrive({ inbox, library, reports });
+
+  // Three proposals from 张三, each without payment terms, one run at a time.
+  for (const v of ['一', '二', '三']) {
+    await writeFile(join(inbox, `门店__提案__张三__第${v}版.md`), body, 'utf8');
+    await runInbox({ drive, model: null });
+  }
+  // And one from 李四.
+  await writeFile(join(inbox, '门店__提案__李四__初稿.md'), body, 'utf8');
+  await runInbox({ drive, model: null });
+
+  const state = await drive.readState();
+  const zhang = Object.values(state.seen).filter(s => s.author === '张三');
+  assert.equal(zhang.length, 3);
+  assert.equal(zhang[0].verdicts.scrip, 'fail', 'every verdict is remembered');
+
+  const read = async who => {
+    const out = [];
+    const walk = async d => { for (const e of await readdir(d, { withFileTypes: true })) {
+      const p = join(d, e.name); if (e.isDirectory()) await walk(p); else out.push(p);
+    } };
+    await walk(join(reports, who));
+    return Promise.all(out.sort().map(p => readFile(p, 'utf8')));
+  };
+
+  const zhangReports = await read('张三');
+  assert.equal(zhangReports.length, 3, 'reports are filed per person');
+  assert.ok(!zhangReports[0].includes('你的老毛病'), 'the first submission has no history yet');
+  const third = zhangReports.find(r => r.includes('第三版'));
+  assert.match(third, /你的老毛病，这次怎样/);
+  assert.match(third, /付款条件检查员.*✗ 又出现了/);
+
+  const [liReport] = await read('李四');
+  assert.ok(!liReport.includes('张三'), "another person's name must never appear");
+  assert.ok(!liReport.includes('你的老毛病'), 'a first submission has no recurring section');
+
+  // A drill made from 张三's work names nobody.
+  const pick = drillCandidates(state).find(s => s.author === '张三');
+  const made = await makeDrill({ library, reportsRoot: reports, entry: pick });
+  const files = (await readdir(made.dir)).sort();
+  assert.deepEqual(files.map(f => f.replace(/\.[^.]+$/, '')), ['1_题目', '2_怎么做', '3_答案_做完再打开']);
+  const answer = await readFile(join(made.dir, '3_答案_做完再打开.md'), 'utf8');
+  assert.ok(!answer.includes('张三'));
+  assert.match(answer, /付款/);
+  assert.ok(resolve(made.dir).startsWith(resolve(library)));
+
+  await rm(root, { recursive: true, force: true });
+});

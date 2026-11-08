@@ -8,6 +8,7 @@
 
 import { AGENTS, AGENT_BY_ID, GUILD_ROLES, agentsForDocType, DOC_TYPES } from './agents.data.js';
 import { runRule, makeContext } from './rules.js';
+import { recurringSection } from './learning.js';
 
 export const MAX_DOC_CHARS = 24000;
 
@@ -221,7 +222,7 @@ export async function review(doc, model, opts = {}) {
 const VERDICT_LABEL = { fail: '不过', flag: '留意', error: '出错', skip: '未跑', pass: '通过' };
 const SEV_MARK = { high: '●●●', medium: '●●', low: '●' };
 
-export function reportMarkdown(r) {
+export function reportMarkdown(r, { weak = [] } = {}) {
   const L = [];
   L.push(`# 评审报告：${r.doc.name}`);
   L.push('');
@@ -233,6 +234,9 @@ export function reportMarkdown(r) {
   L.push(`- 参与检查：${r.agents} 项 · 不过 ${r.tally.fail || 0} · 留意 ${r.tally.flag || 0} · 通过 ${r.tally.pass || 0} · 未跑 ${(r.tally.skip || 0) + (r.tally.error || 0)}`);
   L.push('');
 
+  const personal = recurringSection(weak, r.entries);
+  if (personal) L.push(personal);
+
   const musts = r.entries.filter(e => e.verdict === 'fail');
   L.push('## 必须处理');
   if (!musts.length) L.push('没有。');
@@ -242,6 +246,9 @@ export function reportMarkdown(r) {
     if (e.evidence) L.push(`> ${e.evidence.replace(/\n/g, ' ')}`);
     if (e.evidenceNote) L.push(`*${e.evidenceNote}*`);
     if (e.ask) L.push(`**要做的：** ${e.ask}`);
+    const duty = AGENT_BY_ID.get(e.agent)?.duty;
+    // Several rules already say why in their finding; never say it twice.
+    if (duty && !e.finding.includes(duty)) L.push(`**为什么：** ${duty}`);
     L.push('');
   }
 

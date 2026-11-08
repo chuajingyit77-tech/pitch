@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { extractText } from './extract.js';
 import { classify, parseManifestCsv } from './classify.js';
 import { review, reportMarkdown } from './review.js';
+import { recurringFor } from './learning.js';
 
 export async function loadManifest(path) {
   if (!path) return null;
@@ -18,7 +19,7 @@ export async function loadManifest(path) {
   catch { return null; }
 }
 
-export async function processOne(file, { drive, model, manifest = null, move = false, reviewOpts = {} }) {
+export async function processOne(file, { drive, model, manifest = null, move = false, reviewOpts = {}, state = null }) {
   const doc = await extractText(file.path);
   const meta = await classify(file, doc, manifest);
 
@@ -47,12 +48,15 @@ export async function processOne(file, { drive, model, manifest = null, move = f
     '',
   ].filter(l => l !== null).join('\n');
 
+  // The person's own history, as it stood before this submission.
+  const { weak } = recurringFor(state, meta.author);
   const report = await drive.writeReport(filed.path, {
-    project: meta.project, type: folder, filename: meta.filename,
-    markdown: header + reportMarkdown(result),
+    project: meta.project, type: folder, filename: meta.filename, author: meta.author,
+    markdown: header + reportMarkdown(result, { weak }),
   });
 
-  return { file, meta, doc: { ok: doc.ok, reason: doc.reason, chars: doc.text?.length || 0, pages: doc.pages }, filed, report, result };
+  const verdicts = Object.fromEntries(result.entries.map(e => [e.agent, e.verdict]));
+  return { file, meta, doc: { ok: doc.ok, reason: doc.reason, chars: doc.text?.length || 0, pages: doc.pages }, filed, report, result, verdicts, weak };
 }
 
 export async function runInbox({ drive, model, manifestPath = null, move = false, force = false, limit = 0, reviewOpts = {}, onItem = null }) {
@@ -67,7 +71,7 @@ export async function runInbox({ drive, model, manifestPath = null, move = false
   const done = [], failed = [];
   for (const file of todo) {
     try {
-      const outcome = await processOne(file, { drive, model, manifest, move, reviewOpts });
+      const outcome = await processOne(file, { drive, model, manifest, move, reviewOpts, state });
       state.seen[file.key] = {
         name: file.name, at: new Date().toISOString(),
         project: outcome.meta.project, type: outcome.meta.typeZh, author: outcome.meta.author,
@@ -76,6 +80,8 @@ export async function runInbox({ drive, model, manifestPath = null, move = false
         fail: outcome.result.tally.fail || 0, flag: outcome.result.tally.flag || 0,
         note: outcome.meta.note, date: outcome.meta.date,
         readOk: outcome.doc.ok,
+        typeId: outcome.meta.type,
+        verdicts: outcome.verdicts,
       };
       done.push(outcome);
       onItem?.({ ok: true, outcome });

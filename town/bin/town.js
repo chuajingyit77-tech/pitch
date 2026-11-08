@@ -18,6 +18,7 @@ import { runInbox } from '../core/pipeline.js';
 import { guessTypeFromText, normaliseType } from '../core/classify.js';
 import { AGENTS, GUILD_ROLES, DOC_TYPES, agentsForGuild, agentsForDocType } from '../core/agents.data.js';
 import { RULE_IDS } from '../core/rules.js';
+import { checklistMarkdown, recurringFor, drillCandidates, makeDrill } from '../core/learning.js';
 
 function parseArgs(argv) {
   const flags = {}, rest = [];
@@ -169,6 +170,74 @@ const CMDS = {
     if (summary.failed.length) process.exitCode = 1;
   },
 
+  async checklist(flags) {
+    const { drive, cfg } = await build(flags);
+    const author = flags.author || null;
+    const type = normaliseType(flags.type);
+
+    // A personal checklist: one type, one person, their recurring misses first.
+    if (author) {
+      if (!type) { console.error('个人清单要指定类型：--type proposal'); process.exitCode = 1; return; }
+      const state = await drive.readState();
+      const { weak, submissions } = recurringFor(state, author);
+      const md = checklistMarkdown(type, { author, weak });
+      if (flags.out) {
+        const dir = resolve(flags.out);
+        await mkdir(dir, { recursive: true });
+        const out = join(dir, `自检清单_${DOC_TYPES.find(t => t.id === type).zh}_${author}.md`);
+        await writeFile(out, md + '\n', 'utf8');
+        console.error(`写到 ${out}`);
+      } else console.log(md);
+      console.error(`（根据 ${author} 过去 ${submissions} 份作品，老毛病 ${weak.length} 项）`);
+      return;
+    }
+
+    // The general set: one checklist per type, into the library.
+    const dir = flags.out ? resolve(flags.out) : join(cfg.drive.library, '_自检清单');
+    await mkdir(dir, { recursive: true });
+    const types = type ? [type] : DOC_TYPES.map(t => t.id);
+    for (const t of types) {
+      const out = join(dir, `${DOC_TYPES.find(x => x.id === t).zh}.md`);
+      await writeFile(out, checklistMarkdown(t) + '\n', 'utf8');
+      console.log(`  ${out}`);
+    }
+    console.log(`写了 ${types.length} 份通用自检清单。给某个人的：--author 名字 --type 类型`);
+  },
+
+  async drill(flags, rest) {
+    const { drive, cfg } = await build(flags);
+    const state = await drive.readState();
+    const pick = rest[0];
+
+    if (!pick) {
+      const list = drillCandidates(state);
+      if (!list.length) { console.log('还没有适合做练习的作品（要已评审、读得出文字、至少两项问题）。'); return; }
+      console.log('可以拿来做找茬练习的作品（问题越多越适合）：\n');
+      for (const [i, s] of list.slice(0, 20).entries()) {
+        console.log(`  ${String(i + 1).padStart(2)}. ${s.filed}`);
+        console.log(`      不过 ${s.fail} · 留意 ${s.flag} · ${s.type}`);
+      }
+      console.log('\n选一份：node town/bin/town.js drill <编号或路径>');
+      console.log('优先选外部伙伴的文件，或作者本人同意拿来练习的——文件内容本身可能看得出是谁写的。');
+      return;
+    }
+
+    const list = drillCandidates(state);
+    const entry = /^\d+$/.test(pick)
+      ? list[Number(pick) - 1]
+      : Object.values(state.seen || {}).find(s => s.filed === pick || s.filed.endsWith(pick));
+    if (!entry) { console.error(`找不到 ${pick}。先跑 drill 不带参数看清单。`); process.exitCode = 1; return; }
+
+    const made = await makeDrill({
+      library: cfg.drive.library, reportsRoot: cfg.drive.reports, entry,
+      outRoot: flags.out ? resolve(flags.out) : null,
+    });
+    console.log(`练习题做好了：${made.dir}`);
+    console.log('  1_题目          给新人读的作品（改过名）');
+    console.log('  2_怎么做.md     练习说明');
+    console.log('  3_答案_做完再打开.md   系统的报告，已去掉提交人');
+  },
+
   async sops() {
     await import('../tools/write-sops.js');
   },
@@ -181,6 +250,12 @@ const CMDS = {
   node town/bin/town.js review <文件> [选项]     评审一份文件
   node town/bin/town.js run [选项]               处理整个收件夹
   node town/bin/town.js sops                     重新生成 SOP
+  node town/bin/town.js checklist [选项]         交件前自检清单
+  node town/bin/town.js drill [编号]             新人找茬练习
+
+checklist 的选项
+  不带参数                   每种类型一份通用清单，写进 档案库/_自检清单/
+  --author 张三 --type proposal   给张三的个人清单，他的老毛病排最前面
 
 review 的选项
   --type proposal|contract|design|report|copy|other   不给就看内容猜
