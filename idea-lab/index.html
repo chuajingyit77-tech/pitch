@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Idea Lab</title>
+<meta name="description" content="Test a business idea the way AI Sensei's reel describes: eleven Claude agents, each with its own job, from Board to Plan.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Fraunces:ital,wght@1,500&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Idea Lab: one idea in, eleven specialist verdicts out. The page is a warm cream studio; each agent is a small blocky mascot that wakes up, works, and reports. */
+:root{
+  --bg:#f6efe6; --bg2:#fff8f1; --ink:#2b2420; --muted:#7a6a60; --line:rgba(70,40,20,.14);
+  --card:#fffdf9; --accent:#d9643a; --accent-ink:#fff; --accent-soft:#f6d7c8;
+  --go:#2f8f5b; --pivot:#d9a13a; --nogo:#c9463d; --shadow:0 10px 30px rgba(80,40,10,.08);
+  --display:"Baloo 2",system-ui,sans-serif; --serif:"Fraunces",Georgia,serif; --body:"Inter",system-ui,-apple-system,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#1a1512; --bg2:#231c18; --ink:#f3ece5; --muted:#b3a498; --line:rgba(255,230,210,.14);
+    --card:#26201b; --accent:#ef7c4e; --accent-soft:#4a2c1f; --shadow:0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1a1512; --bg2:#231c18; --ink:#f3ece5; --muted:#b3a498; --line:rgba(255,230,210,.14);
+  --card:#26201b; --accent:#ef7c4e; --accent-soft:#4a2c1f; --shadow:0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:radial-gradient(1200px 600px at 50% -10%,var(--bg2),var(--bg) 70%);color:var(--ink);font-family:var(--body);line-height:1.5;min-height:100vh}
+a{color:inherit}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+
+/* Hero */
+.hero{padding:56px 0 24px;text-align:center}
+.eyebrow{display:inline-flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.eyebrow b{color:var(--accent)}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(34px,6vw,64px);line-height:1.02;margin:10px 0 6px;letter-spacing:-.01em}
+h1 em{font-family:var(--serif);font-style:italic;font-weight:500;color:var(--accent)}
+.sub{color:var(--muted);font-size:17px;max-width:620px;margin:0 auto}
+.big{font-family:var(--display);font-weight:800;font-size:clamp(90px,18vw,180px);line-height:.9;color:var(--accent);opacity:.12;position:absolute;left:50%;top:-10px;transform:translateX(-50%);pointer-events:none;user-select:none}
+.hero{position:relative}
+
+/* Input */
+.compose{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:16px;margin:26px auto 0;max-width:820px}
+textarea{width:100%;min-height:110px;resize:vertical;border:0;background:transparent;color:var(--ink);font:inherit;font-size:17px;padding:8px 10px;outline:none}
+textarea::placeholder{color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:6px 6px 0;border-top:1px dashed var(--line);margin-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:5px 11px;font:inherit;font-size:13px;cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+button{font:inherit;cursor:pointer}
+.primary{background:var(--accent);color:var(--accent-ink);border:0;border-radius:14px;padding:12px 22px;font-family:var(--display);font-weight:800;font-size:17px;box-shadow:0 8px 20px rgba(217,100,58,.3)}
+.primary:disabled{opacity:.55;cursor:progress;box-shadow:none}
+.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:9px 14px;font-size:14px}
+.ghost:hover{border-color:var(--accent)}
+:is(button,textarea,input,summary,details):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Settings */
+details.settings{max-width:820px;margin:12px auto 0;color:var(--muted);font-size:14px}
+details.settings summary{cursor:pointer;list-style:none;display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:10px}
+details.settings summary::-webkit-details-marker{display:none}
+.settings-body{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-top:8px;display:grid;gap:12px}
+.field{display:grid;gap:6px}
+.field label{font-weight:600;color:var(--ink);font-size:13px}
+.field input,.field select{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink);width:100%}
+.field small{color:var(--muted)}
+.switch{display:flex;gap:10px;align-items:center;font-weight:600;color:var(--ink)}
+.switch input{width:18px;height:18px;accent-color:var(--accent)}
+
+/* Progress */
+.progress[hidden]{display:none}
+.progress{display:flex;align-items:center;gap:14px;max-width:820px;margin:28px auto 0;color:var(--muted);font-size:14px}
+.bar{flex:1;height:8px;border-radius:999px;background:var(--accent-soft);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .5s ease}
+.count{font-family:var(--display);font-weight:800;font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* Agents grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin:22px 0 10px}
+.agent{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 14px 14px;text-align:center;position:relative;transition:transform .25s ease,box-shadow .25s ease;cursor:pointer;min-height:188px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.agent:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.agent[data-state="running"]{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.agent[data-state="done"]{border-color:transparent;box-shadow:var(--shadow)}
+.agent[data-state="error"]{border-color:var(--nogo)}
+.agent .name{font-family:var(--display);font-weight:800;font-size:17px;margin-top:4px}
+.agent .job{font-size:12px;color:var(--muted);line-height:1.35}
+.agent .score{position:absolute;top:10px;right:10px;font-family:var(--display);font-weight:800;font-size:13px;background:var(--accent-soft);color:var(--ink);border-radius:999px;padding:2px 8px;opacity:0;transform:scale(.6);transition:all .35s cubic-bezier(.2,1.4,.4,1)}
+.agent[data-state="done"] .score{opacity:1;transform:scale(1)}
+.agent .state{font-size:11px;color:var(--muted);margin-top:auto;height:16px}
+.agent[data-state="running"] .state{color:var(--accent);font-weight:600}
+
+/* Mascot: a blocky bot built from CSS. It idles, blinks, and bounces while working. */
+.bot{width:64px;height:58px;position:relative;margin:4px auto 0;filter:drop-shadow(0 6px 8px rgba(80,40,10,.18))}
+.bot .head{position:absolute;left:8px;top:0;width:48px;height:40px;border-radius:10px 10px 8px 8px;background:var(--c,#d98a5f);background-image:linear-gradient(135deg,rgba(255,255,255,.35),rgba(0,0,0,0) 55%)}
+.bot .eye{position:absolute;top:14px;width:9px;height:11px;border-radius:3px;background:#1c1512;transform-origin:center}
+.bot .eye.l{left:18px}.bot .eye.r{left:36px}
+.bot .eye::after{content:"";position:absolute;left:2px;top:2px;width:3px;height:3px;background:#fff;border-radius:1px}
+.bot .ear{position:absolute;top:12px;width:7px;height:14px;background:var(--c,#d98a5f);border-radius:3px;filter:brightness(.85)}
+.bot .ear.l{left:1px}.bot .ear.r{right:1px}
+.bot .body{position:absolute;left:14px;top:40px;width:36px;height:16px;border-radius:0 0 9px 9px;background:var(--c,#d98a5f);filter:brightness(.92)}
+.bot .tool{position:absolute;right:-6px;top:30px;font-size:18px;line-height:1;transform:rotate(12deg)}
+.agent[data-state="idle"] .bot{opacity:.75;filter:grayscale(.35) drop-shadow(0 6px 8px rgba(80,40,10,.12))}
+.agent[data-state="running"] .bot{animation:work .6s ease-in-out infinite}
+.agent[data-state="done"] .bot .eye{animation:blink 4s infinite}
+.agent[data-state="done"] .bot{animation:land .5s cubic-bezier(.2,1.4,.4,1)}
+@keyframes work{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)}}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes land{0%{transform:scale(.8)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.agent .bot,.agent .bot .eye{animation:none!important}}
+
+/* Report */
+.report{display:none;margin:28px 0 70px}
+.report.show{display:block}
+.verdict{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:26px;box-shadow:var(--shadow);display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+.stamp{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:.06em;border:4px solid currentColor;border-radius:14px;padding:10px 18px;transform:rotate(-6deg);text-transform:uppercase}
+.stamp.go{color:var(--go)}.stamp.pivot{color:var(--pivot)}.stamp.nogo{color:var(--nogo)}
+.verdict h2{font-family:var(--display);font-size:26px;margin:0 0 6px}
+.verdict p{margin:0;color:var(--muted)}
+.meter{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.meter span{font-size:12px;border-radius:999px;padding:4px 10px;background:var(--accent-soft)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px}
+.note{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 18px}
+.note h3{font-family:var(--display);margin:0 0 4px;font-size:18px;display:flex;gap:8px;align-items:center}
+.note h3 small{font:600 12px var(--body);color:var(--muted)}
+.note .head{font-family:var(--serif);font-style:italic;font-size:17px;margin:2px 0 8px}
+.note ul{margin:6px 0 0;padding-left:18px;font-size:14px}
+.note li{margin:3px 0}
+.note li b{font-weight:600}
+.note .risk{margin-top:8px;font-size:13px;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;justify-content:center}
+footer{color:var(--muted);font-size:13px;text-align:center;padding:30px 16px 50px;border-top:1px solid var(--line)}
+footer a{color:var(--accent)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:.3s;pointer-events:none;max-width:calc(100% - 32px)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Detail dialog */
+dialog{border:0;border-radius:22px;padding:0;max-width:640px;width:calc(100% - 32px);background:var(--card);color:var(--ink);box-shadow:0 30px 80px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(30,20,10,.45);backdrop-filter:blur(4px)}
+.dlg{padding:22px 24px}
+.dlg header{display:flex;gap:14px;align-items:center;margin-bottom:8px}
+.dlg header .bot{margin:0;transform:scale(.8)}
+.dlg h3{font-family:var(--display);margin:0;font-size:22px}
+.dlg .job{color:var(--muted);font-size:13px}
+.dlg .close{margin-left:auto}
+.dlg pre{white-space:pre-wrap;font:inherit;margin:0}
+@media (max-width:640px){.verdict{grid-template-columns:1fr;text-align:center}.stamp{justify-self:center}.hero{padding-top:40px}}
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="big" aria-hidden="true">11</div>
+    <div class="eyebrow"><b>Idea Lab</b> · test a business idea with Claude</div>
+    <h1>It's <em>eleven,</em><br>each with its own job.</h1>
+    <p class="sub">Type one idea. A board sets the bar, a scout checks the market, a customer panel pushes back, and eight more specialists take it apart before a final plan says go, pivot, or stop.</p>
+
+    <form class="compose" id="form">
+      <textarea id="idea" placeholder="Describe the idea in a sentence or two. Who is it for, what does it do, and how would it make money?" aria-label="Your business idea"></textarea>
+      <div class="row">
+        <div class="chips" id="examples" aria-label="Example ideas">
+          <button type="button" class="chip">Subscription meal kits for new parents</button>
+          <button type="button" class="chip">AI bookkeeping for food trucks</button>
+          <button type="button" class="chip">Weekend coding camps for retirees</button>
+        </div>
+        <button class="primary" id="run" type="submit">Run the eleven</button>
+      </div>
+    </form>
+
+    <details class="settings" id="settings">
+      <summary>⚙︎ Settings · <span id="modeLabel">demo mode</span></summary>
+      <div class="settings-body">
+        <label class="switch"><input type="checkbox" id="demo" checked> Demo mode (no API calls, sample output)</label>
+        <div class="field">
+          <label for="key">Anthropic API key</label>
+          <input id="key" type="password" autocomplete="off" placeholder="sk-ant-…">
+          <small>Stored only in this browser's local storage and sent straight to api.anthropic.com. Turn demo mode off to use it.</small>
+        </div>
+        <div class="field">
+          <label for="effort">Effort</label>
+          <select id="effort"><option value="low">low · fastest</option><option value="medium" selected>medium</option><option value="high">high · deepest</option></select>
+        </div>
+      </div>
+    </details>
+
+    <div class="progress" id="progress" hidden>
+      <div class="count"><span id="doneN">0</span>/11</div>
+      <div class="bar"><i id="barFill"></i></div>
+      <div id="progressText">Waking the board…</div>
+    </div>
+  </section>
+
+  <section class="grid" id="grid" aria-live="polite"></section>
+
+  <section class="report" id="report">
+    <div class="verdict" id="verdict"></div>
+    <div class="notes" id="notes"></div>
+    <div class="actions">
+      <button class="ghost" id="copy">Copy report as Markdown</button>
+      <button class="ghost" id="again">Test another idea</button>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Method from AI Sensei's reel <a href="https://www.instagram.com/reel/DfWkNJZuFpJ/" rel="noopener" target="_blank">"This is how you actually test your business idea with Claude AI"</a> · built as a standalone page in the <em>pitch</em> collection.
+</footer>
+
+<dialog id="dlg"><div class="dlg" id="dlgBody"></div></dialog>
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ---------- The eleven agents. Order matters: each one reads the handoff notes of everyone before it. ---------- */
+const AGENTS = [
+  {id:'board',    name:'Board',     tool:'🛡️', c:'#d98a5f', job:'Sets the bar and the kill criteria',
+   brief:'You are the Board. Decide what must be true for this idea to be worth pursuing. Define 5 crisp kill criteria (measurable where possible), the single biggest assumption, and what "good" looks like at 12 months. Be demanding but fair.'},
+  {id:'scout',    name:'Scout',     tool:'🔭', c:'#c97a4a', job:'Scans the market, competitors and gaps',
+   brief:'You are the Scout. Map the market from what you know: rough size, who already serves this customer, how they charge, where they are weak, and the real gap (if any). Flag where you are uncertain rather than inventing numbers.'},
+  {id:'panel',    name:'Panel',     tool:'🗣️', c:'#e0a06a', job:'Five target customers react and object',
+   brief:'You are a Customer Panel of five distinct target customers. For each, give a one-line persona, their gut reaction, their strongest objection, and whether they would pay. Then summarize the pattern: what wins them and what loses them.'},
+  {id:'pricing',  name:'Pricing',   tool:'🏷️', c:'#b86a3c', job:'Picks a pricing model and price point',
+   brief:'You are Pricing. Propose 2-3 pricing models, anchor them against alternatives the Scout and Panel surfaced, and recommend one with a concrete price. Explain the willingness-to-pay logic.'},
+  {id:'offer',    name:'Offer',     tool:'🎁', c:'#d7784f', job:'Shapes the promise, guarantee and pitch',
+   brief:'You are Offer. Turn the idea into an offer people cannot ignore: the core promise, the proof, a risk reversal or guarantee, 1-2 bonuses, and a one-sentence pitch a founder could say out loud.'},
+  {id:'cfo',      name:'CFO',       tool:'🧮', c:'#a95f3a', job:'Runs unit economics and break-even',
+   brief:'You are the CFO. Estimate unit economics with stated assumptions: price, gross margin, CAC, payback, LTV, monthly fixed costs, and the break-even customer count. Give a rough 12-month picture. Say which assumption breaks the model if wrong.'},
+  {id:'marketing',name:'Marketing', tool:'📣', c:'#e38c5c', job:'Finds the first 100 customers',
+   brief:'You are Marketing. Choose the 2 best channels to reach the first 100 customers and explain why. Write 3 hooks or headlines that use the Panel language, and describe one scrappy campaign for week one.'},
+  {id:'brand',    name:'Brand',     tool:'✨', c:'#cf8457', job:'Names it and positions it',
+   brief:'You are Brand. Give 3 name options with a one-line rationale, a positioning statement (for X who Y, we are the Z that W), the tone of voice in 3 words, and a tagline.'},
+  {id:'ops',      name:'Ops',       tool:'🔧', c:'#b97148', job:'Works out how it actually gets delivered',
+   brief:'You are Ops. Describe what it takes to deliver the offer: the minimum stack or supply chain, roles needed, the first bottleneck, and the quality risk. Keep it to what matters in the first 90 days.'},
+  {id:'launch',   name:'Launch',    tool:'🚀', c:'#dc6f45', job:'Scopes the MVP and the 30-day launch',
+   brief:'You are Launch. Define the smallest test that proves the Board’s biggest assumption, a 30-day plan in weekly milestones, the success metric for day 30, and what you deliberately leave out.'},
+  {id:'plan',     name:'Plan',      tool:'📋', c:'#c4663b', job:'Delivers the final verdict and next steps',
+   brief:'You are Plan, the final synthesizer. Read every handoff. Check the idea against the Board’s kill criteria one by one. Give an overall verdict (GO, PIVOT, or NO-GO), the three strongest reasons, the three biggest risks, and the next three actions for this week. In "headline", start with exactly one of GO, PIVOT or NO-GO followed by a colon.'}
+];
+
+const SCHEMA = {
+  type:'object', additionalProperties:false,
+  required:['headline','score','summary','points','risks','handoff'],
+  properties:{
+    headline:{type:'string',description:'One punchy sentence that states your conclusion.'},
+    score:{type:'integer',description:'0-10. How strong the idea looks from your seat.'},
+    summary:{type:'string',description:'Two or three sentences of reasoning in plain language.'},
+    points:{type:'array',items:{type:'object',additionalProperties:false,required:['label','detail'],properties:{label:{type:'string'},detail:{type:'string'}}},description:'3 to 6 concrete points. Label is 1-4 words, detail is one or two sentences.'},
+    risks:{type:'array',items:{type:'string'},description:'1 to 3 risks or open questions.'},
+    handoff:{type:'string',description:'A short note (max 80 words) for the agents after you: what they must take into account.'}
+  }
+};
+
+const MODEL = 'claude-opus-5-5';
+const $ = s => document.querySelector(s);
+const grid = $('#grid'), ideaEl = $('#idea'), runBtn = $('#run'), demoEl = $('#demo'), keyEl = $('#key'), effortEl = $('#effort');
+const results = {};
+let running = false;
+
+/* ---------- Build the cards ---------- */
+function botHTML(a){
+  return `<div class="bot" style="--c:${a.c}" aria-hidden="true"><div class="ear l"></div><div class="ear r"></div><div class="head"><div class="eye l"></div><div class="eye r"></div></div><div class="body"></div><div class="tool">${a.tool}</div></div>`;
+}
+grid.innerHTML = AGENTS.map(a => `
+  <article class="agent" data-id="${a.id}" data-state="idle" tabindex="0" role="button" aria-label="${a.name}: ${a.job}">
+    <span class="score"></span>${botHTML(a)}
+    <div class="name">${a.name}</div><div class="job">${a.job}</div><div class="state">waiting</div>
+  </article>`).join('');
+grid.addEventListener('click', e => { const card = e.target.closest('.agent'); if (card) openDetail(card.dataset.id); });
+grid.addEventListener('keydown', e => { if ((e.key==='Enter'||e.key===' ') && e.target.classList.contains('agent')) { e.preventDefault(); openDetail(e.target.dataset.id); } });
+
+function setState(id, state, text){
+  const card = grid.querySelector(`[data-id="${id}"]`);
+  card.dataset.state = state; card.querySelector('.state').textContent = text || state;
+  if (state==='done' && results[id]) card.querySelector('.score').textContent = results[id].score + '/10';
+}
+
+/* ---------- Settings persistence ---------- */
+try { keyEl.value = localStorage.getItem('idealab.key') || ''; demoEl.checked = localStorage.getItem('idealab.demo') !== 'off'; effortEl.value = localStorage.getItem('idealab.effort') || 'medium'; } catch(e){}
+function syncMode(){ $('#modeLabel').textContent = demoEl.checked ? 'demo mode' : 'live · ' + MODEL; try{ localStorage.setItem('idealab.demo', demoEl.checked ? 'on' : 'off'); }catch(e){} }
+demoEl.addEventListener('change', syncMode); syncMode();
+keyEl.addEventListener('change', () => { try{ localStorage.setItem('idealab.key', keyEl.value.trim()); }catch(e){} });
+effortEl.addEventListener('change', () => { try{ localStorage.setItem('idealab.effort', effortEl.value); }catch(e){} });
+$('#examples').addEventListener('click', e => { if (e.target.classList.contains('chip')) { ideaEl.value = e.target.textContent; ideaEl.focus(); } });
+
+/* ---------- Run ---------- */
+$('#form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (running) return;
+  const idea = ideaEl.value.trim();
+  if (idea.length < 12) { toast('Give the eleven a little more to work with.'); ideaEl.focus(); return; }
+  if (!demoEl.checked && !keyEl.value.trim()) { toast('Add an API key in Settings, or keep demo mode on.'); $('#settings').open = true; keyEl.focus(); return; }
+  running = true; runBtn.disabled = true; runBtn.textContent = 'Working…';
+  for (const k in results) delete results[k];
+  AGENTS.forEach(a => { setState(a.id,'idle','waiting'); grid.querySelector(`[data-id="${a.id}"] .score`).textContent=''; });
+  $('#report').classList.remove('show'); $('#progress').hidden = false; updateProgress(0, 'Waking the board…');
+
+  const handoffs = [];
+  for (let i = 0; i < AGENTS.length; i++) {
+    const a = AGENTS[i];
+    setState(a.id,'running','thinking');
+    updateProgress(i, `${a.name} · ${a.job.toLowerCase()}…`);
+    try {
+      const out = demoEl.checked ? await demoAgent(a, idea, i) : await callClaude(a, idea, handoffs);
+      results[a.id] = out; handoffs.push({name:a.name, note:out.handoff, headline:out.headline, score:out.score});
+      setState(a.id,'done','done');
+    } catch (err) {
+      console.error(err);
+      setState(a.id,'error','failed');
+      toast(a.name + ' failed: ' + (err.message || err));
+      if (!demoEl.checked && /401|403|api key|invalid/i.test(String(err.message))) { $('#settings').open = true; }
+      break;
+    }
+    updateProgress(i+1);
+  }
+  const all = AGENTS.every(a => results[a.id]);
+  if (all) { updateProgress(11, 'All eleven have reported.'); renderReport(idea); }
+  running = false; runBtn.disabled = false; runBtn.textContent = all ? 'Run again' : 'Retry';
+});
+
+function updateProgress(n, text){ $('#doneN').textContent = n; $('#barFill').style.width = (n/11*100) + '%'; if (text) $('#progressText').textContent = text; }
+
+/* ---------- Claude call (raw HTTP from the browser) ---------- */
+async function callClaude(agent, idea, handoffs){
+  const context = handoffs.length ? '\n\nHandoff notes from the agents before you:\n' + handoffs.map(h => `- ${h.name} (${h.score}/10): ${h.headline} ${h.note}`).join('\n') : '';
+  const body = {
+    model: MODEL,
+    max_tokens: 4000,
+    output_config: { effort: effortEl.value, format: { type:'json_schema', schema: SCHEMA } },
+    fallbacks: 'default',
+    system: 'You are one of eleven specialist agents stress-testing a business idea for a founder, in the spirit of a sharp advisory board. Be concrete, specific to this idea, and honest; a low score with clear reasons is more useful than polite optimism. Never pad. ' + agent.brief,
+    messages: [{ role:'user', content: `Business idea:\n${idea}${context}\n\nDo your job as ${agent.name} and respond in the required JSON shape.` }]
+  };
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key': keyEl.value.trim(),
+      'anthropic-version':'2026-10-21',
+      'anthropic-beta':'server-side-fallback-2026-07-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { let msg = res.status + ' ' + res.statusText; try { const j = await res.json(); msg = j.error?.message || msg; } catch(e){} throw new Error(msg); }
+  const msg = await res.json();
+  if (msg.stop_reason === 'refusal') throw new Error('The model declined this request' + (msg.stop_details?.category ? ' (' + msg.stop_details.category + ')' : '') + '.');
+  if (msg.stop_reason === 'max_tokens') throw new Error('Response was cut off. Try a lower effort or a shorter idea.');
+  const text = msg.content.filter(b => b.type==='text').map(b => b.text).join('');
+  const out = JSON.parse(text);
+  out.score = Math.max(0, Math.min(10, Math.round(Number(out.score)||0)));
+  return out;
+}
+
+/* ---------- Demo mode: templated output so the pitch works without a key ---------- */
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function seedFrom(s){ let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return () => { h = Math.imul(h ^ (h>>>15), 2246822507); h = Math.imul(h ^ (h>>>13), 3266489909); return ((h ^= h>>>16) >>> 0) / 4294967296; }; }
+async function demoAgent(a, idea, i){
+  await wait(700 + Math.random()*700);
+  const rnd = seedFrom(idea + a.id); const score = 5 + Math.floor(rnd()*5);
+  const short = idea.length > 60 ? idea.slice(0, 57).replace(/\s+\S*$/, '') + '…' : idea;
+  const D = {
+    board:{ headline:`Worth a 30-day test, not a 12-month bet, until two assumptions are proven.`, points:[['Kill criterion 1','Fewer than 10 of 50 target customers say they would pay the proposed price.'],['Kill criterion 2','Customer acquisition cost above one third of first-year revenue per customer.'],['Kill criterion 3','No repeat use or renewal signal within 60 days.'],['Biggest assumption','That the target customer feels this problem often enough to change a habit.'],['Good at 12 months','A few hundred paying customers, positive contribution margin, one channel that reliably converts.']], risks:['The founder may be the only person who has felt the pain acutely.'] },
+    scout:{ headline:`Crowded at the edges, thin in the middle: nobody owns the exact job to be done.`, points:[['Incumbents','Generic tools and DIY workarounds serve this customer today, badly but cheaply.'],['Pricing norms','Alternatives charge a low monthly fee or nothing, so value must be visibly higher.'],['Gap','A done-for-you version aimed squarely at this niche, with language they use.'],['Uncertainty','Market size numbers here are directional, not verified.']], risks:['A well-funded horizontal player could add this as a feature.'] },
+    panel:{ headline:`Three of five would try it; two want proof it saves them time this week.`, points:[['The overwhelmed one','"Yes, if setup takes under ten minutes."'],['The skeptic','"I have been burned before. Show me someone like me using it."'],['The budget-holder','"Price is fine if it replaces something I already pay for."'],['The DIY-er','"I would rather keep my spreadsheet." Not a buyer.'],['Pattern','Speed to first result wins them; vague promises lose them.']], risks:['Objections cluster around trust, not price.'] },
+    pricing:{ headline:`Charge a simple monthly fee with a visible anchor, and offer an annual plan early.`, points:[['Model A','Flat monthly subscription. Easiest to explain and to forecast.'],['Model B','Starter plus premium tier once the premium job is clear.'],['Recommendation','Start with one price near the top of what the Panel accepted; it is easier to lower than to raise.'],['Anchor','Frame it against the cost of the time or the service it replaces.']], risks:['Underpricing to win early users makes later increases painful.'] },
+    offer:{ headline:`Promise the first visible result inside the first session, and guarantee it.`, points:[['Core promise','Get the specific outcome the Panel named, without the usual effort.'],['Proof','One before-and-after from a real pilot customer.'],['Risk reversal','Full refund in the first 30 days, no questions.'],['Bonus','A quick-start checklist that is useful even if they cancel.'],['One-liner',`"${short}" in one sitting, or you do not pay.`]], risks:['A guarantee only works once onboarding is genuinely fast.'] },
+    cfo:{ headline:`The model works at a few hundred customers if acquisition stays under control.`, points:[['Gross margin','High for a software-led offer, lower if humans deliver part of it.'],['Payback','Target under four months of subscription per customer.'],['Break-even','Roughly fixed monthly costs divided by contribution per customer; a few hundred, not thousands.'],['12-month picture','Loss-making for the first two quarters, close to break-even by quarter four if churn stays low.'],['Fragile assumption','Churn. Every point of monthly churn pushes break-even out sharply.']], risks:['These are placeholder assumptions; replace them with pilot data.'] },
+    marketing:{ headline:`Win the first 100 where this customer already complains, then let them refer.`, points:[['Channel 1','Communities and groups where the target customer already asks for help.'],['Channel 2','Short video showing the first-session result, using Panel language verbatim.'],['Hook 1','"Stop doing it the hard way every week."'],['Hook 2','"Your first result in ten minutes. Yes, really."'],['Week one','Twenty hand-picked outreach messages, one live demo, one referral ask.']], risks:['Paid ads before message-market fit will burn cash.'] },
+    brand:{ headline:`Sound like a capable friend, not a platform.`, points:[['Name option 1','A plain two-word name that says the outcome.'],['Name option 2','A short invented word that is easy to say and spell.'],['Name option 3','A phrase the Panel used, trimmed.'],['Positioning','For the target customer who is stuck doing this by hand, we are the done-with-you option that gets a result today.'],['Tone','Warm, direct, unfussy.']], risks:['Avoid names that box you into one feature.'] },
+    ops:{ headline:`Deliverable by a tiny team if the first version stays narrow.`, points:[['Minimum stack','Off-the-shelf tools stitched together; build nothing custom until it hurts.'],['Roles','One builder, one person talking to customers daily. That is enough for 90 days.'],['First bottleneck','Onboarding and support once past the first fifty customers.'],['Quality risk','Inconsistent results across customer situations; fix with a tighter scope.']], risks:['Scope creep from eager early customers.'] },
+    launch:{ headline:`Prove the biggest assumption in 30 days with a concierge version.`, points:[['Smallest test','Deliver the outcome manually for ten customers before automating anything.'],['Week 1','Recruit ten target customers from the Marketing channels.'],['Week 2 to 3','Deliver, measure time to first result, collect objections.'],['Week 4','Ask for payment and a referral; count both.'],['Day 30 metric','At least five of ten pay and at least three refer someone.']], risks:['Leaving out automation on purpose; it is a feature, not a bug, for now.'] },
+    plan:{ headline:`${score>=7?'GO':score>=5?'PIVOT':'NO-GO'}: ${score>=7?'run the 30-day concierge test now.':score>=5?'narrow the customer and the promise, then test.':'the economics and demand do not line up yet.'}`, points:[['Kill criteria check','Two of five are unproven, none are failed outright.'],['Reason 1','A real, repeated pain with weak incumbents.'],['Reason 2','A deliverable first version with a tiny team.'],['Reason 3','A guarantee-backed offer that matches Panel language.'],['Risk 1','Trust: the skeptic needs proof before paying.'],['Risk 2','Churn sensitivity in the CFO model.'],['Risk 3','Acquisition cost if community channels underperform.'],['This week','1. Recruit ten pilot customers. 2. Write the one-liner and guarantee. 3. Set up a sheet to track time to first result and payment.']], risks:['Demo output is illustrative. Turn off demo mode and add an API key for a real analysis.'] }
+  }[a.id];
+  return { headline:D.headline, score, summary:`Demo reasoning for "${short}". In live mode this agent reads the handoff notes of the ${i} agent${i===1?'':'s'} before it and reasons about your specific idea.`, points:D.points.map(([label,detail])=>({label,detail})), risks:D.risks, handoff:'See points above.' };
+}
+
+/* ---------- Report ---------- */
+function verdictOf(){
+  const h = (results.plan?.headline || '').toUpperCase();
+  if (h.startsWith('NO-GO') || h.startsWith('NO GO')) return 'nogo';
+  if (h.startsWith('PIVOT')) return 'pivot';
+  if (h.startsWith('GO')) return 'go';
+  const avg = AGENTS.reduce((s,a)=>s+results[a.id].score,0)/AGENTS.length;
+  return avg >= 7 ? 'go' : avg >= 5 ? 'pivot' : 'nogo';
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function renderReport(idea){
+  const v = verdictOf(); const plan = results.plan;
+  const avg = (AGENTS.reduce((s,a)=>s+results[a.id].score,0)/AGENTS.length).toFixed(1);
+  $('#verdict').innerHTML = `
+    <div class="stamp ${v}">${v==='go'?'Go':v==='pivot'?'Pivot':'No-go'}</div>
+    <div><h2>${esc(plan.headline)}</h2><p>${esc(plan.summary)}</p>
+      <div class="meter"><span>Average score ${avg}/10</span>${AGENTS.map(a=>`<span>${a.name} ${results[a.id].score}</span>`).join('')}</div></div>`;
+  $('#notes').innerHTML = AGENTS.map(a => { const r = results[a.id]; return `
+    <article class="note" style="border-top:4px solid ${a.c}">
+      <h3>${a.tool} ${a.name} <small>${r.score}/10</small></h3>
+      <div class="head">${esc(r.headline)}</div>
+      <ul>${r.points.map(p=>`<li><b>${esc(p.label)}.</b> ${esc(p.detail)}</li>`).join('')}</ul>
+      ${r.risks?.length ? `<div class="risk">Risks: ${r.risks.map(esc).join(' · ')}</div>` : ''}
+    </article>`; }).join('');
+  $('#report').classList.add('show');
+  $('#report').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function toMarkdown(idea){
+  const v = verdictOf().toUpperCase();
+  let md = `# Idea Lab report\n\n**Idea:** ${idea}\n\n**Verdict:** ${v} — ${results.plan.headline}\n\n`;
+  for (const a of AGENTS) { const r = results[a.id]; md += `## ${a.name} (${r.score}/10)\n*${r.headline}*\n\n${r.summary}\n\n` + r.points.map(p=>`- **${p.label}.** ${p.detail}`).join('\n') + (r.risks?.length?`\n\nRisks: ${r.risks.join('; ')}`:'') + '\n\n'; }
+  return md;
+}
+$('#copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(toMarkdown(ideaEl.value.trim())); toast('Report copied.'); } catch(e) { toast('Could not copy. Select the text instead.'); } });
+$('#again').addEventListener('click', () => { ideaEl.value=''; ideaEl.focus(); window.scrollTo({top:0,behavior:'smooth'}); });
+
+/* ---------- Detail dialog ---------- */
+function openDetail(id){
+  const a = AGENTS.find(x=>x.id===id), r = results[id];
+  $('#dlgBody').innerHTML = `
+    <header>${botHTML(a)}<div><h3>${a.name}</h3><div class="job">${a.job}</div></div><button class="ghost close" id="dlgClose">Close</button></header>
+    ${r ? `<p style="font-family:var(--serif);font-style:italic;font-size:19px;margin:8px 0">${esc(r.headline)} <span style="font:600 13px var(--body);color:var(--muted)">${r.score}/10</span></p><p>${esc(r.summary)}</p><ul>${r.points.map(p=>`<li><b>${esc(p.label)}.</b> ${esc(p.detail)}</li>`).join('')}</ul>${r.risks?.length?`<p style="color:var(--muted);font-size:14px">Risks: ${r.risks.map(esc).join(' · ')}</p>`:''}`
+        : `<p style="color:var(--muted)">${esc(a.brief)}</p><p style="font-size:13px;color:var(--muted)">Run an idea to see what ${a.name} says.</p>`}`;
+  $('#dlg').showModal(); $('#dlgClose').onclick = () => $('#dlg').close();
+}
+$('#dlg').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+let toastT; function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
+</script>
+</body>
+</html>
