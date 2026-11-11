@@ -188,6 +188,11 @@ Audio ambience layer names for `ambience`: `underwater ocean wind rain stream wa
   (play with an `AnimationMixer` per clone; vary `timeScale`, pause the action for glides).
   Native wingspan ≈ 150 units, so scale ≈ 0.01. They fly toward +Z.
 - `models/Barramundi.glb` — photoreal CC0 fish, ≈ 0.64 long along Z, belly at y=0, head toward +Z after its node rotation.
+- `models/fish_<id>.glb` — photo fish from the CC0 Fish Kit by なちゃっと (https://cda-social.github.io/fish/), made by
+  `tools/photofish_pack.py <kit>/fish id:texture ...`: nodes `hi` (~5,000 triangles) and `lo` (~700) already in the swim
+  frame (head +X, length 1, centred) with `aFin`; one atlas (opaque body, bled edges, power of two; 1024 for fish seen
+  up close, 512 for schools). Load with `lib/photofish.js` (`loadPhotoFish`, `photoFishMaterial`, `PhotoFishGroup`).
+  Packed so far: `kamasu` (barracuda), `madai` (red sea bream), `isaki` (grunt), `aji` (horse mackerel).
 - `textures/waternormals.jpg` (for `three/addons/objects/Water.js`), `Water_1_M_Normal.jpg`, `Water_2_M_Normal.jpg` (for Water2 / custom water).
 - Anything else should be procedural (canvas textures, noise, shaders) or downloaded by you from a
   CC0 / MIT source into `assets/<id>/`. Keep each world's extra assets under ~3 MB and record the license.

@@ -201,5 +201,8 @@ npx http-server idle-world-3d -p 8080
   glTF conversion by AsoboStudio and scurest (CC BY 4.0).
 - Parrot, Flamingo, Stork: mirada / ro.me, from the three.js examples.
 - Barramundi Fish: Microsoft (CC0).
+- Photo fish (the reef's barracuda, red sea bream and grunts, the island's horse mackerel and grunts): models and
+  photographs from the Fish Kit by なちゃっと (CC0 1.0, https://cda-social.github.io/fish/), packed for these worlds by
+  `tools/photofish_pack.py` (only the kit's models are used; they swim with our own shader, `lib/photofish.js`).
 - Water normal maps: three.js examples.
-- three.js (MIT). Everything else — fish, plants, terrain, sky, sound — is procedural.
+- three.js (MIT). Everything else — the other fish, plants, terrain, sky, sound — is procedural.

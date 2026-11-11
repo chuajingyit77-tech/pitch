@@ -816,6 +816,15 @@ export function createFishMaterial(painted, overrides = {}) {
     envMapIntensity: p.envMapIntensity ?? 1,
   });
   applySwim(mat, { waveK: p.waveK ?? 7.0 });
+  return applyFinAlpha(mat);
+}
+
+/**
+ * Keep a fish material's texture alpha so its fins are see-through (the material has alphaToCoverage and a low
+ * alphaTest): alpha-to-coverage where there is multisampling, and where there is not, the split into an opaque pass
+ * and a blended fin pass (addFinPass, which FishInstances adds). Used by createFishMaterial and the photo fish.
+ */
+export function applyFinAlpha(mat) {
   // three r160 forces alpha to 1 on opaque materials, which defeats alpha-to-coverage; keep the fin alpha.
   // The chunk itself stays in place so later patches that hook it (underwater tint, fog, rim) still apply.
   // uFinMode splits the fins over two passes where there is no multisampling (see addFinPass): 0 = one pass
@@ -862,7 +871,8 @@ const FIN_SYNC = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessM
   'sheenRoughness', 'visible', 'fog', 'toneMapped', 'side'];
 function syncFinMaterial(fin, main) {
   for (let i = 0; i < FIN_SYNC.length; i++) { const k = FIN_SYNC[i]; if (fin[k] !== main[k]) fin[k] = main[k]; }
-  fin.color.copy(main.color); fin.emissive.copy(main.emissive); fin.sheenColor.copy(main.sheenColor);
+  fin.color.copy(main.color); fin.emissive.copy(main.emissive);
+  if (main.sheenColor) fin.sheenColor.copy(main.sheenColor);   // physical materials only (the photo fish are standard)
   fin.normalScale.copy(main.normalScale);
 }
 

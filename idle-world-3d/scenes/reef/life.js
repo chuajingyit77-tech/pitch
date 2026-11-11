@@ -5,6 +5,7 @@ import { clamp, lerp, smoothstep, TAU, makeRng, quatFromForward, damp, angleDelt
 import { SHAPES, PAINTERS, REGION, buildFishGeometry, paintFish, createFishMaterial, applySwim, prepareSwimGeometry, FishInstances, Swimmer } from '../../lib/fish.js';
 import { waterize } from './uw.js';
 import { Turtle } from './turtle.js';
+import { loadPhotoFish, photoFishMaterial, PhotoFishGroup } from '../../lib/photofish.js';
 
 const hex = h => { const n = parseInt(h.slice(1), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
 const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
@@ -701,7 +702,73 @@ export async function createLife(ctx) {
     }
   } catch (e) { console.warn('[reef] barramundi unavailable', e); }
 
-  const swimLists = [school, silver, butter, cleaners, fus.fish, jacks, barra, ...hoverGroups.map(g => g.fish)];
+  /* ---- photo fish (lib/photofish.js: modelled from photographs, CC0 Fish Kit) ---- */
+  // A barracuda tornado over the reef: a slow column of long silver fish wheeling in the blue (as over Sipadan's
+  // drop-off), the open water's landmark; a pair of red sea bream roaming the reef and a band of grunts off the
+  // flank of a coral head, both coming to the food.
+  const cuda = [], bream = [], grunts = [];
+  let cudaFish = null, breamFish = null, gruntFish = null;
+  const cudaC = new THREE.Vector3();
+  const pRng = rng.fork('photo');
+  try {
+    const [kamasu, madai, isaki] = await Promise.all(['kamasu', 'madai', 'isaki'].map(id => loadPhotoFish(env, id)));
+    const mk = (spec, max, lod, opts) => {
+      const mat = photoFishMaterial(spec.map, opts);
+      waterize(mat, W, { key: 'photo', rim: 1.2 });
+      const g = new PhotoFishGroup(spec, mat, max, { lod, castShadow: lod === 'hi' && env.shadows });
+      group.add(g.mesh);
+      disposables.push(g, mat);
+      return g;
+    };
+    const tangent = (sw, a, v) => { sw.vel.set(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(v); sw.fwd.copy(sw.vel).normalize(); };
+
+    // barracuda: each holds a ring and a level of the column (levels spread top to bottom)
+    const nCuda = q > 0.6 ? 44 : 30;
+    // seen small against the blue: a matte, slightly greyed silver, so their highlights do not sparkle (flicker)
+    cudaFish = mk(kamasu, nCuda, 'lo', { waveK: 6.0, roughness: 0.7, envMapIntensity: 0.45 });
+    cudaFish.mesh.material.color.setScalar(0.86);
+    cudaFish.ampK = 0.8;
+    const ca = pRng.range(0, TAU);
+    cudaC.set(center.x + Math.cos(ca) * 4, 0, center.z + Math.sin(ca) * 4);
+    cudaC.y = clamp(floorAt(cudaC.x, cudaC.z) + 4.9, center.y + 4.0, surfY - 3.6);
+    for (let i = 0; i < nCuda; i++) {
+      const a = pRng.range(0, TAU), r = pRng.range(1.3, 2.4), h = (i / (nCuda - 1) - 0.5) * 3.4 + pRng.range(-0.15, 0.15);
+      const sw = new Swimmer({ pos: cudaC.clone().add(new THREE.Vector3(Math.cos(a) * r, h, Math.sin(a) * r)), size: pRng.range(0.8, 1.1), speed: 0.5, rng: pRng, agility: 1.6, maxPitch: 0.2 });
+      tangent(sw, a, 0.5);
+      sw.ring = r; sw.lvl = h; sw.ph = pRng.range(0, TAU);
+      cuda.push(sw);
+    }
+
+    // grunts: a loose band milling off the flank of a coral head
+    const nGrunt = q > 0.6 ? 9 : 6;
+    gruntFish = mk(isaki, nGrunt, 'lo', { waveK: 6.5 });
+    const gb = bommies[Math.min(1, bommies.length - 1)];
+    const ga = pRng.range(0, TAU);
+    const gHome = new THREE.Vector3(gb.x + Math.cos(ga) * (gb.r + 1.4), 0, gb.z + Math.sin(ga) * (gb.r + 1.4));
+    gHome.y = floorAt(gHome.x, gHome.z) + 1.3;
+    for (let i = 0; i < nGrunt; i++) {
+      const p = gHome.clone().add(new THREE.Vector3(pRng.range(-1.2, 1.2), pRng.range(-0.3, 0.4), pRng.range(-1.2, 1.2)));
+      const sw = new Swimmer({ pos: p, size: pRng.range(0.3, 0.38), speed: 0.2, rng: pRng, agility: 1.8, maxPitch: 0.35 });
+      sw.home = gHome; sw.target = p.clone(); sw.timer = pRng.range(0, 4); sw.food = null;
+      sw.rng = pRng.fork(`grunt${i}`);   // its own dice (see the anthias' darts)
+      grunts.push(sw);
+    }
+
+    // red sea bream: a pair roaming the reef, the second keeping near the first
+    breamFish = mk(madai, 2, 'hi', { waveK: 5.8 });
+    breamFish.ampK = 0.85;
+    const ba = pRng.range(0, TAU);
+    for (let i = 0; i < 2; i++) {
+      const p = new THREE.Vector3(center.x + Math.cos(ba) * 8 + i * 0.8, 0, center.z + Math.sin(ba) * 8 + i * 0.6);
+      p.y = floorAt(p.x, p.z) + 1.6;
+      const sw = new Swimmer({ pos: p, size: pRng.range(0.5, 0.6), speed: 0.35, rng: pRng, agility: 1.5, maxPitch: 0.3 });
+      sw.target = p.clone(); sw.timer = 0; sw.food = null; sw.lead = i ? bream[0] : null;
+      sw.rng = pRng.fork(`bream${i}`);
+      bream.push(sw);
+    }
+  } catch (e) { console.warn('[reef] photo fish unavailable', e); }
+
+  const swimLists = [school, silver, butter, cleaners, fus.fish, jacks, barra, cuda, grunts, bream, ...hoverGroups.map(g => g.fish)];
 
   /* ---- food ---- */
   const food = new Food(W, env, 72);
@@ -1405,8 +1472,98 @@ export async function createLife(ctx) {
     barraInst.end(fishT);
   }
 
+  // A fish going for food: keeps the pellet it chose until it is gone, eats it when its mouth reaches it.
+  // Returns true while it has one (the caller has aimed `f.target` at it).
+  function chasePellet(f, reach) {
+    if (!food.active || (f.food && !f.food.alive)) f.food = null;
+    if (food.active && !f.food) f.food = food.nearest(f.pos, reach, foodAvail);
+    const it = f.food;
+    if (!it) return false;
+    aimAt(it, f.target);
+    _v1.copy(f.fwd).multiplyScalar(f.size * 0.48).add(f.pos);
+    if (_v1.distanceTo(f.target) < 0.14) { food.eat(it); env.onEat(null, it.pos.clone()); f.food = null; f.timer = 0; }
+    return true;
+  }
+
+  // The barracuda wheel round their column, anticlockwise seen from above: each holds its ring and its level, the
+  // rings breathe a little. They part for the whale shark and keep a few metres from the viewer.
+  function updateCuda(dt, t) {
+    if (!cudaFish) return;
+    const c = cudaC, cam = camera.position;
+    for (const s of cuda) {
+      const rx = s.pos.x - c.x, ry = s.pos.y - c.y, rz = s.pos.z - c.z;
+      const rr = Math.hypot(rx, rz) + 1e-3;
+      const R = s.ring + Math.sin(t * 0.11 + s.ph) * 0.35;
+      const v = 0.55 + 0.1 * Math.sin(t * 0.07 + s.ph * 2);
+      _d.set(-rz / rr * v, 0, rx / rr * v);
+      _d.x += -rx / rr * (rr - R) * 0.45; _d.z += -rz / rr * (rr - R) * 0.45;
+      _d.y = (s.lvl + Math.sin(t * 0.13 + s.ph) * 0.35 - ry) * 0.4;
+      const ex = s.pos.x - cam.x, ey = s.pos.y - cam.y, ez = s.pos.z - cam.z, ed = Math.hypot(ex, ey, ez);
+      if (ed < 3.5) { const k = (3.5 - ed) / 3.5 * 1.6 / Math.max(ed, 0.1); _d.x += ex * k; _d.y += ey * k; _d.z += ez * k; }
+      giantPush(s.pos, _d, 4.0, 2.2);
+      swim(s, _d, dt);
+    }
+    cudaFish.begin(); for (const s of cuda) cudaFish.push(s); cudaFish.end(fishT);
+  }
+
+  // Grunts mill off the flank of their coral head, each drifting from spot to spot near home and keeping a little
+  // room from its neighbours; food within reach and they go for it, then drift back.
+  function updateGrunts(dt, t) {
+    if (!gruntFish) return;
+    for (let i = 0; i < grunts.length; i++) {
+      const g = grunts[i];
+      g.timer -= dt;
+      let speed = 0.22;
+      if (chasePellet(g, 7)) speed = 0.9;
+      else if (g.timer <= 0 || g.pos.distanceTo(g.target) < 0.35) {
+        g.timer = g.rng.range(4, 9);
+        g.target.set(g.home.x + g.rng.range(-1.6, 1.6), g.home.y + g.rng.range(-0.5, 0.6), g.home.z + g.rng.range(-1.6, 1.6));
+      }
+      g.seek(g.target, speed, 1.2, _d);
+      for (let j = 0; j < grunts.length; j++) {
+        if (j === i) continue;
+        const o = grunts[j], dx = g.pos.x - o.pos.x, dy = g.pos.y - o.pos.y, dz = g.pos.z - o.pos.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < 0.2 && d2 > 1e-8) { const d = Math.sqrt(d2), k = (0.45 - d) / 0.45 * 0.6 / d; _d.x += dx * k; _d.y += dy * k * 0.5; _d.z += dz * k; }
+      }
+      avoid(g, _d, 0.5, dt);
+      arcSteer(g, _d, 0.8);
+      giantPush(g.pos, _d, 2.0, 1.4, 0.4);
+      swim(g, _d, dt);
+      clampAbove(g, 0.45, dt);
+    }
+    gruntFish.begin(); for (const g of grunts) gruntFish.push(g); gruntFish.end(fishT);
+  }
+
+  // The red sea bream roam the reef, the second a body length or so behind the first; both come to the food.
+  function updateBream(dt, t) {
+    if (!breamFish) return;
+    for (const b of bream) {
+      b.timer -= dt;
+      let speed = 0.36;
+      if (chasePellet(b, 8)) speed = 1.0;
+      else if (b.lead) {
+        // keep station behind and beside the leader
+        const l = b.lead;
+        b.target.copy(l.pos).addScaledVector(l.fwd, -0.9).add(_v2.set(-l.fwd.z * 0.5, 0.15, l.fwd.x * 0.5));
+        speed = clamp(b.pos.distanceTo(b.target) * 0.6, 0.15, 0.7);
+      } else if (b.timer <= 0 || b.pos.distanceTo(b.target) < 1.2) {
+        b.timer = b.rng.range(8, 16);
+        randomReefPoint(b.rng, b.target, 0.8, 2.4);
+      }
+      b.seek(b.target, speed, 1.6, _d);
+      avoid(b, _d, 0.6, dt);
+      arcSteer(b, _d, 0.9);
+      giantPush(b.pos, _d, 2.5, 1.6, 0.5);
+      swim(b, _d, dt);
+      clampAbove(b, 0.5, dt);
+    }
+    breamFish.begin(); for (const b of bream) breamFish.push(b); breamFish.end(fishT);
+  }
+
   return {
     group, food, residents, turtles, school, schoolC, barra, silver, silCenter, hoverGroups, butter, station, jackC, fus,
+    photo: { cuda, cudaC, grunts, bream },
     addMember(m) { addResident(m, true); },
     update(dt, t) {
       time = t;
@@ -1417,6 +1574,9 @@ export async function createLife(ctx) {
       updateSchool(dt, t);
       updateSilver(dt, t);
       updateBarra(dt, t);
+      updateCuda(dt, t);
+      updateGrunts(dt, t);
+      updateBream(dt, t);
       updateHover(dt, t);
       updateButterfly(dt, t);
       updateCleaners(dt, t);

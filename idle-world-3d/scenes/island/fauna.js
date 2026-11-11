@@ -1,9 +1,11 @@
 // 晴岛 residents: crabs & hermit crabs (procedural, instanced parts), gulls (Stork.glb recoloured),
-// sea turtles (procedural), a dolphin pod (procedural, vertex-flexed), dusk flamingos, lagoon fish.
+// sea turtles (procedural), a dolphin pod (procedural, vertex-flexed), dusk flamingos, lagoon fish (procedural, and
+// photo fish: horse mackerel in the lagoon and grunts under the dock, lib/photofish.js).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TAU, clamp, lerp, smoothstep, damp, dampAngle, angleDelta, makeRng, patchMaterial } from '../../lib/util.js';
 import { buildFishGeometry, paintFish, createFishMaterial, FishInstances, Swimmer } from '../../lib/fish.js';
+import { loadPhotoFish, photoFishMaterial, PhotoFishGroup } from '../../lib/photofish.js';
 import { Batch, segmentMatrix, addUnderwater, LAYER_NO_REFLECT } from './shared.js';
 import { turtleShellTexture } from './textures.js';
 import { waveHeight } from './water.js';
@@ -1338,8 +1340,8 @@ function createDolphins(env, ctx, max) {
 /* ================================================================== */
 /* Lagoon fish                                                         */
 /* ================================================================== */
-function createFish(env, ctx) {
-  const { terrain } = ctx;
+async function createFish(env, ctx) {
+  const { terrain, props } = ctx;
   const H = terrain.height;
   const rng = makeRng(env.seed ^ 0xf15);
   const schools = [];
@@ -1365,6 +1367,36 @@ function createFish(env, ctx) {
     }
     schools.push(school);
   }
+  // Photo fish (modelled from photographs, CC0 Fish Kit): a school of horse mackerel cruising the lagoon, and grunts
+  // milling in the shade under the end of the dock, where the dolphin comes to talk. Their own dice (own rng each),
+  // so the schools above keep their layout and their retargeting draws.
+  try {
+    const [aji, isaki] = await Promise.all([loadPhotoFish(env, 'aji'), loadPhotoFish(env, 'isaki')]);
+    const pr = makeRng(env.seed ^ 0x9a17);
+    const dock = props && props.dockEnd ? props.dockEnd.clone().addScaledVector(props.dockDir, -0.6) : null;
+    const defs = [[aji, 14, 0.22, 0.3, null]];
+    if (dock) defs.push([isaki, 7, 0.28, 0.36, dock]);
+    for (const [spec, n0, s0, s1, home] of defs) {
+      const n = Math.round(n0 * lerp(0.6, 1, env.q));
+      const mat = photoFishMaterial(spec.map, { roughness: 0.45, envMapIntensity: 0.7 });
+      addUnderwater(mat, { key: 'photo' });
+      const inst = new PhotoFishGroup(spec, mat, n, { lod: 'lo', castShadow: true });
+      inst.mesh.layers.set(LAYER_NO_REFLECT);
+      group.add(inst.mesh);
+      const r = makeRng(pr.int(1, 1e9));
+      const a = r.range(0, TAU);
+      const c = home ? home.clone() : terrain.pointAt(a, -r.range(4, 7));
+      // under the dock: halfway down the water there, held off the sand
+      c.y = home ? clamp(H(c.x, c.z) * 0.5, -1.1, -0.45) : -0.4;
+      const school = { inst, mat, photo: true, rng: r, home: home ? c.clone() : null, center: c.clone(), target: c.clone(), fish: [], timer: 0, ang: a };
+      for (let i = 0; i < n; i++) {
+        const sw = new Swimmer({ pos: new V3(c.x + r.range(-1, 1), c.y + r.range(-0.08, 0.08), c.z + r.range(-1, 1)), size: r.range(s0, s1), speed: 0.35, rng: r, agility: 2.2 });
+        sw.off = new V3(r.range(-1.1, 1.1), r.range(-0.1, 0.1), r.range(-1.1, 1.1));
+        school.fish.push(sw);
+      }
+      schools.push(school);
+    }
+  } catch (e) { console.warn('[island] photo fish unavailable', e); }
   // per-fish wander (own rng, so the school layout and colours stay as they were)
   const wr = makeRng(env.seed ^ 0x3b1);
   for (const s of schools) for (const f of s.fish) { f.wob = wr.range(0, TAU); f.wobK = wr.range(0.8, 1.25); f.turnSide = 1; }
@@ -1375,10 +1407,17 @@ function createFish(env, ctx) {
     update(dt, t) {
       for (const s of schools) {
         s.timer -= dt;
-        if (s.timer <= 0 || s.center.distanceTo(s.target) < 1) {
-          s.timer = rng.range(6, 14);
-          s.ang += rng.range(-0.5, 0.5);
-          terrain.pointAt(s.ang, -rng.range(3.5, terrain.lagoonW(s.ang) - 1), s.target);
+        if (s.home) {
+          // the grunts keep to the shade of the dock, drifting a little round it
+          if (s.timer <= 0) {
+            s.timer = s.rng.range(5, 10);
+            s.target.set(s.home.x + s.rng.range(-0.9, 0.9), s.home.y + s.rng.range(-0.12, 0.12), s.home.z + s.rng.range(-0.9, 0.9));
+          }
+        } else if (s.timer <= 0 || s.center.distanceTo(s.target) < 1) {
+          const r = s.rng || rng;
+          s.timer = r.range(6, 14);
+          s.ang += r.range(-0.5, 0.5);
+          terrain.pointAt(s.ang, -r.range(3.5, terrain.lagoonW(s.ang) - 1), s.target);
           s.target.y = clamp(s.target.y + 0.35, -0.6, -0.3);
         }
         _want.subVectors(s.target, s.center);
@@ -1394,6 +1433,7 @@ function createFish(env, ctx) {
           const sb = H(f.pos.x, f.pos.z);
           if (f.pos.y < sb + 0.15) _want.y += 0.5;
           if (f.pos.y > -0.15) _want.y -= 0.5;
+          if (s.home) _want.multiplyScalar(0.6);   // the grunts mill slowly
           // Never ask for a reversal or a hover: the swimmer then rolled its nose through the vertical and
           // spun (dozens of flips a minute at 30 fps). Turn along an arc on a steady side, keep cruising,
           // and climb or dive at a bounded angle.
@@ -1415,7 +1455,12 @@ function createFish(env, ctx) {
         s.inst.end(t);
       }
     },
-    dispose() { for (const s of schools) { s.inst.geometry.dispose(); s.mat.dispose(); s.painted.map?.dispose(); s.painted.normalMap?.dispose(); } },
+    dispose() {
+      for (const s of schools) {
+        if (s.photo) { s.inst.dispose(); s.mat.dispose(); continue; }
+        s.inst.geometry.dispose(); s.mat.dispose(); s.painted.map?.dispose(); s.painted.normalMap?.dispose();
+      }
+    },
   };
 }
 
@@ -1430,7 +1475,7 @@ export async function createFauna(env, ctx) {
   const birds = createBirds(env, ctx, stork, flamingo);
   const turtles = createTurtles(env, ctx, 16);
   const dolphins = createDolphins(env, ctx, 18);
-  const fish = createFish(env, ctx);
+  const fish = await createFish(env, ctx);
   group.add(crabs.group, birds.group, turtles.group, dolphins.mesh, fish.group);
   // ambient (non-member) extras keep the world lively
   birds.addGull(null, env.seed ^ 0xa1);
