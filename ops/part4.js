@@ -27,8 +27,8 @@ function openSheet(type, id, preset) {
   else if (type === 'product') {
     const p = prod(id);
     sh.form = S.isOwner;
-    sh.vals = p ? { name: p.name || '', size: p.size || '', cat: p.cat || 'home', pr: p.pr || '', pd: p.pd || '', pb: p.pb || '', safe: p.safe || '', on: p.on === false ? '0' : '1', cost: S.costs[id]?.cost || '' }
-      : { name: '', size: '', cat: 'home', pr: '', pd: '', pb: '', safe: '', on: '1', cost: '' };
+    sh.vals = p ? { name: p.name || '', size: p.size || '', cat: p.cat || 'home', pr: p.pr || '', pd: p.pd || '', pb: p.pb || '', safe: p.safe || '', on: p.on === false ? '0' : '1', cost: S.costs[id]?.cost || '', pk: p.pk || '', col: p.col || '' }
+      : { name: '', size: '', cat: 'home', pr: '', pd: '', pb: '', safe: '', on: '1', cost: '', pk: '', col: '' };
   }
   else if (type === 'batch-new') sh.vals = { pid: '', qty: '', batchNo: '', mfg: fmtDate(Date.now()), exp: '', note: '' };
   else if (type === 'adjust') sh.vals = { pid: '', actual: '', note: '' };
@@ -125,19 +125,20 @@ SH.inbox = () => {
 
 SH.product = () => {
   const p = prod(S.sheet.id);
-  const stockLine = p ? `<div class="acts">${pack(p)}<div><div>${esc(lab(CATS, CATS[p.cat] ? p.cat : 'home'))}</div><div style="color:var(--muted);font-size:13.5px">${L('库存', 'Stock')} ${stockOf(p.id)} · ${L('订单占用', 'Reserved')} ${reserved()[p.id] || 0}</div></div></div>` : '';
+  const stockLine = p ? `<div class="acts"><div><div>${esc(lab(CATS, CATS[p.cat] ? p.cat : 'home'))}</div><div style="color:var(--muted);font-size:13.5px">${L('库存', 'Stock')} ${stockOf(p.id)} · ${L('订单占用', 'Reserved')} ${reserved()[p.id] || 0}</div></div></div>` : '';
   if (!S.sheet.form) {
     if (!p) return [L('产品', 'Product'), empty(L('找不到这个产品', 'Product not found'), '')];
-    return [pname(p), `${stockLine}<dl class="kv"><dt>${L('零售价', 'Retail')}</dt><dd>${Number(p.pr) ? esc(money(p.pr)) : '—'}</dd><dt>${L('经销商价', 'Distributor')}</dt><dd>${Number(p.pd) ? esc(money(p.pd)) : '—'}</dd><dt>${L('企业价', 'Business')}</dt><dd>${Number(p.pb) ? esc(money(p.pb)) : '—'}</dd></dl>
+    return [pname(p), `<div class="bigart ${CATS[p.cat] ? p.cat : 'home'}">${art(p)}</div>${stockLine}<dl class="kv"><dt>${L('零售价', 'Retail')}</dt><dd>${Number(p.pr) ? esc(money(p.pr)) : '—'}</dd><dt>${L('经销商价', 'Distributor')}</dt><dd>${Number(p.pd) ? esc(money(p.pd)) : '—'}</dd><dt>${L('企业价', 'Business')}</dt><dd>${Number(p.pb) ? esc(money(p.pb)) : '—'}</dd></dl>
       ${(p.flags || []).map(f => `<div class="note">${esc(lab(FLAGS, f))}</div>`).join('')}`];
   }
-  return [p ? pname(p) : L('新产品', 'New product'), `${stockLine}
+  return [p ? pname(p) : L('新产品', 'New product'), `<div id="artprev"></div>${stockLine}
     <div id="pflags"></div>
     <div class="grid2">${fld('name', L('产品名字', 'Product name'))}${fld('size', L('规格（例如 500ml）', 'Size (e.g. 500ml)'))}</div>
     <div class="grid2">${fld('cat', L('类别', 'Category'), { opts: optsOf(CATS) })}${fld('on', L('状态', 'Status'), { opts: [['1', L('在卖', 'Active')], ['0', L('停售', 'Inactive')]] })}</div>
     <div class="grid2">${fld('pr', L('零售价', 'Retail price'), { mode: 'decimal' })}${fld('pd', L('经销商价', 'Distributor price'), { mode: 'decimal' })}${fld('pb', L('企业价', 'Business price'), { mode: 'decimal' })}</div>
     <div class="grid2">${fld('cost', L('成本（只有负责人看得到）', 'Cost (owner only)'), { mode: 'decimal' })}${fld('safe', L('安全库存（低于这个数就提醒）', 'Safety level (warn below this)'), { mode: 'numeric' })}</div>
     <div id="margin" class="s" style="color:var(--muted);font-size:13px"></div>
+    <div class="grid2">${fld('pk', L('产品图：包装样子', 'Picture: pack shape'), { opts: [['', L('自动（按名字）', 'Automatic (from the name)')], ...Object.keys(PK).map(k => [k, lab({ [k]: PK[k].n }, k)])] })}${fld('col', L('产品图：内容物颜色', 'Picture: colour of the contents'), { opts: [['', L('自动', 'Automatic')], ...optsOf(COLS)] })}</div>
     <div class="note info">${L('库存不在这里改。做了货到「生产库存」记一笔；数字对不上用「盘点调整」。', 'Stock is not edited here. Record batches under Production; fix mismatches with "Stock count".')}</div>
     <div class="acts">${btn('save-product', L('保存', 'Save'), 'primary')}</div>`];
 };
@@ -245,6 +246,7 @@ function sheetLive() {
   if (sh.type === 'faq-edit') put('claims', claimPills(checkClaims(val('a'))));
   if (sh.type === 'approval' && sh.form) put('claims', claimPills(checkClaims(val('body'))));
   if (sh.type === 'product' && sh.form) {
+    put('artprev', `<div class="bigart ${CATS[val('cat')] ? val('cat') : 'home'}">${art({ name: val('name'), cat: val('cat'), pk: val('pk'), col: val('col') })}</div>`);
     put('pflags', autoFlags(val('name'), val('cat')).map(f => `<div class="note" style="margin-bottom:6px">${esc(lab(FLAGS, f))}</div>`).join(''));
     const c = num(val('cost')), r = num(val('pr'));
     put('margin', c && r ? `${L('零售毛利', 'Retail margin')} ${esc(money(r - c))}（${Math.round((r - c) / r * 100)}%）${num(val('pd')) ? ` · ${L('经销商毛利', 'Distributor margin')} ${esc(money(num(val('pd')) - c))}` : ''}` : '');
@@ -462,7 +464,7 @@ const ACT = {
     if (!v.name.trim()) return toast(L('写上产品名字。', 'Enter a product name.'));
     run(async () => {
       const old = prod(id);
-      await Store.set('products/' + id, { name: v.name.trim(), size: v.size.trim(), cat: v.cat, pr: num(v.pr), pd: num(v.pd), pb: num(v.pb), safe: num(v.safe), on: v.on !== '0', flags: autoFlags(v.name, v.cat), ts: old?.ts || Date.now() });
+      await Store.set('products/' + id, { name: v.name.trim(), size: v.size.trim(), cat: v.cat, pr: num(v.pr), pd: num(v.pd), pb: num(v.pb), safe: num(v.safe), on: v.on !== '0', flags: autoFlags(v.name, v.cat), pk: v.pk || '', col: v.col || '', ts: old?.ts || Date.now() });
       if (num(v.cost) !== num(S.costs[id]?.cost)) await Store.set('costs/' + id, { cost: num(v.cost), ts: Date.now() });
       closeSheet(); toast(L('已保存。', 'Saved.'));
     });

@@ -21,17 +21,76 @@ const chips = (group, opts) => `<div class="chips">${opts.map(([k, t]) => `<butt
 const head = (title, sub, actions = '') => `<div class="head"><div><h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ''}</div><div class="acts">${actions}</div></div>`;
 const itemsLine = o => (o.items || []).map(it => `${it.name} ×${it.qty}`).join('、');
 
-// Each product is drawn as its own kind of pack and tinted by its range.
-const PACKS = {
-  pump: '<rect class="b" x="12" y="26" width="24" height="34" rx="7"/><rect class="c" x="21" y="15" width="6" height="11"/><rect class="c" x="17" y="9" width="20" height="6" rx="3"/><rect class="l" x="16" y="36" width="16" height="14" rx="3"/>',
-  spray: '<path class="b" d="M15 26c0-7 4-10 9-10s9 3 9 10v28a6 6 0 0 1-6 6h-6a6 6 0 0 1-6-6z"/><rect class="c" x="20" y="7" width="8" height="8" rx="2"/><circle class="c" cx="33" cy="9" r="1.3"/><circle class="c" cx="37" cy="6" r="1.1"/><circle class="c" cx="37" cy="12" r="1.1"/><rect class="l" x="18" y="34" width="12" height="16" rx="3"/>',
-  bottle: '<path class="b" d="M19 22h10l6 9v23a6 6 0 0 1-6 6H19a6 6 0 0 1-6-6V31z"/><rect class="c" x="20" y="9" width="8" height="12" rx="2"/><rect class="l" x="16" y="37" width="16" height="13" rx="3"/>',
-  box: '<rect class="b" x="10" y="20" width="28" height="40" rx="4"/><rect class="c" x="10" y="13" width="28" height="7" rx="2"/><circle class="l" cx="24" cy="40" r="9"/>',
-  jar: '<rect class="b" x="8" y="31" width="32" height="27" rx="8"/><rect class="c" x="6" y="20" width="36" height="11" rx="4"/><rect class="l" x="14" y="39" width="20" height="11" rx="3"/>',
-  dropper: '<rect class="b" x="15" y="30" width="18" height="30" rx="6"/><rect class="c" x="19" y="21" width="10" height="9" rx="2"/><ellipse class="c" cx="24" cy="12" rx="5" ry="8"/><rect class="l" x="18" y="40" width="12" height="12" rx="3"/>',
+// ---------------------------------------------------------------- product pictures
+// Every product is drawn from three facts about the real pack: its shape, the
+// colour of what is inside, and its name on a house label. Shading comes from
+// two gradients defined once in the page, so each picture stays small.
+const GOLD = '#c9a253', SILVER = '#c7cad1', WHITE = '#f7f5f1';
+const rect = (x, y, w, h, rx, fill, extra = '') => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" ${extra}/>`;
+const cyl = (x, y, w, h, rx, fill) => rect(x, y, w, h, rx, fill) + rect(x, y, w, h, rx, 'url(#gCyl)');
+const clearCap = (x, y, w, h) => rect(x, y, w, h, 9, '#ffffff', 'fill-opacity=".2" stroke="#ffffff" stroke-opacity=".85" stroke-width="1.5"');
+const PK = {
+  flip: { n: ['翻盖瓶', 'Flip-cap bottle'], col: '#2f8fd0', y0: 40, level: 104, label: [70, 142, 60, 58],
+    body: 'M72 86h56q10 0 10 12v132q0 14-14 14H76q-14 0-14-14V98q0-12 10-12z', top: () => cyl(72, 54, 56, 34, 7, GOLD) },
+  curvy: { n: ['按压瓶（曲线）', 'Curved pump bottle'], col: '#3fc1c0', y0: 40, level: 122, label: [68, 180, 64, 46],
+    body: 'M80 104C54 108 46 130 55 158c5 16-4 42-3 64 1 16 10 22 24 22h48c14 0 23-6 24-22 1-22-8-48-3-64 9-28 1-50-25-54z',
+    top: () => cyl(84, 88, 32, 18, 4, WHITE) + cyl(95, 66, 10, 24, 2, WHITE) + rect(54, 55, 30, 8, 4, WHITE) + cyl(76, 52, 48, 15, 6, WHITE) },
+  tall: { n: ['高直瓶', 'Tall bottle'], col: '#f0c419', y0: 14, level: 86, label: [70, 138, 60, 62],
+    body: 'M74 72h52q10 0 10 12v146q0 14-14 14H78q-14 0-14-14V84q0-12 10-12z', top: () => cyl(76, 26, 48, 48, 5, SILVER) },
+  pumpTall: { n: ['乳液泵瓶', 'Lotion pump bottle'], col: '#f4f1ea', y0: 8, solid: true, label: [68, 140, 64, 60],
+    body: 'M76 82h48q14 0 14 16v132q0 14-14 14H76q-14 0-14-14V98q0-16 14-16z',
+    top: () => cyl(86, 62, 28, 22, 3, WHITE) + cyl(90, 34, 20, 30, 4, WHITE) + clearCap(80, 18, 40, 64) },
+  mist: { n: ['喷雾瓶', 'Mist spray bottle'], col: '#dff0f3', y0: 22, level: 112, label: [72, 150, 56, 56],
+    body: 'M82 96h36q16 4 16 22v112q0 14-14 14H80q-14 0-14-14V118q0-18 16-22z', inside: () => rect(98.5, 96, 3, 136, 1, '#ffffff', 'fill-opacity=".7"'),
+    top: () => cyl(84, 76, 32, 22, 4, WHITE) + cyl(89, 50, 22, 28, 4, WHITE) + '<circle cx="93" cy="60" r="2" fill="#a9adb6"/>' + clearCap(80, 34, 40, 62) },
+  ribbed: { n: ['矮胖瓶', 'Stout ribbed bottle'], col: '#1f2a5c', y0: 50, level: 116, label: [64, 152, 72, 46],
+    body: 'M80 100h40q24 4 24 28v102q0 14-14 14H70q-14 0-14-14V128q0-24 24-28z',
+    inside: () => [140, 206, 226].map(y => rect(0, y, 200, 2, 0, '#000000', 'fill-opacity=".16"')).join(''),
+    top: () => cyl(76, 90, 48, 12, 3, WHITE) + cyl(80, 62, 40, 30, 6, WHITE) },
+  tub: { n: ['大口罐（粉）', 'Wide tub (powder)'], col: '#eeeef1', y0: 54, level: 110, solid: true, label: [64, 150, 72, 54],
+    body: 'M52 100h96q14 0 14 14v116q0 14-14 14H52q-14 0-14-14V114q0-14 14-14z',
+    inside: () => [[50, 128, 0], [150, 134, 1], [46, 172, 1], [154, 176, 0], [52, 214, 0], [148, 218, 1], [100, 122, 1], [58, 232, 1], [142, 232, 0], [96, 226, 0], [120, 132, 0], [76, 136, 1]]
+      .map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="2.2" fill="${r ? '#d2433b' : '#2f6fd0'}"/>`).join(''),
+    top: () => cyl(34, 68, 132, 36, 9, '#b23a3a') },
+  dropper: { n: ['滴管瓶', 'Dropper bottle'], col: '#e0b93a', y0: 70, level: 166, label: [74, 182, 52, 44],
+    body: 'M80 152h40q12 0 12 12v66q0 14-14 14H82q-14 0-14-14v-66q0-12 12-12z', inside: () => rect(98.5, 152, 3, 58, 1, '#ffffff', 'fill-opacity=".65"'),
+    top: () => `<path d="M90 126V98q0-16 10-16t10 16v28z" fill="${WHITE}"/><path d="M90 126V98q0-16 10-16t10 16v28z" fill="url(#gCyl)"/>` + cyl(84, 122, 32, 32, 4, GOLD) },
+  potLid: { n: ['大盖面霜罐', 'Jar with wide lid'], col: '#7ac943', y0: 136, base: true, label: [66, 161, 68, 28],
+    body: 'M60 196h80q8 0 8 8v28q0 12-12 12H64q-12 0-12-12v-28q0-8 8-8z', top: c => cyl(44, 150, 112, 50, 16, c) },
+  refill: { n: ['小补充瓶', 'Small refill bottle'], col: '#f1e7a6', y0: 92, level: 192, label: [72, 198, 56, 34],
+    body: 'M82 180h36q16 2 16 16v36q0 12-12 12H78q-12 0-12-12v-36q0-14 16-16z',
+    top: () => rect(94, 104, 12, 26, 5, '#efe9dc') + cyl(82, 126, 36, 34, 5, WHITE) + cyl(86, 158, 28, 24, 3, WHITE) },
+  pot: { n: ['金盖面霜罐', 'Jar with gold lid'], col: '#f6f3ee', y0: 148, solid: true, label: [66, 206, 68, 28],
+    body: 'M60 192h80q10 0 10 10v30q0 12-12 12H62q-12 0-12-12v-30q0-10 10-10z', top: () => cyl(46, 162, 108, 34, 8, GOLD) },
 };
-const packOf = p => { const n = (p?.name || '').toLowerCase(); return /serum|drop/.test(n) ? 'dropper' : /cream|jar|balm/.test(n) ? 'jar' : /spray|freshener/.test(n) ? 'spray' : /powder|surf/.test(n) ? 'box' : /hand|shampoo|lotion/.test(n) ? 'pump' : 'bottle'; };
-const pack = p => `<span class="ph ${CATS[p?.cat] ? p.cat : 'home'}" aria-hidden="true"><svg class="bt" viewBox="0 0 48 64">${PACKS[packOf(p)]}</svg></span>`;
+const COLS = { '#2f8fd0': ['蓝', 'Blue'], '#3fc1c0': ['水绿', 'Aqua'], '#f0c419': ['黄', 'Yellow'], '#f4f1ea': ['珠光白', 'Pearl white'], '#dff0f3': ['透明', 'Clear'], '#1f2a5c': ['深蓝', 'Navy'], '#e0b93a': ['金黄', 'Golden'], '#f1e7a6': ['淡黄', 'Pale yellow'], '#7ac943': ['绿', 'Green'], '#f2a7b8': ['粉红', 'Pink'], '#b9a4e0': ['淡紫', 'Lavender'], '#f08a3c': ['橙', 'Orange'] };
+const RANGE = { home: 'HOME CARE', skin: 'SKIN CARE', pest: 'PEST CONTROL' };
+const guessPk = p => { const n = (p?.name || '').toLowerCase(); return /serum|drop/.test(n) ? 'dropper' : /cream|balm/.test(n) ? 'pot' : /spray|freshener|mist/.test(n) ? 'mist' : /powder|surf/.test(n) ? 'tub' : /shampoo|lotion|conditioner/.test(n) ? 'pumpTall' : /hand/.test(n) ? 'curvy' : /toilet|floor|phenyl|bleach/.test(n) ? 'ribbed' : /liquid|refill/.test(n) ? 'refill' : 'tall'; };
+let artN = 0;
+function art(p) {
+  const k = PK[p?.pk] ? PK[p.pk] : PK[guessPk(p)];
+  const col = /^#[0-9a-f]{6}$/i.test(p?.col || '') ? p.col : k.col, id = 'k' + (++artN), [lx, ly, lw, lh] = k.label;
+  // The label: the name in up to three lines, sized to fit, over the range.
+  const words = (p?.name ? aiName({ ...p, size: '' }) : '').toUpperCase().split(/\s+/).filter(Boolean), lines = [];
+  for (const w of words) { if (lines.length && (lines[lines.length - 1] + ' ' + w).length <= 9) lines[lines.length - 1] += ' ' + w; else lines.push(w); }
+  lines.splice(3);
+  const range = lh >= 44 ? RANGE[p?.cat] || RANGE.home : '';
+  const longest = Math.max(1, ...lines.map(l => l.length));
+  const fs = Math.min(11.5, (lw - 10) / (longest * 0.76), (lh - 10 - (range ? 9 : 0)) / (Math.max(1, lines.length) * 1.12));
+  const ty = ly + 5 + (lh - 5 - (range ? 9 : 0) - lines.length * fs * 1.12) / 2 + fs * 0.86;
+  const label = rect(lx, ly, lw, lh, 3, '#fffdf9') + rect(lx, ly, lw, 2.5, 0, '#b8893a') +
+    lines.map((l, i) => `<text x="${lx + lw / 2}" y="${(ty + i * fs * 1.12).toFixed(1)}" text-anchor="middle" font-family="Jost, sans-serif" font-weight="600" font-size="${fs.toFixed(1)}" letter-spacing=".4" fill="#2e1426">${esc(l)}</text>`).join('') +
+    (range ? `<text x="${lx + lw / 2}" y="${ly + lh - 5}" text-anchor="middle" font-family="Jost, sans-serif" font-weight="500" font-size="5.2" letter-spacing=".9" fill="#8e2f6b">${range}</text>` : '');
+  const fill = k.base ? rect(0, 0, 200, 260, 0, WHITE) : k.solid ? rect(0, k.level || 0, 200, 260, 0, col) : rect(0, k.level, 200, 260, 0, col, 'fill-opacity=".9"');
+  return `<svg class="art" viewBox="0 ${k.y0} 200 ${260 - k.y0}" width="200" height="${260 - k.y0}" role="img" aria-label="${esc(p?.name || '')}">
+    <ellipse cx="100" cy="246" rx="74" ry="8" fill="url(#gFloor)"/>
+    <clipPath id="${id}"><path d="${k.body}"/></clipPath>
+    <path d="${k.body}" fill="#ffffff" fill-opacity="${k.solid || k.base ? 1 : 0.42}"/>
+    <g clip-path="url(#${id})">${fill}${k.inside ? k.inside() : ''}</g>
+    <path d="${k.body}" fill="url(#gCyl)"/><path d="${k.body}" fill="none" stroke="#ffffff" stroke-opacity=".75" stroke-width="1.5"/>
+    ${k.top(col)}${label}</svg>`;
+}
+const pack = p => `<span class="ph ${CATS[p?.cat] ? p.cat : 'home'}">${art(p)}</span>`;
 const FLAGN = () => ({ tm: L('商标风险', 'Trademark'), tmlike: L('名字像名牌', 'Brand look-alike'), skin: L('护肤品合规', 'Skin-care rules'), drug: L('治疗类说法', 'Treatment claim'), pest: L('驱虫登记', 'Pest registration') });
 
 function orderItem(o) {
@@ -74,7 +133,7 @@ V.today = () => {
   }).join('');
   return `<section class="hero">${head(L('今天', 'Today'), `${fmtDate(d)} · ${L('各个 agent 替你看出来的事，照着顺序做就行。', 'What the agents found for you. Work down the list.')}`,
       btn('open', L('＋ 新订单', '+ New order'), 'primary', 'data-sheet="order-new"') + btn('open', L('＋ 客人询问', '+ Inquiry'), '', 'data-sheet="inbox-new"'))}
-      <div class="hero-art" aria-hidden="true">${pack({ cat: 'skin', name: 'serum' })}${pack({ cat: 'skin', name: 'cream' })}${pack({ cat: 'home', name: 'hand wash' })}</div></section>
+      <div class="hero-art" aria-hidden="true">${pack({ cat: 'skin', pk: 'dropper' })}${pack({ cat: 'skin', pk: 'pot' })}${pack({ cat: 'home', pk: 'curvy' })}${pack({ cat: 'home', pk: 'tall' })}</div></section>
     <div class="stats">
       <div class="stat"><b>${b.today.length}</b><span>${L('今天的订单', 'Orders today')} · ${esc(money(b.todaySum))}</span></div>
       <div class="stat"><b>${esc(money(b.monthSum))}</b><span>${L('本月销售', 'Sales this month')} · ${b.month.length} ${L('单', 'orders')}</span></div>

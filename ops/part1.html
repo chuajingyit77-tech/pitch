@@ -78,10 +78,12 @@ main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 20p
 .hero .head { position: relative; z-index: 1 }
 .hero .head h1 { font-size: 36px }
 .hero .head p { color: var(--ink); opacity: .78 }
-.hero-art { position: absolute; right: 18px; bottom: -10px; display: none; gap: 6px; align-items: flex-end; opacity: .9 }
+.hero-art { position: absolute; right: 22px; bottom: 6px; display: none; gap: 2px; align-items: flex-end }
 .hero-art .ph { background: none; width: auto; height: auto }
-.hero-art svg { height: 120px; width: auto }
-.hero-art .ph:nth-child(2) svg { height: 88px }
+.hero-art .ph svg { max-width: none; max-height: none; height: 150px }
+.hero-art .ph:nth-child(1) svg { height: 112px }
+.hero-art .ph:nth-child(2) svg { height: 74px }
+.hero-art .ph:nth-child(3) svg { height: 138px }
 @media (min-width: 760px) { .hero { padding: 30px 28px } .hero-art { display: flex } .hero .head { max-width: 62% } }
 .note { padding: 10px 14px; border-radius: 14px; background: var(--warn-soft); color: var(--ink); font-size: 14px }
 .note.info { background: var(--accent-soft) }
@@ -105,16 +107,17 @@ main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 20p
 .stat span { color: var(--muted); font-size: 13px }
 
 /* packs: each product as a small drawing, tinted by range */
-.ph { --c: var(--mint); --ci: var(--mint-ink); flex: none; width: 46px; height: 54px; border-radius: 14px; background: var(--c); display: grid; place-items: center }
-.ph.skin { --c: var(--rose); --ci: var(--rose-ink) }
-.ph.pest { --c: var(--herb); --ci: var(--herb-ink) }
-.ph svg { height: 38px; width: auto; display: block }
-.bt .b { fill: var(--ci) } .bt .c { fill: var(--gold) } .bt .l { fill: var(--surface); opacity: .82 }
+.ph { --c: var(--mint); flex: none; width: 46px; height: 54px; border-radius: 14px; background: var(--c); display: grid; place-items: center }
+.ph.skin { --c: var(--rose) }
+.ph.pest { --c: var(--herb) }
+.ph svg { display: block; width: auto; height: auto; max-width: 88%; max-height: 86% }
+.bigart { --c: var(--mint); border-radius: 22px; background: radial-gradient(circle at 50% 42%, var(--surface) 0, var(--c) 72%); height: 230px; display: grid; place-items: center }
+.bigart.skin { --c: var(--rose) } .bigart.pest { --c: var(--herb) }
+.bigart svg { display: block; width: auto; height: auto; max-width: 80%; max-height: 204px }
 .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; padding: 0; display: flex; flex-direction: column; text-align: left; cursor: pointer; min-width: 0 }
 .card:hover { border-color: var(--accent) }
-.card .ph { width: 100%; height: 116px; border-radius: 0 }
-.card .ph svg { height: 86px }
+.card .ph { width: 100%; height: 150px; border-radius: 0; background: radial-gradient(circle at 50% 40%, var(--surface) 0, var(--c) 78%) }
 .card.off .ph { opacity: .45 }
 .card .cb { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0 }
 .card .t { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere }
@@ -122,8 +125,7 @@ main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 20p
 .card .flags { display: flex; gap: 4px; flex-wrap: wrap }
 .strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin }
 .sku { flex: none; width: 92px; border: 0; background: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center }
-.sku .ph { width: 76px; height: 86px; border-radius: 20px }
-.sku .ph svg { height: 58px }
+.sku .ph { width: 80px; height: 96px; border-radius: 20px }
 .sku .n { font-size: 12.5px; line-height: 1.25; overflow-wrap: anywhere }
 
 /* lists */
@@ -173,6 +175,10 @@ button.item:hover { border-color: var(--accent) }
 @media (prefers-reduced-motion: no-preference) { .panel { animation: up .2s ease-out } @keyframes up { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } } }
 </style>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gCyl" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".16" stop-color="#000" stop-opacity="0"/><stop offset=".28" stop-color="#fff" stop-opacity=".46"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient>
+  <radialGradient id="gFloor"><stop offset="0" stop-color="#2e1426" stop-opacity=".3"/><stop offset="1" stop-color="#2e1426" stop-opacity="0"/></radialGradient>
+</defs></svg>
 <header class="top">
   <div class="wrap">
     <div class="top-row">
