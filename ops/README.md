@@ -9,11 +9,11 @@ artifact; data lives in the artifact's shared database.
     part3.js     the ten views
     part4.js     forms, actions, AI calls, start-up
     build.sh     joins the parts into app.html (the file that is published)
-    test/walkthrough.js   drives the whole flow in a browser against a stand-in database
+    test/walkthrough.cjs   drives the whole flow in a browser against a stand-in database
 
 Build and test:
 
-    ./build.sh && node test/walkthrough.js      # expects "ERRORS: none"
+    ./build.sh && node test/walkthrough.cjs      # expects "ERRORS: none"
 
 ## Who can do what
 
