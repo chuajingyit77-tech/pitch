@@ -1,0 +1,11 @@
+{
+  "currency": "RM",
+  "price": 18,
+  "variable_cost": {"low": 5.5, "mode": 6.5, "high": 8},
+  "fixed_cost_monthly": {"low": 9000, "mode": 11000, "high": 14000},
+  "units_per_day_at_plan": {"low": 60, "mode": 90, "high": 120},
+  "startup_cost": 45000,
+  "days_per_month": 26,
+  "ramp_months": 3,
+  "capacity_units_per_day": 200
+}
