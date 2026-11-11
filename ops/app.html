@@ -1,126 +1,182 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <title>工厂营运台</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@500;600;700&family=Jost:wght@400;500;600&family=Noto+Serif+SC:wght@600;700&display=swap">
 <style>
-/* Layout: one working desk. A sticky header, a tab strip that scrolls on its own,
-   then a single column of lists. Everything you type happens in a sheet, so live
-   data can redraw the lists underneath without touching what you are typing. */
+/* Layout: a beauty counter. A wordmark header closed by a gold foil hairline,
+   capsule tabs, a pastel counter-top on Today, and every product drawn as its
+   own pack on a shelf, tinted by range: mint for home care, rose for skin care,
+   herb for pest control. Typing still happens in a sheet above the page. */
 :root {
-  --bg: #f2f6f6; --surface: #ffffff; --sunk: #e9efef;
-  --ink: #12262b; --muted: #587076; --line: #d6e0e1;
-  --accent: #0a7480; --accent-ink: #ffffff; --accent-soft: #dff0f1;
-  --good: #1c7f47; --good-soft: #e0f3e7;
-  --warn: #9a5b00; --warn-soft: #fbefd6;
-  --bad: #b83227; --bad-soft: #fbe4e1;
-  --shadow: 0 1px 2px rgba(18,38,43,.06), 0 6px 18px rgba(18,38,43,.07);
-  --f-body: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
-  --f-head: "Space Grotesk", Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --bg: #fbf1f3; --surface: #ffffff; --sunk: #f6e6eb;
+  --ink: #2e1426; --muted: #7d6272; --line: #eed8df;
+  --accent: #8e2f6b; --accent-ink: #ffffff; --accent-soft: #f6dcea; --gold: #b8893a;
+  --mint: #d3efe8; --mint-ink: #1c6b60; --rose: #fbd5dd; --rose-ink: #a8395c;
+  --herb: #e4eec6; --herb-ink: #566b1c; --peach: #fde9d8;
+  --good: #1f7a4d; --good-soft: #dff2e7;
+  --warn: #96600a; --warn-soft: #fbeed2;
+  --bad: #c9401a; --bad-soft: #fde5dc;
+  --veil: rgba(46,20,38,.42);
+  --shadow: 0 1px 2px rgba(46,20,38,.05), 0 10px 28px rgba(142,47,107,.10);
+  --f-body: Jost, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --f-head: "Bodoni Moda", "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0d1618; --surface: #152124; --sunk: #1b2a2e;
-  --ink: #e6efef; --muted: #93a8ac; --line: #2a3b3f;
-  --accent: #43b6c2; --accent-ink: #062226; --accent-soft: #173439;
-  --good: #5fc88c; --good-soft: #15301f;
-  --warn: #e6ae4f; --warn-soft: #33270e;
-  --bad: #f08a80; --bad-soft: #3a1b18;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+  --bg: #1b0f17; --surface: #27161f; --sunk: #321e29;
+  --ink: #f7e9ef; --muted: #b999aa; --line: #47303c;
+  --accent: #e991c4; --accent-ink: #2b0d1f; --accent-soft: #4b2240; --gold: #d8b46c;
+  --mint: #173f39; --mint-ink: #8fdccb; --rose: #4f2332; --rose-ink: #f5a9bd;
+  --herb: #303b15; --herb-ink: #c8de88; --peach: #49301f;
+  --good: #6fd09a; --good-soft: #16321f;
+  --warn: #e8b257; --warn-soft: #35280e;
+  --bad: #ff9a7a; --bad-soft: #40201a;
+  --veil: rgba(8,3,6,.6);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.4);
   color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0d1618; --surface: #152124; --sunk: #1b2a2e;
-  --ink: #e6efef; --muted: #93a8ac; --line: #2a3b3f;
-  --accent: #43b6c2; --accent-ink: #062226; --accent-soft: #173439;
-  --good: #5fc88c; --good-soft: #15301f;
-  --warn: #e6ae4f; --warn-soft: #33270e;
-  --bad: #f08a80; --bad-soft: #3a1b18;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+  --bg: #1b0f17; --surface: #27161f; --sunk: #321e29;
+  --ink: #f7e9ef; --muted: #b999aa; --line: #47303c;
+  --accent: #e991c4; --accent-ink: #2b0d1f; --accent-soft: #4b2240; --gold: #d8b46c;
+  --mint: #173f39; --mint-ink: #8fdccb; --rose: #4f2332; --rose-ink: #f5a9bd;
+  --herb: #303b15; --herb-ink: #c8de88; --peach: #49301f;
+  --good: #6fd09a; --good-soft: #16321f;
+  --warn: #e8b257; --warn-soft: #35280e;
+  --bad: #ff9a7a; --bad-soft: #40201a;
+  --veil: rgba(8,3,6,.6);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.4);
   color-scheme: dark }
 
 * { box-sizing: border-box }
-body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+body { background: var(--bg); color: var(--ink); font: 15.5px/1.5 var(--f-body); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface) }
 button, input, select, textarea { font: inherit; color: inherit }
 h1, h2, h3 { font-family: var(--f-head); margin: 0; text-wrap: balance }
 .num { font-variant-numeric: tabular-nums }
-.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap { max-width: 1000px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
 
-.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--surface); border-bottom: 1px solid var(--line) }
-.top-row { display: flex; align-items: center; gap: 10px; padding-block: 10px }
-.brand { font: 700 17px/1.2 var(--f-head); min-width: 0; flex: 1; overflow-wrap: anywhere }
-.brand small { display: block; font: 400 12px/1.3 var(--f-body); color: var(--muted) }
-.nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; padding-bottom: 0 }
+/* header */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--surface) }
+.top::after { content: ""; position: absolute; inset: auto 0 0; height: 1px; background: linear-gradient(90deg, var(--line), var(--gold) 50%, var(--line)) }
+.top-row { display: flex; align-items: center; gap: 10px; padding-block: 12px 8px }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 }
+.brand .mark { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center }
+.brand .mark svg { width: 16px; height: 20px }
+.brand .mark path { fill: var(--accent) }
+.brand b { display: block; font: 700 19px/1.15 var(--f-head); letter-spacing: .01em; overflow-wrap: anywhere }
+.brand small { display: block; font: 400 11.5px/1.3 var(--f-body); color: var(--muted); letter-spacing: .04em }
+.nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 10px }
 .nav::-webkit-scrollbar { display: none }
-.tab { flex: none; border: 0; background: none; padding: 9px 12px; border-bottom: 2.5px solid transparent; color: var(--muted); cursor: pointer; font-weight: 500; white-space: nowrap }
-.tab[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent) }
-.tab .dot { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--bad); color: #fff; font: 600 11px/18px var(--f-body); text-align: center }
+.tab { flex: none; border: 0; background: none; padding: 6px 14px; border-radius: 99px; color: var(--muted); cursor: pointer; font-weight: 500; white-space: nowrap }
+.tab:hover { color: var(--ink) }
+.tab[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.tab .dot { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px; border-radius: 9px; background: var(--bad); color: var(--surface); font: 600 11px/18px var(--f-body); text-align: center }
 
-main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 18px }
+main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 20px }
 .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap }
-.head h1 { font-size: 22px }
-.head p { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; max-width: 62ch }
-.note { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--ink); font-size: 13.5px; border: 1px solid var(--line) }
+.head h1 { font-size: 30px; font-weight: 600; line-height: 1.15 }
+.head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 60ch }
+.hero { position: relative; overflow: hidden; border-radius: 26px; padding: 22px 20px; background: linear-gradient(120deg, var(--rose) 0%, var(--peach) 50%, var(--mint) 100%) }
+.hero .head { position: relative; z-index: 1 }
+.hero .head h1 { font-size: 36px }
+.hero .head p { color: var(--ink); opacity: .78 }
+.hero-art { position: absolute; right: 18px; bottom: -10px; display: none; gap: 6px; align-items: flex-end; opacity: .9 }
+.hero-art .ph { background: none; width: auto; height: auto }
+.hero-art svg { height: 120px; width: auto }
+.hero-art .ph:nth-child(2) svg { height: 88px }
+@media (min-width: 760px) { .hero { padding: 30px 28px } .hero-art { display: flex } .hero .head { max-width: 62% } }
+.note { padding: 10px 14px; border-radius: 14px; background: var(--warn-soft); color: var(--ink); font-size: 14px }
 .note.info { background: var(--accent-soft) }
 
-.btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 9px; cursor: pointer; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: var(--ink) }
+/* controls */
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 16px; border-radius: 99px; cursor: pointer; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: var(--ink) }
 .btn:hover { border-color: var(--accent) }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 }
 .btn.danger { color: var(--bad) }
-.btn.small { padding: 5px 10px; font-size: 13px }
-.btn[disabled] { opacity: .5; cursor: default }
+.btn.small { padding: 5px 12px; font-size: 13.5px }
+.btn[disabled] { opacity: .45; cursor: default }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .chips { display: flex; gap: 6px; flex-wrap: wrap }
-.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 5px 12px; cursor: pointer; font-size: 13.5px; color: var(--muted) }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 5px 14px; cursor: pointer; font-size: 14px; color: var(--muted) }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
 
+/* figures */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px }
-.stat b { display: block; font: 700 22px/1.2 var(--f-head); font-variant-numeric: tabular-nums }
-.stat span { color: var(--muted); font-size: 12.5px }
+.stat { background: var(--surface); border-radius: 20px; padding: 14px 16px; box-shadow: var(--shadow) }
+.stat b { display: block; font: 600 26px/1.15 var(--f-head); font-variant-numeric: tabular-nums lining-nums }
+.stat span { color: var(--muted); font-size: 13px }
 
+/* packs: each product as a small drawing, tinted by range */
+.ph { --c: var(--mint); --ci: var(--mint-ink); flex: none; width: 46px; height: 54px; border-radius: 14px; background: var(--c); display: grid; place-items: center }
+.ph.skin { --c: var(--rose); --ci: var(--rose-ink) }
+.ph.pest { --c: var(--herb); --ci: var(--herb-ink) }
+.ph svg { height: 38px; width: auto; display: block }
+.bt .b { fill: var(--ci) } .bt .c { fill: var(--gold) } .bt .l { fill: var(--surface); opacity: .82 }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; padding: 0; display: flex; flex-direction: column; text-align: left; cursor: pointer; min-width: 0 }
+.card:hover { border-color: var(--accent) }
+.card .ph { width: 100%; height: 116px; border-radius: 0 }
+.card .ph svg { height: 86px }
+.card.off .ph { opacity: .45 }
+.card .cb { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.card .t { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere }
+.card .s { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+.card .flags { display: flex; gap: 4px; flex-wrap: wrap }
+.strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin }
+.sku { flex: none; width: 92px; border: 0; background: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center }
+.sku .ph { width: 76px; height: 86px; border-radius: 20px }
+.sku .ph svg { height: 58px }
+.sku .n { font-size: 12.5px; line-height: 1.25; overflow-wrap: anywhere }
+
+/* lists */
 .list { display: flex; flex-direction: column; gap: 8px }
-.item { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100% }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100% }
 button.item { cursor: pointer }
 button.item:hover { border-color: var(--accent) }
 .item .body { flex: 1; min-width: 0 }
 .item .t { font-weight: 600; overflow-wrap: anywhere }
-.item .s { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+.item .s { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere }
 .item .r { text-align: right; flex: none; font-variant-numeric: tabular-nums }
-.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--sunk); color: var(--muted); white-space: nowrap }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--sunk); color: var(--muted); white-space: nowrap }
 .pill.good { background: var(--good-soft); color: var(--good) }
 .pill.warn { background: var(--warn-soft); color: var(--warn) }
 .pill.bad { background: var(--bad-soft); color: var(--bad) }
 .pill.acc { background: var(--accent-soft); color: var(--accent) }
-.group h2 { font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px }
-.group h2 .count { font: 600 12px/1 var(--f-body); color: var(--muted) }
-.todo { border-left: 4px solid var(--line) }
-.todo.bad { border-left-color: var(--bad) } .todo.warn { border-left-color: var(--warn) } .todo.good { border-left-color: var(--good) }
-.empty { border: 1.5px dashed var(--line); border-radius: 12px; padding: 22px 16px; text-align: center; color: var(--muted) }
-.empty b { display: block; color: var(--ink); font-family: var(--f-head); margin-bottom: 4px }
-.quote { background: var(--sunk); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere }
-.zh { color: var(--muted); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere }
+.group h2 { font: 600 12.5px/1.2 var(--f-body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 8px }
+.group h2 .count { letter-spacing: 0; background: var(--sunk); border-radius: 99px; padding: 2px 8px; font-size: 11.5px }
+.todo::before { content: ""; flex: none; width: 10px; height: 10px; margin: 7px 2px 0; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 4px var(--sunk) }
+.todo.bad::before { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft) }
+.todo.warn::before { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft) }
+.todo.good::before { background: var(--good); box-shadow: 0 0 0 4px var(--good-soft) }
+.empty { border-radius: 22px; background: var(--sunk); padding: 26px 18px; text-align: center; color: var(--muted) }
+.empty b { display: block; color: var(--ink); font: 600 18px/1.3 var(--f-head); margin-bottom: 4px }
+.quote { background: var(--sunk); border-radius: 16px; padding: 11px 14px; white-space: pre-wrap; overflow-wrap: anywhere }
+.zh { color: var(--muted); font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere }
 
-#sheet { position: fixed; inset: 0; z-index: 20; background: rgba(8,20,23,.45); display: flex; align-items: flex-end; justify-content: center }
-.panel { background: var(--surface); width: 100%; max-width: 620px; max-height: 92%; overflow-y: auto; border-radius: 16px 16px 0 0; box-shadow: var(--shadow);
-  padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px }
-@media (min-width: 700px) { #sheet { align-items: center } .panel { border-radius: 16px; max-height: 88% } }
+/* sheet */
+#sheet { position: fixed; inset: 0; z-index: 20; background: var(--veil); display: flex; align-items: flex-end; justify-content: center }
+.panel { background: var(--surface); width: 100%; max-width: 620px; max-height: 92%; overflow-y: auto; border-radius: 28px 28px 0 0; box-shadow: var(--shadow);
+  padding: 18px max(18px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px }
+@media (min-width: 700px) { #sheet { align-items: center } .panel { border-radius: 28px; max-height: 88% } }
 .panel-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px }
-.panel-top h2 { font-size: 18px }
+.panel-top h2 { font-size: 23px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; min-width: 0 }
 .f { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
-.f > span { font-size: 12.5px; color: var(--muted); font-weight: 500 }
-.f input, .f select, .f textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 9px; padding: 8px 10px; width: 100%; min-width: 0 }
+.f > span { font-size: 13px; color: var(--muted); font-weight: 500 }
+.f input, .f select, .f textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 9px 12px; width: 100%; min-width: 0 }
+.f input:focus, .f select:focus, .f textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft) }
 .f textarea { min-height: 96px; resize: vertical }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
-.line { display: grid; grid-template-columns: minmax(0, 1fr) 70px 90px 34px; gap: 6px; align-items: end }
+.line { display: grid; grid-template-columns: minmax(0, 1fr) 66px 86px 38px; gap: 6px; align-items: end }
+.line .btn { padding: 8px 0; justify-content: center }
 .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 14px }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 14.5px; margin: 0 }
 .kv dt { color: var(--muted) } .kv dd { margin: 0; overflow-wrap: anywhere }
-#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 10px; max-width: min(92%, 520px); box-shadow: var(--shadow); font-size: 14px }
-@media (prefers-reduced-motion: no-preference) { .panel { animation: up .18s ease-out } @keyframes up { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } } }
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--ink); color: var(--bg); padding: 9px 18px; border-radius: 99px; max-width: min(92%, 520px); box-shadow: var(--shadow); font-size: 14.5px }
+@media (prefers-reduced-motion: no-preference) { .panel { animation: up .2s ease-out } @keyframes up { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } } }
 </style>
 
 <header class="top">
   <div class="wrap">
     <div class="top-row">
-      <div class="brand" id="brand">工厂营运台</div>
+      <div class="brand" id="brand"></div>
       <button class="btn small" id="langBtn" data-act="lang" type="button">EN</button>
       <button class="btn small" id="setBtn" data-act="open-settings" type="button" hidden>设置</button>
     </div>
@@ -417,9 +473,22 @@ const chips = (group, opts) => `<div class="chips">${opts.map(([k, t]) => `<butt
 const head = (title, sub, actions = '') => `<div class="head"><div><h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ''}</div><div class="acts">${actions}</div></div>`;
 const itemsLine = o => (o.items || []).map(it => `${it.name} ×${it.qty}`).join('、');
 
+// Each product is drawn as its own kind of pack and tinted by its range.
+const PACKS = {
+  pump: '<rect class="b" x="12" y="26" width="24" height="34" rx="7"/><rect class="c" x="21" y="15" width="6" height="11"/><rect class="c" x="17" y="9" width="20" height="6" rx="3"/><rect class="l" x="16" y="36" width="16" height="14" rx="3"/>',
+  spray: '<path class="b" d="M15 26c0-7 4-10 9-10s9 3 9 10v28a6 6 0 0 1-6 6h-6a6 6 0 0 1-6-6z"/><rect class="c" x="20" y="7" width="8" height="8" rx="2"/><circle class="c" cx="33" cy="9" r="1.3"/><circle class="c" cx="37" cy="6" r="1.1"/><circle class="c" cx="37" cy="12" r="1.1"/><rect class="l" x="18" y="34" width="12" height="16" rx="3"/>',
+  bottle: '<path class="b" d="M19 22h10l6 9v23a6 6 0 0 1-6 6H19a6 6 0 0 1-6-6V31z"/><rect class="c" x="20" y="9" width="8" height="12" rx="2"/><rect class="l" x="16" y="37" width="16" height="13" rx="3"/>',
+  box: '<rect class="b" x="10" y="20" width="28" height="40" rx="4"/><rect class="c" x="10" y="13" width="28" height="7" rx="2"/><circle class="l" cx="24" cy="40" r="9"/>',
+  jar: '<rect class="b" x="8" y="31" width="32" height="27" rx="8"/><rect class="c" x="6" y="20" width="36" height="11" rx="4"/><rect class="l" x="14" y="39" width="20" height="11" rx="3"/>',
+  dropper: '<rect class="b" x="15" y="30" width="18" height="30" rx="6"/><rect class="c" x="19" y="21" width="10" height="9" rx="2"/><ellipse class="c" cx="24" cy="12" rx="5" ry="8"/><rect class="l" x="18" y="40" width="12" height="12" rx="3"/>',
+};
+const packOf = p => { const n = (p?.name || '').toLowerCase(); return /serum|drop/.test(n) ? 'dropper' : /cream|jar|balm/.test(n) ? 'jar' : /spray|freshener/.test(n) ? 'spray' : /powder|surf/.test(n) ? 'box' : /hand|shampoo|lotion/.test(n) ? 'pump' : 'bottle'; };
+const pack = p => `<span class="ph ${CATS[p?.cat] ? p.cat : 'home'}" aria-hidden="true"><svg class="bt" viewBox="0 0 48 64">${PACKS[packOf(p)]}</svg></span>`;
+const FLAGN = () => ({ tm: L('商标风险', 'Trademark'), tmlike: L('名字像名牌', 'Brand look-alike'), skin: L('护肤品合规', 'Skin-care rules'), drug: L('治疗类说法', 'Treatment claim'), pest: L('驱虫登记', 'Pest registration') });
+
 function orderItem(o) {
   return `<button type="button" class="item" data-act="open" data-sheet="order" data-id="${esc(o.id)}">
-    <div class="body"><div class="t">${esc(o.name || L('（没写名字）', '(no name)'))} <span class="s num">${esc(o.no || '')}</span></div>
+    ${pack(prod(o.items?.[0]?.pid))}<div class="body"><div class="t">${esc(o.name || L('（没写名字）', '(no name)'))} <span class="s num">${esc(o.no || '')}</span></div>
     <div class="s">${esc(itemsLine(o))}</div>
     <div class="s">${esc(lab(CHANNELS, o.channel))} · ${esc(lab(PAYS, o.pay))}${o.city ? ' · ' + esc(o.city) : ''} · ${esc(fmtTime(o.ts))}</div></div>
     <div class="r"><div class="t">${esc(money(orderTotal(o)))}</div><div>${orderPills(o)}</div></div></button>`;
@@ -451,16 +520,22 @@ V.today = () => {
   if (b.flagged.length) add('bad', L(`${b.flagged.length} 个产品有商标或合规上的风险`, `${b.flagged.length} products carry trademark or compliance risk`), b.flagged.map(p => p.name).join('、'), 'products');
 
   const d = new Date();
-  return head(L('今天', 'Today'), `${fmtDate(d)} · ${L('这一页是各个 agent 替你看出来的事，照着顺序做就行。', 'What the agents found for you. Work down the list.')}`,
-      btn('open', L('＋ 新订单', '+ New order'), 'primary', 'data-sheet="order-new"') + btn('open', L('＋ 客人询问', '+ Inquiry'), '', 'data-sheet="inbox-new"')) +
-    `<div class="stats">
+  const shelf = S.products.filter(p => p.on !== false).map(p => {
+    const av = stockOf(p.id) - (b.res[p.id] || 0), low = b.low.find(x => x.p.id === p.id);
+    return `<button type="button" class="sku" data-act="open" data-sheet="product" data-id="${esc(p.id)}">${pack(p)}<span class="n">${esc(p.name)}</span>${pill(av < 0 ? 'bad' : low ? 'warn' : av > 0 ? 'good' : '', String(av))}</button>`;
+  }).join('');
+  return `<section class="hero">${head(L('今天', 'Today'), `${fmtDate(d)} · ${L('各个 agent 替你看出来的事，照着顺序做就行。', 'What the agents found for you. Work down the list.')}`,
+      btn('open', L('＋ 新订单', '+ New order'), 'primary', 'data-sheet="order-new"') + btn('open', L('＋ 客人询问', '+ Inquiry'), '', 'data-sheet="inbox-new"'))}
+      <div class="hero-art" aria-hidden="true">${pack({ cat: 'skin', name: 'serum' })}${pack({ cat: 'skin', name: 'cream' })}${pack({ cat: 'home', name: 'hand wash' })}</div></section>
+    <div class="stats">
       <div class="stat"><b>${b.today.length}</b><span>${L('今天的订单', 'Orders today')} · ${esc(money(b.todaySum))}</span></div>
       <div class="stat"><b>${esc(money(b.monthSum))}</b><span>${L('本月销售', 'Sales this month')} · ${b.month.length} ${L('单', 'orders')}</span></div>
       <div class="stat"><b>${b.ship.length}</b><span>${L('可以出货', 'Ready to ship')}</span></div>
       <div class="stat"><b>${esc(money(b.owedSum))}</b><span>${L('货出了还没收的钱', 'Shipped but not yet paid')} · ${b.owed.length} ${L('单', 'orders')}</span></div>
     </div>
     <section class="group"><h2>${L('现在要做的', 'To do now')} <span class="count">${todos.length}</span></h2>
-      <div class="list">${todos.join('') || empty(L('没有卡住的事', 'Nothing is stuck'), S.products.length ? L('有新订单或客人询问时，会出现在这里。', 'New orders and inquiries will show up here.') : L('先到「产品」加上你的产品。', 'Start by adding your products under Products.'))}</div></section>`;
+      <div class="list">${todos.join('') || empty(L('没有卡住的事', 'Nothing is stuck'), S.products.length ? L('有新订单或客人询问时，会出现在这里。', 'New orders and inquiries will show up here.') : L('先到「产品」加上你的产品。', 'Start by adding your products under Products.'))}</div></section>
+    ${shelf ? `<section class="group"><h2>${L('货架 · 现在可卖的数量', 'Shelf · free to sell now')}</h2><div class="strip">${shelf}</div></section>` : ''}`;
 };
 
 V.orders = () => {
@@ -483,20 +558,21 @@ V.inbox = () => {
 };
 
 V.products = () => {
-  const res = reserved();
+  const res = reserved(), fn = FLAGN();
   const groups = Object.keys(CATS).map(c => {
-    const ps = S.products.filter(p => (p.cat || 'home') === c);
+    const ps = S.products.filter(p => (CATS[p.cat] ? p.cat : 'home') === c);
     if (!ps.length) return '';
-    return `<section class="group"><h2>${esc(lab(CATS, c))} <span class="count">${ps.length}</span></h2><div class="list">${ps.map(p => {
+    return `<section class="group"><h2>${esc(lab(CATS, c))} <span class="count">${ps.length}</span></h2><div class="shelf">${ps.map(p => {
       const st = stockOf(p.id), av = st - (res[p.id] || 0);
-      const prices = Number(p.pr) ? `${L('零售', 'Retail')} ${money(p.pr)}${Number(p.pd) ? ` · ${L('经销', 'Dist.')} ${money(p.pd)}` : ''}${Number(p.pb) ? ` · ${L('企业', 'Business')} ${money(p.pb)}` : ''}` : L('还没定价', 'No price yet');
-      const flags = (p.flags || []).map(f => pill('bad', { tm: L('商标风险', 'Trademark'), tmlike: L('名字像名牌', 'Brand look-alike'), skin: L('护肤品合规', 'Skin-care rules'), drug: L('治疗类说法', 'Treatment claim'), pest: L('驱虫登记', 'Pest registration') }[f] || f)).join(' ');
-      return `<button type="button" class="item" data-act="open" data-sheet="product" data-id="${esc(p.id)}">
-        <div class="body"><div class="t">${esc(pname(p))} ${p.on === false ? pill('', L('停售', 'Inactive')) : ''}</div><div class="s">${esc(prices)}</div>${flags ? `<div style="margin-top:4px">${flags}</div>` : ''}</div>
-        <div class="r"><div class="t">${st}</div><div class="s">${L('可卖', 'Free')} <span style="${av < 0 ? 'color:var(--bad)' : ''}">${av}</span></div></div></button>`;
+      const flags = (p.flags || []).map(f => pill('bad', fn[f] || f)).join('');
+      return `<button type="button" class="card ${p.on === false ? 'off' : ''}" data-act="open" data-sheet="product" data-id="${esc(p.id)}">${pack(p)}
+        <span class="cb"><span class="t">${esc(p.name)}</span>${p.size ? `<span class="s">${esc(p.size)}</span>` : ''}
+        <span class="s num">${Number(p.pr) ? esc(money(p.pr)) : L('还没定价', 'No price yet')}${p.on === false ? ' · ' + L('停售', 'Inactive') : ''}</span>
+        <span class="s num">${L('库存', 'Stock')} ${st} · ${L('可卖', 'Free')} <b style="${av < 0 ? 'color:var(--bad)' : 'color:var(--ink)'}">${av}</b></span>
+        ${flags ? `<span class="flags">${flags}</span>` : ''}</span></button>`;
     }).join('')}</div></section>`;
   }).join('');
-  return head(L('产品', 'Products'), L('右边的数字是现在的库存；「可卖」是扣掉已接订单以后还剩的。', 'The number on the right is stock on hand; "Free" is what remains after orders already taken.'), S.isOwner ? btn('open', L('＋ 新产品', '+ New product'), 'primary', 'data-sheet="product"') : '') +
+  return head(L('产品', 'Products'), L('「可卖」是库存扣掉已接订单以后还剩的数量。点一个产品看三种价钱。', '"Free" is stock minus orders already taken. Tap a product for its three prices.'), S.isOwner ? btn('open', L('＋ 新产品', '+ New product'), 'primary', 'data-sheet="product"') : '') +
     (groups || empty(L('还没有产品', 'No products yet'), S.isOwner ? L('加上第一个产品，其他页面才有东西可用。', 'Add your first product so the other pages have something to work with.') : L('请负责人先加上产品。', 'Ask the owner to add products first.')));
 };
 
@@ -580,7 +656,7 @@ const NAV = { today: ['今天', 'Today'], orders: ['订单', 'Orders'], inbox: [
 
 function render() {
   document.documentElement.lang = S.lang === 'zh' ? 'zh-Hans' : 'en';
-  $('#brand').innerHTML = esc(S.settings.company || L('工厂营运台', 'Factory Desk')) + `<small>${L('一个 app 管订单、客服、库存、收款和营销', 'Orders, customer service, stock, payments and marketing in one app')}</small>`;
+  $('#brand').innerHTML = `<span class="mark" aria-hidden="true"><svg viewBox="0 0 16 20"><path d="M8 0c3 4.6 8 8.200 8 12.400A8 7.600 0 0 1 0 12.400C0 8.200 5 4.600 8 0z"/></svg></span><span style="min-width:0"><b>${esc(S.settings.company || L('工厂营运台', 'Factory Desk'))}</b><small>${L('订单 · 客服 · 库存 · 收款 · 营销', 'Orders · Service · Stock · Payments · Marketing')}</small></span>`;
   $('#langBtn').textContent = S.lang === 'zh' ? 'EN' : '中文';
   $('#setBtn').hidden = !S.isOwner || !S.ready;
   $('#setBtn').textContent = L('设置', 'Settings');
@@ -733,7 +809,7 @@ SH.inbox = () => {
 
 SH.product = () => {
   const p = prod(S.sheet.id);
-  const stockLine = p ? `<div class="s" style="color:var(--muted);font-size:13px">${L('库存', 'Stock')} ${stockOf(p.id)} · ${L('订单占用', 'Reserved')} ${reserved()[p.id] || 0}</div>` : '';
+  const stockLine = p ? `<div class="acts">${pack(p)}<div><div>${esc(lab(CATS, CATS[p.cat] ? p.cat : 'home'))}</div><div style="color:var(--muted);font-size:13.5px">${L('库存', 'Stock')} ${stockOf(p.id)} · ${L('订单占用', 'Reserved')} ${reserved()[p.id] || 0}</div></div></div>` : '';
   if (!S.sheet.form) {
     if (!p) return [L('产品', 'Product'), empty(L('找不到这个产品', 'Product not found'), '')];
     return [pname(p), `${stockLine}<dl class="kv"><dt>${L('零售价', 'Retail')}</dt><dd>${Number(p.pr) ? esc(money(p.pr)) : '—'}</dd><dt>${L('经销商价', 'Distributor')}</dt><dd>${Number(p.pd) ? esc(money(p.pd)) : '—'}</dd><dt>${L('企业价', 'Business')}</dt><dd>${Number(p.pb) ? esc(money(p.pb)) : '—'}</dd></dl>

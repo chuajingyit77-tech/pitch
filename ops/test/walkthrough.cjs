@@ -55,7 +55,7 @@ const fake = (role) => `
   log('margin:', await text('#margin')); await click('[data-act="save-product"]');
   await click('[data-sheet="product"]'); await fill('name', 'Toilet Cleaner (Harpic)'); log('flags:', (await text('#pflags')).slice(0, 60)); await fill('pr', '300'); await click('[data-act="save-product"]');
   await click('.head [data-sheet="product"]'); await fill('name', 'Acne Cream'); await sel('cat', 'skin'); log('flags2 count:', await p.locator('#pflags .note').count()); await click('[data-act="save-product"]');
-  log('products listed:', await p.locator('#main .item').count());
+  log('products listed:', await p.locator('#main .card').count());
   const pid = await p.evaluate(() => Object.entries(window.__data.products).find(([k, v]) => v.name === 'Hand Wash')[0]);
   // production
   await click('[data-v="production"]'); await click('[data-sheet="batch-new"]'); await sel('pid', pid); await fill('qty', '30'); await fill('batchNo', 'B001'); await fill('exp', '2026-12-20'); await click('[data-act="save-batch"]');
@@ -110,7 +110,7 @@ const fake = (role) => `
   const s = await mk('staff', { width: 1200, height: 800 }); await s.emulateMedia({ colorScheme: 'dark' });
   await s.evaluate(() => { window.__seed('products', 'p1', { name: 'Dish Wash', size: '1L', cat: 'home', pr: 180, on: true, flags: [], ts: 1 }); }); await s.waitForTimeout(150);
   await s.locator('#nav [data-v="products"]').click(); log('staff add-product btn:', await s.locator('.head [data-sheet="product"]').count(), '| settings hidden:', await s.locator('#setBtn').isHidden());
-  await s.locator('#main .item').first().click(); await s.waitForTimeout(100); log('staff product sheet inputs:', await s.locator('#sheet input').count()); await s.screenshot({ path: SP + '/08-staff-dark.png' });
+  await s.locator('#main .card').first().click(); await s.waitForTimeout(100); log('staff product sheet inputs:', await s.locator('#sheet input').count()); await s.screenshot({ path: SP + '/08-staff-dark.png' });
   // local fallback
   const ctx = await browser.newContext({ viewport: { width: 390, height: 700 } }); const l = await ctx.newPage(); l.on('pageerror', e => errors.push('local pageerror: ' + e.message));
   await l.route('http://app.test/', r => r.fulfill({ contentType: 'text/html; charset=utf-8', body: html })); await l.addInitScript('window.claude={use:async()=>null}'); await l.goto('http://app.test/'); await l.waitForSelector('.head'); log('local banner:', await l.locator('#main .note').count());

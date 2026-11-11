@@ -21,9 +21,22 @@ const chips = (group, opts) => `<div class="chips">${opts.map(([k, t]) => `<butt
 const head = (title, sub, actions = '') => `<div class="head"><div><h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ''}</div><div class="acts">${actions}</div></div>`;
 const itemsLine = o => (o.items || []).map(it => `${it.name} ×${it.qty}`).join('、');
 
+// Each product is drawn as its own kind of pack and tinted by its range.
+const PACKS = {
+  pump: '<rect class="b" x="12" y="26" width="24" height="34" rx="7"/><rect class="c" x="21" y="15" width="6" height="11"/><rect class="c" x="17" y="9" width="20" height="6" rx="3"/><rect class="l" x="16" y="36" width="16" height="14" rx="3"/>',
+  spray: '<path class="b" d="M15 26c0-7 4-10 9-10s9 3 9 10v28a6 6 0 0 1-6 6h-6a6 6 0 0 1-6-6z"/><rect class="c" x="20" y="7" width="8" height="8" rx="2"/><circle class="c" cx="33" cy="9" r="1.3"/><circle class="c" cx="37" cy="6" r="1.1"/><circle class="c" cx="37" cy="12" r="1.1"/><rect class="l" x="18" y="34" width="12" height="16" rx="3"/>',
+  bottle: '<path class="b" d="M19 22h10l6 9v23a6 6 0 0 1-6 6H19a6 6 0 0 1-6-6V31z"/><rect class="c" x="20" y="9" width="8" height="12" rx="2"/><rect class="l" x="16" y="37" width="16" height="13" rx="3"/>',
+  box: '<rect class="b" x="10" y="20" width="28" height="40" rx="4"/><rect class="c" x="10" y="13" width="28" height="7" rx="2"/><circle class="l" cx="24" cy="40" r="9"/>',
+  jar: '<rect class="b" x="8" y="31" width="32" height="27" rx="8"/><rect class="c" x="6" y="20" width="36" height="11" rx="4"/><rect class="l" x="14" y="39" width="20" height="11" rx="3"/>',
+  dropper: '<rect class="b" x="15" y="30" width="18" height="30" rx="6"/><rect class="c" x="19" y="21" width="10" height="9" rx="2"/><ellipse class="c" cx="24" cy="12" rx="5" ry="8"/><rect class="l" x="18" y="40" width="12" height="12" rx="3"/>',
+};
+const packOf = p => { const n = (p?.name || '').toLowerCase(); return /serum|drop/.test(n) ? 'dropper' : /cream|jar|balm/.test(n) ? 'jar' : /spray|freshener/.test(n) ? 'spray' : /powder|surf/.test(n) ? 'box' : /hand|shampoo|lotion/.test(n) ? 'pump' : 'bottle'; };
+const pack = p => `<span class="ph ${CATS[p?.cat] ? p.cat : 'home'}" aria-hidden="true"><svg class="bt" viewBox="0 0 48 64">${PACKS[packOf(p)]}</svg></span>`;
+const FLAGN = () => ({ tm: L('商标风险', 'Trademark'), tmlike: L('名字像名牌', 'Brand look-alike'), skin: L('护肤品合规', 'Skin-care rules'), drug: L('治疗类说法', 'Treatment claim'), pest: L('驱虫登记', 'Pest registration') });
+
 function orderItem(o) {
   return `<button type="button" class="item" data-act="open" data-sheet="order" data-id="${esc(o.id)}">
-    <div class="body"><div class="t">${esc(o.name || L('（没写名字）', '(no name)'))} <span class="s num">${esc(o.no || '')}</span></div>
+    ${pack(prod(o.items?.[0]?.pid))}<div class="body"><div class="t">${esc(o.name || L('（没写名字）', '(no name)'))} <span class="s num">${esc(o.no || '')}</span></div>
     <div class="s">${esc(itemsLine(o))}</div>
     <div class="s">${esc(lab(CHANNELS, o.channel))} · ${esc(lab(PAYS, o.pay))}${o.city ? ' · ' + esc(o.city) : ''} · ${esc(fmtTime(o.ts))}</div></div>
     <div class="r"><div class="t">${esc(money(orderTotal(o)))}</div><div>${orderPills(o)}</div></div></button>`;
@@ -55,16 +68,22 @@ V.today = () => {
   if (b.flagged.length) add('bad', L(`${b.flagged.length} 个产品有商标或合规上的风险`, `${b.flagged.length} products carry trademark or compliance risk`), b.flagged.map(p => p.name).join('、'), 'products');
 
   const d = new Date();
-  return head(L('今天', 'Today'), `${fmtDate(d)} · ${L('这一页是各个 agent 替你看出来的事，照着顺序做就行。', 'What the agents found for you. Work down the list.')}`,
-      btn('open', L('＋ 新订单', '+ New order'), 'primary', 'data-sheet="order-new"') + btn('open', L('＋ 客人询问', '+ Inquiry'), '', 'data-sheet="inbox-new"')) +
-    `<div class="stats">
+  const shelf = S.products.filter(p => p.on !== false).map(p => {
+    const av = stockOf(p.id) - (b.res[p.id] || 0), low = b.low.find(x => x.p.id === p.id);
+    return `<button type="button" class="sku" data-act="open" data-sheet="product" data-id="${esc(p.id)}">${pack(p)}<span class="n">${esc(p.name)}</span>${pill(av < 0 ? 'bad' : low ? 'warn' : av > 0 ? 'good' : '', String(av))}</button>`;
+  }).join('');
+  return `<section class="hero">${head(L('今天', 'Today'), `${fmtDate(d)} · ${L('各个 agent 替你看出来的事，照着顺序做就行。', 'What the agents found for you. Work down the list.')}`,
+      btn('open', L('＋ 新订单', '+ New order'), 'primary', 'data-sheet="order-new"') + btn('open', L('＋ 客人询问', '+ Inquiry'), '', 'data-sheet="inbox-new"'))}
+      <div class="hero-art" aria-hidden="true">${pack({ cat: 'skin', name: 'serum' })}${pack({ cat: 'skin', name: 'cream' })}${pack({ cat: 'home', name: 'hand wash' })}</div></section>
+    <div class="stats">
       <div class="stat"><b>${b.today.length}</b><span>${L('今天的订单', 'Orders today')} · ${esc(money(b.todaySum))}</span></div>
       <div class="stat"><b>${esc(money(b.monthSum))}</b><span>${L('本月销售', 'Sales this month')} · ${b.month.length} ${L('单', 'orders')}</span></div>
       <div class="stat"><b>${b.ship.length}</b><span>${L('可以出货', 'Ready to ship')}</span></div>
       <div class="stat"><b>${esc(money(b.owedSum))}</b><span>${L('货出了还没收的钱', 'Shipped but not yet paid')} · ${b.owed.length} ${L('单', 'orders')}</span></div>
     </div>
     <section class="group"><h2>${L('现在要做的', 'To do now')} <span class="count">${todos.length}</span></h2>
-      <div class="list">${todos.join('') || empty(L('没有卡住的事', 'Nothing is stuck'), S.products.length ? L('有新订单或客人询问时，会出现在这里。', 'New orders and inquiries will show up here.') : L('先到「产品」加上你的产品。', 'Start by adding your products under Products.'))}</div></section>`;
+      <div class="list">${todos.join('') || empty(L('没有卡住的事', 'Nothing is stuck'), S.products.length ? L('有新订单或客人询问时，会出现在这里。', 'New orders and inquiries will show up here.') : L('先到「产品」加上你的产品。', 'Start by adding your products under Products.'))}</div></section>
+    ${shelf ? `<section class="group"><h2>${L('货架 · 现在可卖的数量', 'Shelf · free to sell now')}</h2><div class="strip">${shelf}</div></section>` : ''}`;
 };
 
 V.orders = () => {
@@ -87,20 +106,21 @@ V.inbox = () => {
 };
 
 V.products = () => {
-  const res = reserved();
+  const res = reserved(), fn = FLAGN();
   const groups = Object.keys(CATS).map(c => {
-    const ps = S.products.filter(p => (p.cat || 'home') === c);
+    const ps = S.products.filter(p => (CATS[p.cat] ? p.cat : 'home') === c);
     if (!ps.length) return '';
-    return `<section class="group"><h2>${esc(lab(CATS, c))} <span class="count">${ps.length}</span></h2><div class="list">${ps.map(p => {
+    return `<section class="group"><h2>${esc(lab(CATS, c))} <span class="count">${ps.length}</span></h2><div class="shelf">${ps.map(p => {
       const st = stockOf(p.id), av = st - (res[p.id] || 0);
-      const prices = Number(p.pr) ? `${L('零售', 'Retail')} ${money(p.pr)}${Number(p.pd) ? ` · ${L('经销', 'Dist.')} ${money(p.pd)}` : ''}${Number(p.pb) ? ` · ${L('企业', 'Business')} ${money(p.pb)}` : ''}` : L('还没定价', 'No price yet');
-      const flags = (p.flags || []).map(f => pill('bad', { tm: L('商标风险', 'Trademark'), tmlike: L('名字像名牌', 'Brand look-alike'), skin: L('护肤品合规', 'Skin-care rules'), drug: L('治疗类说法', 'Treatment claim'), pest: L('驱虫登记', 'Pest registration') }[f] || f)).join(' ');
-      return `<button type="button" class="item" data-act="open" data-sheet="product" data-id="${esc(p.id)}">
-        <div class="body"><div class="t">${esc(pname(p))} ${p.on === false ? pill('', L('停售', 'Inactive')) : ''}</div><div class="s">${esc(prices)}</div>${flags ? `<div style="margin-top:4px">${flags}</div>` : ''}</div>
-        <div class="r"><div class="t">${st}</div><div class="s">${L('可卖', 'Free')} <span style="${av < 0 ? 'color:var(--bad)' : ''}">${av}</span></div></div></button>`;
+      const flags = (p.flags || []).map(f => pill('bad', fn[f] || f)).join('');
+      return `<button type="button" class="card ${p.on === false ? 'off' : ''}" data-act="open" data-sheet="product" data-id="${esc(p.id)}">${pack(p)}
+        <span class="cb"><span class="t">${esc(p.name)}</span>${p.size ? `<span class="s">${esc(p.size)}</span>` : ''}
+        <span class="s num">${Number(p.pr) ? esc(money(p.pr)) : L('还没定价', 'No price yet')}${p.on === false ? ' · ' + L('停售', 'Inactive') : ''}</span>
+        <span class="s num">${L('库存', 'Stock')} ${st} · ${L('可卖', 'Free')} <b style="${av < 0 ? 'color:var(--bad)' : 'color:var(--ink)'}">${av}</b></span>
+        ${flags ? `<span class="flags">${flags}</span>` : ''}</span></button>`;
     }).join('')}</div></section>`;
   }).join('');
-  return head(L('产品', 'Products'), L('右边的数字是现在的库存；「可卖」是扣掉已接订单以后还剩的。', 'The number on the right is stock on hand; "Free" is what remains after orders already taken.'), S.isOwner ? btn('open', L('＋ 新产品', '+ New product'), 'primary', 'data-sheet="product"') : '') +
+  return head(L('产品', 'Products'), L('「可卖」是库存扣掉已接订单以后还剩的数量。点一个产品看三种价钱。', '"Free" is stock minus orders already taken. Tap a product for its three prices.'), S.isOwner ? btn('open', L('＋ 新产品', '+ New product'), 'primary', 'data-sheet="product"') : '') +
     (groups || empty(L('还没有产品', 'No products yet'), S.isOwner ? L('加上第一个产品，其他页面才有东西可用。', 'Add your first product so the other pages have something to work with.') : L('请负责人先加上产品。', 'Ask the owner to add products first.')));
 };
 
@@ -184,7 +204,7 @@ const NAV = { today: ['今天', 'Today'], orders: ['订单', 'Orders'], inbox: [
 
 function render() {
   document.documentElement.lang = S.lang === 'zh' ? 'zh-Hans' : 'en';
-  $('#brand').innerHTML = esc(S.settings.company || L('工厂营运台', 'Factory Desk')) + `<small>${L('一个 app 管订单、客服、库存、收款和营销', 'Orders, customer service, stock, payments and marketing in one app')}</small>`;
+  $('#brand').innerHTML = `<span class="mark" aria-hidden="true"><svg viewBox="0 0 16 20"><path d="M8 0c3 4.6 8 8.200 8 12.400A8 7.600 0 0 1 0 12.400C0 8.200 5 4.600 8 0z"/></svg></span><span style="min-width:0"><b>${esc(S.settings.company || L('工厂营运台', 'Factory Desk'))}</b><small>${L('订单 · 客服 · 库存 · 收款 · 营销', 'Orders · Service · Stock · Payments · Marketing')}</small></span>`;
   $('#langBtn').textContent = S.lang === 'zh' ? 'EN' : '中文';
   $('#setBtn').hidden = !S.isOwner || !S.ready;
   $('#setBtn').textContent = L('设置', 'Settings');

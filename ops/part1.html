@@ -1,126 +1,182 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <title>工厂营运台</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@500;600;700&family=Jost:wght@400;500;600&family=Noto+Serif+SC:wght@600;700&display=swap">
 <style>
-/* Layout: one working desk. A sticky header, a tab strip that scrolls on its own,
-   then a single column of lists. Everything you type happens in a sheet, so live
-   data can redraw the lists underneath without touching what you are typing. */
+/* Layout: a beauty counter. A wordmark header closed by a gold foil hairline,
+   capsule tabs, a pastel counter-top on Today, and every product drawn as its
+   own pack on a shelf, tinted by range: mint for home care, rose for skin care,
+   herb for pest control. Typing still happens in a sheet above the page. */
 :root {
-  --bg: #f2f6f6; --surface: #ffffff; --sunk: #e9efef;
-  --ink: #12262b; --muted: #587076; --line: #d6e0e1;
-  --accent: #0a7480; --accent-ink: #ffffff; --accent-soft: #dff0f1;
-  --good: #1c7f47; --good-soft: #e0f3e7;
-  --warn: #9a5b00; --warn-soft: #fbefd6;
-  --bad: #b83227; --bad-soft: #fbe4e1;
-  --shadow: 0 1px 2px rgba(18,38,43,.06), 0 6px 18px rgba(18,38,43,.07);
-  --f-body: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
-  --f-head: "Space Grotesk", Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --bg: #fbf1f3; --surface: #ffffff; --sunk: #f6e6eb;
+  --ink: #2e1426; --muted: #7d6272; --line: #eed8df;
+  --accent: #8e2f6b; --accent-ink: #ffffff; --accent-soft: #f6dcea; --gold: #b8893a;
+  --mint: #d3efe8; --mint-ink: #1c6b60; --rose: #fbd5dd; --rose-ink: #a8395c;
+  --herb: #e4eec6; --herb-ink: #566b1c; --peach: #fde9d8;
+  --good: #1f7a4d; --good-soft: #dff2e7;
+  --warn: #96600a; --warn-soft: #fbeed2;
+  --bad: #c9401a; --bad-soft: #fde5dc;
+  --veil: rgba(46,20,38,.42);
+  --shadow: 0 1px 2px rgba(46,20,38,.05), 0 10px 28px rgba(142,47,107,.10);
+  --f-body: Jost, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --f-head: "Bodoni Moda", "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0d1618; --surface: #152124; --sunk: #1b2a2e;
-  --ink: #e6efef; --muted: #93a8ac; --line: #2a3b3f;
-  --accent: #43b6c2; --accent-ink: #062226; --accent-soft: #173439;
-  --good: #5fc88c; --good-soft: #15301f;
-  --warn: #e6ae4f; --warn-soft: #33270e;
-  --bad: #f08a80; --bad-soft: #3a1b18;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+  --bg: #1b0f17; --surface: #27161f; --sunk: #321e29;
+  --ink: #f7e9ef; --muted: #b999aa; --line: #47303c;
+  --accent: #e991c4; --accent-ink: #2b0d1f; --accent-soft: #4b2240; --gold: #d8b46c;
+  --mint: #173f39; --mint-ink: #8fdccb; --rose: #4f2332; --rose-ink: #f5a9bd;
+  --herb: #303b15; --herb-ink: #c8de88; --peach: #49301f;
+  --good: #6fd09a; --good-soft: #16321f;
+  --warn: #e8b257; --warn-soft: #35280e;
+  --bad: #ff9a7a; --bad-soft: #40201a;
+  --veil: rgba(8,3,6,.6);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.4);
   color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0d1618; --surface: #152124; --sunk: #1b2a2e;
-  --ink: #e6efef; --muted: #93a8ac; --line: #2a3b3f;
-  --accent: #43b6c2; --accent-ink: #062226; --accent-soft: #173439;
-  --good: #5fc88c; --good-soft: #15301f;
-  --warn: #e6ae4f; --warn-soft: #33270e;
-  --bad: #f08a80; --bad-soft: #3a1b18;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.35);
+  --bg: #1b0f17; --surface: #27161f; --sunk: #321e29;
+  --ink: #f7e9ef; --muted: #b999aa; --line: #47303c;
+  --accent: #e991c4; --accent-ink: #2b0d1f; --accent-soft: #4b2240; --gold: #d8b46c;
+  --mint: #173f39; --mint-ink: #8fdccb; --rose: #4f2332; --rose-ink: #f5a9bd;
+  --herb: #303b15; --herb-ink: #c8de88; --peach: #49301f;
+  --good: #6fd09a; --good-soft: #16321f;
+  --warn: #e8b257; --warn-soft: #35280e;
+  --bad: #ff9a7a; --bad-soft: #40201a;
+  --veil: rgba(8,3,6,.6);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.4);
   color-scheme: dark }
 
 * { box-sizing: border-box }
-body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+body { background: var(--bg); color: var(--ink); font: 15.5px/1.5 var(--f-body); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface) }
 button, input, select, textarea { font: inherit; color: inherit }
 h1, h2, h3 { font-family: var(--f-head); margin: 0; text-wrap: balance }
 .num { font-variant-numeric: tabular-nums }
-.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap { max-width: 1000px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
 
-.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--surface); border-bottom: 1px solid var(--line) }
-.top-row { display: flex; align-items: center; gap: 10px; padding-block: 10px }
-.brand { font: 700 17px/1.2 var(--f-head); min-width: 0; flex: 1; overflow-wrap: anywhere }
-.brand small { display: block; font: 400 12px/1.3 var(--f-body); color: var(--muted) }
-.nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; padding-bottom: 0 }
+/* header */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--surface) }
+.top::after { content: ""; position: absolute; inset: auto 0 0; height: 1px; background: linear-gradient(90deg, var(--line), var(--gold) 50%, var(--line)) }
+.top-row { display: flex; align-items: center; gap: 10px; padding-block: 12px 8px }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 }
+.brand .mark { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center }
+.brand .mark svg { width: 16px; height: 20px }
+.brand .mark path { fill: var(--accent) }
+.brand b { display: block; font: 700 19px/1.15 var(--f-head); letter-spacing: .01em; overflow-wrap: anywhere }
+.brand small { display: block; font: 400 11.5px/1.3 var(--f-body); color: var(--muted); letter-spacing: .04em }
+.nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 10px }
 .nav::-webkit-scrollbar { display: none }
-.tab { flex: none; border: 0; background: none; padding: 9px 12px; border-bottom: 2.5px solid transparent; color: var(--muted); cursor: pointer; font-weight: 500; white-space: nowrap }
-.tab[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent) }
-.tab .dot { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--bad); color: #fff; font: 600 11px/18px var(--f-body); text-align: center }
+.tab { flex: none; border: 0; background: none; padding: 6px 14px; border-radius: 99px; color: var(--muted); cursor: pointer; font-weight: 500; white-space: nowrap }
+.tab:hover { color: var(--ink) }
+.tab[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.tab .dot { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px; border-radius: 9px; background: var(--bad); color: var(--surface); font: 600 11px/18px var(--f-body); text-align: center }
 
-main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 18px }
+main { padding-block: 18px 80px; display: flex; flex-direction: column; gap: 20px }
 .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap }
-.head h1 { font-size: 22px }
-.head p { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; max-width: 62ch }
-.note { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--ink); font-size: 13.5px; border: 1px solid var(--line) }
+.head h1 { font-size: 30px; font-weight: 600; line-height: 1.15 }
+.head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 60ch }
+.hero { position: relative; overflow: hidden; border-radius: 26px; padding: 22px 20px; background: linear-gradient(120deg, var(--rose) 0%, var(--peach) 50%, var(--mint) 100%) }
+.hero .head { position: relative; z-index: 1 }
+.hero .head h1 { font-size: 36px }
+.hero .head p { color: var(--ink); opacity: .78 }
+.hero-art { position: absolute; right: 18px; bottom: -10px; display: none; gap: 6px; align-items: flex-end; opacity: .9 }
+.hero-art .ph { background: none; width: auto; height: auto }
+.hero-art svg { height: 120px; width: auto }
+.hero-art .ph:nth-child(2) svg { height: 88px }
+@media (min-width: 760px) { .hero { padding: 30px 28px } .hero-art { display: flex } .hero .head { max-width: 62% } }
+.note { padding: 10px 14px; border-radius: 14px; background: var(--warn-soft); color: var(--ink); font-size: 14px }
 .note.info { background: var(--accent-soft) }
 
-.btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 9px; cursor: pointer; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: var(--ink) }
+/* controls */
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 16px; border-radius: 99px; cursor: pointer; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; color: var(--ink) }
 .btn:hover { border-color: var(--accent) }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600 }
 .btn.danger { color: var(--bad) }
-.btn.small { padding: 5px 10px; font-size: 13px }
-.btn[disabled] { opacity: .5; cursor: default }
+.btn.small { padding: 5px 12px; font-size: 13.5px }
+.btn[disabled] { opacity: .45; cursor: default }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .chips { display: flex; gap: 6px; flex-wrap: wrap }
-.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 5px 12px; cursor: pointer; font-size: 13.5px; color: var(--muted) }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 5px 14px; cursor: pointer; font-size: 14px; color: var(--muted) }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
 
+/* figures */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px }
-.stat b { display: block; font: 700 22px/1.2 var(--f-head); font-variant-numeric: tabular-nums }
-.stat span { color: var(--muted); font-size: 12.5px }
+.stat { background: var(--surface); border-radius: 20px; padding: 14px 16px; box-shadow: var(--shadow) }
+.stat b { display: block; font: 600 26px/1.15 var(--f-head); font-variant-numeric: tabular-nums lining-nums }
+.stat span { color: var(--muted); font-size: 13px }
 
+/* packs: each product as a small drawing, tinted by range */
+.ph { --c: var(--mint); --ci: var(--mint-ink); flex: none; width: 46px; height: 54px; border-radius: 14px; background: var(--c); display: grid; place-items: center }
+.ph.skin { --c: var(--rose); --ci: var(--rose-ink) }
+.ph.pest { --c: var(--herb); --ci: var(--herb-ink) }
+.ph svg { height: 38px; width: auto; display: block }
+.bt .b { fill: var(--ci) } .bt .c { fill: var(--gold) } .bt .l { fill: var(--surface); opacity: .82 }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; padding: 0; display: flex; flex-direction: column; text-align: left; cursor: pointer; min-width: 0 }
+.card:hover { border-color: var(--accent) }
+.card .ph { width: 100%; height: 116px; border-radius: 0 }
+.card .ph svg { height: 86px }
+.card.off .ph { opacity: .45 }
+.card .cb { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.card .t { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere }
+.card .s { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+.card .flags { display: flex; gap: 4px; flex-wrap: wrap }
+.strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin }
+.sku { flex: none; width: 92px; border: 0; background: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center }
+.sku .ph { width: 76px; height: 86px; border-radius: 20px }
+.sku .ph svg { height: 58px }
+.sku .n { font-size: 12.5px; line-height: 1.25; overflow-wrap: anywhere }
+
+/* lists */
 .list { display: flex; flex-direction: column; gap: 8px }
-.item { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100% }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100% }
 button.item { cursor: pointer }
 button.item:hover { border-color: var(--accent) }
 .item .body { flex: 1; min-width: 0 }
 .item .t { font-weight: 600; overflow-wrap: anywhere }
-.item .s { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+.item .s { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere }
 .item .r { text-align: right; flex: none; font-variant-numeric: tabular-nums }
-.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--sunk); color: var(--muted); white-space: nowrap }
+.pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--sunk); color: var(--muted); white-space: nowrap }
 .pill.good { background: var(--good-soft); color: var(--good) }
 .pill.warn { background: var(--warn-soft); color: var(--warn) }
 .pill.bad { background: var(--bad-soft); color: var(--bad) }
 .pill.acc { background: var(--accent-soft); color: var(--accent) }
-.group h2 { font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px }
-.group h2 .count { font: 600 12px/1 var(--f-body); color: var(--muted) }
-.todo { border-left: 4px solid var(--line) }
-.todo.bad { border-left-color: var(--bad) } .todo.warn { border-left-color: var(--warn) } .todo.good { border-left-color: var(--good) }
-.empty { border: 1.5px dashed var(--line); border-radius: 12px; padding: 22px 16px; text-align: center; color: var(--muted) }
-.empty b { display: block; color: var(--ink); font-family: var(--f-head); margin-bottom: 4px }
-.quote { background: var(--sunk); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere }
-.zh { color: var(--muted); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere }
+.group h2 { font: 600 12.5px/1.2 var(--f-body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 8px }
+.group h2 .count { letter-spacing: 0; background: var(--sunk); border-radius: 99px; padding: 2px 8px; font-size: 11.5px }
+.todo::before { content: ""; flex: none; width: 10px; height: 10px; margin: 7px 2px 0; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 4px var(--sunk) }
+.todo.bad::before { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft) }
+.todo.warn::before { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft) }
+.todo.good::before { background: var(--good); box-shadow: 0 0 0 4px var(--good-soft) }
+.empty { border-radius: 22px; background: var(--sunk); padding: 26px 18px; text-align: center; color: var(--muted) }
+.empty b { display: block; color: var(--ink); font: 600 18px/1.3 var(--f-head); margin-bottom: 4px }
+.quote { background: var(--sunk); border-radius: 16px; padding: 11px 14px; white-space: pre-wrap; overflow-wrap: anywhere }
+.zh { color: var(--muted); font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere }
 
-#sheet { position: fixed; inset: 0; z-index: 20; background: rgba(8,20,23,.45); display: flex; align-items: flex-end; justify-content: center }
-.panel { background: var(--surface); width: 100%; max-width: 620px; max-height: 92%; overflow-y: auto; border-radius: 16px 16px 0 0; box-shadow: var(--shadow);
-  padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px }
-@media (min-width: 700px) { #sheet { align-items: center } .panel { border-radius: 16px; max-height: 88% } }
+/* sheet */
+#sheet { position: fixed; inset: 0; z-index: 20; background: var(--veil); display: flex; align-items: flex-end; justify-content: center }
+.panel { background: var(--surface); width: 100%; max-width: 620px; max-height: 92%; overflow-y: auto; border-radius: 28px 28px 0 0; box-shadow: var(--shadow);
+  padding: 18px max(18px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px }
+@media (min-width: 700px) { #sheet { align-items: center } .panel { border-radius: 28px; max-height: 88% } }
 .panel-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px }
-.panel-top h2 { font-size: 18px }
+.panel-top h2 { font-size: 23px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; min-width: 0 }
 .f { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
-.f > span { font-size: 12.5px; color: var(--muted); font-weight: 500 }
-.f input, .f select, .f textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 9px; padding: 8px 10px; width: 100%; min-width: 0 }
+.f > span { font-size: 13px; color: var(--muted); font-weight: 500 }
+.f input, .f select, .f textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 9px 12px; width: 100%; min-width: 0 }
+.f input:focus, .f select:focus, .f textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft) }
 .f textarea { min-height: 96px; resize: vertical }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
-.line { display: grid; grid-template-columns: minmax(0, 1fr) 70px 90px 34px; gap: 6px; align-items: end }
+.line { display: grid; grid-template-columns: minmax(0, 1fr) 66px 86px 38px; gap: 6px; align-items: end }
+.line .btn { padding: 8px 0; justify-content: center }
 .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 14px }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 14.5px; margin: 0 }
 .kv dt { color: var(--muted) } .kv dd { margin: 0; overflow-wrap: anywhere }
-#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 10px; max-width: min(92%, 520px); box-shadow: var(--shadow); font-size: 14px }
-@media (prefers-reduced-motion: no-preference) { .panel { animation: up .18s ease-out } @keyframes up { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } } }
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--ink); color: var(--bg); padding: 9px 18px; border-radius: 99px; max-width: min(92%, 520px); box-shadow: var(--shadow); font-size: 14.5px }
+@media (prefers-reduced-motion: no-preference) { .panel { animation: up .2s ease-out } @keyframes up { from { transform: translateY(14px); opacity: .6 } to { transform: none; opacity: 1 } } }
 </style>
 
 <header class="top">
   <div class="wrap">
     <div class="top-row">
-      <div class="brand" id="brand">工厂营运台</div>
+      <div class="brand" id="brand"></div>
       <button class="btn small" id="langBtn" data-act="lang" type="button">EN</button>
       <button class="btn small" id="setBtn" data-act="open-settings" type="button" hidden>设置</button>
     </div>

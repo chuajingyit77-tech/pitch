@@ -125,7 +125,7 @@ SH.inbox = () => {
 
 SH.product = () => {
   const p = prod(S.sheet.id);
-  const stockLine = p ? `<div class="s" style="color:var(--muted);font-size:13px">${L('库存', 'Stock')} ${stockOf(p.id)} · ${L('订单占用', 'Reserved')} ${reserved()[p.id] || 0}</div>` : '';
+  const stockLine = p ? `<div class="acts">${pack(p)}<div><div>${esc(lab(CATS, CATS[p.cat] ? p.cat : 'home'))}</div><div style="color:var(--muted);font-size:13.5px">${L('库存', 'Stock')} ${stockOf(p.id)} · ${L('订单占用', 'Reserved')} ${reserved()[p.id] || 0}</div></div></div>` : '';
   if (!S.sheet.form) {
     if (!p) return [L('产品', 'Product'), empty(L('找不到这个产品', 'Product not found'), '')];
     return [pname(p), `${stockLine}<dl class="kv"><dt>${L('零售价', 'Retail')}</dt><dd>${Number(p.pr) ? esc(money(p.pr)) : '—'}</dd><dt>${L('经销商价', 'Distributor')}</dt><dd>${Number(p.pd) ? esc(money(p.pd)) : '—'}</dd><dt>${L('企业价', 'Business')}</dt><dd>${Number(p.pb) ? esc(money(p.pb)) : '—'}</dd></dl>
