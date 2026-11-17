@@ -1,0 +1,19 @@
+{
+  "name": "agent-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One system, four AI agents: pitch, assistant, sales, coding",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --demo",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
+    "openai": "^7.58.0"
+  }
+}

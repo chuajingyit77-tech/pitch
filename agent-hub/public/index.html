@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Hub</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="rail">
+    <div class="brand"><span class="mark"></span>Agent Hub</div>
+    <nav id="agents"></nav>
+    <button id="new-chat" class="ghost" type="button">＋ 新对话</button>
+    <div class="rail-label">历史</div>
+    <div id="sessions"></div>
+    <button id="open-settings" class="ghost" type="button">设置</button>
+  </aside>
+
+  <main id="main">
+    <header id="topbar">
+      <button id="toggle-rail" class="icon" type="button" aria-label="菜单">☰</button>
+      <div class="title"><strong id="agent-name"></strong><span id="agent-model"></span></div>
+      <button id="toggle-side" class="ghost small" type="button" hidden></button>
+    </header>
+    <div id="setup-banner" hidden></div>
+    <div id="scroll"><div id="messages"></div></div>
+    <form id="composer">
+      <textarea id="input" rows="1" placeholder="输入任务，Enter 发送，Shift+Enter 换行"></textarea>
+      <button id="send" type="submit">发送</button>
+      <button id="stop" type="button" hidden>停止</button>
+    </form>
+  </main>
+
+  <aside id="side" hidden>
+    <header><strong id="side-title"></strong><span id="side-actions"></span><button id="close-side" class="icon" type="button" aria-label="关闭">✕</button></header>
+    <div id="side-body"></div>
+  </aside>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" id="settings-form">
+    <header><h2>设置</h2><button class="icon" value="cancel" aria-label="关闭">✕</button></header>
+    <div id="settings-body"></div>
+    <footer><span id="settings-status"></span><button type="button" id="save-settings">保存</button></footer>
+  </form>
+</dialog>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
