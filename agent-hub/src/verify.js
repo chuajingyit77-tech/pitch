@@ -196,14 +196,29 @@ export function isProtectedPath(p) {
   return Boolean(rel) && (RULE_PATH.test(rel) || TEST_PATH.test(rel));
 }
 
-const MUTATING = /(^|[\s;&|(])(rm|rmdir|mv|cp|tee|truncate|patch|dd|ln|chmod|touch)\s|\b(sed|perl|ruby)\s+(-\S+\s+)*-[a-hj-zA-Z]*i|\bgit\s+(checkout|restore|rm|mv|apply|am|revert|reset|stash|merge|rebase|cherry-pick|clean)\b/;
+// Commands that rewrite files in place.
+const FILE_OPS = /(^|[\s;&|(])(rm|rmdir|mv|cp|tee|truncate|patch|dd|ln|chmod|touch)\s|\b(sed|perl|ruby)\s+(-\S+\s+)*-[a-hj-zA-Z]*i/;
+const GIT = /(?:^|[\s;&|(])git\s+(?:-\S+\s+(?:\S+\s+)?)*?([a-z][a-z-]*)((?:[ \t]+[^\s;&|]+)*)/g;
+const GIT_REWRITES = new Set(['restore', 'rm', 'mv', 'apply', 'am', 'revert', 'merge', 'rebase', 'cherry-pick', 'clean', 'pull']);
+
+/** Does a git command in this line change the files on disk? Creating a branch or listing stashes does not. */
+function gitChangesFiles(command) {
+  for (const [, sub, args] of String(command || '').matchAll(GIT)) {
+    if (GIT_REWRITES.has(sub)) return true;
+    if ((sub === 'checkout' || sub === 'switch') && !/\s(-[bBcC]|--orphan|--create)(\s|$)/.test(args)) return true;
+    if (sub === 'reset' && /\s--(hard|merge|keep)(\s|$)/.test(args)) return true;
+    if (sub === 'stash' && !/^\s+(list|show)(\s|$)/.test(args)) return true;
+  }
+  return false;
+}
 
 const words = (command) => String(command || '').split(/[\s"'`;|&<>()=]+/).filter(Boolean);
 
 /** Best-effort: does this shell command change a test or a rule file? Such commands are never auto-approved. */
 export function mutatesProtected(command) {
   if (redirectTargets(command).some(isProtectedPath)) return true;
-  return MUTATING.test(String(command || '')) && words(command).some(isProtectedPath);
+  const cmd = String(command || '');
+  return (FILE_OPS.test(cmd) || gitChangesFiles(cmd)) && words(cmd).some(isProtectedPath);
 }
 
 const SCRATCH = /^(\/tmp\/|\/var\/tmp\/|\/dev\/|\$\{?TMPDIR)/;
@@ -215,7 +230,8 @@ const SCRATCH = /^(\/tmp\/|\/var\/tmp\/|\/dev\/|\$\{?TMPDIR)/;
 export function looksLikeEdit(command) {
   const cmd = String(command || '');
   if (redirectTargets(cmd).some((t) => !SCRATCH.test(t))) return true;
-  if (!MUTATING.test(cmd)) return false;
+  if (gitChangesFiles(cmd)) return true;
+  if (!FILE_OPS.test(cmd)) return false;
   const paths = words(cmd).filter((w) => /[/.]/.test(w) && !w.startsWith('-'));
   return !(paths.length && paths.every((w) => SCRATCH.test(w)));
 }

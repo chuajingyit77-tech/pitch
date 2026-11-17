@@ -111,6 +111,10 @@ test('shell commands that change a protected file are spotted; reading or runnin
   }
   for (const c of ['sed -i s/a/b/ src/x.js', 'echo hi > notes.txt', 'git stash', 'mv a.js b.js']) assert.equal(V.looksLikeEdit(c), true, c);
   for (const c of ['npm test 2>&1', 'npm test > /dev/null', 'git status', 'node -e "const f = (a) => a > 1"', 'ls', 'git commit -m "msg"', 'sed -n 1,5p a.js', 'rm -f /tmp/out.txt', 'npm test > /tmp/log.txt']) assert.equal(V.looksLikeEdit(c), false, c);
+  // Git: only commands that rewrite files count as edits. Making a branch right after the tests pass must not make the result stale.
+  for (const c of ['git checkout main', 'git checkout -- src/a.js', 'git reset --hard HEAD~1', 'git stash', 'git stash pop', 'git pull', 'git -C sub merge feature', 'git add -A && git rebase main']) assert.equal(V.looksLikeEdit(c), true, c);
+  for (const c of ['git checkout -b feature', 'git switch -c feature', 'git stash list', 'git reset --soft HEAD~1', 'git reset', 'git merge-base a b', 'git add -A && git commit -m "restore the merge"', 'git log --oneline', 'git push -u origin feature', 'git diff --stat']) assert.equal(V.looksLikeEdit(c), false, c);
+  assert.equal(V.mutatesProtected('git stash list') || V.mutatesProtected('git checkout -b test/topic'), false);
   assert.equal(V.isRulePath('.claude/settings.json') && V.isRulePath('verification/gate.json') && V.isRulePath('REVIEW.md'), true);
   assert.equal(V.isRulePath('test/a.test.js') || V.isRulePath('src/review.js'), false);
 });
