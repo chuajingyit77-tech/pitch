@@ -1,0 +1,18 @@
+{
+  "说明": "每个区域的便宜检查。verify.mjs 按改动的文件挑出要跑的那几项；这份配方从最近一次提交读取，所以改动改不了自己的检查。",
+  "recipes": [
+    {
+      "id": "agent-hub",
+      "paths": ["agent-hub/**"],
+      "cwd": "agent-hub",
+      "prepare": { "when_missing": "node_modules", "run": "npm ci --no-audit --no-fund" },
+      "checks": [{ "label": "npm test", "run": "npm test" }]
+    },
+    {
+      "id": "verification",
+      "paths": ["verification/**", ".claude/**", "AGENTS.md", "CLAUDE.md", "REVIEW.md"],
+      "cwd": ".",
+      "checks": [{ "label": "脚本测试", "run": "node --test verification/test/*.test.mjs" }]
+    }
+  ]
+}
