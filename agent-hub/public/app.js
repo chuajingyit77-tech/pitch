@@ -77,6 +77,30 @@ function brief(item) {
   return i.command || i.query || i.url || i.path || i.pattern || i.company || i.title || i.task || i.claim || i.text || i.lead_id || '';
 }
 
+// The verification stamp at the end of a run: how the work was checked, or that it was not.
+const STAMP = {
+  verified: { cls: 'ok', title: '已验证', hint: '检查是在最后一次改动之后通过的' },
+  failed: { cls: 'bad', title: '检查未通过', hint: '' },
+  escalated: { cls: 'bad', title: '已停下，等你决定', hint: '同一类检查连续几轮都没通过，没有再继续改' },
+  none: { cls: 'warn', title: '未验证', hint: '改了文件，但没有一项可信的检查通过' },
+  stale: { cls: 'warn', title: '验证已过期', hint: '检查通过之后又改了文件' },
+};
+// Why an approval cannot be covered by "allow for this conversation".
+const WHY = {
+  protected: '这会改动用来检查这次修改的测试或规则文件，所以每次都要你单独同意。',
+  destructive: '这个命令可能删掉或覆盖东西，所以每次都要你单独同意。',
+};
+
+function stampHtml(item) {
+  const s = STAMP[item.status];
+  if (!s) return '';
+  const checks = (item.checks || [])
+    .map((c) => `<li class="${c.pass ? 'pass' : 'fail'}">${c.pass ? '✓' : '✗'} ${esc(c.label)}${!c.pass && c.rounds > 1 ? `（已 ${c.rounds} 轮）` : ''}</li>`)
+    .join('');
+  const hint = item.status === 'none' && item.inconclusive ? `${s.hint}（有检查的结果被管道或 “|| true” 盖住了，不算数）` : s.hint;
+  return `<div class="stamp ${s.cls}${item.depth ? ' sub' : ''}"><b>${s.title}</b>${hint ? `<span>${esc(hint)}</span>` : ''}${checks ? `<ul>${checks}</ul>` : ''}</div>`;
+}
+
 function itemHtml(item) {
   const sub = item.depth ? ' sub' : '';
   switch (item.type) {
@@ -87,15 +111,19 @@ function itemHtml(item) {
     case 'text':
       return `<div class="msg text${sub}">${md(item.text)}</div>`;
     case 'tool': {
-      const cls = item.state === 'running' ? 'running' : item.isError ? 'error' : '';
+      // A check that ran and failed is not a tool error, but it must not look like a success either.
+      const cls = item.state === 'running' ? 'running' : item.isError || item.check === 'fail' ? 'error' : '';
+      const chk = item.check ? `<span class="chk ${item.check}">${{ pass: '检查通过', fail: '检查未通过', unclear: '结果不算数' }[item.check] || ''}</span>` : '';
       const body = `${item.input && Object.keys(item.input).length ? JSON.stringify(item.input, null, 2) : ''}${item.result ? `\n\n→ ${item.result}` : ''}`.trim();
-      return `<details class="tool ${cls}${sub}"><summary><span class="dot"></span><span class="name">${esc(TOOL_LABEL[item.name] || item.name)}</span><span class="brief">${esc(brief(item))}</span></summary>${body ? `<pre>${esc(body)}</pre>` : ''}</details>`;
+      return `<details class="tool ${cls}${sub}"><summary><span class="dot"></span><span class="name">${esc(TOOL_LABEL[item.name] || item.name)}</span><span class="brief">${esc(brief(item))}</span>${chk}</summary>${body ? `<pre>${esc(body)}</pre>` : ''}</details>`;
     }
     case 'approval': {
       const what = item.tool === 'bash' ? item.input.command : JSON.stringify(item.input, null, 2);
       if (item.state !== 'pending') return `<div class="approval done">${item.state === 'allowed' ? '已允许' : '已拒绝'}：${esc(TOOL_LABEL[item.tool] || item.tool)}</div>`;
       const always = item.tier === 'exec' ? '本次对话都允许命令' : '本次对话都允许改文件';
-      return `<div class="approval" data-approval="${esc(item.id)}"><div><b>${esc(agentName(item.agent))}</b> 想要${esc(TOOL_LABEL[item.tool] || item.tool)}，需要你同意：</div><pre>${esc(what)}</pre><div class="row"><button data-act="allow" type="button">允许</button><button data-act="always" class="ghost" type="button">${always}</button><button data-act="deny" class="danger" type="button">拒绝</button></div></div>`;
+      const why = WHY[item.why] || '';
+      // An action that always asks cannot be covered by a blanket approval, so that button is not offered.
+      return `<div class="approval" data-approval="${esc(item.id)}"><div><b>${esc(agentName(item.agent))}</b> 想要${esc(TOOL_LABEL[item.tool] || item.tool)}，需要你同意：</div>${why ? `<div class="why">${why}</div>` : ''}<pre>${esc(what)}</pre><div class="row"><button data-act="allow" type="button">允许</button>${why ? '' : `<button data-act="always" class="ghost" type="button">${always}</button>`}<button data-act="deny" class="danger" type="button">拒绝</button></div></div>`;
     }
     case 'notice':
       return `<div class="note">${esc(item.text)}</div>`;
@@ -103,6 +131,8 @@ function itemHtml(item) {
       return `<div class="note error">${esc(item.text)}</div>`;
     case 'deck':
       return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button><a href="${esc(item.url)}" target="_blank" rel="noopener">新窗口</a></div>`;
+    case 'verification':
+      return stampHtml(item);
     default:
       return '';
   }
@@ -279,7 +309,23 @@ ${id === 'anthropic' ? '' : `<label class="field">接口地址<input data-k="bas
 <label class="field">路径<input id="coding-ws" value="${esc(c.codingWorkspace)}" placeholder="/Users/you/projects/my-app"><span></span></label>
 <h3>联网搜索</h3><p>用 Claude 时由 Anthropic 的搜索工具完成。其他厂商默认用 DuckDuckGo；填入 Brave Search API key 更稳定。</p>
 <label class="field">Brave key<input id="brave" type="password" autocomplete="off" placeholder="${c.hasBraveKey ? '已保存' : '可选'}"><span></span></label>
+<h3>验收关卡</h3><p>每次任务结束都会盖章：已验证、未验证，或检查未通过。同一类检查连续 3 轮不过，agent 会停下来找你。“先观察”只记下哪些任务本该被拦；“严格”会把没验证的改动退回去先验证，最多退 2 次。</p>
+<label class="field">模式<select id="verify-mode">${[['observe', '先观察（建议先用这个）'], ['enforce', '严格'], ['off', '关闭']].map(([v, t]) => `<option value="${v}"${c.verification?.mode === v ? ' selected' : ''}>${t}</option>`).join('')}</select><span></span></label>
+<div id="verify-log" class="hint">加载中…</div>
 <h3>记忆</h3><div id="memories" class="hint">加载中…</div>`;
+  api('/api/verification').then(({ summary: v, recent }) => {
+    const box = $('verify-log');
+    if (!box) return;
+    if (!v.total) {
+      box.textContent = '还没有记录。agent 改过文件或跑过检查的任务会记在这里。';
+      return;
+    }
+    const open = recent.filter((r) => r.status !== 'verified').slice(0, 5);
+    box.className = '';
+    box.innerHTML = `<p>最近 ${v.total} 次有记录的任务：已验证 ${v.verified} · 未验证 ${v.none + v.stale} · 检查未通过 ${v.failed} · 停下等你 ${v.escalated}。其中 ${v.wouldBlock} 次在“严格”模式下会被拦下。</p>${open
+      .map((r) => `<div class="mem"><span>${esc(new Date(r.at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }))} · ${esc(agentName(r.agent))} · ${esc(STAMP[r.status]?.title || r.status)}${r.checks?.length ? `：${esc(r.checks.map((k) => `${k.pass ? '✓' : '✗'} ${k.label}`).join('，'))}` : ''}</span></div>`)
+      .join('')}`;
+  });
   api('/api/memory').then(({ memories }) => {
     $('memories').className = '';
     $('memories').innerHTML = memories.length ? memories.map((m) => `<div class="mem"><span>${esc(m.text)}</span><button type="button" class="icon" data-forget="${m.id}" aria-label="删除">✕</button></div>`).join('') : '<p>助理还没有记住任何东西。</p>';
@@ -298,6 +344,7 @@ async function saveSettings() {
   }
   for (const sel of document.querySelectorAll('[data-assign]')) patch.agents[sel.dataset.assign] = sel.value;
   if ($('brave').value) patch.braveKey = $('brave').value;
+  patch.verification = { mode: $('verify-mode').value };
   state = await api('/api/config', { method: 'POST', body: patch });
   $('settings-status').textContent = '已保存';
   renderSettings();

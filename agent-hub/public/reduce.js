@@ -28,11 +28,11 @@ export function applyEvent(items, ev) {
       break;
     case 'tool_result': {
       const tool = items.findLast((i) => i.type === 'tool' && i.id === ev.id);
-      if (tool) Object.assign(tool, { result: ev.content, isError: ev.isError, state: 'done' });
+      if (tool) Object.assign(tool, { result: ev.content, isError: ev.isError, state: 'done', ...(ev.check ? { check: ev.check } : {}) });
       break;
     }
     case 'approval':
-      items.push({ type: 'approval', id: ev.id, tool: ev.tool, tier: ev.tier, input: ev.input, agent: ev.agent, state: 'pending' });
+      items.push({ type: 'approval', id: ev.id, tool: ev.tool, tier: ev.tier, input: ev.input, agent: ev.agent, state: 'pending', why: ev.why });
       break;
     case 'approval_done': {
       const a = items.findLast((i) => i.type === 'approval' && i.id === ev.id);
@@ -45,6 +45,10 @@ export function applyEvent(items, ev) {
       break;
     case 'deck':
       items.push({ type: 'deck', url: ev.url, title: ev.title });
+      break;
+    case 'verification':
+      // The stamp of a finished run: how the work was verified, or that it was not.
+      items.push({ type: 'verification', status: ev.status, checks: ev.checks || [], edits: ev.edits || 0, inconclusive: ev.inconclusive || 0, agent: ev.agent, depth: ev.depth || 0 });
       break;
     case 'done':
       if (!ev.depth) for (const i of items) if (i.open) i.open = false;

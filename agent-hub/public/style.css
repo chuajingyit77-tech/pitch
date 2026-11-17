@@ -65,6 +65,8 @@ a{color:var(--accent)}
 .tool .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
 .tool.running .dot{background:var(--accent);animation:pulse 1s infinite}
 .tool.error .dot{background:var(--err)}
+.tool .chk{flex:none;font-size:11.5px;font-weight:650;border-radius:999px;padding:.1em .65em}
+.tool .chk.pass{color:var(--ok)}.tool .chk.fail{color:var(--err);background:var(--err-bg)}.tool .chk.unclear{color:var(--warn);background:var(--warn-bg)}
 .tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--line);font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
 @keyframes pulse{50%{opacity:.3}}
 .approval{border:1px solid var(--accent);border-radius:var(--radius);background:var(--soft);padding:12px 14px;display:grid;gap:9px}
@@ -75,6 +77,14 @@ a{color:var(--accent)}
 .note.error{background:var(--err-bg);color:var(--err)}
 .deck-link{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:9px 12px;font-size:14px}
 .deck-link span{flex:1}
+.stamp{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;border-radius:10px;padding:8px 12px;font-size:13.5px;border:1px solid var(--line);background:var(--panel)}
+.stamp b{font-weight:650}
+.stamp span{color:var(--muted)}
+.stamp ul{flex-basis:100%;margin:2px 0 0;padding:0;list-style:none;font:12.5px/1.6 ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.stamp.ok{border-color:var(--ok)}.stamp.ok b,.stamp li.pass{color:var(--ok)}
+.stamp.warn{background:var(--warn-bg);border-color:transparent}.stamp.warn b,.stamp.warn span{color:var(--warn)}
+.stamp.bad{background:var(--err-bg);border-color:transparent}.stamp.bad b,.stamp.bad span,.stamp li.fail{color:var(--err)}
+.approval .why{font-size:13px;color:var(--warn);background:var(--warn-bg);border-radius:8px;padding:6px 10px}
 .typing{color:var(--muted);font-size:13px}
 #composer{display:flex;gap:8px;align-items:flex-end;padding:10px 18px 16px;max-width:816px;width:100%;margin:0 auto}
 #input{flex:1;resize:none;max-height:180px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 13px;outline:none}

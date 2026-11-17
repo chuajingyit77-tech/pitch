@@ -1,5 +1,7 @@
-// Shell tool. Always needs the user's approval; commands that destroy work can never be auto-approved.
+// Shell tool. Always needs the user's approval; commands that destroy work, or that change the tests and
+// rule files a change is judged by, can never be auto-approved.
 import { spawn } from 'node:child_process';
+import { commandCheck, looksLikeEdit, mutatesProtected } from '../verify.js';
 
 const DESTRUCTIVE = [
   /\brm\s+(-[a-z]*[rf][a-z]*\s+)+/i,
@@ -31,7 +33,11 @@ export const bashTool = {
     required: ['command'],
   },
   tier: 'exec',
-  alwaysAsk: (input) => isDestructive(String(input.command || '')),
+  alwaysAsk: (input) => isDestructive(String(input.command || '')) || mutatesProtected(input.command),
+  askReason: (input) => (mutatesProtected(input.command) ? 'protected' : isDestructive(String(input.command || '')) ? 'destructive' : null),
+  // Verification: a test, lint, type-check or build command is a check, and its exit code is the evidence.
+  check: (input, output) => commandCheck(input.command, output),
+  touches: (input) => (looksLikeEdit(input.command) ? ['(shell)'] : []),
   run({ command, timeout_seconds = 120 }, ctx) {
     return new Promise((resolve) => {
       const child = spawn(command, { cwd: ctx.workspace, shell: true, env: process.env });

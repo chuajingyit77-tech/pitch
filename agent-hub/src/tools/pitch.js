@@ -80,6 +80,8 @@ export const pitchTools = [
       required: ['title', 'slides'],
     },
     tier: 'auto',
+    // Verification: the deck's own review (sourced numbers, length limits, layout) is this agent's check.
+    check: (_deck, output) => ({ kind: 'deck', label: 'Pitch 自检', pass: /(^|\n)No problems found\./.test(String(output)) }),
     async run(deck, ctx) {
       if (!deck.slides.length) throw new Error('A deck needs at least one slide');
       const facts = ctx.session.facts || [];

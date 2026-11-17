@@ -1,6 +1,8 @@
 // File tools. Every path is confined to the session's workspace.
 import fs from 'node:fs';
 import path from 'node:path';
+import { hubWorkspace } from '../store.js';
+import { isProtectedPath, isRulePath } from '../verify.js';
 
 /** Resolve a model-supplied path inside root, rejecting anything that escapes it (including via symlinks). */
 export function confine(root, p) {
@@ -20,6 +22,23 @@ export function confine(root, p) {
   }
   return real;
 }
+
+/**
+ * A change must not rewrite what it is judged by. In the user's repository, writing a review or verification
+ * rule file, or editing a test that already exists, always asks, even after "allow edits for this conversation".
+ * Adding a new test is fine, and the hub's own sandbox holds no checks.
+ */
+export function guardsCheck(input, ctx) {
+  if (!ctx?.workspace || ctx.workspace === hubWorkspace()) return false;
+  try {
+    const target = confine(ctx.workspace, input.path);
+    const rel = path.relative(fs.realpathSync(ctx.workspace), target).split(path.sep).join('/');
+    return isRulePath(rel) || (isProtectedPath(rel) && fs.existsSync(target));
+  } catch {
+    return false;
+  }
+}
+const guarded = { alwaysAsk: guardsCheck, askReason: (input, ctx) => (guardsCheck(input, ctx) ? 'protected' : null) };
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.venv']);
 
@@ -90,6 +109,7 @@ export const fileTools = [
       required: ['path', 'content'],
     },
     tier: 'edit',
+    ...guarded,
     async run({ path: p, content }, ctx) {
       const target = confine(ctx.workspace, p);
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -107,6 +127,7 @@ export const fileTools = [
       required: ['path', 'old_string', 'new_string'],
     },
     tier: 'edit',
+    ...guarded,
     async run({ path: p, old_string, new_string }, ctx) {
       const target = confine(ctx.workspace, p);
       const text = fs.readFileSync(target, 'utf8');

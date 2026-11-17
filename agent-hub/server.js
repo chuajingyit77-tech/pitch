@@ -11,6 +11,7 @@ import { dataPath, hubWorkspace, newId, readJson, writeJson } from './src/store.
 import { confine } from './src/tools/files.js';
 import { listLeads, updateLead, suppress, listSuppressed } from './src/tools/sales.js';
 import { listMemories, deleteMemory } from './src/tools/memory.js';
+import { readLog, summarize, verificationMode } from './src/verify.js';
 import { applyEvent } from './public/reduce.js';
 
 // `node server.js --demo` runs with a scripted stand-in model, so the interface can be tried without any key.
@@ -214,6 +215,11 @@ const server = http.createServer(async (req, res) => {
       return updated ? send(res, 200, { lead: updated }) : send(res, 404, { error: 'Not found' });
     }
     if (m === 'GET' && p === '/api/memory') return send(res, 200, { memories: listMemories() });
+    if (m === 'GET' && p === '/api/verification') {
+      // The acceptance record: every run's stamp, so unverified work (and what the gate would block) can be reviewed.
+      const entries = readLog(200);
+      return send(res, 200, { mode: verificationMode(loadConfig()), summary: summarize(entries), recent: entries.slice(0, 30) });
+    }
     const mem = /^\/api\/memory\/([\w]+)$/.exec(p);
     if (mem && m === 'DELETE') {
       deleteMemory(mem[1]);

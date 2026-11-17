@@ -1,5 +1,6 @@
 // Provider keys, model choices and per-agent provider assignment.
 import { readJson, writeJson } from './store.js';
+import { MODES, DEFAULT_MODE } from './verify.js';
 
 export const PROVIDERS = {
   anthropic: { label: 'Claude (Anthropic)', env: 'ANTHROPIC_API_KEY', kind: 'anthropic' },
@@ -20,6 +21,8 @@ const DEFAULTS = {
   agents: { assistant: 'moonshot', pitch: 'anthropic', sales: 'xai', coding: 'openai' },
   braveKey: '',
   codingWorkspace: '',
+  // The acceptance gate (src/verify.js): off, observe (record what would be blocked) or enforce.
+  verification: { mode: DEFAULT_MODE },
 };
 
 export function loadConfig() {
@@ -29,6 +32,8 @@ export function loadConfig() {
   Object.assign(cfg.agents, saved.agents);
   if (typeof saved.braveKey === 'string') cfg.braveKey = saved.braveKey;
   if (typeof saved.codingWorkspace === 'string') cfg.codingWorkspace = saved.codingWorkspace;
+  // A config file written before the gate existed has no such field and keeps the default.
+  if (MODES.includes(saved.verification?.mode)) cfg.verification.mode = saved.verification.mode;
   return cfg;
 }
 
@@ -45,6 +50,7 @@ export function saveConfig(patch) {
   }
   if (typeof patch.braveKey === 'string') cfg.braveKey = patch.braveKey.trim();
   if (typeof patch.codingWorkspace === 'string') cfg.codingWorkspace = patch.codingWorkspace.trim();
+  if (MODES.includes(patch.verification?.mode)) cfg.verification.mode = patch.verification.mode;
   writeJson('config.json', cfg);
   return cfg;
 }
@@ -87,5 +93,6 @@ export function publicConfig(cfg) {
     agents: cfg.agents,
     hasBraveKey: Boolean(cfg.braveKey),
     codingWorkspace: cfg.codingWorkspace,
+    verification: { mode: cfg.verification.mode },
   };
 }
