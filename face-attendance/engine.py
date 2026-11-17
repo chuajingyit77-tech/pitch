@@ -3,6 +3,7 @@ import os
 import platform
 import threading
 import time
+import uuid
 from collections import deque
 from datetime import datetime
 
@@ -17,9 +18,13 @@ DET_MODEL = os.path.join(MODEL_DIR, "face_detection_yunet_2023mar.onnx")
 REC_MODEL = os.path.join(MODEL_DIR, "face_recognition_sface_2021dec.onnx")
 PHOTO_DIR = os.path.join(db.DATA_DIR, "photos")
 FACE_DIR = os.path.join(db.DATA_DIR, "faces")
+VISITOR_DIR = os.path.join(db.DATA_DIR, "visitors")
 
 PROC_WIDTH = 640  # 识别时缩小到这个宽度，旧电脑也跑得动
 HIT_WINDOW = 3.0  # 秒：在这段时间内连续识别到 N 次才算数，防止误认
+PENDING_WINDOW = 5.0  # 秒：新面孔要在这段时间内被连续看到才会建档
+AMBIGUOUS_MARGIN = 0.08  # 和某个员工“有点像但不够像”时不建访客档，避免把员工当成访客
+MAX_VISITOR_FACES = 4  # 每个访客最多保存几个人脸特征（不同角度）
 
 
 class FaceModel:
@@ -87,14 +92,18 @@ class Engine:
         self.recent = deque(maxlen=20)
         self.hits = {}               # emp_id -> [时间戳...]
         self.last_punch = {}         # emp_id -> 上次打卡时间（秒）
-        self.last_unknown = 0.0
-        self.unknown_streak = 0      # 连续多少次处理都是陌生人
+        self.pending = []            # 还没建档的新面孔：[{feat, size, hits}]
+        self.last_visit = {}         # visitor_id -> 上次记录时间（秒）
         self.reload_gallery()
-        os.makedirs(PHOTO_DIR, exist_ok=True)
-        os.makedirs(FACE_DIR, exist_ok=True)
+        self.reload_visitors()
+        for d in (PHOTO_DIR, FACE_DIR, VISITOR_DIR):
+            os.makedirs(d, exist_ok=True)
 
     def reload_gallery(self):
         self.ids, self.names, self.feats = db.load_gallery()
+
+    def reload_visitors(self):
+        self.v_ids, self.v_feats = db.load_visitor_gallery()
 
     # ---------- 线程 ----------
 
@@ -156,12 +165,13 @@ class Engine:
         threshold = self.cfg.get("match_threshold", 0.42)
         now = time.time()
         boxes, current = [], []
-        saw_unknown = saw_known = False
+        record_visitors = self.cfg.get("record_visitors", self.cfg.get("save_unknown_faces", True))
+        self.pending = [p for p in self.pending if now - p["hits"][-1] < PENDING_WINDOW]
 
         for face in faces:
             if face[2] < min_size:
                 continue
-            feat, _ = self.model.embed(small, face)
+            feat, aligned = self.model.embed(small, face)
             emp_id, name, score = None, None, 0.0
             if len(self.ids):
                 sims = self.feats @ feat
@@ -172,13 +182,13 @@ class Engine:
             box = (face[:4] / scale).astype(int)
 
             if emp_id is None:
-                boxes.append((box, (0, 0, 255)))
-                current.append({"name": "陌生人", "state": "unknown", "score": round(score, 2)})
-                if not saw_unknown:
-                    saw_unknown = True
-                    unknown_box, unknown_score = box, score
+                if not record_visitors or score >= threshold - AMBIGUOUS_MARGIN:
+                    state, label = "unknown", "未识别"
+                else:
+                    state, label = self._see_visitor(feat, aligned, float(face[2]), frame, box, now)
+                boxes.append((box, (0, 140, 255) if state.startswith("visitor") else (0, 0, 255)))
+                current.append({"name": label, "state": state, "score": round(score, 2)})
                 continue
-            saw_known = True
 
             hits = [t for t in self.hits.get(emp_id, []) if now - t < HIT_WINDOW] + [now]
             self.hits[emp_id] = hits
@@ -188,12 +198,90 @@ class Engine:
             boxes.append((box, (0, 200, 0) if state != "checking" else (0, 200, 255)))
             current.append({"name": name, "state": state, "score": round(score, 2), "employee_id": emp_id})
 
-        # 连续多次都认不出来才算陌生人，避免员工侧脸/走动时一两帧没认出被误拍
-        self.unknown_streak = self.unknown_streak + 1 if saw_unknown and not saw_known else 0
-        if self.unknown_streak >= self.cfg.get("confirm_hits", 3) * 2:
-            self._maybe_save_unknown(frame, unknown_box, unknown_score, now)
         self.current = current
         return boxes
+
+    # ---------- 访客（不是员工的人） ----------
+
+    def _see_visitor(self, feat, aligned, size, frame, box, now):
+        """处理一张不是员工的脸。以前来过 → 认出是同一位访客；新面孔 → 连续看到几次后建档。"""
+        threshold = self.cfg.get("match_threshold", 0.42)
+        confirm = self.cfg.get("confirm_hits", 3)
+
+        if len(self.v_ids):
+            sims = self.v_feats @ feat
+            i = int(np.argmax(sims))
+            if sims[i] >= threshold:
+                vid = int(self.v_ids[i])
+                key = ("v", vid)
+                hits = [t for t in self.hits.get(key, []) if now - t < HIT_WINDOW] + [now]
+                self.hits[key] = hits
+                if len(hits) < confirm:
+                    return "unknown", "识别中"
+                # 同一个人换了角度：多存一个特征，下次更容易认出来
+                if sims[i] < 0.6 and int((self.v_ids == vid).sum()) < MAX_VISITOR_FACES:
+                    db.add_visitor_face(vid, feat)
+                    self.reload_visitors()
+                return self._visit(vid, float(sims[i]), frame, box, now), self._visitor_label(vid)
+
+        for p in self.pending:
+            if float(p["feat"] @ feat) >= threshold:
+                p["hits"].append(now)
+                if size > p["size"]:  # 留下最大（最清晰）的那一张
+                    p.update(feat=feat, size=size, aligned=aligned)
+                if len(p["hits"]) >= confirm * 2:
+                    self.pending.remove(p)
+                    fname = f"{uuid.uuid4().hex[:16]}.jpg"  # 同一帧可能同时建档好几个人，文件名必须唯一
+                    cv2.imwrite(os.path.join(VISITOR_DIR, fname), p["aligned"])
+                    vid = db.add_visitor(p["feat"], f"visitors/{fname}")
+                    self.reload_visitors()
+                    return self._visit(vid, 0.0, frame, box, now), self._visitor_label(vid)
+                return "unknown", "识别中"
+        self.pending.append({"feat": feat, "size": size, "aligned": aligned, "hits": [now]})
+        return "unknown", "识别中"
+
+    @staticmethod
+    def _visitor_label(vid):
+        v = db.get_visitor(vid)
+        return (v and v["name"]) or f"访客 #{vid}"
+
+    def _visit(self, vid, score, frame, box, now):
+        cooldown = self.cfg.get("cooldown_minutes", 3) * 60
+        last = self.last_visit.get(vid)
+        if last is None:
+            v = db.get_visitor(vid)
+            # 刚建档的访客 visit_count 为 0，要马上记第一次
+            last = datetime.strptime(v["last_seen"], "%Y-%m-%d %H:%M:%S").timestamp() \
+                if v and v["visit_count"] else 0
+        if now - last < cooldown:
+            self.last_visit[vid] = last
+            return "visitor_seen"
+        photo = self._save_snapshot(frame, box, PHOTO_DIR)
+        db.record_event(None, round(score, 3), photo, event_type="VISITOR", visitor_id=vid)
+        self.last_visit[vid] = now
+        self.hits[("v", vid)] = []
+        self.recent.appendleft({
+            "name": self._visitor_label(vid), "visitor_id": vid, "type": "VISITOR",
+            "time": datetime.now().strftime("%H:%M:%S"), "photo": photo,
+        })
+        return "visitor"
+
+    def forget_visitors_like(self, feat):
+        """员工登记了人脸后，把之前被当成访客的同一张脸的档案清掉。"""
+        if not len(self.v_ids):
+            return
+        sims = self.v_feats @ feat
+        for vid in {int(v) for v in self.v_ids[sims >= self.cfg.get("match_threshold", 0.42)]}:
+            self.remove_files(db.delete_visitor(vid))
+        self.reload_visitors()
+
+    @staticmethod
+    def remove_files(paths):
+        for p in paths:
+            try:
+                os.remove(os.path.join(db.DATA_DIR, p))
+            except OSError:
+                pass
 
     def _punch(self, emp_id, name, score, frame, box, now):
         cooldown = self.cfg.get("cooldown_minutes", 3) * 60
@@ -213,15 +301,6 @@ class Engine:
             "time": datetime.now().strftime("%H:%M:%S"), "photo": photo,
         })
         return "recorded"
-
-    def _maybe_save_unknown(self, frame, box, score, now):
-        if not self.cfg.get("save_unknown_faces", True):
-            return
-        if now - self.last_unknown < self.cfg.get("unknown_cooldown_seconds", 30):
-            return
-        self.last_unknown = now
-        photo = self._save_snapshot(frame, box, PHOTO_DIR)
-        db.record_event(None, round(score, 3), photo, event_type="UNKNOWN")
 
     @staticmethod
     def _save_snapshot(frame, box, folder):
@@ -276,4 +355,5 @@ class Engine:
         cv2.imwrite(os.path.join(FACE_DIR, fname), aligned)
         db.add_face(emp_id, feat, f"faces/{fname}")
         self.reload_gallery()
+        self.forget_visitors_like(feat)
         return True, "登记成功"

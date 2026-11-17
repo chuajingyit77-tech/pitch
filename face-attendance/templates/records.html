@@ -1,14 +1,20 @@
-{% extends "base.html" %}{% block title %}打卡记录{% endblock %}
+{% extends "base.html" %}{% block title %}进出记录{% endblock %}
 {% block body %}
-<h1>打卡记录</h1>
+<h1>进出记录 <span class="muted" style="font-size:15px;font-weight:400">每一个经过门口的人</span></h1>
 <div class="card">
   <form class="row">
     <input type="date" name="from" value="{{ d_from }}"> 至 <input type="date" name="to" value="{{ d_to }}">
     <select name="emp"><option value="">全部员工</option>
       {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if e.id==emp_id }}>{{ e.name }}</option>{% endfor %}
     </select>
-    <label><input type="checkbox" name="unknown" value="1" {{ 'checked' if show_unknown }}> 显示陌生人</label>
+    <select name="who">
+      <option value="all" {{ 'selected' if who=='all' }}>所有人</option>
+      <option value="staff" {{ 'selected' if who=='staff' }}>只看员工</option>
+      <option value="visitors" {{ 'selected' if who=='visitors' }}>只看访客</option>
+    </select>
+    {% if visitor_id %}<input type="hidden" name="visitor" value="{{ visitor_id }}">{% endif %}
     <button>查询</button>
+    <a class="btn ghost" href="{{ url_for('records', **{'from': d_from, 'to': d_to, 'who': who, 'emp': emp_id or '', 'visitor': visitor_id or '', 'format': 'csv'}) }}">⬇ 导出 Excel (CSV)</a>
   </form>
 </div>
 <details class="card"><summary><b>手动补卡</b>（员工忘记打卡、摄像头故障时用）</summary>
@@ -28,7 +34,7 @@
   <tr>
     <td>{% if e.photo %}<a href="{{ url_for('data_file', path=e.photo) }}" target="_blank"><img class="thumb" src="{{ url_for('data_file', path=e.photo) }}"></a>{% endif %}</td>
     <td>{{ e.ts }}</td><td>{{ e.name or '—' }}</td><td>{{ e.department or '' }}</td>
-    <td>{% if e.event_type=='IN' %}<span class="pill in">进入</span>{% elif e.event_type=='OUT' %}<span class="pill out">离开</span>{% else %}<span class="pill bad">陌生人</span>{% endif %}</td>
+    <td>{% if e.event_type=='IN' %}<span class="pill in">进入</span>{% elif e.event_type=='OUT' %}<span class="pill out">离开</span>{% else %}<span class="pill warn">访客</span>{% endif %}</td>
     <td class="muted">{{ e.score if e.score is not none }}</td>
     <td class="muted">{{ e.note }}</td>
     <td><form method="post" onsubmit="return confirm('删除这条记录？')"><input type="hidden" name="action" value="delete"><input type="hidden" name="event_id" value="{{ e.id }}"><button class="small ghost">删除</button></form></td>

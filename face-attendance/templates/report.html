@@ -20,7 +20,14 @@
     <td>{% if s.missing %}<span class="pill warn">{{ s.missing }}</span>{% else %}0{% endif %}</td></tr>
   {% else %}<tr><td colspan="8" class="muted">没有数据</td></tr>{% endfor %}
 </table></div>
-<h2>每日明细</h2>
+<h2>人流统计</h2>
+<div class="tbl"><table>
+  <tr><th>日期</th><th>到过的员工</th><th>访客人数</th><th>访客人次</th><th>总进出人次</th></tr>
+  {% for t in traffic %}
+  <tr><td><a href="{{ url_for('records', **{'from': t.day}) }}">{{ t.day }}</a></td><td>{{ t.employees }}</td><td>{{ t.visitors }}</td><td>{{ t.visitor_passes }}</td><td>{{ t.passes }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">没有数据</td></tr>{% endfor %}
+</table></div>
+<h2>员工每日明细</h2>
 <div class="tbl"><table>
   <tr><th>日期</th><th>姓名</th><th>部门</th><th>上班</th><th>下班</th><th>工时</th><th>打卡次数</th><th>情况</th></tr>
   {% for r in rows %}

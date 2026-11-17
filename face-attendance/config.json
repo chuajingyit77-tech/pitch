@@ -16,8 +16,9 @@
   "cooldown_minutes": 3,
   "process_every_n_frames": 3,
 
-  "save_unknown_faces": true,
-  "unknown_cooldown_seconds": 30,
+  "record_visitors": true,
+  "visitor_retention_days": 30,
+  "greet_visitors": true,
 
   "webhook_url": "",
 

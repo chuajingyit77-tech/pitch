@@ -25,7 +25,8 @@
   .row img{width:44px;height:44px;border-radius:50%;object-fit:cover;background:#374151}
   .row .nm{flex:1;font-size:17px}
   .tag{font-size:13px;padding:2px 8px;border-radius:999px}
-  .IN{background:#166534}.OUT{background:#1e40af}
+  .IN{background:#166534}.OUT{background:#1e40af}.VISITOR{background:#92400e}
+  .greet.visitor{background:#78350f}
   .admin{color:#475569;font-size:13px;text-decoration:none}
   @media(max-width:900px){.wrap{grid-template-columns:1fr;grid-template-rows:60vh 1fr}}
 </style>
@@ -41,7 +42,7 @@
     <div class="co">{{ company }}</div>
     <div><div class="clock" id="clock">--:--:--</div><div class="date" id="date"></div></div>
     <div class="greet" id="greet"><div class="t">欢迎</div><div class="n">—</div><div class="t">走到门口，看一下摄像头即可</div></div>
-    <div class="list"><h3>最近打卡</h3><div id="recent"></div></div>
+    <div class="list"><h3>最近进出</h3><div id="recent"></div></div>
     <a class="admin" href="{{ url_for('dashboard') }}">管理后台 →</a>
   </div>
 </div>
@@ -83,8 +84,10 @@ async function poll() {
     $('err').textContent = s.error;
 
     const ev = s.recent[0];
-    const key = ev ? ev.employee_id + '@' + ev.time : null;
-    if (key && key !== lastKey && !first) {
+    const key = ev ? (ev.employee_id || 'v' + ev.visitor_id) + '@' + ev.time : null;
+    if (key && key !== lastKey && !first && ev.type === 'VISITOR') {
+      if (s.greet_visitors) { showGreet('visitor', ev.time, '欢迎光临', ev.name + ' · 已登记', 5000); speak('欢迎光临'); }
+    } else if (key && key !== lastKey && !first) {
       const label = ev.type === 'IN' ? '进入打卡成功 ✓' : '离开打卡成功 ✓';
       showGreet(ev.type === 'IN' ? 'ok' : 'out', ev.time, hello(ev.name, ev.type), label, 6000);
       speak(ev.name + (ev.type === 'IN' ? '，打卡成功' : '，再见'));
@@ -93,14 +96,14 @@ async function poll() {
       const checking = s.current.find(c => c.state === 'checking');
       if (seen && !greetTimer) showGreet('seen', '', seen.name, '刚刚已经打过卡了', 3000);
       $('hint').textContent = checking ? '正在识别，请稍等…' :
-        s.current.some(c => c.state === 'unknown') ? '未识别，请正对摄像头（新员工请联系管理员登记）' :
+        s.current.some(c => c.state === 'unknown') ? '正在识别，请正对摄像头…' :
         '请看向摄像头 · 自动识别打卡';
     }
     lastKey = key; first = false;
 
     $('recent').innerHTML = s.recent.slice(0, 8).map(e =>
       `<div class="row"><img src="/data/${e.photo}"><span class="nm">${e.name}</span>
-       <span class="tag ${e.type}">${e.type === 'IN' ? '进入' : '离开'}</span><span>${e.time.slice(0,5)}</span></div>`).join('');
+       <span class="tag ${e.type}">${e.type === 'IN' ? '进入' : e.type === 'OUT' ? '离开' : '访客'}</span><span>${e.time.slice(0,5)}</span></div>`).join('');
   } catch (e) {
     $('err').style.display = 'block';
     $('err').textContent = '连不上考勤程序，请检查黑色窗口是否被关闭';

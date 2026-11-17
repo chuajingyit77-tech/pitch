@@ -7,6 +7,7 @@
   <div class="stat"><b style="color:#4338ca">{{ counts['out'] }}</b><span>已离开</span></div>
   <div class="stat"><b>{{ counts['absent'] }}</b><span>今天还没来</span></div>
   <div class="stat"><b style="color:var(--red)">{{ counts['late'] }}</b><span>迟到</span></div>
+  <div class="stat"><b style="color:var(--amber)">{{ counts['visitors'] }}</b><span>今日访客（共 {{ counts['visitor_passes'] }} 人次）</span></div>
 </div>
 <div class="tbl"><table>
   <tr><th></th><th>姓名</th><th>部门</th><th>状态</th><th>上班</th><th>最后离开</th><th>已工作</th><th></th></tr>
@@ -26,12 +27,28 @@
   {% endfor %}
 </table></div>
 
-{% if unknown %}
-<h2>今天的陌生人抓拍</h2>
-<div class="card faces">
-  {% for u in unknown %}<figure><img src="{{ url_for('data_file', path=u.photo) }}"><span class="muted">{{ u.ts[11:16] }}</span></figure>{% endfor %}
+<h2>今日人流（每小时进出人次）</h2>
+<div class="card">
+  <div class="bars">
+    {% for h, e, v in hours %}{% if 6 <= h <= 22 %}
+    <div class="bar" title="{{ h }} 点：员工 {{ e }} 人次，访客 {{ v }} 人次">
+      <span class="num">{{ e + v if e + v }}</span>
+      <i class="v" style="height:{{ (v / hour_max * 100)|round }}px"></i><i class="e" style="height:{{ (e / hour_max * 100)|round }}px"></i>
+      <span>{{ h }}</span>
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+  <p class="muted" style="margin:8px 0 0"><i class="dot e"></i> 员工 &nbsp; <i class="dot v"></i> 访客</p>
 </div>
-{% endif %}
+
+<h2>今天来过的访客 <a href="{{ url_for('visitors') }}" style="font-size:14px;font-weight:400">查看全部 →</a></h2>
+<div class="card faces">
+  {% for v in visitors %}
+  <figure><a href="{{ url_for('records', visitor=v.id, **{'from': v.day_first[:10]}) }}"><img src="{{ url_for('data_file', path=v.photo) }}"></a>
+    <b>{{ v.name or '访客 #' ~ v.id }}</b><br><span class="muted">{{ v.day_first[11:16] }}{% if v.day_count > 1 %} – {{ v.day_last[11:16] }} · {{ v.day_count }} 次{% endif %}</span>
+    {% if v.visit_count > v.day_count %}<br><span class="pill warn">回头客</span>{% endif %}</figure>
+  {% else %}<p class="muted">今天还没有访客。</p>{% endfor %}
+</div>
 
 <p class="muted">云端同步：{% if not webhook %}未设置（只保存在本机）{% elif sync.error %}<span style="color:var(--red)">失败：{{ sync.error }}（记录已保存在本机，恢复后自动补发）</span>{% else %}正常，最近 {{ sync.last_ok }}{% endif %}</p>
 <script>setTimeout(()=>location.reload(),60000)</script>

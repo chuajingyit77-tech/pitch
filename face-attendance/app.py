@@ -112,6 +112,7 @@ def api_status():
         "error": engine.error,
         "current": engine.current,
         "recent": list(engine.recent),
+        "greet_visitors": CFG.get("greet_visitors", True),
         "time": datetime.now().strftime("%H:%M:%S"),
         "date": datetime.now().strftime("%Y年%m月%d日"),
     })
@@ -160,9 +161,12 @@ def dashboard():
         people.append({**emp, "state": state, "report": r})
     counts = {k: sum(1 for p in people if p["state"] == k) for k in ("in", "out", "absent")}
     counts["late"] = sum(1 for p in people if p["report"] and p["report"]["late"])
-    unknown = db.list_events(today, today, include_unknown=True, limit=200)
-    unknown = [e for e in unknown if e["event_type"] == "UNKNOWN"][:12]
-    return render_template("dashboard.html", people=people, counts=counts, unknown=unknown,
+    visitors = db.list_visitors(day=today)
+    counts["visitors"] = len(visitors)
+    counts["visitor_passes"] = sum(v["day_count"] for v in visitors)
+    hours = db.hourly(today)
+    return render_template("dashboard.html", people=people, counts=counts, visitors=visitors[:18],
+                           hours=hours, hour_max=max([e + v for _, e, v in hours] + [1]),
                            sync=sync_state, webhook=bool(CFG.get("webhook_url")),
                            engine_status=engine.status, engine_error=engine.error)
 
@@ -248,10 +252,67 @@ def records():
         return redirect(request.full_path)
     d_from, d_to = parse_range()
     emp_id = request.args.get("emp", type=int)
-    show_unknown = request.args.get("unknown") == "1"
-    events = db.list_events(d_from, d_to, emp_id, include_unknown=show_unknown, limit=2000)
-    return render_template("records.html", events=events, d_from=d_from, d_to=d_to, emp_id=emp_id,
-                           show_unknown=show_unknown, employees=db.list_employees(include_inactive=True))
+    visitor_id = request.args.get("visitor", type=int)
+    who = request.args.get("who", "all")  # all = 所有人, staff = 只看员工, visitors = 只看访客
+    events = db.list_events(d_from, d_to, emp_id, include_visitors=(who != "staff" and not emp_id),
+                            limit=5000, visitor_id=visitor_id)
+    if who == "visitors":
+        events = [e for e in events if e["event_type"] == "VISITOR"]
+
+    if request.args.get("format") == "csv":
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["时间", "姓名", "工号", "部门", "类型", "备注"])
+        label = {"IN": "员工进入", "OUT": "员工离开", "VISITOR": "访客"}
+        for e in events:
+            w.writerow([e["ts"], e["name"], e["emp_no"] or "", e["department"] or "",
+                        label.get(e["event_type"], e["event_type"]), e["note"]])
+        return Response("\ufeff" + buf.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition": f"attachment; filename=records_{d_from}_{d_to}.csv"})
+    return render_template("records.html", events=events, d_from=d_from, d_to=d_to, emp_id=emp_id, who=who,
+                           visitor_id=visitor_id, employees=db.list_employees(include_inactive=True))
+
+
+@app.route("/admin/visitors", methods=["GET", "POST"])
+@login_required
+def visitors():
+    if request.method == "POST":
+        vid = int(request.form["visitor_id"])
+        action = request.form.get("action")
+        v = db.get_visitor(vid)
+        if not v:
+            flash("这位访客已经不存在")
+        elif action == "save":
+            db.update_visitor(vid, request.form.get("name", "").strip(), request.form.get("note", "").strip())
+            flash("已保存")
+        elif action == "delete":
+            engine.remove_files(db.delete_visitor(vid))
+            engine.reload_visitors()
+            flash("已删除这位访客和 TA 的全部记录")
+        elif action in ("to_new_employee", "to_employee"):
+            # 这个人其实是员工：把人脸转到员工名下，以后自动算考勤
+            if action == "to_new_employee":
+                name = request.form.get("name", "").strip() or v["name"]
+                if not name:
+                    flash("请先填写姓名")
+                    return redirect(request.full_path)
+                emp_id = db.add_employee(name)
+            else:
+                emp_id = int(request.form["employee_id"])
+            for feat in db.visitor_embeddings(vid):
+                db.add_face(emp_id, feat, v["photo"])
+            # 头像照片留给员工用，其余抓拍照删掉
+            engine.remove_files([f for f in db.delete_visitor(vid) if f != v["photo"]])
+            engine.reload_gallery()
+            engine.reload_visitors()
+            flash("已转为员工，以后会自动打卡")
+            return redirect(url_for("employee", emp_id=emp_id))
+        return redirect(request.full_path)
+    day = request.args.get("day", date.today().isoformat())
+    show_all = request.args.get("all") == "1"
+    return render_template("visitors.html", visitors=db.list_visitors(None if show_all else day), day=day,
+                           show_all=show_all, employees=db.list_employees(),
+                           retention=CFG.get("visitor_retention_days", 30))
 
 
 @app.route("/admin/report")
@@ -285,13 +346,27 @@ def report():
         s["early"] += r["early_leave"]
         s["missing"] += r["missing_out"]
     summary = sorted(summary.values(), key=lambda s: (s["department"], s["name"]))
-    return render_template("report.html", rows=rows, summary=summary, d_from=d_from, d_to=d_to, cfg=CFG)
+    return render_template("report.html", rows=rows, summary=summary, d_from=d_from, d_to=d_to, cfg=CFG,
+                           traffic=db.traffic(d_from, d_to))
 
 
 @app.route("/data/<path:path>")
 @local_or_login
 def data_file(path):
     return send_from_directory(db.DATA_DIR, path)
+
+
+def retention_loop():
+    """隐私保护：定期删除过期的访客记录和照片（员工考勤记录不受影响）。"""
+    while True:
+        days = CFG.get("visitor_retention_days", 30)
+        if days and days > 0:
+            try:
+                engine.remove_files(db.purge_visitors(days))
+                engine.reload_visitors()
+            except Exception as e:
+                print("清理访客记录出错:", e)
+        time.sleep(6 * 3600)
 
 
 def open_kiosk(url):
@@ -327,6 +402,7 @@ def lan_ip():
 
 if __name__ == "__main__":
     engine.start()
+    threading.Thread(target=retention_loop, daemon=True, name="retention").start()
     port = CFG.get("port", 8000)
     if "--open-kiosk" in sys.argv:
         threading.Thread(target=open_kiosk, args=(f"http://localhost:{port}/kiosk",), daemon=True).start()

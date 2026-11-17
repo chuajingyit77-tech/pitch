@@ -37,3 +37,13 @@ form.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:800px){.grid2{grid-template-columns:1fr}}
 .live{width:100%;border-radius:10px;background:#000;display:block}
+.bars{display:flex;align-items:flex-end;gap:6px;height:140px;overflow-x:auto}
+.bar{flex:1;min-width:22px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;font-size:12px;color:var(--muted)}
+.bar i{display:block;width:100%}.bar i.e{background:var(--brand);border-radius:0 0 3px 3px}.bar i.v{background:#f59e0b;border-radius:3px 3px 0 0}
+.bar .num{color:var(--text)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:2px}.dot.e{background:var(--brand)}.dot.v{background:#f59e0b}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px}
+@media(max-width:500px){.vgrid{grid-template-columns:1fr}}
+.vcard{display:flex;gap:14px;margin:0}
+.vcard img{width:96px;height:96px;border-radius:10px;object-fit:cover;background:#e5e7eb}
+.vbody{flex:1;min-width:0}

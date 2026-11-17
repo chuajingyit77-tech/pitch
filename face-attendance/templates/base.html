@@ -11,7 +11,8 @@
   {% set ep = request.endpoint %}
   <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}">今日概况</a>
   <a href="{{ url_for('employees') }}" class="{{ 'on' if ep in ('employees','employee') }}">员工</a>
-  <a href="{{ url_for('records') }}" class="{{ 'on' if ep=='records' }}">打卡记录</a>
+  <a href="{{ url_for('visitors') }}" class="{{ 'on' if ep=='visitors' }}">访客</a>
+  <a href="{{ url_for('records') }}" class="{{ 'on' if ep=='records' }}">进出记录</a>
   <a href="{{ url_for('report') }}" class="{{ 'on' if ep=='report' }}">考勤报表</a>
   <a href="{{ url_for('kiosk') }}">签到屏</a>
   <span class="sp"></span>

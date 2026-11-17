@@ -24,6 +24,7 @@ def _loop(cfg, state):
                         "id": ev["id"],
                         "company": cfg.get("company_name", ""),
                         "employee_id": ev["employee_id"],
+                        "visitor_id": ev["visitor_id"],
                         "emp_no": ev["emp_no"],
                         "name": ev["name"],
                         "department": ev["department"],

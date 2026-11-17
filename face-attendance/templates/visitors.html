@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}访客{% endblock %}
+{% block body %}
+<h1>访客 <span class="muted" style="font-size:15px;font-weight:400">不是员工的人：客户、送货员、陌生人……系统会自动建档，再来时认得出是同一个人</span></h1>
+<div class="card">
+  <form class="row">
+    <input type="date" name="day" value="{{ day }}"> <button>看这一天</button>
+    <a class="btn ghost" href="{{ url_for('visitors', all=1) }}">全部访客</a>
+  </form>
+  <p class="muted" style="margin-bottom:0">{% if retention %}为保护隐私，访客记录和照片保存 {{ retention }} 天后自动删除。{% else %}访客记录永久保存（未设置自动删除）。{% endif %}</p>
+</div>
+<div class="vgrid">
+{% for v in visitors %}
+  <div class="card vcard">
+    <a href="{{ url_for('records', visitor=v.id, **{'from': v.first_seen[:10], 'to': v.last_seen[:10]}) }}"><img src="{{ url_for('data_file', path=v.photo) }}"></a>
+    <div class="vbody">
+      <b>{{ v.name or '访客 #' ~ v.id }}</b>
+      {% if v.visit_count > 1 %}<span class="pill warn">来过 {{ v.visit_count }} 次</span>{% endif %}
+      <div class="muted">第一次：{{ v.first_seen[:16] }}<br>最近：{{ v.last_seen[:16] }}{% if v.day_count is defined %}<br>当天 {{ v.day_count }} 次（{{ v.day_first[11:16] }} – {{ v.day_last[11:16] }}）{% endif %}</div>
+      <form method="post" class="row" style="margin-top:8px">
+        <input type="hidden" name="visitor_id" value="{{ v.id }}">
+        <input name="name" value="{{ v.name }}" placeholder="名字（如：快递小哥）" style="width:150px">
+        <input name="note" value="{{ v.note }}" placeholder="备注" style="width:120px">
+        <button class="small" name="action" value="save">保存</button>
+        <button class="small ghost" name="action" value="to_new_employee" title="用上面的名字新建员工">这是新员工</button>
+        <button class="small ghost" name="action" value="delete" onclick="return confirm('删除这位访客和 TA 的全部记录？')">删除</button>
+      </form>
+      {% if employees %}
+      <form method="post" class="row" style="margin-top:6px">
+        <input type="hidden" name="visitor_id" value="{{ v.id }}"><input type="hidden" name="action" value="to_employee">
+        <select name="employee_id">{% for e in employees %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select>
+        <button class="small ghost">其实是这位员工</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+{% else %}<p class="muted">这一天没有访客。</p>
+{% endfor %}
+</div>
+{% endblock %}
