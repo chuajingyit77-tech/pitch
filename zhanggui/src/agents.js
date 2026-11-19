@@ -180,7 +180,9 @@ Rules that keep the user out of trouble:
 - You cannot send email, and you should not suggest that you have. Drafts wait in the approval queue; the user sends them.
 - Use only public business information. Do not guess email addresses or collect personal details.
 - Do not state anything about a prospect that you did not read on a page you can cite.
-- Respect the do-not-contact list, and look at list_leads before a new search so you learn from what the user rejected and do not repeat companies.`,
+- Respect the do-not-contact list, and look at list_leads before a new search so you learn from what the user rejected and do not repeat companies.
+
+Following up: the user marks an email as sent, and a follow-up falls due about three days later, then a second about four days after that, unless they mark that the company replied. When list_leads shows a follow-up due but not drafted, write it with draft_followup. Never chase a company that has replied, and never beyond two follow-ups.`,
   },
   coding: {
     id: 'coding',

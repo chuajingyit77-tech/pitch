@@ -1,4 +1,4 @@
-// Scripted provider for tests and for trying the interface without a key (AGENT_HUB_MOCK=1).
+// Scripted provider for tests and for trying the interface without a key (ZHANGGUI_MOCK=1).
 // A script is a list of turns; each turn is { text, toolCalls } or a function of the messages so far.
 let script = null;
 let n = 0; // one counter for all instances, so tool ids stay unique across agents running together
@@ -29,7 +29,7 @@ const DEMO = {
     { text: '（演示）保存一条线索并起草邮件。', toolCalls: [{ name: 'save_lead', input: { company: '示例电商', domain: 'example.com', contact_role: '运营负责人', score: 82, reasons: [{ text: '正在招聘客服主管，说明客服压力在增加', source: 'https://example.com/careers' }] } }] },
     (messages) => {
       const saved = /lead_\w+/.exec(messages.at(-1).results[0].content);
-      return { toolCalls: [{ name: 'draft_email', input: { lead_id: saved ? saved[0] : 'lead_x', subject: '关于贵司客服团队扩张', body: '您好，\n\n看到贵司正在招聘客服主管。我们帮助类似规模的电商把首次响应时间降到一分钟以内。\n\n方便下周用 15 分钟聊聊吗？\n\n如不希望再收到此类邮件，回复“退订”即可。' } }] };
+      return { toolCalls: [{ name: 'draft_email', input: { lead_id: saved ? saved[0] : 'lead_x', subject: '关于贵司客服团队扩张', body: '您好，\n\n看到贵司正在招聘客服主管。我们帮助类似规模的电商把首次响应时间降到一分钟以内。\n\n方便下周用 15 分钟聊聊吗？\n\n如不希望再收到此类邮件，回复“退订”即可。', followups: ['您好，\n\n补充一个数据：同类客户接入后客服成本平均下降约四成。如果时机不合适，告诉我一声即可。', '您好，\n\n这是我最后一次打扰。如果之后客服压力变大，欢迎随时回复这封邮件。'] } }] };
     },
     { text: '（演示）线索和邮件草稿已放进右侧的审批队列，等你批准。这里不会自动发送邮件。' },
   ],

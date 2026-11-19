@@ -55,13 +55,13 @@ export function apiKeyFor(cfg, id) {
 
 /** A provider is usable once it has a key and a model. */
 export function isReady(cfg, id) {
-  if (id === 'mock') return process.env.AGENT_HUB_MOCK === '1';
+  if (id === 'mock') return process.env.ZHANGGUI_MOCK === '1';
   return Boolean(apiKeyFor(cfg, id) && cfg.providers[id]?.model);
 }
 
 /** The vendor an agent will actually run on: its assigned one, else the first usable one. */
 export function resolveProvider(cfg, agentId) {
-  if (process.env.AGENT_HUB_MOCK === '1') return 'mock';
+  if (process.env.ZHANGGUI_MOCK === '1') return 'mock';
   const preferred = cfg.agents[agentId];
   if (preferred && isReady(cfg, preferred)) return preferred;
   return Object.keys(PROVIDERS).find((id) => isReady(cfg, id)) || null;

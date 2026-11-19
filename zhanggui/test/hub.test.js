@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-hub-test-'));
-process.env.AGENT_HUB_DATA = path.join(tmp, 'data');
-process.env.AGENT_HUB_MOCK = '1';
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zhanggui-test-'));
+process.env.ZHANGGUI_DATA = path.join(tmp, 'data');
+process.env.ZHANGGUI_MOCK = '1';
 const repo = path.join(tmp, 'repo');
 fs.mkdirSync(repo);
 
@@ -268,4 +268,56 @@ test('quartet (四重奏): parts run at the same time, one per agent, and one fa
     { text: 'ok' },
   ]);
   assert.match(toolResults(dup.messages)[0].content, /only one part/);
+});
+
+test('follow-ups: due three days after sending, then four days later, and never after a reply', async () => {
+  const { followupDueAt, followupIsDue, salesTodo } = await import('../src/tools/sales.js');
+  const [saveLead, draftEmail, draftFollowup, listLeadsTool] = salesTools;
+  const DAY = 86_400_000;
+  await saveLead.run({ company: 'Initech', domain: 'initech.com', score: 70, reasons: [{ text: 'Expanding', source: 'https://initech.com/news' }] });
+  const id = listLeads().find((l) => l.domain === 'initech.com').id;
+  await draftEmail.run({ lead_id: id, subject: 'Hi', body: 'First', followups: ['Second'] });
+  assert.equal(salesTodo(), 1, 'a draft awaiting approval counts as waiting on the user');
+  assert.match(await draftFollowup.run({ lead_id: id, body: 'x' }), /has not been sent yet/);
+
+  const t0 = Date.parse('2026-03-02T09:00:00Z');
+  updateLead(id, { status: 'sent', sentAt: new Date(t0).toISOString(), lastTouchAt: new Date(t0).toISOString(), followupsSent: 0 });
+  let lead = listLeads().find((l) => l.id === id);
+  assert.equal(followupDueAt(lead), t0 + 3 * DAY);
+  assert.equal(followupIsDue(lead, t0 + 2 * DAY), false);
+  assert.equal(followupIsDue(lead, t0 + 3 * DAY), true);
+  assert.match(await draftEmail.run({ lead_id: id, subject: 'Again', body: 'again' }), /already gone out/);
+
+  // First follow-up goes out on day 3; the second is not drafted yet, and falls due four days later.
+  updateLead(id, { followupsSent: 1, lastTouchAt: new Date(t0 + 3 * DAY).toISOString() });
+  lead = listLeads().find((l) => l.id === id);
+  assert.equal(followupDueAt(lead), t0 + 7 * DAY);
+  assert.match(await draftFollowup.run({ lead_id: id, body: 'Last note' }), /Follow-up 2 saved/);
+  assert.deepEqual(listLeads().find((l) => l.id === id).draft.followups, ['Second', 'Last note']);
+  assert.match(await listLeadsTool.run({}), /initech\.com\) \| score 70 \| sent \| follow-up 2 due/);
+
+  updateLead(id, { followupsSent: 2 });
+  assert.equal(followupDueAt(listLeads().find((l) => l.id === id)), null, 'no chasing beyond two follow-ups');
+  updateLead(id, { status: 'replied', followupsSent: 0 });
+  assert.equal(followupDueAt(listLeads().find((l) => l.id === id)), null);
+  assert.match(await draftFollowup.run({ lead_id: id, body: 'x' }), /has replied/);
+});
+
+test('schedules: a slot runs once a day, catches up if missed, and skips slots that passed before the task existed', async () => {
+  const { isDue, createSchedule } = await import('../src/schedules.js');
+  const at = (s) => new Date(s); // local time
+  const base = { enabled: true, time: '09:00', days: 'daily', createdAt: at('2026-03-01T12:00:00').toISOString(), lastRunAt: null };
+  assert.equal(isDue(base, at('2026-03-01T15:00:00')), false, 'created after today\'s slot: wait for tomorrow');
+  assert.equal(isDue(base, at('2026-03-02T08:59:00')), false);
+  assert.equal(isDue(base, at('2026-03-02T09:00:30')), true);
+  assert.equal(isDue(base, at('2026-03-02T17:00:00')), true, 'missed while closed: still runs later that day');
+  const ran = { ...base, lastRunAt: at('2026-03-02T09:00:40').toISOString() };
+  assert.equal(isDue(ran, at('2026-03-02T17:00:00')), false, 'once a day');
+  assert.equal(isDue(ran, at('2026-03-03T09:01:00')), true);
+  assert.equal(isDue({ ...base, enabled: false }, at('2026-03-02T10:00:00')), false);
+  const weekdays = { ...base, days: 'weekdays' };
+  assert.equal(isDue(weekdays, at('2026-03-07T10:00:00')), false, 'Saturday');
+  assert.equal(isDue(weekdays, at('2026-03-09T10:00:00')), true, 'Monday');
+  assert.throws(() => createSchedule({ agent: 'sales', prompt: 'x', time: '25:00' }), /HH:MM/);
+  assert.throws(() => createSchedule({ agent: 'sales', prompt: ' ', time: '09:00' }), /不能为空/);
 });

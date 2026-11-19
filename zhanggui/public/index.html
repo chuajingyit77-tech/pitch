@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>掌柜</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
@@ -14,6 +14,7 @@
     <button id="new-chat" class="ghost" type="button">＋ 新对话</button>
     <div class="rail-label">历史</div>
     <div id="sessions"></div>
+    <button id="open-schedules" class="ghost" type="button">定时任务</button>
     <button id="open-settings" class="ghost" type="button">设置</button>
   </aside>
 
@@ -45,6 +46,21 @@
     <footer><span id="settings-status"></span><button type="button" id="save-settings">保存</button></footer>
   </form>
 </dialog>
-<script type="module" src="/app.js"></script>
+<dialog id="schedules">
+  <form method="dialog" class="dialog-form">
+    <header><h2>定时任务</h2><button class="icon" value="cancel" aria-label="关闭">✕</button></header>
+    <div class="dialog-body">
+      <p>到点后 agent 自己运行，结果出现在左侧历史里。程序开着才会运行；错过的当天会补跑一次。无人值守时不会改文件、不会运行命令，邮件也只是起草。</p>
+      <div id="schedule-list"></div>
+      <h3>新建</h3>
+      <label class="field">名称<input id="sched-name" placeholder="例如：每日线索"><span></span></label>
+      <label class="field">谁来做<select id="sched-agent"></select><span></span></label>
+      <label class="field">时间<span class="pair"><select id="sched-days"><option value="daily">每天</option><option value="weekdays">工作日</option></select><input id="sched-time" type="time" value="09:00"></span><span></span></label>
+      <label class="field top">任务<textarea id="sched-prompt" rows="3" placeholder="要它做什么，写得和平时发消息一样完整"></textarea><span></span></label>
+    </div>
+    <footer><span id="sched-status"></span><button type="button" id="add-schedule">添加</button></footer>
+  </form>
+</dialog>
+<script type="module" src="app.js"></script>
 </body>
 </html>

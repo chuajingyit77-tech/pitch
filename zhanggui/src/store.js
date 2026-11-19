@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export function dataDir() {
-  const dir = process.env.AGENT_HUB_DATA || path.join(here, '..', 'data');
+  const dir = process.env.ZHANGGUI_DATA || path.join(here, '..', 'data');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

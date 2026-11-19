@@ -1,4 +1,7 @@
-import { applyEvent } from '/reduce.js';
+import { applyEvent } from './reduce.js';
+
+// Every address is relative to the page, so the app also works when served under a path prefix.
+const rel = (p) => String(p).replace(/^\//, '');
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -11,7 +14,7 @@ const EXAMPLES = {
   relay: ['先找 3 家可能需要我们产品的公司，再为得分最高的那家做一份定制 pitch，最后写一封附上 pitch 的邮件。我们的产品是：……', '先调研这个行业的三个主要竞品，再据此做一份突出我们差异的 pitch：……', '先查清这个开源库的最新用法，再让编程 agent 把仓库里的旧写法换掉'],
   quartet: ['我们下个月发布新产品：同时做一份发布 pitch、找 5 家首批目标客户、调研竞品最近的动作。产品是：……', '为下周的投资人会议做准备：一份融资 pitch、一份对方机构的背景调研、一份可能被问到的问题清单', '同时做：整理这个仓库的 README、为它做一页介绍 pitch、找 3 个可能用得上它的团队'],
 };
-const TOOL_LABEL = { web_search: '搜索', web_fetch: '读取网页', read_file: '读文件', write_file: '写文件', edit_file: '改文件', glob: '找文件', grep: '搜索代码', bash: '运行命令', remember: '记住', forget: '忘记', delegate: '委派', save_fact: '记录事实', write_deck: '生成 pitch', run_relay: '接力', run_quartet: '四重奏', save_lead: '保存线索', draft_email: '起草邮件', list_leads: '查看线索' };
+const TOOL_LABEL = { web_search: '搜索', web_fetch: '读取网页', read_file: '读文件', write_file: '写文件', edit_file: '改文件', glob: '找文件', grep: '搜索代码', bash: '运行命令', remember: '记住', forget: '忘记', delegate: '委派', save_fact: '记录事实', write_deck: '生成 pitch', run_relay: '接力', run_quartet: '四重奏', save_lead: '保存线索', draft_email: '起草邮件', draft_followup: '起草跟进', list_leads: '查看线索' };
 
 let state = null;
 let agent = localStorage.getItem('agent') || 'assistant';
@@ -23,7 +26,7 @@ let sideMode = null; // 'deck' | 'leads'
 let hasLeads = false; // a team run produced leads the user may want to review
 
 const api = async (path, opts = {}) => {
-  const res = await fetch(path, { ...opts, headers: { 'content-type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const res = await fetch(rel(path), { ...opts, headers: { 'content-type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
   return data;
@@ -105,7 +108,7 @@ function itemHtml(item) {
     case 'error':
       return `<div class="note error">${esc(item.text)}</div>`;
     case 'deck':
-      return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button><a href="${esc(item.url)}" target="_blank" rel="noopener">新窗口</a></div>`;
+      return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button><a href="${esc(rel(item.url))}" target="_blank" rel="noopener">新窗口</a></div>`;
     default:
       return '';
   }
@@ -126,10 +129,10 @@ function renderMessages() {
 }
 
 function renderRail() {
-  const button = (a) => `<button type="button" class="agent${a.id === agent ? ' active' : ''}" data-agent="${a.id}"><b>${esc(a.name)}</b><small>${esc(a.tagline)}</small></button>`;
+  const button = (a) => `<button type="button" class="agent${a.id === agent ? ' active' : ''}" data-agent="${a.id}"><b>${esc(a.name)}${a.id === 'sales' && state.salesTodo ? `<i class="count" title="等你处理">${state.salesTodo}</i>` : ''}</b><small>${esc(a.tagline)}</small></button>`;
   $('agents').innerHTML = `${state.agents.filter((a) => a.group !== 'team').map(button).join('')}<div class="rail-label">协作模式</div>${state.agents.filter((a) => a.group === 'team').map(button).join('')}`;
   $('sessions').innerHTML =
-    state.sessions.map((s) => `<div class="session${s.id === sessionId ? ' active' : ''}" data-session="${s.id}"><span>${esc(s.title || '未命名')}</span><em>${esc(agentName(s.agent))}</em><button class="icon" data-del="${s.id}" type="button" aria-label="删除">✕</button></div>`).join('') || '<div class="hint">还没有对话</div>';
+    state.sessions.map((s) => `<div class="session${s.id === sessionId ? ' active' : ''}" data-session="${s.id}">${s.unread ? '<i class="unread" title="新结果"></i>' : ''}<span>${esc(s.title || '未命名')}</span><em>${esc(agentName(s.agent))}</em><button class="icon" data-del="${s.id}" type="button" aria-label="删除">✕</button></div>`).join('') || '<div class="hint">还没有对话</div>';
   const a = state.agents.find((x) => x.id === agent);
   const prov = state.resolved[agent];
   $('agent-name').textContent = a.name;
@@ -155,35 +158,48 @@ function showDeck(url) {
   sideMode = 'deck';
   $('side').hidden = false;
   $('side-title').textContent = 'Pitch 预览';
-  $('side-actions').innerHTML = `<a class="small" href="${esc(url)}" target="_blank" rel="noopener">新窗口打开</a>`;
-  $('side-body').innerHTML = `<iframe sandbox="allow-scripts allow-modals allow-popups" src="${esc(url)}?t=${Date.now()}" title="Pitch"></iframe>`;
+  $('side-actions').innerHTML = `<a class="small" href="${esc(rel(url))}" target="_blank" rel="noopener">新窗口打开</a>`;
+  $('side-body').innerHTML = `<iframe sandbox="allow-scripts allow-modals allow-popups" src="${esc(rel(url))}?t=${Date.now()}" title="Pitch"></iframe>`;
 }
 
 async function showLeads() {
   sideMode = 'leads';
   $('side').hidden = false;
   $('side-title').textContent = '线索与审批';
-  $('side-actions').innerHTML = '<a class="small" href="/api/leads.csv">导出 CSV</a>';
+  $('side-actions').innerHTML = '<a class="small" href="api/leads.csv">导出 CSV</a>';
   const { leads, suppressed } = await api('/api/leads');
   if (sideMode !== 'leads') return; // the deck was opened while the leads were loading
-  const order = { pending: 0, new: 1, approved: 2, rejected: 3 };
-  leads.sort((a, b) => order[a.status] - order[b.status] || b.score - a.score);
-  const label = { new: '待起草', pending: '待你审批', approved: '已批准', rejected: '已拒绝' };
+  const order = { pending: 1, approved: 2, new: 3, sent: 4, replied: 5, rejected: 6 };
+  leads.sort((a, b) => (a.followupDue ? 0 : order[a.status]) - (b.followupDue ? 0 : order[b.status]) || b.score - a.score);
+  const label = { new: '待起草', pending: '待你审批', approved: '已批准，待发出', sent: '已发出', replied: '已回复', rejected: '已拒绝' };
+  const day = (ms) => new Date(ms).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
   $('side-body').innerHTML = `<div class="leads">${
     leads.length
       ? leads
           .map((l) => {
             const d = l.draft;
             const mailto = d ? `mailto:${encodeURIComponent(l.email || '')}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}` : '';
+            const n = l.followupsSent || 0;
+            const fu = d?.followups?.[n];
+            let follow = '';
+            if (l.status === 'sent') {
+              if (l.followupDue) {
+                follow = fu
+                  ? `<div class="due">第 ${n + 1} 次跟进到期了</div><textarea data-f="followup" readonly>${esc(fu)}</textarea><div class="row"><a class="small" href="mailto:${encodeURIComponent(l.email || '')}?subject=${encodeURIComponent('Re: ' + d.subject)}&body=${encodeURIComponent(fu)}">在邮件客户端打开</a><button class="small ghost" data-lead-act="copy-followup" type="button">复制</button><button class="small" data-lead-act="followup_sent" type="button">跟进已发出</button></div>`
+                  : `<div class="due">第 ${n + 1} 次跟进到期了，但还没有写好。对销售 agent 说“给到期的线索起草跟进”即可。</div>`;
+              } else if (l.followupDueAt) follow = `<div class="off">已跟进 ${n} 次 · 没有回复的话，${day(l.followupDueAt)} 提醒你跟进</div>`;
+              else follow = '<div class="off">两次跟进都已发出，不再提醒。</div>';
+            }
             return `<div class="lead" data-lead="${l.id}">
 <h4><span>${esc(l.company)} <small class="off">${esc(l.domain)}</small></span><span class="badge">${l.score} 分</span><span class="badge ${l.status}">${label[l.status]}</span></h4>
 ${l.contactName ? `<div class="off">${esc(l.contactName)} · ${esc(l.contactRole)} ${esc(l.email)}</div>` : ''}
 <ul>${l.reasons.map((r) => `<li>${esc(r.text)} <a href="${esc(r.source)}" target="_blank" rel="noopener">来源</a></li>`).join('')}</ul>
-${d ? `<input data-f="subject" value="${esc(d.subject)}" ${l.status === 'pending' ? '' : 'readonly'}><textarea data-f="body" ${l.status === 'pending' ? '' : 'readonly'}>${esc(d.body)}</textarea>` : ''}
+${d && !l.followupDue ? `<input data-f="subject" value="${esc(d.subject)}" ${l.status === 'pending' ? '' : 'readonly'}><textarea data-f="body" ${l.status === 'pending' ? '' : 'readonly'}>${esc(d.body)}</textarea>` : ''}
+${follow}
 ${l.rejectReason ? `<div class="off">拒绝原因：${esc(l.rejectReason)}</div>` : ''}
 <div class="row">${
               l.status === 'pending' ? '<button class="small" data-lead-act="approve" type="button">批准</button><button class="small ghost" data-lead-act="reject" type="button">拒绝</button>' : ''
-            }${l.status === 'approved' ? `<a class="small" href="${mailto}">在邮件客户端打开</a><button class="small ghost" data-lead-act="copy" type="button">复制正文</button>` : ''}${
+            }${l.status === 'approved' ? `<a class="small" href="${mailto}">在邮件客户端打开</a><button class="small ghost" data-lead-act="copy" type="button">复制正文</button><button class="small" data-lead-act="sent" type="button">我已发出</button>` : ''}${l.status === 'sent' ? '<button class="small ghost" data-lead-act="replied" type="button">对方已回复</button>' : ''}${
               l.status !== 'rejected' ? '<button class="small danger" data-lead-act="suppress" type="button">不再联系</button>' : ''
             }</div></div>`;
           })
@@ -201,7 +217,7 @@ async function sendMessage(text) {
   $('input').value = '';
   autosize();
   try {
-    const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, agent, text }) });
+    const res = await fetch('api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, agent, text }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `请求失败 (${res.status})`);
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -316,6 +332,28 @@ async function saveSettings() {
   renderRail();
 }
 
+// ---------- scheduled tasks ----------
+async function renderSchedules() {
+  const { schedules } = await api('/api/schedules');
+  const dayLabel = { daily: '每天', weekdays: '工作日' };
+  const statusLabel = { ok: '完成', failed: '失败', running: '运行中' };
+  $('schedule-list').innerHTML = schedules.length
+    ? schedules
+        .map(
+          (s) => `<div class="sched${s.enabled ? '' : ' paused'}" data-sched="${s.id}">
+<div class="head"><span><b>${esc(s.name)}</b> · ${dayLabel[s.days]} ${esc(s.time)} · ${esc(agentName(s.agent))}</span>${s.enabled ? '' : '<span class="off">已暂停</span>'}</div>
+<div class="off">${esc(s.prompt)}</div>
+<div class="row"><span class="off">${s.lastRunAt ? `上次：${new Date(s.lastRunAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${s.running ? '运行中' : statusLabel[s.lastStatus] || ''}` : '还没有运行过'}</span>
+${s.lastSessionId && !s.running ? `<button type="button" class="ghost small" data-sched-open="${s.lastSessionId}">看结果</button>` : ''}
+<button type="button" class="ghost small" data-sched-act="run" ${s.running ? 'disabled' : ''}>立即运行</button>
+<button type="button" class="ghost small" data-sched-act="toggle">${s.enabled ? '暂停' : '恢复'}</button>
+<button type="button" class="danger small" data-sched-act="delete">删除</button></div></div>`,
+        )
+        .join('')
+    : '<p class="hint">还没有定时任务。例如：每个工作日 09:00，让销售 agent 找 3 家新线索并起草邮件。</p>';
+  $('sched-agent').innerHTML = state.agents.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+}
+
 // ---------- events ----------
 function autosize() {
   const t = $('input');
@@ -352,6 +390,21 @@ $('open-settings').addEventListener('click', () => {
   $('settings-status').textContent = '';
   renderSettings();
   $('settings').showModal();
+});
+$('open-schedules').addEventListener('click', async () => {
+  $('sched-status').textContent = '';
+  await renderSchedules();
+  $('schedules').showModal();
+});
+$('add-schedule').addEventListener('click', async () => {
+  try {
+    await api('/api/schedules', { method: 'POST', body: { name: $('sched-name').value, agent: $('sched-agent').value, time: $('sched-time').value, days: $('sched-days').value, prompt: $('sched-prompt').value } });
+    $('sched-name').value = $('sched-prompt').value = '';
+    $('sched-status').textContent = '已添加';
+    await renderSchedules();
+  } catch (e) {
+    $('sched-status').textContent = e.message;
+  }
 });
 $('save-settings').addEventListener('click', () => saveSettings().catch((e) => ($('settings-status').textContent = e.message)));
 
@@ -393,12 +446,34 @@ document.addEventListener('click', async (e) => {
     const id = card.dataset.lead;
     const act = t.dataset.leadAct;
     if (act === 'copy') return navigator.clipboard.writeText(card.querySelector('[data-f=body]').value);
+    if (act === 'copy-followup') return navigator.clipboard.writeText(card.querySelector('[data-f=followup]').value);
     const body = { action: act };
     if (act === 'approve') Object.assign(body, { subject: card.querySelector('[data-f=subject]').value, body: card.querySelector('[data-f=body]').value });
     if (act === 'reject') body.reason = prompt('拒绝原因（会告诉销售 agent，用来改进之后的线索）') || '';
     if (act === 'suppress' && !confirm('把这家公司加入“不再联系”名单？')) return;
     await api(`/api/leads/${id}`, { method: 'POST', body });
+    state = await api('/api/state');
+    renderRail();
     return showLeads();
+  }
+  if (t.dataset.schedOpen) {
+    $('schedules').close();
+    await openSession(t.dataset.schedOpen);
+    state = await api('/api/state');
+    return renderRail();
+  }
+  if (t.dataset.schedAct) {
+    const id = t.closest('[data-sched]').dataset.sched;
+    if (t.dataset.schedAct === 'delete' && !confirm('删除这个定时任务？')) return;
+    try {
+      await api(`/api/schedules/${id}`, { method: 'POST', body: { action: t.dataset.schedAct } });
+      $('sched-status').textContent = t.dataset.schedAct === 'run' ? '已开始运行，完成后会出现在左侧历史里' : '';
+    } catch (err) {
+      $('sched-status').textContent = err.message;
+    }
+    await renderSchedules();
+    if (t.dataset.schedAct === 'run') setTimeout(() => $('schedules').open && renderSchedules(), 2500);
+    return;
   }
   if (t.dataset.models) {
     const id = t.dataset.models;
@@ -420,6 +495,14 @@ document.addEventListener('click', async (e) => {
     return renderSettings();
   }
 });
+
+setInterval(async () => {
+  if (busy || document.hidden) return;
+  try {
+    state = await api('/api/state');
+    renderRail();
+  } catch {}
+}, 30_000);
 
 state = await api('/api/state');
 if (!state.agents.some((a) => a.id === agent)) agent = 'assistant';
