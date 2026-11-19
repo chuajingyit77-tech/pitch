@@ -38,7 +38,7 @@ async function get(url, signal, headers = {}) {
   const res = await fetch(url, {
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000),
     redirect: 'follow',
-    headers: { 'user-agent': 'Mozilla/5.0 (compatible; agent-hub/0.1)', accept: 'text/html,application/json,text/plain,*/*', ...headers },
+    headers: { 'user-agent': 'Mozilla/5.0 (compatible; zhanggui/0.1)', accept: 'text/html,application/json,text/plain,*/*', ...headers },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(url).host}`);
   return res;

@@ -1,6 +1,6 @@
-# 协作任务：在 Agent Hub 上继续改进
+# 协作任务：在掌柜系统上继续改进
 
-仓库里的 `agent-hub/` 已经是一个能运行的系统：一个共用核心（模型适配、agent 循环、权限审批、agent 互相委派）加四个 agent 和一个网页界面。先读 `agent-hub/README.md`，运行 `npm install && npm test && npm run demo` 确认环境正常，再开始下面属于你的那一项。
+仓库里的 `agent-hub/` 是“掌柜”系统，已经能运行：一个共用核心（模型适配、agent 循环、权限审批）加四个 agent、两种协作模式（接力：按顺序交接；四重奏：同时进行）和一个网页界面。先读 `agent-hub/README.md`，运行 `npm install && npm test && npm run demo` 确认环境正常，再开始下面属于你的那一项。
 
 ## 共同规则
 

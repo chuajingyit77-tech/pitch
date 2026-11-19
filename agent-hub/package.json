@@ -1,9 +1,9 @@
 {
-  "name": "agent-hub",
+  "name": "zhanggui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "One system, four AI agents: pitch, assistant, sales, coding",
+  "description": "Zhanggui: one system, four AI agents and two team modes",
   "engines": {
     "node": ">=20"
   },

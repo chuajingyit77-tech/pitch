@@ -1,4 +1,4 @@
-// Agent Hub server: serves the web interface and runs the agents. Listens on this machine only.
+// Zhanggui (掌柜) server: serves the web interface and runs the agents. Listens on this machine only.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -244,5 +244,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  Agent Hub 已启动： http://localhost:${PORT}${process.env.AGENT_HUB_MOCK === '1' ? '   （演示模式：使用模拟模型）' : ''}\n  数据目录： ${path.dirname(dataPath('x'))}\n`);
+  console.log(`\n  掌柜系统已启动： http://localhost:${PORT}${process.env.AGENT_HUB_MOCK === '1' ? '   （演示模式：使用模拟模型）' : ''}\n  数据目录： ${path.dirname(dataPath('x'))}\n`);
 });

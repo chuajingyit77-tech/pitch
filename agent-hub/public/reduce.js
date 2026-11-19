@@ -27,7 +27,7 @@ export function applyEvent(items, ev) {
       items.push({ type: 'tool', id: ev.id, name: ev.name, input: ev.input, agent: ev.agent, depth: ev.depth || 0, server: ev.server, state: ev.server ? 'done' : 'running' });
       break;
     case 'tool_result': {
-      const tool = items.findLast((i) => i.type === 'tool' && i.id === ev.id);
+      const tool = items.findLast((i) => i.type === 'tool' && i.id === ev.id && i.state === 'running');
       if (tool) Object.assign(tool, { result: ev.content, isError: ev.isError, state: 'done' });
       break;
     }

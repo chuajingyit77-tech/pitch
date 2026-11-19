@@ -1,6 +1,7 @@
 // Scripted provider for tests and for trying the interface without a key (AGENT_HUB_MOCK=1).
 // A script is a list of turns; each turn is { text, toolCalls } or a function of the messages so far.
 let script = null;
+let n = 0; // one counter for all instances, so tool ids stay unique across agents running together
 
 export function setMockScript(turns) {
   script = turns ? [...turns] : null;
@@ -36,6 +37,14 @@ const DEMO = {
     { text: '（演示）先看一下目录。', toolCalls: [{ name: 'bash', input: { command: 'ls' } }] },
     { text: '（演示）命令已处理。填入真实的 API key 后，我会真正阅读和修改代码。' },
   ],
+  relay: [
+    { text: '（演示）分两棒：销售先找线索，Pitch 再据此做方案。', toolCalls: [{ name: 'run_relay', input: { legs: [{ agent: 'sales', task: '找一家潜在客户并起草邮件' }, { agent: 'pitch', task: '为这家客户做一份 pitch' }] } }] },
+    { text: '（演示）接力完成：销售找到 1 条线索并起草了邮件（等你批准），Pitch 据此生成了方案，见右侧预览。' },
+  ],
+  quartet: [
+    { text: '（演示）三个 agent 同时开工。', toolCalls: [{ name: 'run_quartet', input: { parts: [{ agent: 'pitch', task: '做一份 pitch' }, { agent: 'sales', task: '找一家潜在客户' }, { agent: 'assistant', task: '写一份备忘' }] } }] },
+    { text: '（演示）四重奏完成：pitch 已生成，线索和邮件草稿在审批队列里，备忘已写入工作区。' },
+  ],
   assistant: [
     { text: '（演示）我写一个文件试试。', toolCalls: [{ name: 'write_file', input: { path: 'demo.txt', content: 'hello from demo mode\n' } }] },
     { text: '（演示）文件已写入工作区。这是演示模式：填入真实的 API key 后，这里会是真实模型的回答。' },
@@ -53,13 +62,12 @@ function demoTurn(messages, system) {
 }
 
 export function createMockProvider() {
-  let n = 0;
   return {
     id: 'mock',
     model: 'mock',
     async complete({ messages, system, onText }) {
       let turn = script ? script.shift() : demoTurn(messages, system);
-      if (typeof turn === 'function') turn = turn(messages);
+      if (typeof turn === 'function') turn = await turn(messages);
       if (!turn) turn = { text: '(mock script exhausted)' };
       if (turn.text) onText?.(turn.text);
       const toolCalls = (turn.toolCalls || []).map((c) => ({ id: c.id || `mock_${++n}`, name: c.name, input: c.input || {} }));

@@ -209,3 +209,63 @@ test('the transcript reducer groups streamed text and pairs tools with results',
   assert.equal(items[2].result, 'r');
   assert.equal(items[3].open, false);
 });
+
+test('relay (接力): legs run in order and each one receives what the earlier legs handed over', async () => {
+  const seen = [];
+  const { result, messages, events } = await run('relay', [
+    { toolCalls: [{ name: 'run_relay', input: { legs: [{ agent: 'sales', task: 'find one prospect' }, { agent: 'pitch', task: 'build a deck for it' }, { agent: 'assistant', task: 'write the cover note' }] } }] },
+    (m) => (seen.push(m[0].content), { text: 'prospect: Globex' }),
+    (m) => (seen.push(m[0].content), { text: 'deck built for Globex' }),
+    (m) => (seen.push(m[0].content), { text: 'note written' }),
+    { text: 'relay finished' },
+  ]);
+  assert.equal(result.text, 'relay finished');
+  assert.equal(seen[0], 'find one prospect', 'the first leg starts from its brief alone');
+  assert.match(seen[1], /^build a deck for it[\s\S]*Leg 1, sales[\s\S]*prospect: Globex/);
+  assert.match(seen[2], /Leg 1, sales[\s\S]*Leg 2, pitch[\s\S]*deck built for Globex/);
+  assert.deepEqual(events.filter((e) => e.type === 'start' && e.depth === 1).map((e) => e.agent), ['sales', 'pitch', 'assistant']);
+  assert.match(toolResults(messages)[0].content, /Leg 3 \(assistant\) ===\nnote written/);
+});
+
+test('relay stops at a failed leg instead of handing on nothing', async () => {
+  saveConfig({ codingWorkspace: '' });
+  const { messages } = await run('relay', [
+    { toolCalls: [{ name: 'run_relay', input: { legs: [{ agent: 'coding', task: 'fix it' }, { agent: 'assistant', task: 'summarise' }] } }] },
+    { text: 'reported' },
+  ]);
+  saveConfig({ codingWorkspace: repo });
+  const out = toolResults(messages)[0].content;
+  assert.match(out, /Leg 1 \(coding\) ===\nFAILED:/);
+  assert.match(out, /1 later leg\(s\) did not run/);
+});
+
+test('quartet (四重奏): parts run at the same time, one per agent, and one failure does not sink the rest', async () => {
+  const { setMockScript } = await import('../src/llm/mock.js');
+  const order = [];
+  const part = (name, ms) => async () => {
+    order.push(`${name} start`);
+    await new Promise((r) => setTimeout(r, ms));
+    order.push(`${name} end`);
+    return { text: `${name} done` };
+  };
+  saveConfig({ codingWorkspace: '' });
+  const { messages, result } = await run('quartet', [
+    { toolCalls: [{ name: 'run_quartet', input: { parts: [{ agent: 'pitch', task: 'deck' }, { agent: 'coding', task: 'code' }, { agent: 'sales', task: 'leads' }] } }] },
+    part('first', 40),
+    part('second', 5),
+    { text: 'combined' },
+  ]);
+  saveConfig({ codingWorkspace: repo });
+  assert.equal(result.text, 'combined');
+  assert.deepEqual(order, ['first start', 'second start', 'second end', 'first end'], 'the parts overlap in time');
+  const out = toolResults(messages)[0].content;
+  assert.match(out, /=== pitch ===\nfirst done/);
+  assert.match(out, /=== coding ===\nFAILED:/);
+  assert.match(out, /=== sales ===\nsecond done/);
+
+  const dup = await run('quartet', [
+    { toolCalls: [{ name: 'run_quartet', input: { parts: [{ agent: 'pitch', task: 'a' }, { agent: 'pitch', task: 'b' }] } }] },
+    { text: 'ok' },
+  ]);
+  assert.match(toolResults(dup.messages)[0].content, /only one part/);
+});

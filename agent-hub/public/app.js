@@ -8,8 +8,10 @@ const EXAMPLES = {
   pitch: ['为一家做 AI 客服的 SaaS 公司做 10 页融资 pitch，面向种子轮投资人。公司信息：……', '根据这个官网做一份销售 pitch：https://', '把第 3 页改得更有冲击力，用一个大数字开场'],
   sales: ['我们卖面向中小电商的库存管理软件，帮我找 5 家东南亚的潜在客户并起草邮件', '看看我拒绝过哪些线索，据此调整后再找 5 家', '给得分最高的三家各写一封跟进邮件'],
   coding: ['看一下这个仓库的结构，告诉我怎么运行测试', '修复失败的测试，并说明原因', '给这个函数加上输入校验，并补一个测试'],
+  relay: ['先找 3 家可能需要我们产品的公司，再为得分最高的那家做一份定制 pitch，最后写一封附上 pitch 的邮件。我们的产品是：……', '先调研这个行业的三个主要竞品，再据此做一份突出我们差异的 pitch：……', '先查清这个开源库的最新用法，再让编程 agent 把仓库里的旧写法换掉'],
+  quartet: ['我们下个月发布新产品：同时做一份发布 pitch、找 5 家首批目标客户、调研竞品最近的动作。产品是：……', '为下周的投资人会议做准备：一份融资 pitch、一份对方机构的背景调研、一份可能被问到的问题清单', '同时做：整理这个仓库的 README、为它做一页介绍 pitch、找 3 个可能用得上它的团队'],
 };
-const TOOL_LABEL = { web_search: '搜索', web_fetch: '读取网页', read_file: '读文件', write_file: '写文件', edit_file: '改文件', glob: '找文件', grep: '搜索代码', bash: '运行命令', remember: '记住', forget: '忘记', delegate: '委派', save_fact: '记录事实', write_deck: '生成 pitch', save_lead: '保存线索', draft_email: '起草邮件', list_leads: '查看线索' };
+const TOOL_LABEL = { web_search: '搜索', web_fetch: '读取网页', read_file: '读文件', write_file: '写文件', edit_file: '改文件', glob: '找文件', grep: '搜索代码', bash: '运行命令', remember: '记住', forget: '忘记', delegate: '委派', save_fact: '记录事实', write_deck: '生成 pitch', run_relay: '接力', run_quartet: '四重奏', save_lead: '保存线索', draft_email: '起草邮件', list_leads: '查看线索' };
 
 let state = null;
 let agent = localStorage.getItem('agent') || 'assistant';
@@ -18,6 +20,7 @@ let items = [];
 let busy = false;
 let deckUrl = null;
 let sideMode = null; // 'deck' | 'leads'
+let hasLeads = false; // a team run produced leads the user may want to review
 
 const api = async (path, opts = {}) => {
   const res = await fetch(path, { ...opts, headers: { 'content-type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined });
@@ -74,7 +77,7 @@ const agentName = (id) => state.agents.find((a) => a.id === id)?.name || id;
 
 function brief(item) {
   const i = item.input || {};
-  return i.command || i.query || i.url || i.path || i.pattern || i.company || i.title || i.task || i.claim || i.text || i.lead_id || '';
+  return i.command || i.query || i.url || i.path || i.pattern || i.company || i.title || i.task || i.claim || i.text || i.lead_id || (i.legs || i.parts || []).map((x) => agentName(x.agent)).join(i.legs ? ' → ' : ' + ') || '';
 }
 
 function itemHtml(item) {
@@ -123,7 +126,8 @@ function renderMessages() {
 }
 
 function renderRail() {
-  $('agents').innerHTML = state.agents.map((a) => `<button type="button" class="agent${a.id === agent ? ' active' : ''}" data-agent="${a.id}"><b>${esc(a.name)}</b><small>${esc(a.tagline)}</small></button>`).join('');
+  const button = (a) => `<button type="button" class="agent${a.id === agent ? ' active' : ''}" data-agent="${a.id}"><b>${esc(a.name)}</b><small>${esc(a.tagline)}</small></button>`;
+  $('agents').innerHTML = `${state.agents.filter((a) => a.group !== 'team').map(button).join('')}<div class="rail-label">协作模式</div>${state.agents.filter((a) => a.group === 'team').map(button).join('')}`;
   $('sessions').innerHTML =
     state.sessions.map((s) => `<div class="session${s.id === sessionId ? ' active' : ''}" data-session="${s.id}"><span>${esc(s.title || '未命名')}</span><em>${esc(agentName(s.agent))}</em><button class="icon" data-del="${s.id}" type="button" aria-label="删除">✕</button></div>`).join('') || '<div class="hint">还没有对话</div>';
   const a = state.agents.find((x) => x.id === agent);
@@ -139,8 +143,10 @@ function renderRail() {
     banner.innerHTML = '编程 agent 需要一个工作目录（你的代码仓库路径）。<button type="button" class="small" id="banner-settings">打开设置</button>';
   } else banner.hidden = true;
   const btn = $('toggle-side');
-  btn.hidden = !(agent === 'sales' || deckUrl);
-  btn.textContent = agent === 'sales' ? '线索与审批' : '查看 pitch';
+  btn.hidden = !(agent === 'sales' || deckUrl || hasLeads);
+  const both = deckUrl && hasLeads && agent !== 'sales';
+  const showingDeck = sideMode === 'deck' && !$('side').hidden;
+  btn.textContent = both ? (showingDeck ? '线索与审批' : '查看 pitch') : agent === 'sales' || !deckUrl ? '线索与审批' : '查看 pitch';
 }
 
 // ---------- side panel ----------
@@ -159,6 +165,7 @@ async function showLeads() {
   $('side-title').textContent = '线索与审批';
   $('side-actions').innerHTML = '<a class="small" href="/api/leads.csv">导出 CSV</a>';
   const { leads, suppressed } = await api('/api/leads');
+  if (sideMode !== 'leads') return; // the deck was opened while the leads were loading
   const order = { pending: 0, new: 1, approved: 2, rejected: 3 };
   leads.sort((a, b) => order[a.status] - order[b.status] || b.score - a.score);
   const label = { new: '待起草', pending: '待你审批', approved: '已批准', rejected: '已拒绝' };
@@ -212,7 +219,10 @@ async function sendMessage(text) {
         if (ev.type === 'session') sessionId = ev.id;
         else applyEvent(items, ev);
         if (ev.type === 'deck') showDeck(ev.url);
-        if (ev.type === 'tool_result' && ['save_lead', 'draft_email'].includes(ev.name) && agent === 'sales') showLeads();
+        if (ev.type === 'tool_result' && ['save_lead', 'draft_email'].includes(ev.name)) {
+          hasLeads = true;
+          if (agent === 'sales' || (!deckUrl && innerWidth > 900)) showLeads();
+        }
       }
       renderMessages();
     }
@@ -235,6 +245,7 @@ async function openSession(id) {
   localStorage.setItem('agent', agent);
   items = s.transcript || [];
   deckUrl = s.deckUrl;
+  hasLeads = items.some((i) => i.type === 'tool' && ['save_lead', 'draft_email'].includes(i.name));
   $('side').hidden = true;
   if (deckUrl) showDeck(deckUrl);
   renderRail();
@@ -248,6 +259,7 @@ function newChat(nextAgent = agent) {
   sessionId = null;
   items = [];
   deckUrl = null;
+  hasLeads = false;
   $('side').hidden = true;
   if (agent === 'sales' && innerWidth > 900) showLeads();
   renderRail();
@@ -327,9 +339,14 @@ $('new-chat').addEventListener('click', () => newChat());
 $('toggle-rail').addEventListener('click', () => $('app').classList.toggle('rail-open'));
 $('close-side').addEventListener('click', () => ($('side').hidden = true));
 $('toggle-side').addEventListener('click', () => {
-  if (!$('side').hidden) $('side').hidden = true;
-  else if (agent === 'sales') showLeads();
-  else if (deckUrl) showDeck(deckUrl);
+  // With both a deck and leads to show, the button switches between them.
+  if (deckUrl && hasLeads && agent !== 'sales') {
+    if ($('side').hidden || sideMode === 'leads') showDeck(deckUrl);
+    else showLeads();
+  } else if (!$('side').hidden) $('side').hidden = true;
+  else if (agent === 'sales' || !deckUrl) showLeads();
+  else showDeck(deckUrl);
+  renderRail();
 });
 $('open-settings').addEventListener('click', () => {
   $('settings-status').textContent = '';

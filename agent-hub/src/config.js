@@ -17,7 +17,7 @@ const DEFAULTS = {
     moonshot: { apiKey: '', model: '', baseURL: '' },
   },
   // Which vendor drives which agent. Any agent falls back to a configured vendor.
-  agents: { assistant: 'moonshot', pitch: 'anthropic', sales: 'xai', coding: 'openai' },
+  agents: { assistant: 'moonshot', pitch: 'anthropic', sales: 'xai', coding: 'openai', relay: 'anthropic', quartet: 'anthropic' },
   braveKey: '',
   codingWorkspace: '',
 };
