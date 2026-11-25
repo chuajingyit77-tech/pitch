@@ -99,7 +99,7 @@ function brief(item) {
   return i.command || i.query || i.url || i.path || i.pattern || i.company || i.title || i.task || i.claim || i.text || i.lead_id || (i.legs || i.parts || []).map((x) => agentName(x.agent)).join(i.legs ? ' → ' : ' + ') || '';
 }
 
-function itemHtml(item) {
+function itemHtml(item, k) {
   const sub = item.depth ? ' sub' : '';
   switch (item.type) {
     case 'user':
@@ -107,7 +107,8 @@ function itemHtml(item) {
     case 'start':
       return item.depth ? `<div class="who sub"><b>↳ ${esc(agentName(item.agent))}</b>接手任务 · ${esc(item.model || '')}</div>` : '';
     case 'text':
-      return `<div class="msg text${sub}">${md(item.text)}</div>`;
+      // A finished answer of some length can be kept; short remarks and sub-agents' chatter are not offered.
+      return `<div class="msg text${sub}">${md(item.text)}${!item.depth && !item.open && item.text.length >= 40 ? `<div class="msg-actions"><button class="ghost small" data-save-note="${k}" type="button">保存到成果库</button></div>` : ''}</div>`;
     case 'tool': {
       const cls = item.state === 'running' ? 'running' : item.isError ? 'error' : '';
       const body = `${item.input && Object.keys(item.input).length ? JSON.stringify(item.input, null, 2) : ''}${item.result ? `\n\n→ ${item.result}` : ''}`.trim();
@@ -124,7 +125,7 @@ function itemHtml(item) {
     case 'error':
       return `<div class="note error">${esc(item.text)}</div>`;
     case 'deck':
-      return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button>${inlineDeck(item.url) ? '' : `<a href="${esc(rel(item.url))}" target="_blank" rel="noopener">新窗口</a>`}</div>`;
+      return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button><button class="small" data-save-deck type="button">保存这一版</button>${inlineDeck(item.url) ? '' : `<a href="${esc(rel(item.url))}" target="_blank" rel="noopener">新窗口</a>`}</div>`;
     default:
       return '';
   }
@@ -140,7 +141,7 @@ function renderMessages() {
   // Keep tool cards the user opened from snapping shut on every streamed token.
   const open = new Set([...box.querySelectorAll('details[open]')].map((d) => d.dataset.k));
   const nearBottom = $('scroll').scrollHeight - $('scroll').scrollTop - $('scroll').clientHeight < 120;
-  box.innerHTML = items.map((it, k) => itemHtml(it).replace(/^<details /, `<details data-k="${k}" ${open.has(String(k)) ? 'open ' : ''}`)).join('') + (busy ? '<div class="typing">运行中…</div>' : '');
+  box.innerHTML = items.map((it, k) => itemHtml(it, k).replace(/^<details /, `<details data-k="${k}" ${open.has(String(k)) ? 'open ' : ''}`)).join('') + (busy ? '<div class="typing">运行中…</div>' : '');
   if (nearBottom) $('scroll').scrollTop = $('scroll').scrollHeight;
 }
 
@@ -172,13 +173,13 @@ function renderRail() {
 // A host page can supply a deck's HTML itself (window.__deckHtml[url]) instead of a URL to load; the static demo does.
 const inlineDeck = (url) => (window.__deckHtml || {})[url];
 
-function showDeck(url) {
-  deckUrl = url;
-  sideMode = 'deck';
+function showDeck(url, saved = null) {
+  if (!saved) deckUrl = url;
+  sideMode = saved ? 'library' : 'deck';
   $('side').hidden = false;
-  $('side-title').textContent = 'Pitch 预览';
+  $('side-title').textContent = saved ? saved.title : 'Pitch 预览';
   const html = inlineDeck(url);
-  $('side-actions').innerHTML = html ? '' : `<a class="small" href="${esc(rel(url))}" target="_blank" rel="noopener">新窗口打开</a>`;
+  $('side-actions').innerHTML = `${saved ? '' : '<button class="small" data-save-deck type="button">保存这一版</button>'}${html ? '' : `<a class="small" href="${esc(rel(url))}" target="_blank" rel="noopener">新窗口打开</a>`}`;
   $('side-body').innerHTML = html
     ? `<iframe id="deck-frame" srcdoc="${esc(html)}" title="Pitch"></iframe>`
     : `<iframe sandbox="allow-scripts allow-modals allow-popups" src="${esc(rel(url))}?t=${Date.now()}" title="Pitch"></iframe>`;
@@ -236,14 +237,14 @@ ${l.rejectReason ? `<div class="off">拒绝原因：${esc(l.rejectReason)}</div>
  * Ask the user to confirm something, optionally with a line of text.
  * Resolves to null when they cancel; otherwise to what they typed ('' when no text was asked for).
  */
-function ask(text, { input = null, ok = '确定' } = {}) {
+function ask(text, { input = null, value = '', ok = '确定' } = {}) {
   return new Promise((resolve) => {
     const dialog = $('ask');
     const field = $('ask-input');
     $('ask-text').textContent = text;
     $('ask-ok').textContent = ok;
     field.hidden = input === null;
-    field.value = '';
+    field.value = value;
     field.placeholder = input || '';
     const done = (value) => {
       $('ask-ok').onclick = $('ask-cancel').onclick = dialog.oncancel = null;
@@ -273,6 +274,83 @@ async function copyFrom(field, button) {
     button.textContent = '已选中，请手动复制';
   }
   setTimeout(() => (button.textContent = label), 1600);
+}
+
+// ---------- library ----------
+let toastTimer = null;
+function toast(text, action = null) {
+  $('toast-text').textContent = text;
+  $('toast-action').hidden = !action;
+  if (action) {
+    $('toast-action').textContent = action.label;
+    $('toast-action').onclick = () => {
+      $('toast').hidden = true;
+      action.run();
+    };
+  }
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ($('toast').hidden = true), 8000);
+}
+
+const folderPath = (folder) => `成果库 › ${folder.split('/').join(' › ')}`;
+
+/** Keep the version the user is happy with. The server decides which folder it belongs in. */
+async function saveWork(payload, button) {
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = '正在归档…';
+  try {
+    const { item, duplicate } = await api('/api/library', { method: 'POST', body: { sessionId, ...payload } });
+    toast(`${duplicate ? '这一版已经保存过，在' : '已保存到'} ${folderPath(item.folder)}`, { label: '查看', run: openLibrary });
+  } catch (e) {
+    toast(`没有保存成功：${e.message}`);
+  }
+  if (button.isConnected) {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
+async function renderLibrary() {
+  const { items: saved } = await api('/api/library');
+  const folders = new Map();
+  for (const item of saved) folders.set(item.folder, [...(folders.get(item.folder) || []), item]);
+  const filed = { ai: 'AI 归档', rule: '按类型归档', user: '你移动过' };
+  const when = (iso) => new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+  $('library-list').innerHTML = saved.length
+    ? [...folders.keys()]
+        .sort((a, b) => a.localeCompare(b, 'zh'))
+        .map(
+          (folder) => `<div class="folder"><div class="folder-name">${esc(folder.split('/').join(' › '))}</div>${folders
+            .get(folder)
+            .map(
+              (item) => `<div class="saved" data-saved="${item.id}" data-folder="${esc(item.folder)}">
+<div class="head"><span><b>${esc(item.title)}</b></span><span class="badge">${item.kind === 'deck' ? 'Pitch' : '文字'}</span></div>
+${item.summary ? `<div class="off">${esc(item.summary)}</div>` : ''}
+<div class="row"><span class="off">${when(item.savedAt)} · ${filed[item.filedBy] || ''}</span><button type="button" class="small" data-saved-act="open">打开</button><button type="button" class="ghost small" data-saved-act="move">移动</button><button type="button" class="danger small" data-saved-act="delete">删除</button></div></div>`,
+            )
+            .join('')}</div>`,
+        )
+        .join('')
+    : '<p class="hint">这里还是空的。看到满意的 pitch 或回答，点它旁边的“保存”，就会归到这里。</p>';
+}
+
+async function openLibrary() {
+  $('library-status').textContent = '';
+  await renderLibrary();
+  if (!$('library').open) $('library').showModal();
+}
+
+async function openSaved(id) {
+  const { item, text } = await api(`/api/library/${id}`);
+  $('library').close();
+  if (item.kind === 'deck') return showDeck(item.url, item);
+  sideMode = 'library';
+  $('side').hidden = false;
+  $('side-title').textContent = item.title;
+  $('side-actions').innerHTML = '';
+  $('side-body').innerHTML = `<div class="saved-note msg text">${md(text || '')}</div>`;
 }
 
 // ---------- chat ----------
@@ -458,6 +536,7 @@ $('open-settings').addEventListener('click', () => {
   renderSettings();
   $('settings').showModal();
 });
+$('open-library').addEventListener('click', openLibrary);
 $('open-schedules').addEventListener('click', async () => {
   $('sched-status').textContent = '';
   await renderSchedules();
@@ -508,6 +587,24 @@ document.addEventListener('click', async (e) => {
     return $('input').focus();
   }
   if (t.dataset.deck) return showDeck(t.dataset.deck);
+  if ('saveDeck' in t.dataset) return saveWork({ kind: 'deck' }, t);
+  if (t.dataset.saveNote) return saveWork({ kind: 'note', text: items[Number(t.dataset.saveNote)].text }, t);
+  if (t.dataset.savedAct) {
+    const row = t.closest('[data-saved]');
+    const id = row.dataset.saved;
+    if (t.dataset.savedAct === 'open') return openSaved(id);
+    if (t.dataset.savedAct === 'delete') {
+      if ((await ask('从成果库里删除这一项？删除后无法恢复。', { ok: '删除' })) === null) return;
+      await api(`/api/library/${id}`, { method: 'POST', body: { action: 'delete' } });
+    }
+    if (t.dataset.savedAct === 'move') {
+      const folder = await ask('放到哪个文件夹？最多两层，用 / 分隔。', { input: '例如：Pitch/青禾茶业', value: row.dataset.folder, ok: '移动' });
+      if (!folder) return;
+      const { item } = await api(`/api/library/${id}`, { method: 'POST', body: { action: 'move', folder } });
+      $('library-status').textContent = `已移到 ${folderPath(item.folder)}`;
+    }
+    return renderLibrary();
+  }
   if (t.dataset.act) {
     const id = t.closest('[data-approval]').dataset.approval;
     const act = t.dataset.act;

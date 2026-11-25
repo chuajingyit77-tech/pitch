@@ -85,3 +85,33 @@ test('lead lifecycle over the API: approve, mark sent, follow-up schedule, reply
   assert.equal((await api(`/api/leads/${lead.id}`, { action: 'replied' })).data.lead.status, 'replied');
   assert.equal((await api('/api/leads')).data.leads[0].followupDueAt, null);
 });
+
+test('saving to the library over the API: a deck snapshot is filed, served, moved and deleted', async () => {
+  // Build a deck first, reading the whole stream so the run has finished.
+  const res = await fetch(`${base}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent: 'pitch', text: '做一份 pitch' }) });
+  const events = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+  const sessionId = events.find((e) => e.type === 'session').id;
+  assert.ok(events.some((e) => e.type === 'deck'));
+
+  assert.equal((await api('/api/library', { kind: 'deck', sessionId: 's_missing' })).status, 400);
+  const saved = await api('/api/library', { kind: 'deck', sessionId });
+  assert.equal(saved.status, 200);
+  const { item } = saved.data;
+  assert.deepEqual([item.kind, item.folder, item.title, item.filedBy], ['deck', 'Pitch', '演示 Pitch', 'rule']);
+  const page = await fetch(base + item.url);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /class="slide slide-cover"/);
+  assert.equal((await api('/api/library', { kind: 'deck', sessionId })).data.duplicate, true);
+
+  const note = (await api('/api/library', { kind: 'note', sessionId, text: '## 给投资人的三句话\n\n我们让小团队也有一支 AI 客服。' })).data.item;
+  assert.deepEqual([note.folder, note.title], ['笔记', '给投资人的三句话']);
+  assert.match((await api(`/api/library/${note.id}`)).data.text, /AI 客服/);
+
+  const moved = (await api(`/api/library/${item.id}`, { action: 'move', folder: 'Pitch/投资人' })).data.item;
+  assert.equal(moved.folder, 'Pitch/投资人');
+  assert.equal((await fetch(base + moved.url)).status, 200);
+  assert.equal((await fetch(base + item.url)).status, 404);
+  assert.equal((await api('/api/library')).data.items.length, 2);
+  assert.equal((await api(`/api/library/${note.id}`, { action: 'delete' })).status, 200);
+  assert.equal((await api('/api/library')).data.items.length, 1);
+});

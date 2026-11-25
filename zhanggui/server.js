@@ -12,6 +12,7 @@ import { confine } from './src/tools/files.js';
 import { listLeads, updateLead, suppress, listSuppressed, salesTodo, followupDueAt } from './src/tools/sales.js';
 import { listSchedules, createSchedule, updateSchedule, deleteSchedule, isDue } from './src/schedules.js';
 import { listMemories, deleteMemory } from './src/tools/memory.js';
+import { saveToLibrary, libraryItems, readItem, moveItem, deleteItem } from './src/library.js';
 import { applyEvent } from './public/reduce.js';
 
 // `node server.js --demo` runs with a scripted stand-in model, so the interface can be tried without any key.
@@ -180,6 +181,29 @@ function tick() {
   }
 }
 
+/** Save what the user is happy with: the current deck of a conversation, or a piece of text. */
+async function saveWork(body) {
+  const session = body.sessionId ? loadSession(String(body.sessionId)) : null;
+  if (body.kind === 'deck') {
+    if (!session?.deckFile) return [400, { error: '这个对话里还没有生成 pitch' }];
+    const file = path.join(hubWorkspace(), 'decks', session.deckFile);
+    if (!fs.existsSync(file)) return [400, { error: '找不到这份 pitch 的文件' }];
+    const title = session.transcript.findLast((i) => i.type === 'deck')?.title || session.title;
+    return [200, await saveToLibrary({ kind: 'deck', title, content: fs.readFileSync(file, 'utf8'), agent: session.agent, sessionId: session.id })];
+  }
+  if (body.kind === 'note') {
+    const text = String(body.text || '');
+    if (!text.trim()) return [400, { error: '没有可以保存的内容' }];
+    if (text.length > 200_000) return [400, { error: '内容太长，无法保存' }];
+    // A heading names the text itself; otherwise what the user asked for is the best short name for it.
+    const first = text.split('\n').find((l) => l.trim()) || '';
+    const plain = first.replace(/^[#>*\-\s]+/, '').replace(/[*`]/g, '');
+    const title = first.trim().startsWith('#') ? plain : session?.title || plain.split(/[。！？.!?：:]/)[0].slice(0, 24);
+    return [200, await saveToLibrary({ kind: 'note', title, content: text, agent: session?.agent || '', sessionId: session?.id || '' })];
+  }
+  return [400, { error: 'Unknown kind' }];
+}
+
 function leadsCsv() {
   const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = [['company', 'domain', 'contact', 'role', 'email', 'score', 'status', 'subject', 'body', 'reasons']];
@@ -293,6 +317,22 @@ const server = http.createServer(async (req, res) => {
     if (lead && m === 'POST') {
       const updated = await leadAction(lead[1], await readBody(req));
       return updated ? send(res, 200, { lead: updated }) : send(res, 404, { error: 'Not found' });
+    }
+    if (m === 'GET' && p === '/api/library') return send(res, 200, { items: libraryItems() });
+    if (m === 'POST' && p === '/api/library') return send(res, ...(await saveWork(await readBody(req))));
+    const lib = /^\/api\/library\/([\w]+)$/.exec(p);
+    if (lib && m === 'GET') {
+      const found = readItem(lib[1]);
+      return found ? send(res, 200, found) : send(res, 404, { error: 'Not found' });
+    }
+    if (lib && m === 'POST') {
+      const body = await readBody(req);
+      if (body.action === 'delete') return deleteItem(lib[1]) ? send(res, 200, { ok: true }) : send(res, 404, { error: 'Not found' });
+      if (body.action === 'move') {
+        const moved = moveItem(lib[1], body.folder);
+        return moved ? send(res, 200, { item: moved }) : send(res, 404, { error: 'Not found' });
+      }
+      return send(res, 400, { error: 'Unknown action' });
     }
     if (m === 'GET' && p === '/api/memory') return send(res, 200, { memories: listMemories() });
     const mem = /^\/api\/memory\/([\w]+)$/.exec(p);

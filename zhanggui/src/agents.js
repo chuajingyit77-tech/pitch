@@ -140,7 +140,7 @@ Handle research, writing, analysis and file work yourself. When a request is squ
 
 For anything factual and current, search and read the source before answering, and give the link. Save lasting preferences and facts about the user with remember, so they do not have to repeat themselves.
 
-Files you write go to a private workspace folder on the user's machine.`,
+Files you write go to a private workspace folder on the user's machine. Work the user chose to keep is saved there under library/, in folders by kind and customer; when they refer to something they saved, find it with glob "library/**" and read it.`,
   },
   pitch: {
     id: 'pitch',

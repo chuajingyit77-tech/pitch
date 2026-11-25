@@ -47,7 +47,7 @@ export function createAnthropicProvider({ apiKey, model }) {
   const client = apiKey ? new Anthropic({ apiKey }) : new Anthropic();
   let useFallbacks = true;
 
-  async function oneRequest({ system, apiMessages, tools, onText, onServerTool, signal }) {
+  async function oneRequest({ system, apiMessages, tools, onText, onServerTool, signal, effort }) {
     const params = {
       model,
       max_tokens: 64000,
@@ -55,7 +55,7 @@ export function createAnthropicProvider({ apiKey, model }) {
       messages: apiMessages,
       tools: toApiTools(tools),
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high' },
+      output_config: { effort: effort || 'high' },
       cache_control: { type: 'ephemeral' },
     };
     // On a safety decline, let the API re-run the request on a fallback model in the same call.
@@ -74,14 +74,14 @@ export function createAnthropicProvider({ apiKey, model }) {
   return {
     id: 'anthropic',
     model,
-    async complete({ system, messages, tools, onText, onServerTool, signal }) {
+    async complete({ system, messages, tools, onText, onServerTool, signal, effort }) {
       const apiMessages = toApiMessages(messages);
       const usage = { input: 0, output: 0 };
       let message;
       let jsonRetries = 0;
       for (let pauses = 0; ; ) {
         try {
-          message = await oneRequest({ system, apiMessages, tools, onText, onServerTool, signal });
+          message = await oneRequest({ system, apiMessages, tools, onText, onServerTool, signal, effort });
         } catch (err) {
           if (err instanceof Anthropic.BadRequestError && useFallbacks) {
             // The account or model may not accept the fallbacks beta; continue without it.

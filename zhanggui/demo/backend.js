@@ -182,6 +182,40 @@ function publishDeck(deck, facts) {
   return url;
 }
 
+// ---------- library ----------
+db.library = [];
+const NOTE_FOLDER = { sales: '销售', relay: '项目总结', quartet: '项目总结' };
+
+/** Keep a snapshot of the conversation's deck, or of a piece of text. The demo files by kind; the real system asks the model. */
+function saveWork(body) {
+  const session = db.sessions.find((s) => s.id === body.sessionId);
+  let entry;
+  if (body.kind === 'deck') {
+    const source = session?.deckUrl;
+    if (!source) return [400, { error: '这个对话里还没有生成 pitch' }];
+    const same = db.library.find((i) => i.source === source);
+    if (same) return { item: same, duplicate: true };
+    const url = `demo-deck:${newId('lib')}`;
+    window.__deckHtml[url] = window.__deckHtml[source].replaceAll(JSON.stringify(source), JSON.stringify(url));
+    deckData[url] = deckData[source];
+    entry = { kind: 'deck', title: deckData[url].title, folder: 'Pitch', url, source, summary: deckData[url].slides[0].title };
+  } else {
+    const text = String(body.text || '');
+    if (!text.trim()) return [400, { error: '没有可以保存的内容' }];
+    const same = db.library.find((i) => i.text === text);
+    if (same) return { item: same, duplicate: true };
+    const first = text.split('\n').find((l) => l.trim()) || '';
+    const title = (first.trim().startsWith('#') ? first.replace(/^[#\s]+/, '') : session?.title || first.split(/[。！？.!?：:]/)[0]).replace(/[*`]/g, '').slice(0, 40) || '笔记';
+    entry = { kind: 'note', title, folder: NOTE_FOLDER[session?.agent] || '笔记', text, summary: text.replace(/\s+/g, ' ').slice(0, 90) };
+  }
+  const taken = (t) => db.library.some((i) => i.folder === entry.folder && i.title === t);
+  let title = entry.title;
+  for (let v = 2; taken(title); v++) title = `${entry.title} v${v}`;
+  const item = { id: newId('lib'), tags: [], filedBy: 'rule', savedAt: now(), ...entry, title };
+  db.library.push(item);
+  return { item, duplicate: false };
+}
+
 // ---------- scripted agent runs ----------
 class Stopped extends Error {}
 
@@ -482,6 +516,18 @@ function handle(method, path, query, body) {
     if (!id) return { leads: db.leads.map((l) => ({ ...l, followupDueAt: followupDueAt(l), followupDue: followupDue(l) })), suppressed: db.suppressed };
     const found = db.leads.find((l) => l.id === id);
     return found ? { lead: leadAction(found, body) } : [404, { error: 'Not found' }];
+  }
+  if (resource === 'library') {
+    if (!id) return method === 'GET' ? { items: [...db.library].sort((a, b) => b.savedAt.localeCompare(a.savedAt)) } : saveWork(body);
+    const item = db.library.find((i) => i.id === id);
+    if (!item) return [404, { error: 'Not found' }];
+    if (method === 'GET') return { item, text: item.text ?? null };
+    if (body.action === 'delete') db.library = db.library.filter((i) => i.id !== id);
+    if (body.action === 'move') {
+      const folder = String(body.folder || '').split('/').map((p) => p.trim()).filter(Boolean).slice(0, 2).join('/');
+      if (folder) Object.assign(item, { folder, filedBy: 'user' });
+    }
+    return { item };
   }
   if (resource === 'memory') {
     if (method === 'DELETE') db.memories = db.memories.filter((m) => m.id !== id);
