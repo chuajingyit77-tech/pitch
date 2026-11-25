@@ -1,0 +1,201 @@
+<title>碎碎念工作台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column command desk. Status strip, then what needs you today, then projects, relations, history. */
+:root {
+  --bg: #0b1120; --panel: #121a2e; --panel-2: #18223a; --line: #26324e; --fg: #e7edf8; --muted: #8e9bb8;
+  --accent: #5aa9ff; --accent-ink: #06121f; --urgent: #ff6b6b; --watch: #f2b64a; --ok: #41cf96; --chip: #1d2944;
+  --display: "Space Grotesk", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --body: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f2f5fa; --panel: #ffffff; --panel-2: #f7f9fc; --line: #d5dceb; --fg: #111a2c; --muted: #58647d;
+    --accent: #1565d8; --accent-ink: #ffffff; --urgent: #c62828; --watch: #9a6500; --ok: #0d7a4f; --chip: #e8edf6;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f2f5fa; --panel: #ffffff; --panel-2: #f7f9fc; --line: #d5dceb; --fg: #111a2c; --muted: #58647d;
+  --accent: #1565d8; --accent-ink: #ffffff; --urgent: #c62828; --watch: #9a6500; --ok: #0d7a4f; --chip: #e8edf6;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 28px; }
+h1, h2 { font-family: var(--display); margin: 0; text-wrap: balance; }
+h1 { font-size: 26px; letter-spacing: 0.02em; }
+h2 { font-size: 17px; display: flex; align-items: baseline; gap: 8px; }
+h2 .n { font-family: var(--mono); font-size: 13px; color: var(--muted); font-weight: 400; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px;
+  border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+.head-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--chip); color: var(--fg);
+  font-size: 12px; line-height: 1.7; white-space: nowrap; }
+.chip.urgent { background: transparent; color: var(--urgent); border: 1px solid var(--urgent); }
+.chip.watch { background: transparent; color: var(--watch); border: 1px solid var(--watch); }
+.chip.ok { background: transparent; color: var(--ok); border: 1px solid var(--ok); }
+.chip.ghost { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+.strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.strip div { background: var(--panel); padding: 12px 14px; min-width: 0; }
+.strip b { display: block; font-family: var(--mono); font-size: 26px; font-weight: 600; line-height: 1.1; }
+.strip span { font-size: 12px; color: var(--muted); }
+.strip .u b { color: var(--urgent); } .strip .w b { color: var(--watch); }
+section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.notice { border: 1px solid var(--watch); border-radius: 10px; padding: 12px 14px; font-size: 14px; background: var(--panel); }
+.nudges { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.nudges li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 11px 14px;
+  border-top: 1px solid var(--line); align-items: start; }
+.nudges li:first-child { border-top: 0; }
+.sev { font-size: 12px; font-weight: 700; text-align: center; border-radius: 4px; padding: 2px 0; }
+.sev.s0 { background: var(--urgent); color: var(--bg); } .sev.s1 { color: var(--watch); border: 1px solid var(--watch); }
+.sev.s2 { color: var(--muted); border: 1px solid var(--line); }
+.nudges .who { font-weight: 600; } .nudges .what { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filters button { font: inherit; font-size: 13px; padding: 5px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px;
+  padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card.h0 { border-left-color: var(--urgent); } .card.h1 { border-left-color: var(--watch); } .card.h2 { border-left-color: var(--ok); }
+.card .top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.card .name { font-family: var(--display); font-weight: 600; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.card .next { background: var(--panel-2); border-radius: 6px; padding: 8px 10px; font-size: 14px; overflow-wrap: anywhere; }
+.card .next .lab { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; display: flex; justify-content: space-between; gap: 8px; }
+.due.late { color: var(--urgent); } .due.soon { color: var(--watch); }
+.card ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+details { font-size: 13px; }
+summary { cursor: pointer; color: var(--accent); width: fit-content; }
+dl { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 4px 10px; margin: 8px 0 0; }
+dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+.rows { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 4px 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row .sub { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.empty { border: 1px dashed var(--line); border-radius: 10px; padding: 16px; color: var(--muted); font-size: 14px; }
+footer { border-top: 1px solid var(--line); padding-top: 16px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+footer q { color: var(--fg); quotes: "「" "」"; }
+@media (max-width: 520px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .row { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>工作台</h1>
+      <div class="muted" id="sub"></div>
+    </div>
+    <div class="head-meta" id="headmeta"></div>
+  </header>
+  <div class="strip" id="strip"></div>
+  <div id="notice" hidden></div>
+  <section>
+    <h2>今天要你处理的 <span class="n" id="n-nudges"></span></h2>
+    <div id="nudges"></div>
+  </section>
+  <section>
+    <h2>项目 <span class="n" id="n-projects"></span></h2>
+    <div class="filters" id="filters" role="group" aria-label="按分类筛选"></div>
+    <div class="grid" id="projects"></div>
+  </section>
+  <section>
+    <h2>关系跟进 <span class="n" id="n-relations"></span></h2>
+    <div id="relations"></div>
+  </section>
+  <section>
+    <h2>历史项目 · 等你确认 <span class="n" id="n-history"></span></h2>
+    <div id="history"></div>
+  </section>
+  <footer>
+    <div>这一页是从卡片自动生成的，不能在这里直接改。要更新，对 Claude 说：</div>
+    <div><q>碎碎念：……</q> 讲新项目、进展、谁说了什么 · <q>跟进表</q> 看全表 · <q>今天该做什么</q> · <q>备份</q> · <q>刷新看板</q></div>
+  </footer>
+</div>
+
+<script>
+const DATA = /*WOS_DATA*/null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const HR = { "急": 0, "注意": 1, "提醒": 2, "正常": 2 };
+const ACTIVE = ["摸底", "制作", "推进", "落地"];
+let filter = "全部";
+try { filter = localStorage.getItem("wos-filter") || "全部"; } catch (e) {}
+
+function dueLabel(p) {
+  if (p.next_days == null) return p.next ? '<span class="due soon">没有日期</span>' : "";
+  const d = p.next_days;
+  const cls = d < 0 ? "late" : d <= 2 ? "soon" : "";
+  const txt = d < 0 ? "过期 " + (-d) + " 天" : d === 0 ? "今天到期" : "还剩 " + d + " 天";
+  return '<span class="due mono ' + cls + '">' + esc(p.next_due.slice(5)) + " · " + txt + "</span>";
+}
+
+function projectCard(p) {
+  const rows = [["目标", p.goal], ["验收标准", p.done_def], ["做完的标准", p.next_test], ["谁付款", p.payer],
+    ["下一个收钱动作", p.next_paid_step], ["Gate", [p.gate_what, p.gate_date].filter(Boolean).join(" · ")],
+    ["证据等级", p.evidence], ["止损线", p.kill_rule], ["保密级", p.sens], ["最近动过", p.touched], ["卡片", p.path]]
+    .filter(r => r[1]).map(r => "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>").join("");
+  const chips = ['<span class="chip">' + esc(p.type + (p.subtype ? " · " + p.subtype : "")) + "</span>",
+    '<span class="chip">' + esc(p.stage_label || p.stage) + "</span>"];
+  if (p.for_whom) chips.push('<span class="chip ghost">' + esc(p.for_whom) + "</span>");
+  if (p.paypath_missing && p.paypath_missing.length) chips.push('<span class="chip watch">无付款路径</span>');
+  const hc = p.health === "急" ? "urgent" : p.health === "注意" ? "watch" : "ok";
+  return '<article class="card h' + HR[p.health] + '">' +
+    '<div class="top"><div class="name">' + esc(p.name) + '</div><span class="chip ' + hc + '">' + esc(p.priority) + " · " + esc(p.health) + "</span></div>" +
+    (p.summary ? '<div class="muted" style="font-size:13px">' + esc(p.summary) + "</div>" : "") +
+    '<div class="meta">' + chips.join("") + "</div>" +
+    '<div class="next"><div class="lab"><span>下一步</span>' + dueLabel(p) + "</div>" + (p.next ? esc(p.next) : '<span class="due soon">还没定下一步</span>') + "</div>" +
+    (p.reasons.length ? "<ul>" + p.reasons.map(r => "<li>" + esc(r) + "</li>").join("") + "</ul>" : "") +
+    (rows ? "<details><summary>展开细节</summary><dl>" + rows + "</dl></details>" : "") + "</article>";
+}
+
+function render() {
+  const d = DATA;
+  if (!d) { $("nudges").innerHTML = '<div class="empty">还没有数据。对 Claude 说「刷新看板」。</div>'; return; }
+  $("sub").textContent = d.today + " " + d.weekday + " · 生成于 " + d.generated_at;
+  const vis = { private: ["仓库私有 · 资料正常备份", "ok"], public: ["仓库公开 · 私密资料不备份", "watch"], unknown: ["仓库状态未确认", "watch"] }[d.visibility] || ["", "ghost"];
+  $("headmeta").innerHTML = '<span class="chip ' + vis[1] + '">' + esc(vis[0]) + "</span>";
+  const cnt = s => d.nudges.filter(n => n.sev === s).length;
+  const act = d.projects.filter(p => ACTIVE.includes(p.stage));
+  $("strip").innerHTML = '<div class="u"><b>' + cnt("急") + "</b><span>急</span></div>" + '<div class="w"><b>' + cnt("注意") + "</b><span>注意</span></div>" +
+    "<div><b>" + act.length + "</b><span>进行中的项目</span></div>" + "<div><b>" + d.relations.length + "</b><span>在跟的关系</span></div>";
+  if (d.visibility !== "private" && d.blocked_private_files > 0) {
+    $("notice").hidden = false;
+    $("notice").innerHTML = '<div class="notice">有 ' + d.blocked_private_files + " 个私密文件没有备份，因为仓库是公开的。把仓库改成私有后，对 Claude 说「备份」。</div>";
+  }
+  $("n-nudges").textContent = d.nudges.length + " 条";
+  $("nudges").innerHTML = d.nudges.length ? '<ul class="nudges">' + d.nudges.map(n =>
+    '<li><span class="sev s' + HR[n.sev] + '">' + esc(n.sev) + '</span><div><div class="who">' + esc(n.name) + '</div><div class="what">' + esc(n.text) + "</div></div></li>").join("") + "</ul>"
+    : '<div class="empty">今天没有需要你处理的提示。</div>';
+  const types = ["全部", "产品", "系统", "其他"];
+  $("filters").innerHTML = types.map(t => '<button type="button" id="f-' + types.indexOf(t) + '" aria-pressed="' + (t === filter) + '">' + t +
+    (t === "全部" ? "" : " " + d.projects.filter(p => p.type === t).length) + "</button>").join("");
+  types.forEach((t, i) => $("f-" + i).addEventListener("click", () => { filter = t; try { localStorage.setItem("wos-filter", t); } catch (e) {} render(); }));
+  const shown = d.projects.filter(p => filter === "全部" || p.type === filter);
+  $("n-projects").textContent = shown.length + " 个";
+  $("projects").innerHTML = shown.length ? shown.map(projectCard).join("") : '<div class="empty">这个分类下还没有项目。对 Claude 说「碎碎念：……」开始一个。</div>';
+  $("n-relations").textContent = d.relations.length + " 个";
+  $("relations").innerHTML = d.relations.length ? '<div class="rows">' + d.relations.map(r =>
+    '<div class="row"><div><b>' + esc(r.name) + '</b> <span class="chip">' + esc(r.kind) + "</span>" + (r.pipeline ? ' <span class="chip ghost">' + esc(r.pipeline) + "</span>" : "") +
+    '<div class="sub">' + esc([r.org, r.role].filter(Boolean).join(" · ")) + '</div></div><div class="sub">' +
+    (r.reasons.length ? esc(r.reasons.join("；")) : "上次联系 " + esc(r.last_contact || "未记录")) + "</div></div>").join("") + "</div>"
+    : '<div class="empty">还没有关系卡片。说「记一下：今天跟谁聊了什么」，Claude 会建卡并记下往来和双方答应的事。</div>';
+  $("n-history").textContent = d.history.length + " 个";
+  $("history").innerHTML = d.history.length ? "<details><summary>展开 " + d.history.length + ' 个从旧分支导入的项目</summary><div class="rows" style="margin-top:10px">' + d.history.map(p =>
+    '<div class="row"><div><b>' + esc(p.name) + '</b> <span class="chip">' + esc(p.type) + '</span></div><div class="sub mono">' + esc(p.period || "时间待确认") + " · " + esc(p.branch || "") + "</div></div>").join("") +
+    '</div><div class="muted" style="margin-top:8px">说「历史项目过一遍」，Claude 一个个问你：还在做、已结束，还是搁置。</div></details>'
+    : '<div class="empty">没有等确认的历史项目。</div>';
+}
+render();
+</script>

@@ -1,0 +1,28 @@
+{
+  "tz_offset_hours": 8,
+  "dashboard_url": "",
+  "allow_private_in_public_repo": false,
+  "visibility_override": "",
+  "auto_merge_to_main": false,
+  "stale_days": 14,
+  "stale_days_maintenance": 90,
+  "max_hook_nudges": 8,
+  "legacy_branches": [
+    "claude/affin-bank-digital-pitch-jx1pr9",
+    "claude/african-whitening-serum-promo-gb078f",
+    "claude/ai-agent-town-htt0x4",
+    "claude/bank-tech-proposal-demo-0ibmqe",
+    "claude/business-plan-review-km9zfs",
+    "claude/cool-fermat-mq0x0l",
+    "claude/eloquent-cray-3xbkzg",
+    "claude/llm-council",
+    "claude/malaysia-market-expansion-plan-7f3w2b",
+    "claude/malaysia-university-ai-drone-vh2lkt",
+    "claude/padang-besar-logistics-package-meubjx",
+    "claude/premium-website-skills-2ioa30",
+    "claude/prospek-cerah-crm-design-q7wys2",
+    "claude/restaurant-digitalization-pricing-kc7knw",
+    "claude/turkey-noodle-chicken-plan-uqa9mr",
+    "claude/verification-line"
+  ]
+}
