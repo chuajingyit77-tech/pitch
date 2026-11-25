@@ -39,6 +39,8 @@ npm start
 
 没有 key 也想先看看界面：`npm run demo`，会用一个模拟模型走完每个 agent 的流程。
 
+不想装任何东西：`node scripts/build-demo.mjs` 会把界面和一个浏览器内的“替身服务器”打包成单个网页（`demo/dist/index.html`），双击就能打开，也可以放到任何网页托管上。它只有演示数据，不调用模型。
+
 （`--preview` 参数只用于托管的预览窗口：它会对外监听并关闭“仅限本机”的检查，不要在存有真实 key 的电脑上使用。）
 
 ## 定时任务
@@ -87,6 +89,8 @@ src/agents.js        四个 agent 和两种协作模式的角色说明与工具�
 src/llm/             模型适配：Claude、OpenAI 兼容（OpenAI / Grok / Kimi）、测试用替身
 src/tools/           文件、命令行、联网、记忆、pitch、销售（含跟进）
 src/schedules.js     定时任务
+demo/backend.js      静态演示版用的浏览器内替身服务器
+scripts/build-demo.mjs  把界面打包成单个演示网页
 src/deck.js          pitch 渲染与数字核对
 public/              网页界面
 test/                自动测试

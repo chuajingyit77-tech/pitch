@@ -102,7 +102,7 @@ function slideHtml(s, i, total, flagged) {
   }
   const badge = flagged ? `<span class="flag" title="${esc(flagged.join(', '))}">待确认 · 数据未核实</span>` : '';
   const notes = s.notes ? `<aside class="notes">${esc(s.notes)}</aside>` : '';
-  return `<section class="slide ${layout}" data-n="${i + 1}"><div class="wrap">${inner}</div>${badge}${notes}<span class="page">${i + 1} / ${total}</span></section>`;
+  return `<section class="slide slide-${layout}" data-n="${i + 1}"><div class="wrap">${inner}</div>${badge}${notes}<span class="page">${i + 1} / ${total}</span></section>`;
 }
 
 export function renderDeck(deck, facts = []) {
@@ -113,7 +113,7 @@ export function renderDeck(deck, facts = []) {
   const total = slides.length + (sources.length ? 1 : 0);
   let html = slides.map((s, i) => slideHtml(s, i, total, unverified[i])).join('\n');
   if (sources.length) {
-    html += `\n<section class="slide sources" data-n="${total}"><div class="wrap"><p class="kicker">Sources</p><h2>数据来源</h2><ol>${sources
+    html += `\n<section class="slide slide-sources" data-n="${total}"><div class="wrap"><p class="kicker">Sources</p><h2>数据来源</h2><ol>${sources
       .slice(0, 14)
       .map((f) => `<li><span>${esc(f.claim)}</span><a href="${esc(f.source)}" target="_blank" rel="noopener">${esc(f.source)}</a></li>`)
       .join('')}</ol></div><span class="page">${total} / ${total}</span></section>`;
@@ -136,9 +136,9 @@ h1{font-size:clamp(38px,7vw,92px);line-height:1.04;letter-spacing:-.03em;font-we
 h2{font-size:clamp(28px,4.2vw,56px);line-height:1.1;letter-spacing:-.02em;font-weight:750;text-wrap:balance;max-width:20em}
 h2.big{font-size:clamp(34px,5.6vw,76px)}
 .body{font-size:clamp(17px,1.7vw,24px);line-height:1.55;color:var(--muted);max-width:38em;margin-top:clamp(16px,2.2vw,30px);text-wrap:pretty}
-.cover,.closing{background:var(--dark);color:#fff;border-bottom:0}
-.cover .body,.closing .body{color:#b9bfc9}
-.cover::before,.closing::before{content:"";position:absolute;inset:0 auto 0 0;width:clamp(6px,.8vw,12px);background:var(--accent)}
+.slide-cover,.slide-closing{background:var(--dark);color:#fff;border-bottom:0}
+.slide-cover .body,.slide-closing .body{color:#b9bfc9}
+.slide-cover::before,.slide-closing::before{content:"";position:absolute;inset:0 auto 0 0;width:clamp(6px,.8vw,12px);background:var(--accent)}
 .cta{display:inline-block;margin-top:clamp(24px,3vw,44px);padding:.7em 1.3em;border-radius:999px;background:var(--accent);color:#fff;font-weight:700;font-size:clamp(16px,1.5vw,21px)}
 .bullets{list-style:none;padding:0;margin-top:clamp(22px,3vw,44px);display:grid;gap:clamp(12px,1.6vw,22px);max-width:44em}
 .bullets li{position:relative;padding-left:1.6em;font-size:clamp(18px,1.9vw,27px);line-height:1.4}
@@ -163,9 +163,9 @@ blockquote{font-size:clamp(28px,4.4vw,60px);line-height:1.22;letter-spacing:-.02
 .bar{display:block;height:100%;background:var(--accent);border-radius:6px}
 .bar-row:not(:first-child) .bar{opacity:.55}
 .bar-value{font-weight:700;font-variant-numeric:tabular-nums}
-.sources ol{margin-top:clamp(18px,2.4vw,36px);padding-left:1.3em;display:grid;gap:.7em;font-size:clamp(12px,1.05vw,15px);color:var(--muted)}
-.sources li span{display:block;color:var(--ink)}
-.sources a{color:var(--accent);word-break:break-all}
+.slide-sources ol{margin-top:clamp(18px,2.4vw,36px);padding-left:1.3em;display:grid;gap:.7em;font-size:clamp(12px,1.05vw,15px);color:var(--muted)}
+.slide-sources li span{display:block;color:var(--ink)}
+.slide-sources a{color:var(--accent);word-break:break-all}
 .page{position:absolute;right:clamp(18px,3vw,44px);bottom:clamp(14px,2.4vw,32px);font-size:13px;color:#9aa0aa;font-variant-numeric:tabular-nums}
 .flag{position:absolute;left:clamp(18px,3vw,44px);bottom:clamp(14px,2.4vw,32px);font-size:12px;font-weight:700;color:#8a4b00;background:#ffe9c2;border-radius:999px;padding:.35em .9em}
 .notes{display:none;position:absolute;left:0;right:0;bottom:0;background:#fffbe8;color:#3d3a2c;border-top:1px solid #eadf9f;padding:14px clamp(18px,6vw,96px) 40px;font-size:15px;line-height:1.5}

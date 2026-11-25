@@ -16,8 +16,24 @@ const EXAMPLES = {
 };
 const TOOL_LABEL = { web_search: '搜索', web_fetch: '读取网页', read_file: '读文件', write_file: '写文件', edit_file: '改文件', glob: '找文件', grep: '搜索代码', bash: '运行命令', remember: '记住', forget: '忘记', delegate: '委派', save_fact: '记录事实', write_deck: '生成 pitch', run_relay: '接力', run_quartet: '四重奏', save_lead: '保存线索', draft_email: '起草邮件', draft_followup: '起草跟进', list_leads: '查看线索' };
 
+// Browser storage can be unavailable (private windows, embedded pages); the app must work without it.
+const saved = {
+  get(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+  },
+};
+
 let state = null;
-let agent = localStorage.getItem('agent') || 'assistant';
+let agent = saved.get('agent') || 'assistant';
 let sessionId = null;
 let items = [];
 let busy = false;
@@ -108,7 +124,7 @@ function itemHtml(item) {
     case 'error':
       return `<div class="note error">${esc(item.text)}</div>`;
     case 'deck':
-      return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button><a href="${esc(rel(item.url))}" target="_blank" rel="noopener">新窗口</a></div>`;
+      return `<div class="deck-link"><span>📑 ${esc(item.title || 'Pitch')}</span><button class="ghost small" data-deck="${esc(item.url)}" type="button">查看</button>${inlineDeck(item.url) ? '' : `<a href="${esc(rel(item.url))}" target="_blank" rel="noopener">新窗口</a>`}</div>`;
     default:
       return '';
   }
@@ -153,13 +169,20 @@ function renderRail() {
 }
 
 // ---------- side panel ----------
+// A host page can supply a deck's HTML itself (window.__deckHtml[url]) instead of a URL to load; the static demo does.
+const inlineDeck = (url) => (window.__deckHtml || {})[url];
+
 function showDeck(url) {
   deckUrl = url;
   sideMode = 'deck';
   $('side').hidden = false;
   $('side-title').textContent = 'Pitch 预览';
-  $('side-actions').innerHTML = `<a class="small" href="${esc(rel(url))}" target="_blank" rel="noopener">新窗口打开</a>`;
-  $('side-body').innerHTML = `<iframe sandbox="allow-scripts allow-modals allow-popups" src="${esc(rel(url))}?t=${Date.now()}" title="Pitch"></iframe>`;
+  const html = inlineDeck(url);
+  $('side-actions').innerHTML = html ? '' : `<a class="small" href="${esc(rel(url))}" target="_blank" rel="noopener">新窗口打开</a>`;
+  $('side-body').innerHTML = html
+    ? `<iframe id="deck-frame" srcdoc="${esc(html)}" title="Pitch"></iframe>`
+    : `<iframe sandbox="allow-scripts allow-modals allow-popups" src="${esc(rel(url))}?t=${Date.now()}" title="Pitch"></iframe>`;
+  if (html) window.__deckShown?.($('deck-frame'), url);
 }
 
 async function showLeads() {
@@ -206,6 +229,50 @@ ${l.rejectReason ? `<div class="off">拒绝原因：${esc(l.rejectReason)}</div>
           .join('')
       : '<div class="hint">还没有线索。告诉销售 agent 你的理想客户，它找到的公司和起草的邮件会出现在这里，等你批准。<br><br>这里不会自动发送任何邮件：批准后由你自己发出。</div>'
   }${suppressed.length ? `<div class="hint">不再联系名单：${suppressed.map(esc).join('、')}</div>` : ''}</div>`;
+}
+
+// ---------- questions ----------
+/**
+ * Ask the user to confirm something, optionally with a line of text.
+ * Resolves to null when they cancel; otherwise to what they typed ('' when no text was asked for).
+ */
+function ask(text, { input = null, ok = '确定' } = {}) {
+  return new Promise((resolve) => {
+    const dialog = $('ask');
+    const field = $('ask-input');
+    $('ask-text').textContent = text;
+    $('ask-ok').textContent = ok;
+    field.hidden = input === null;
+    field.value = '';
+    field.placeholder = input || '';
+    const done = (value) => {
+      $('ask-ok').onclick = $('ask-cancel').onclick = dialog.oncancel = null;
+      dialog.close();
+      resolve(value);
+    };
+    $('ask-ok').onclick = () => done(field.hidden ? '' : field.value.trim());
+    $('ask-cancel').onclick = () => done(null);
+    dialog.oncancel = (e) => {
+      e.preventDefault();
+      done(null);
+    };
+    dialog.showModal();
+    (field.hidden ? $('ask-ok') : field).focus();
+  });
+}
+
+async function copyFrom(field, button) {
+  const label = button.textContent;
+  try {
+    await navigator.clipboard.writeText(field.value);
+    button.textContent = '已复制';
+  } catch {
+    // Copying can be refused; select the text so the user can copy it themselves.
+    field.focus();
+    field.select();
+    button.textContent = '已选中，请手动复制';
+  }
+  setTimeout(() => (button.textContent = label), 1600);
 }
 
 // ---------- chat ----------
@@ -258,7 +325,7 @@ async function openSession(id) {
   const s = await api(`/api/sessions/${id}`);
   sessionId = s.id;
   agent = s.agent;
-  localStorage.setItem('agent', agent);
+  saved.set('agent', agent);
   items = s.transcript || [];
   deckUrl = s.deckUrl;
   hasLeads = items.some((i) => i.type === 'tool' && ['save_lead', 'draft_email'].includes(i.name));
@@ -271,7 +338,7 @@ async function openSession(id) {
 
 function newChat(nextAgent = agent) {
   agent = nextAgent;
-  localStorage.setItem('agent', agent);
+  saved.set('agent', agent);
   sessionId = null;
   items = [];
   deckUrl = null;
@@ -298,7 +365,7 @@ ${id === 'anthropic' ? '' : `<label class="field">接口地址<input data-k="bas
     )
     .join('');
   const assign = state.agents
-    .map((a) => `<label class="field">${esc(a.name)}<select data-assign="${a.id}">${Object.entries(c.providers).map(([id, p]) => `<option value="${id}"${c.agents[a.id] === id ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select><span class="off">${state.resolved[a.id] && state.resolved[a.id] !== c.agents[a.id] ? `当前用 ${esc(c.providers[state.resolved[a.id]]?.label || '')}` : ''}</span></label>`)
+    .map((a) => `<label class="field">${esc(a.name)}<select data-assign="${a.id}">${Object.entries(c.providers).map(([id, p]) => `<option value="${id}"${c.agents[a.id] === id ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select><span class="off">${state.resolved[a.id] && state.resolved[a.id] !== c.agents[a.id] ? `当前用 ${esc(c.providers[state.resolved[a.id]]?.label || '模拟模型')}` : ''}</span></label>`)
     .join('');
   $('settings-body').innerHTML = `
 <h3>模型厂商</h3><p>填任意一家就能用。key 只保存在这台电脑的 data/config.json 里。</p>${provs}
@@ -396,6 +463,11 @@ $('open-schedules').addEventListener('click', async () => {
   await renderSchedules();
   $('schedules').showModal();
 });
+// A task may have run while the dialog was open; show its result in the history straight away.
+$('schedules').addEventListener('close', async () => {
+  state = await api('/api/state');
+  renderRail();
+});
 $('add-schedule').addEventListener('click', async () => {
   try {
     await api('/api/schedules', { method: 'POST', body: { name: $('sched-name').value, agent: $('sched-agent').value, time: $('sched-time').value, days: $('sched-days').value, prompt: $('sched-prompt').value } });
@@ -439,18 +511,25 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.act) {
     const id = t.closest('[data-approval]').dataset.approval;
     const act = t.dataset.act;
-    return api('/api/approve', { method: 'POST', body: { id, allow: act !== 'deny', always: act === 'always' } }).catch((err) => alert(err.message));
+    return api('/api/approve', { method: 'POST', body: { id, allow: act !== 'deny', always: act === 'always' } }).catch((err) => {
+      applyEvent(items, { type: 'error', text: err.message });
+      renderMessages();
+    });
   }
   if (t.dataset.leadAct) {
     const card = t.closest('[data-lead]');
     const id = card.dataset.lead;
     const act = t.dataset.leadAct;
-    if (act === 'copy') return navigator.clipboard.writeText(card.querySelector('[data-f=body]').value);
-    if (act === 'copy-followup') return navigator.clipboard.writeText(card.querySelector('[data-f=followup]').value);
+    if (act === 'copy') return copyFrom(card.querySelector('[data-f=body]'), t);
+    if (act === 'copy-followup') return copyFrom(card.querySelector('[data-f=followup]'), t);
     const body = { action: act };
     if (act === 'approve') Object.assign(body, { subject: card.querySelector('[data-f=subject]').value, body: card.querySelector('[data-f=body]').value });
-    if (act === 'reject') body.reason = prompt('拒绝原因（会告诉销售 agent，用来改进之后的线索）') || '';
-    if (act === 'suppress' && !confirm('把这家公司加入“不再联系”名单？')) return;
+    if (act === 'reject') {
+      const reason = await ask('为什么拒绝这条线索？原因会告诉销售 agent，用来改进之后找的线索。', { input: '可以留空', ok: '拒绝这条线索' });
+      if (reason === null) return;
+      body.reason = reason;
+    }
+    if (act === 'suppress' && (await ask('把这家公司加入“不再联系”名单？之后不会再为它保存线索或起草邮件。', { ok: '加入名单' })) === null) return;
     await api(`/api/leads/${id}`, { method: 'POST', body });
     state = await api('/api/state');
     renderRail();
@@ -464,7 +543,7 @@ document.addEventListener('click', async (e) => {
   }
   if (t.dataset.schedAct) {
     const id = t.closest('[data-sched]').dataset.sched;
-    if (t.dataset.schedAct === 'delete' && !confirm('删除这个定时任务？')) return;
+    if (t.dataset.schedAct === 'delete' && (await ask('删除这个定时任务？', { ok: '删除' })) === null) return;
     try {
       await api(`/api/schedules/${id}`, { method: 'POST', body: { action: t.dataset.schedAct } });
       $('sched-status').textContent = t.dataset.schedAct === 'run' ? '已开始运行，完成后会出现在左侧历史里' : '';
