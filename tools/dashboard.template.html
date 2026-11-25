@@ -85,6 +85,15 @@ dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
 .row:first-child { border-top: 0; }
 .row .sub { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .empty { border: 1px dashed var(--line); border-radius: 10px; padding: 16px; color: var(--muted); font-size: 14px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.col h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
+.row .when { font-size: 13px; text-align: right; white-space: nowrap; }
+.row .when.late { color: var(--urgent); } .row .when.soon { color: var(--watch); }
+.recent { list-style: none; padding: 0; margin: 6px 0 2px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); }
+.recent li { overflow-wrap: anywhere; }
+.lab2 { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; margin-top: 8px; }
+@media (max-width: 520px) { .row .when { text-align: left; } }
 footer { border-top: 1px solid var(--line); padding-top: 16px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
 footer q { color: var(--fg); quotes: "「" "」"; }
 @media (max-width: 520px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .row { grid-template-columns: minmax(0, 1fr); } }
@@ -104,6 +113,18 @@ footer q { color: var(--fg); quotes: "「" "」"; }
   <section>
     <h2>今天要你处理的 <span class="n" id="n-nudges"></span></h2>
     <div id="nudges"></div>
+  </section>
+  <section>
+    <h2>答应的事 <span class="n" id="n-ledger"></span></h2>
+    <div class="two" id="ledger"></div>
+  </section>
+  <section id="sec-dead" hidden>
+    <h2>不能改的期限 <span class="n" id="n-dead"></span></h2>
+    <div id="deadlines"></div>
+  </section>
+  <section>
+    <h2>派给别的 AI 的事 <span class="n" id="n-assign"></span></h2>
+    <div id="assignments"></div>
   </section>
   <section>
     <h2>项目 <span class="n" id="n-projects"></span></h2>
@@ -151,13 +172,30 @@ function projectCard(p) {
   if (p.for_whom) chips.push('<span class="chip ghost">' + esc(p.for_whom) + "</span>");
   if (p.paypath_missing && p.paypath_missing.length) chips.push('<span class="chip watch">无付款路径</span>');
   const hc = p.health === "急" ? "urgent" : p.health === "注意" ? "watch" : "ok";
+  const recent = (p.recent || []).map(r => '<li><span class="mono muted">' + esc(r.date.slice(5)) + "</span> " +
+    (r.by ? '<span class="chip ghost">' + esc(r.by) + "</span> " : "") + esc(r.text) + "</li>").join("");
+  const docs = [["内部资料", (p.docs || {})["内部"]], ["对外资料", (p.docs || {})["对外"]]].filter(x => x[1] && x[1].length)
+    .map(x => "<dt>" + x[0] + "</dt><dd>" + x[1].map(esc).join("、") + "</dd>").join("");
   return '<article class="card h' + HR[p.health] + '">' +
     '<div class="top"><div class="name">' + esc(p.name) + '</div><span class="chip ' + hc + '">' + esc(p.priority) + " · " + esc(p.health) + "</span></div>" +
     (p.summary ? '<div class="muted" style="font-size:13px">' + esc(p.summary) + "</div>" : "") +
     '<div class="meta">' + chips.join("") + "</div>" +
     '<div class="next"><div class="lab"><span>下一步</span>' + dueLabel(p) + "</div>" + (p.next ? esc(p.next) : '<span class="due soon">还没定下一步</span>') + "</div>" +
     (p.reasons.length ? "<ul>" + p.reasons.map(r => "<li>" + esc(r) + "</li>").join("") + "</ul>" : "") +
-    (rows ? "<details><summary>展开细节</summary><dl>" + rows + "</dl></details>" : "") + "</article>";
+    "<details><summary>展开细节</summary>" + (recent ? '<div class="lab2">最近进展</div><ul class="recent">' + recent + "</ul>" : "") +
+    "<dl>" + rows + docs + "</dl></details></article>";
+}
+
+function whenCell(r) {
+  if (r.days == null) return '<div class="when muted">日期待确认</div>';
+  const cls = r.days < 0 ? "late" : r.days <= 2 ? "soon" : "";
+  const txt = r.days < 0 ? "过期 " + (-r.days) + " 天" : r.days === 0 ? "今天" : "还剩 " + r.days + " 天";
+  return '<div class="when mono ' + cls + '">' + esc(r.date.slice(5)) + " · " + txt + "</div>";
+}
+
+function itemRows(list, lead) {
+  return '<div class="rows">' + list.map(r => '<div class="row"><div>' + (lead ? '<span class="chip">' + esc(r[lead]) + "</span> " : "") +
+    esc(r.text) + '<div class="sub">' + esc(r.card) + "</div></div>" + whenCell(r) + "</div>").join("") + "</div>";
 }
 
 function render() {
@@ -170,6 +208,8 @@ function render() {
   const act = d.projects.filter(p => ACTIVE.includes(p.stage));
   $("strip").innerHTML = '<div class="u"><b>' + cnt("急") + "</b><span>急</span></div>" + '<div class="w"><b>' + cnt("注意") + "</b><span>注意</span></div>" +
     "<div><b>" + act.length + "</b><span>进行中的项目</span></div>" + "<div><b>" + d.relations.length + "</b><span>在跟的关系</span></div>";
+  $("notice").hidden = true;
+  $("notice").innerHTML = "";
   if (d.visibility !== "private" && d.blocked_private_files > 0) {
     $("notice").hidden = false;
     $("notice").innerHTML = '<div class="notice">有 ' + d.blocked_private_files + " 个私密文件没有备份，因为仓库是公开的。把仓库改成私有后，对 Claude 说「备份」。</div>";
@@ -178,6 +218,25 @@ function render() {
   $("nudges").innerHTML = d.nudges.length ? '<ul class="nudges">' + d.nudges.map(n =>
     '<li><span class="sev s' + HR[n.sev] + '">' + esc(n.sev) + '</span><div><div class="who">' + esc(n.name) + '</div><div class="what">' + esc(n.text) + "</div></div></li>").join("") + "</ul>"
     : '<div class="empty">今天没有需要你处理的提示。</div>';
+  if ((d.unseen_branches || []).length) {
+    $("notice").hidden = false;
+    $("notice").innerHTML += '<div class="notice" style="margin-top:8px">GitHub 上有 ' + d.unseen_branches.length + " 个分支还没登记成项目（可能是别的会话或别的 AI 做的）：" +
+      esc(d.unseen_branches.slice(0, 4).join("、")) + "。对 Claude 说「同步」。</div>";
+  }
+  const mine = (d.commitments || []).filter(r => r.mine), theirs = (d.commitments || []).filter(r => !r.mine);
+  $("n-ledger").textContent = "我欠 " + mine.length + " · 欠我 " + theirs.length;
+  $("ledger").innerHTML = (mine.length + theirs.length) ?
+    '<div class="col"><h3>我答应别人的</h3>' + (mine.length ? itemRows(mine) : '<div class="empty">没有</div>') + "</div>" +
+    '<div class="col"><h3>别人答应我的</h3>' + (theirs.length ? itemRows(theirs) : '<div class="empty">没有</div>') + "</div>"
+    : '<div class="empty">还没有记下任何承诺。说「我答应了某某，周五前把报价发过去」，到期会提醒你；别人答应你的也一样记。</div>';
+  const dead = d.deadlines || [];
+  $("sec-dead").hidden = !dead.length;
+  $("n-dead").textContent = dead.length + " 个";
+  $("deadlines").innerHTML = dead.length ? itemRows(dead) : "";
+  const asg = d.assignments || [];
+  $("n-assign").textContent = asg.length + " 件";
+  $("assignments").innerHTML = asg.length ? itemRows(asg, "who")
+    : '<div class="empty">还没有派出去的事。说「把这个交给 Kimi 做」，Claude 会出一份可以整段贴过去的任务书，并在这里跟到它交回来。</div>';
   const types = ["全部", "产品", "系统", "其他"];
   $("filters").innerHTML = types.map(t => '<button type="button" id="f-' + types.indexOf(t) + '" aria-pressed="' + (t === filter) + '">' + t +
     (t === "全部" ? "" : " " + d.projects.filter(p => p.type === t).length) + "</button>").join("");

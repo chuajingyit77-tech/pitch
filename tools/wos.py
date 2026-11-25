@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """wos — the work system's single command-line tool (Python standard library only).
 
-Commands: check | build | nudges | privacy | backup | sync | new | ramble | doctor
+Commands: check | build | nudges | privacy | backup | sync | new | set | log | done | handoff
+          doccheck | ramble | doctor
           hook-start | hook-prompt   (called by .claude/settings.json hooks)
 All text printed for the owner is Simplified Chinese. Keys in cards are ASCII, values Chinese.
 """
@@ -37,6 +38,8 @@ DEFAULT_CONFIG = {
     "stale_days": 14,
     "stale_days_maintenance": 90,
     "max_hook_nudges": 8,
+    "ignored_branches": [],
+    "external_banned_words": [],
 }
 
 ACTIVE = ["摸底", "制作", "推进", "落地"]
@@ -69,6 +72,9 @@ RELATION_KEYS = ["name", "aliases", "kind", "org", "role", "pipeline", "tier", "
 LIST_KEYS = {"aliases", "orgs", "people", "lang", "projects"}
 DATE_KEYS = {"stage_since", "next_due", "gate_date", "kill_date", "revisit", "created", "touched",
              "last_contact", "next_contact"}
+SECTIONS = {"project": ["进展", "承诺", "期限", "决定", "派工", "备注"],
+            "org": ["概况", "往来", "承诺", "期限", "备注"],
+            "person": ["概况", "往来", "承诺", "期限", "备注"]}
 REQUIRED = {"project": ["name", "type", "stage", "sens", "created"],
             "org": ["name", "kind", "sens", "created"],
             "person": ["name", "kind", "sens", "created"]}
@@ -282,13 +288,108 @@ def load_cards():
     return cards
 
 
+# ---------- card editing (used by set / log / done / handoff) ----------
+
+def fmt_value(k, v):
+    v = str(v)
+    if v == "" or k in DATE_KEYS or k in ENUMS or re.fullmatch(r"[A-Za-z0-9_\-]+", v):
+        return v
+    return json.dumps(v, ensure_ascii=False)
+
+
+def find_card(query):
+    """Resolve a card by path, folder or file name, name or alias. Returns (card, error text)."""
+    cards = load_cards()
+    q = query.strip().strip("/")
+    exact = [c for c in cards if q in (c.rel, c.slug, c.name)]
+    if len(exact) == 1:
+        return exact[0], ""
+    hits = [c for c in cards if q and (q in c.name or q in c.slug or
+                                       any(q in str(a) for a in c.fm.get("aliases", [])))]
+    if len(hits) == 1:
+        return hits[0], ""
+    if not hits:
+        return None, "找不到叫「%s」的卡片。" % query
+    return None, "叫「%s」的卡片不止一张：%s。请用更完整的名字或路径。" % (query, "、".join(c.name for c in hits[:8]))
+
+
+def _card_lines(card):
+    lines = card.path.read_text(encoding="utf-8").lstrip("﻿").replace("\r\n", "\n").split("\n")
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    return lines, end
+
+
+def write_card_fm(card, changes):
+    """Change front-matter keys in place; everything else in the file stays byte-for-byte."""
+    lines, end = _card_lines(card)
+    for k, v in changes.items():
+        if k in LIST_KEYS:
+            block = (["%s:" % k] + ["  - %s" % json.dumps(str(x), ensure_ascii=False) for x in v]) if v else ["%s: []" % k]
+        else:
+            block = ["%s: %s" % (k, fmt_value(k, v))] if str(v) != "" else ["%s:" % k]
+        at = next((i for i in range(1, end) if (KEY_RE.match(lines[i]) or [None, None])[1] == k), None)
+        if at is None:
+            lines[end:end] = block
+            end += len(block)
+        else:
+            j = at + 1
+            while j < end and not KEY_RE.match(lines[j]) and ITEM_RE.match(lines[j]):
+                j += 1
+            lines[at:j] = block
+            end += len(block) - (j - at)
+    card.path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def append_entry(card, section, line):
+    lines, end = _card_lines(card)
+    head = "## " + section
+    idx = next((i for i in range(end + 1, len(lines)) if lines[i].strip() == head), None)
+    if idx is None:
+        while lines and lines[-1].strip() == "":
+            lines.pop()
+        lines += ["", head, line, ""]
+    else:
+        j = idx + 1
+        while j < len(lines) and not lines[j].startswith("## "):
+            j += 1
+        k = j
+        while k > idx + 1 and lines[k - 1].strip() == "":
+            k -= 1
+        lines.insert(k, line)
+        if k + 1 < len(lines) and lines[k + 1].startswith("## "):
+            lines.insert(k + 1, "")
+    card.path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def section_lines(body, section):
+    out, inside = [], False
+    for line in body.split("\n"):
+        if line.startswith("## "):
+            inside = line[3:].strip() == section
+        elif inside and line.strip():
+            out.append(line.strip())
+    return out
+
+
+PROGRESS_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2})\s+(?:〔([^〕]+)〕\s*)?(.*)$")
+
+
+def recent_progress(body, n=3):
+    rows = []
+    for line in section_lines(body, "进展") + section_lines(body, "往来"):
+        m = PROGRESS_RE.match(line)
+        if m:
+            rows.append({"date": m.group(1), "by": m.group(2) or "", "text": m.group(3)})
+    return sorted(rows, key=lambda r: r["date"], reverse=True)[:n]
+
+
 # ---------- rules: nudges and health ----------
 
 def _days(d, t):
     return (d - t).days
 
 
-def compute_nudges(cards, t, cfg, vis=None, blocked=0):
+def compute_nudges(cards, t, cfg, vis=None, blocked=0, unseen=0):
     """Deterministic. Returns list of dicts sorted by severity then date."""
     out = []
 
@@ -334,6 +435,14 @@ def compute_nudges(cards, t, cfg, vis=None, blocked=0):
                 add("急", c, "期限还剩 %d 天：%s" % (n, text), d)
             elif n <= 14:
                 add("注意", c, "期限还剩 %d 天：%s" % (n, text), d)
+        for done, d, text in parse_entries(c.body, "派工"):
+            if done or d is None:
+                continue
+            n, who = _days(d, t), text.split("｜")[0].strip()
+            if n < 0:
+                add("注意", c, "派给 %s 的事过期 %d 天：%s" % (who, -n, text.split("｜", 1)[-1]), d)
+            elif n <= 1:
+                add("提醒", c, "派给 %s 的事%s到期：%s" % (who, "今天" if n == 0 else "明天", text.split("｜", 1)[-1]), d)
         if c.kind != "project":
             nc, lc = c.date("next_contact"), c.date("last_contact")
             cad = c.fm.get("cadence_days", "")
@@ -384,6 +493,8 @@ def compute_nudges(cards, t, cfg, vis=None, blocked=0):
         add("提醒", None, "有 %d 个进行中的项目都标了 P1。超过 3 个就等于没有优先级" % p1)
     if pending_history:
         add("提醒", None, "有 %d 个历史项目等你确认状态。说「历史项目过一遍」，我一个个问你" % pending_history)
+    if unseen:
+        add("提醒", None, "有 %d 个分支还没登记成项目，可能是别的会话或别的 AI 做的。说「同步」，我去看一遍" % unseen)
     if vis and vis != "private" and blocked:
         add("注意", None, "仓库是公开的，有 %d 个私密文件没有备份。把仓库改成私有后说「备份」即可" % blocked)
     out.sort(key=lambda n: (SEV_RANK[n["sev"]], n["date"] or "9999", n["name"]))
@@ -523,16 +634,52 @@ def project_row(c, nudges, t):
         "sens": c.get("sens"), "touched": c.get("touched") or c.get("created"),
         "reasons": [n["text"] for n in nudges if n["card"] == c.rel][:3],
         "open_commitments": sum(1 for d, _, _ in parse_entries(c.body, "承诺") if not d),
+        "recent": recent_progress(c.body),
+        "docs": {sub: sorted(f.name for f in (c.path.parent / sub).glob("*") if f.is_file() and f.name != ".gitkeep")
+                 for sub in ("内部", "对外")},
+        "has_brief": (c.path.parent / "底稿.md").exists(),
     }
+
+
+def open_items(cards, t):
+    """Open commitments, deadlines and assignments across all live cards."""
+    com, dead, assign = [], [], []
+    for c in cards:
+        if c.errors or (c.kind == "project" and c.fm.get("stage") in ("待确认", "完成", "终止")):
+            continue
+        for sec, bucket in (("承诺", com), ("期限", dead), ("派工", assign)):
+            for done, d, text in parse_entries(c.body, sec):
+                if done:
+                    continue
+                row = {"card": c.name, "date": d.isoformat() if d else "", "days": _days(d, t) if d else None, "text": text}
+                if sec == "承诺":
+                    row["mine"] = text.startswith("我答应")
+                    row["text"] = re.sub(r"^(我答应|对方答应)\s*", "", text)
+                if sec == "派工":
+                    parts = [x.strip() for x in text.split("｜")]
+                    row["who"], row["text"] = parts[0], "｜".join(parts[1:])
+                bucket.append(row)
+    key = lambda r: (r["date"] or "9999", r["card"])
+    return sorted(com, key=key), sorted(dead, key=key), sorted(assign, key=key)
 
 
 def sort_key(r):
     return ({"急": 0, "注意": 1, "正常": 2}[r["health"]], r["priority"], r["next_due"] or "9999", r["name"])
 
 
+def unseen_branches_cached():
+    try:
+        c = json.loads((STATE / "sync.json").read_text(encoding="utf-8"))
+        return list(c.get("unregistered", [])) if time.time() - c.get("ts", 0) < 86400 else []
+    except (OSError, ValueError):
+        return []
+
+
 def build_data(cards, cfg, vis, blocked):
     t = today(cfg)
-    nudges = compute_nudges(cards, t, cfg, vis, blocked)
+    unseen = unseen_branches_cached()
+    nudges = compute_nudges(cards, t, cfg, vis, blocked, len(unseen))
+    com, dead, assign = open_items(cards, t)
     good = [c for c in cards if not c.errors]
     projs = [project_row(c, nudges, t) for c in good if c.kind == "project"]
     rels = []
@@ -543,7 +690,7 @@ def build_data(cards, cfg, vis, blocked):
                      "kind": c.get("kind"), "org": c.get("org"), "role": c.get("role"),
                      "pipeline": c.get("pipeline"), "tier": c.get("tier"),
                      "last_contact": c.get("last_contact"), "next_contact": c.get("next_contact"),
-                     "health": health_of(c, nudges),
+                     "health": health_of(c, nudges), "recent": recent_progress(c.body, 2),
                      "reasons": [n["text"] for n in nudges if n["card"] == c.rel][:2]})
     return {
         "generated_at": now_local(cfg).strftime("%Y-%m-%d %H:%M"), "today": t.isoformat(),
@@ -553,6 +700,7 @@ def build_data(cards, cfg, vis, blocked):
         "history": sorted([p for p in projs if p["stage"] == "待确认"], key=lambda r: r["period"], reverse=True),
         "relations": sorted(rels, key=lambda r: ({"急": 0, "注意": 1, "正常": 2}[r["health"]], r["name"])),
         "broken_cards": [{"path": c.rel, "error": c.errors[0]} for c in cards if c.errors],
+        "commitments": com, "deadlines": dead, "assignments": assign, "unseen_branches": unseen,
     }
 
 
@@ -574,6 +722,20 @@ def render_tracker(d):
             L.append("| %s | %s | %s | %s | %s | %s | %s |" % (
                 p["name"], cat, p["stage_label"], p["priority"], p["health"],
                 (p["next"] or "—").replace("|", "／"), p["next_due"] or "—"))
+    def when(r):
+        if r["days"] is None:
+            return "日期待确认"
+        return "%s（%s）" % (r["date"], "过期 %d 天" % -r["days"] if r["days"] < 0 else "今天" if r["days"] == 0 else "还剩 %d 天" % r["days"])
+    mine = [r for r in d["commitments"] if r["mine"]]
+    theirs = [r for r in d["commitments"] if not r["mine"]]
+    L += ["", "## 答应的事", "", "**我答应别人的（%d）**" % len(mine), ""]
+    L += ["- %s — %s｜%s" % (r["card"], r["text"], when(r)) for r in mine] or ["- 没有"]
+    L += ["", "**别人答应我的（%d）**" % len(theirs), ""]
+    L += ["- %s — %s｜%s" % (r["card"], r["text"], when(r)) for r in theirs] or ["- 没有"]
+    L += ["", "## 不能改的期限（%d）" % len(d["deadlines"]), ""]
+    L += ["- %s — %s｜%s" % (r["card"], r["text"], when(r)) for r in d["deadlines"]] or ["- 没有"]
+    L += ["", "## 派给别的 AI 的事（%d）" % len(d["assignments"]), ""]
+    L += ["- %s｜%s — %s｜%s" % (r["who"], r["card"], r["text"], when(r)) for r in d["assignments"]] or ["- 没有"]
     L += ["", "## 关系跟进（%d）" % len(d["relations"]), ""]
     if d["relations"]:
         L += ["| 名称 | 类别 | 进展 | 上次联系 | 下次联系 | 提示 |", "|---|---|---|---|---|---|"]
@@ -642,7 +804,7 @@ def cmd_nudges(args):
     cards = load_cards()
     vis = visibility(cfg)
     blocked = 0 if (vis == "private" or cfg["allow_private_in_public_repo"]) else len(private_pending())
-    ns = compute_nudges(cards, today(cfg), cfg, vis, blocked)
+    ns = compute_nudges(cards, today(cfg), cfg, vis, blocked, len(unseen_branches_cached()))
     if args.json:
         print(json.dumps(ns, ensure_ascii=False, indent=1))
     else:
@@ -738,6 +900,12 @@ def cmd_backup(args):
         print("- 没有备份的私密文件 %d 个（仓库公开时不提交）：%s%s" % (
             len(blocked), "、".join(blocked[:5]), " 等" if len(blocked) > 5 else ""))
         print("  这些文件只存在于当前会话，会话结束就会消失。把仓库改成私有后再说「备份」。")
+    doc_errs = []
+    for c in load_cards():
+        if c.kind == "project" and not c.errors and c.fm.get("stage") != "待确认":
+            doc_errs += check_project_docs(c, cfg)[0]
+    if doc_errs:
+        print("- 资料检查有 %d 处不过关（已照样备份）：%s%s" % (len(doc_errs), doc_errs[0], " 等，运行 doccheck 看全部" if len(doc_errs) > 1 else ""))
     if bad:
         print("- 有 %d 张卡片格式有问题（已照样备份，但不参与跟进）：%s" % (len(bad), "、".join(c.rel for c in bad[:5])))
     rc, _, _ = git("merge-base", "--is-ancestor", "HEAD", "origin/main")
@@ -746,39 +914,73 @@ def cmd_backup(args):
     return 0
 
 
-def cmd_sync(args):
-    cfg = load_config()
-    rc, out, err = git("ls-remote", "--heads", "origin", "refs/heads/claude/*", timeout=40)
+def known_branches(cfg, cards):
+    known = set(cfg.get("legacy_branches", [])) | set(cfg.get("ignored_branches", [])) | {"main"}
+    for c in cards:
+        if c.fm.get("branch"):
+            known.add(str(c.fm["branch"]))
+    return known
+
+
+def remote_heads(timeout=40):
+    rc, out, err = git("ls-remote", "--heads", "origin", timeout=timeout)
     if rc != 0:
-        print("没能连上 GitHub，暂时查不了其他会话分支。%s" % err.strip())
+        return None, err.strip()
+    heads = []
+    for line in out.strip().split("\n"):
+        if "\t" in line:
+            sha, ref = line.split("\t")
+            heads.append((ref.replace("refs/heads/", ""), sha))
+    return heads, ""
+
+
+def cmd_sync(args):
+    """Look at every branch on GitHub, whoever pushed it. Two findings:
+    stranded  = has this system and holds work not merged here  -> merge it
+    unseen    = has no card pointing at it                      -> register it as a project"""
+    cfg = load_config()
+    heads, err = remote_heads()
+    if heads is None:
+        print("没能连上 GitHub，暂时查不了其他分支。%s" % err)
         return 1
     _, cur, _ = git("rev-parse", "--abbrev-ref", "HEAD")
-    cur, legacy, stranded = cur.strip(), set(cfg.get("legacy_branches", [])), []
-    for line in out.strip().split("\n"):
-        if "\t" not in line:
-            continue
-        sha, ref = line.split("\t")
-        name = ref.replace("refs/heads/", "")
-        if name == cur or name in legacy:
+    cur, known = cur.strip(), known_branches(cfg, load_cards())
+    stranded, unseen = [], []
+    for name, sha in heads:
+        if name == cur or name in known:
             continue
         if git("cat-file", "-e", sha + "^{commit}")[0] != 0:
-            if git("fetch", "--quiet", "origin", name, timeout=120)[0] != 0:
+            if git("fetch", "--quiet", "origin", name, timeout=180)[0] != 0:
                 continue
-        if git("cat-file", "-e", sha + ":tools/wos.py")[0] != 0:
-            continue  # a branch without the system: not ours to merge
-        if git("merge-base", "--is-ancestor", sha, "HEAD")[0] == 0:
-            continue
-        _, cnt, _ = git("rev-list", "--count", "HEAD.." + sha)
-        _, names, _ = git("diff", "--name-only", "HEAD..." + sha)
-        files = [f for f in names.split("\n") if f.strip()]
-        stranded.append((name, sha, cnt.strip(), files))
-    if not stranded:
-        print("没有发现滞留在其他会话分支上的资料。")
+        if git("cat-file", "-e", sha + ":tools/wos.py")[0] == 0:
+            if git("merge-base", "--is-ancestor", sha, "HEAD")[0] == 0:
+                continue
+            _, cnt, _ = git("rev-list", "--count", "HEAD.." + sha)
+            _, names, _ = git("diff", "--name-only", "HEAD..." + sha)
+            stranded.append((name, sha, cnt.strip(), [f for f in names.split("\n") if f.strip()]))
+        else:
+            _, meta, _ = git("log", "-1", "--format=%an｜%cs｜%s", sha)
+            unseen.append((name, meta.strip()))
+    try:
+        STATE.mkdir(exist_ok=True)
+        (STATE / "sync.json").write_text(json.dumps({"ts": time.time(), "unregistered": [n for n, _ in unseen]},
+                                                    ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    if not stranded and not unseen:
+        print("都看过了：没有滞留的资料，也没有没登记的分支。")
         return 0
-    print("发现 %d 个会话分支上有还没并进来的资料：" % len(stranded))
-    for name, sha, cnt, files in stranded:
-        print("- %s（%s 个提交，%d 个文件）：%s%s" % (name, cnt, len(files), "、".join(files[:6]), " 等" if len(files) > 6 else ""))
-        print("  合并命令：git merge --no-edit %s" % sha)
+    if stranded:
+        print("有 %d 个分支上有还没并进来的资料：" % len(stranded))
+        for name, sha, cnt, files in stranded:
+            print("- %s（%s 个提交，%d 个文件）：%s%s" % (name, cnt, len(files), "、".join(files[:6]), " 等" if len(files) > 6 else ""))
+            print("  合并命令：git merge --no-edit %s" % sha)
+    if unseen:
+        print("有 %d 个分支还没登记成项目（可能是别的会话或别的 AI 做的）：" % len(unseen))
+        for name, meta in unseen:
+            print("- %s｜%s" % (name, meta))
+        print("  登记：python3 tools/wos.py new project --name \"…\" --stage 待确认 --origin 历史导入 --branch <分支名> --summary \"…\"")
+        print("  不用管的分支：把名字加进 config/wos.json 的 ignored_branches")
     return 2
 
 
@@ -801,7 +1003,8 @@ def cmd_new(args):
         fm = {"name": args.name, "type": args.type or "待确认", "subtype": args.subtype or "",
               "for_whom": args.for_whom or "待确认", "stage": args.stage or "摸底", "stage_since": t,
               "priority": "P2", "next_owner": "我", "evidence": "M", "sens": args.sens or "内部",
-              "origin": "碎碎念", "created": t, "touched": t}
+              "origin": args.origin or "碎碎念", "branch": args.branch or "", "period": args.period or "",
+              "summary": args.summary or "", "created": t, "touched": t}
     else:
         sub = "机构" if args.what == "org" else "人"
         path = ROOT / "关系" / sub / ("%s-%s.md" % (prefix, slugify(args.name)))
@@ -819,6 +1022,325 @@ def cmd_new(args):
             (path.parent / sub / ".gitkeep").write_text("", encoding="utf-8")
     print(path.relative_to(ROOT).as_posix())
     return 0
+
+
+def _resolve(args):
+    card, err = find_card(args.card)
+    if not card:
+        print(err)
+        return None
+    if card.errors:
+        print("「%s」这张卡片格式有问题，先修好：%s" % (card.name, card.errors[0]))
+        return None
+    return card
+
+
+def cmd_set(args):
+    """set <card> key=value [key+=item] ...  — validated edits, with the stage rules enforced."""
+    cfg = load_config()
+    card = _resolve(args)
+    if not card:
+        return 1
+    keys = PROJECT_KEYS if card.kind == "project" else RELATION_KEYS
+    t, changes = today(cfg).isoformat(), {}
+    for pair in args.pairs:
+        m = re.match(r"^([a-z_]+)(\+?=)(.*)$", pair, re.S)
+        if not m:
+            print("写法是 键=值，例如 stage=推进；列表加一项用 键+=值。看不懂：%s" % pair)
+            return 1
+        k, op, v = m.group(1), m.group(2), m.group(3).strip()
+        if k not in keys:
+            print("没有「%s」这个字段。可以用的：%s" % (k, " ".join(keys)))
+            return 1
+        if k in LIST_KEYS:
+            cur = list(changes.get(k, card.fm.get(k, []))) if op == "+=" else []
+            for x in ([v] if op == "+=" else re.split(r"[,，、]", v)):
+                if x.strip() and x.strip() not in cur:
+                    cur.append(x.strip())
+            changes[k] = cur
+            continue
+        if k in ENUMS and v not in UNSET and v not in ENUMS[k]:
+            print("「%s」只能是：%s" % (k, " / ".join(ENUMS[k])))
+            return 1
+        if k in DATE_KEYS and v not in UNSET and parse_date(v) is None:
+            print("「%s」要写成 2026-12-02 这样的日期，或写 待确认。" % k)
+            return 1
+        if k == "cadence_days" and v not in UNSET and not v.isdigit():
+            print("「cadence_days」要写成天数，例如 14。")
+            return 1
+        changes[k] = v
+    merged = dict(card.fm)
+    merged.update(changes)
+    notes, old, new = [], card.fm.get("stage", ""), changes.get("stage", card.fm.get("stage", ""))
+    moved = card.kind == "project" and new != old
+    if moved:
+        if new == "搁置" and parse_date(merged.get("revisit", "")) is None:
+            print("搁置要给一个回看日，例如：stage=搁置 revisit=2027-01-15")
+            return 4
+        if new == "终止" and not args.why:
+            print("终止要写一句理由：加上 --why \"……\"")
+            return 4
+        if new == "落地" and merged.get("for_whom") in ("具体客户", "市场") and merged.get("evidence") != "V":
+            notes.append("留意：给客户或市场做的项目进「落地」要有 V 级证据（合同、付款或批准），现在是 %s。" % (merged.get("evidence") or "M"))
+        if new == "完成":
+            still = [x for sec in ("承诺", "期限", "派工") for done, _, x in parse_entries(card.body, sec) if not done]
+            if still:
+                notes.append("留意：还有 %d 件开着的事：%s" % (len(still), "；".join(still[:4])))
+        changes["stage_since"] = t
+        if old == "搁置" and "revisit" not in changes:
+            changes["revisit"] = ""
+    if card.kind == "project" and new in ACTIVE:
+        if "next" in changes and changes["next"] not in UNSET and not merged.get("next_due"):
+            notes.append("留意：下一步还没有日期（next_due）。")
+    changes["touched"] = t
+    write_card_fm(card, changes)
+    by = "〔%s〕 " % (args.by or os.environ.get("WOS_AI", "")) if (args.by or os.environ.get("WOS_AI")) else ""
+    if moved:
+        append_entry(card, "进展", "- %s %s阶段 %s→%s" % (t, by, old or "（空）", new))
+        if new == "终止":
+            append_entry(card, "决定", "- %s 决定 终止：%s" % (t, args.why))
+    after = Card(card.kind, card.path)
+    if after.errors:
+        print("改完之后卡片有问题：%s" % "；".join(after.errors))
+        return 1
+    shown = ["%s=%s" % (k, "、".join(v) if isinstance(v, list) else v) for k, v in changes.items() if k not in ("touched", "stage_since")]
+    print("已更新「%s」：%s" % (card.name, "，".join(shown)))
+    for n in notes:
+        print(n)
+    return 0
+
+
+def cmd_log(args):
+    """log <card> <section> "text" [--date D] [--by AI]  — append one dated line, in the right format."""
+    cfg = load_config()
+    card = _resolve(args)
+    if not card:
+        return 1
+    sec, text, t = args.section, " ".join(args.text.split()), today(cfg).isoformat()
+    if sec not in SECTIONS[card.kind]:
+        print("这类卡片没有「%s」这一节。可以用的：%s" % (sec, " ".join(SECTIONS[card.kind])))
+        return 1
+    date, by = args.date or "", args.by or os.environ.get("WOS_AI", "")
+    if date and date != "待确认" and parse_date(date) is None:
+        print("日期要写成 2026-12-02 这样，或写 待确认。")
+        return 1
+    if sec == "承诺" and not text.startswith(("我答应", "对方答应")):
+        print("承诺要以「我答应」或「对方答应」开头，这样到期才知道该催谁。")
+        return 1
+    if sec == "期限" and parse_date(date) is None:
+        print("期限必须带日期：--date 2026-12-10")
+        return 1
+    if sec == "派工" and text.count("｜") < 1:
+        print("派工写成「AI 名｜任务｜验收：……」。")
+        return 1
+    if sec in ("承诺", "期限", "派工"):
+        line = "- [ ] %s %s" % (date or "待确认", text)
+    elif sec == "决定":
+        line = "- %s 决定 %s" % (date or t, re.sub(r"^决定\s*", "", text))
+    else:
+        line = "- %s %s%s" % (date or t, "〔%s〕 " % by if by else "", text)
+    append_entry(card, sec, line)
+    changes = {"touched": t}
+    if card.kind != "project" and sec == "往来":
+        changes["last_contact"] = date or t
+    write_card_fm(card, changes)
+    print("已记到「%s」的「%s」：%s" % (card.name, sec, line))
+    return 0
+
+
+def cmd_done(args):
+    """done <card> "piece of the line"  — tick one open commitment, deadline or assignment."""
+    cfg = load_config()
+    card = _resolve(args)
+    if not card:
+        return 1
+    lines, end = _card_lines(card)
+    hits = [i for i in range(end + 1, len(lines)) if lines[i].lstrip().startswith("- [ ]") and args.text in lines[i]]
+    if len(hits) != 1:
+        opened = [lines[i].strip() for i in range(end + 1, len(lines)) if lines[i].lstrip().startswith("- [ ]")]
+        print(("没有找到含「%s」的未完成事项。" if not hits else "含「%s」的未完成事项不止一条。") % args.text)
+        for o in opened[:12]:
+            print("  " + o)
+        return 1
+    i, t = hits[0], today(cfg).isoformat()
+    lines[i] = lines[i].replace("- [ ]", "- [x]", 1).rstrip() + "（%s 完成%s）" % (t, "，" + args.note if args.note else "")
+    card.path.write_text("\n".join(lines), encoding="utf-8")
+    write_card_fm(card, {"touched": t})
+    print("已勾掉：%s" % lines[i].strip())
+    return 0
+
+
+HANDOFF = """# 任务书：{task}（给 {ai}）
+
+> 内部用，不外发
+> 这份任务书可以整段贴给 {ai}。它不认识这个项目，下面写的就是它知道的全部。贴出去之前，删掉不该给外部看的内容。
+
+## 目标
+{task}
+
+## 背景
+- 项目：{name}{summary}
+- 项目目标：{goal}
+- 这件事做完的样子：{done_def}
+{specs}
+
+## 输入
+（待补：要一起贴给它的来料。只给完成这件事需要的部分。）
+
+## 输出
+（待补：要它交回什么、什么格式、什么语言。）
+
+## 硬性规则
+1. 回复用简体中文，结论先说；对外成品用读者的语言。
+2. 不编造数字、日期、人名、金额。没有来源的一律写「待确认」。
+3. 推断要标明是推断，不写成事实。
+4. 不替我对外发送或发布任何东西。
+5. 给人看的成品：不要模板感，不用 emoji 当图标，手机宽度要能看。
+6. 做不到或没把握的直接说，不写「应该可以」。
+
+## 验收标准
+{accept}
+
+## 截止
+{due}
+
+## 交付时请说明（回执，照下面的格式原样填写）
+【回执】
+- 做了什么：
+- 怎么验证的：
+- 没做的、没把握的：
+- 用到的数字和各自的来源：
+- 文件或链接：
+"""
+
+
+def cmd_handoff(args):
+    """handoff <card> --to AI --task "..."  — paste-ready brief for another AI + an assignment line."""
+    cfg = load_config()
+    card = _resolve(args)
+    if not card:
+        return 1
+    if card.kind != "project":
+        print("任务书只能从项目卡片出。")
+        return 1
+    if card.get("sens") == "机密" and not args.force:
+        print("这个项目是机密级。交给别的 AI，等于把内容发给另一家公司。要老板明确同意后，加上 --force 再出。")
+        return 4
+    t = today(cfg)
+    specs = ""
+    brief = card.path.parent / "底稿.md"
+    if brief.exists():
+        rows = [x for x in section_lines(brief.read_text(encoding="utf-8"), "规格") if x.startswith("- ")]
+        specs = "\n".join(rows)
+    folder = card.path.parent / "内部"
+    folder.mkdir(exist_ok=True)
+    path, n = folder / ("交接_%s_%s.md" % (slugify(args.to), t.strftime("%y%m%d"))), 2
+    while path.exists():
+        path = folder / ("交接_%s_%s-%d.md" % (slugify(args.to), t.strftime("%y%m%d"), n))
+        n += 1
+    path.write_text(HANDOFF.format(task=args.task, ai=args.to, name=card.name,
+                                   summary=" — " + card.get("summary") if card.get("summary") else "",
+                                   goal=card.get("goal") or "待补", done_def=card.get("done_def") or "待补",
+                                   specs=specs, accept=args.accept or "（待补：陌生人也能判断交了还是没交）",
+                                   due=args.due or "待确认"), encoding="utf-8")
+    append_entry(card, "派工", "- [ ] %s %s｜%s｜验收：%s" % (args.due or "待确认", args.to, args.task, args.accept or "待补"))
+    write_card_fm(card, {"touched": t.isoformat()})
+    print(path.relative_to(ROOT).as_posix())
+    return 0
+
+
+# ---------- document checks ----------
+
+DATE_NOISE = re.compile(r"\d{4}\s*[-/年.]\s*\d{1,2}(?:\s*[-/月.]\s*\d{1,2}\s*日?)?|\d{1,2}\s*月\s*\d{1,2}\s*日|\d{1,2}:\d{2}|\d{4}\s*年")
+NUM = re.compile(r"(RM|USD|RMB|\$|¥|￥)?\s*(\d[\d,]*(?:\.\d+)?)\s*(%|％|万|亿|千万|百万|k\b|K\b|M\b|倍)?")
+SOFT = ("示意", "待确认", "假设", "例如", "比如", "【待填")
+
+
+def _visible_text(path):
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if path.suffix.lower() in (".html", ".htm"):
+        text = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", text)
+        text = re.sub(r"(?s)<[^>]+>", " ", text)
+    return text
+
+
+def _claims(line):
+    """Numbers that look like claims: have a unit or currency, or are 10 or more. Dates and list numbers are not claims."""
+    line = DATE_NOISE.sub(" ", re.sub(r"^\s*(?:[-*#>|]+\s*)*\d+[.、)）]\s*", "", line))
+    out = []
+    for cur, num, unit in NUM.findall(line):
+        val = num.replace(",", "")
+        try:
+            big = float(val) >= 10
+        except ValueError:
+            continue
+        if cur or unit or big:
+            out.append(val)
+    return out
+
+
+def check_project_docs(card, cfg):
+    """Mechanical checks on one project's documents. Returns (errors, warnings) as Chinese strings."""
+    errs, warns, base = [], [], card.path.parent
+    ledger = ""
+    for f in ("事实表.md", "底稿.md"):
+        if (base / f).exists():
+            ledger += (base / f).read_text(encoding="utf-8", errors="replace")
+    ledger = ledger.replace(",", "")
+    banned = list(cfg.get("external_banned_words", []))
+    if (base / "底稿.md").exists():
+        banned += [x.lstrip("- ").strip() for x in section_lines(
+            (base / "底稿.md").read_text(encoding="utf-8").replace("### 不外露词", "## 不外露词"), "不外露词")]
+    banned = [w for w in banned if w and not w.startswith("（")]
+    docs = [(sub, f) for sub in ("内部", "对外") if (base / sub).is_dir()
+            for f in sorted((base / sub).rglob("*")) if f.is_file() and f.suffix.lower() in (".md", ".html", ".htm", ".txt")]
+    if docs and not (base / "底稿.md").exists():
+        warns.append("%s：有资料但没有底稿。底稿是这个项目唯一的故事来源。" % card.name)
+    for sub, f in docs:
+        rel, text = f.relative_to(ROOT).as_posix(), _visible_text(f)
+        if sub == "内部":
+            head = [x for x in text.split("\n") if x.strip()][:6]
+            if f.suffix == ".md" and not any("内部用，不外发" in x for x in head):
+                errs.append("%s：内部资料开头要有「> 内部用，不外发」。" % rel)
+        else:
+            for word in ("待确认", "【待填", "内部用", "TODO", "lorem ipsum", "Lorem ipsum"):
+                if word in text:
+                    errs.append("%s：对外资料里出现了「%s」。" % (rel, word))
+            for word in banned:
+                if word in text:
+                    errs.append("%s：对外资料里出现了不外露词「%s」。" % (rel, word))
+        missing = []
+        for line in text.split("\n"):
+            if sub == "内部" and any(w in line for w in SOFT):
+                continue
+            for val in _claims(line):
+                if val not in ledger and val not in missing:
+                    missing.append(val)
+        if missing:
+            msg = "%s：这些数字不在事实表和底稿里：%s%s" % (rel, "、".join(missing[:8]), " 等" if len(missing) > 8 else "")
+            (errs if sub == "对外" else warns).append(msg + ("（对外资料里的数字必须有出处）" if sub == "对外" else "（补进事实表，或标成待确认）"))
+    return errs, warns
+
+
+def cmd_doccheck(args):
+    cfg = load_config()
+    if args.card:
+        card = _resolve(args)
+        if not card:
+            return 1
+        targets = [card]
+    else:
+        targets = [c for c in load_cards() if c.kind == "project" and not c.errors and c.fm.get("stage") != "待确认"]
+    n_err = 0
+    for c in targets:
+        errs, warns = check_project_docs(c, cfg)
+        for e in errs:
+            print("不过关  " + e)
+        for w in warns:
+            print("留意    " + w)
+        n_err += len(errs)
+    print("查了 %d 个项目的资料：%d 处不过关。" % (len(targets), n_err))
+    return 1 if n_err else 0
 
 
 def inbox_items():
@@ -845,7 +1367,7 @@ def cmd_ramble(args):
         chosen.append(items[i - 1].read_text(encoding="utf-8"))
     body = "\n\n".join(chosen)
     now = now_local(cfg)
-    d = ROOT / "碎碎念" / now.strftime("%Y-%m")
+    d = (ROOT / args.dest) if args.dest else ROOT / "碎碎念" / now.strftime("%Y-%m")
     path = d / ("%s-%s.md" % (now.strftime("%y%m%d-%H%M"), slugify(args.title or "碎碎念")))
     if path.exists():
         print("同名文件已经存在：%s" % path.relative_to(ROOT).as_posix())
@@ -890,6 +1412,14 @@ def cmd_hook_start(args):
             L.append("仓库：%s。隐私闸门关闭：标为「内部」「机密」的资料不能备份到这里。动笔记录客户或关系资料之前，先用一句话提醒老板。" % vis_text(vis))
         if git("merge-base", "--is-ancestor", "HEAD", "origin/main")[0] != 0:
             L.append("当前分支有还没进 main 的改动。")
+        heads, _ = remote_heads(timeout=8)
+        if heads:
+            _, cur, _ = git("rev-parse", "--abbrev-ref", "HEAD")
+            known = known_branches(cfg, cards) | {cur.strip()}
+            fresh = [n for n, sha in heads if n not in known and git("merge-base", "--is-ancestor", sha, "HEAD")[0] != 0]
+            if fresh:
+                L.append("GitHub 上有 %d 个分支还没看过（可能是别的会话或别的 AI 的成果）：%s。先运行 python3 tools/wos.py sync。" % (
+                    len(fresh), "、".join(fresh[:4])))
         n_proj = sum(1 for c in cards if c.kind == "project")
         L.append("卡片：项目 %d，关系 %d。提示 %d 条%s：" % (
             n_proj, len(cards) - n_proj, len(ns), "，先看前 %d 条" % cfg["max_hook_nudges"] if len(ns) > cfg["max_hook_nudges"] else ""))
@@ -929,7 +1459,7 @@ def cmd_doctor(args):
         chk("开工提示和原话保存已接好", False, str(e))
     for f in ("CLAUDE.md", "水准/我的水准.md", "水准/资料骨架.md"):
         chk("有 %s" % f, (ROOT / f).exists())
-    for sk in ("ramble", "make-docs", "backup", "track", "people"):
+    for sk in ("ramble", "make-docs", "backup", "track", "people", "handoff"):
         chk("技能 %s 在" % sk, (ROOT / ".claude" / "skills" / sk / "SKILL.md").exists())
     cards = load_cards()
     bad = [c for c in cards if c.errors]
@@ -959,11 +1489,21 @@ def main(argv=None):
     sub.add_parser("sync")
     nw = sub.add_parser("new")
     nw.add_argument("what", choices=["project", "org", "person"]); nw.add_argument("--name", required=True)
-    for a in ("--type", "--subtype", "--for-whom", "--stage", "--sens", "--kind", "--org"):
+    for a in ("--type", "--subtype", "--for-whom", "--stage", "--sens", "--kind", "--org",
+              "--origin", "--branch", "--period", "--summary"):
         nw.add_argument(a, default="")
     r = sub.add_parser("ramble")
     r.add_argument("action", choices=["list", "save"]); r.add_argument("--pick", default="")
-    r.add_argument("--title", default=""); r.add_argument("--sens", default="")
+    r.add_argument("--title", default=""); r.add_argument("--sens", default=""); r.add_argument("--dest", default="")
+    st = sub.add_parser("set"); st.add_argument("card"); st.add_argument("pairs", nargs="+")
+    st.add_argument("--why", default=""); st.add_argument("--by", default="")
+    lg = sub.add_parser("log"); lg.add_argument("card"); lg.add_argument("section"); lg.add_argument("text")
+    lg.add_argument("--date", default=""); lg.add_argument("--by", default="")
+    dn = sub.add_parser("done"); dn.add_argument("card"); dn.add_argument("text"); dn.add_argument("--note", default="")
+    ho = sub.add_parser("handoff"); ho.add_argument("card"); ho.add_argument("--to", required=True)
+    ho.add_argument("--task", required=True); ho.add_argument("--accept", default=""); ho.add_argument("--due", default="")
+    ho.add_argument("--force", action="store_true")
+    dc = sub.add_parser("doccheck"); dc.add_argument("card", nargs="?", default="")
     sub.add_parser("doctor"); sub.add_parser("hook-start"); sub.add_parser("hook-prompt")
     args = ap.parse_args(argv)
     fn = globals()["cmd_" + args.cmd.replace("-", "_")]

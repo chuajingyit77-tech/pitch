@@ -25,11 +25,12 @@ python3 tools/wos.py ramble save --pick 1 --title "短标题" --sens 内部
 | 他讲的是 | 去哪里 |
 |---|---|
 | 一个新项目 | `python3 tools/wos.py new project --name "…" --type … --subtype … --for-whom …`，再写底稿（`make-docs`） |
-| 已有项目的进展 | 那张卡片：`## 进展` 加一行；更新 `next`、`next_due`、`next_test`、`stage`、`touched` |
+| 已有项目的进展 | `python3 tools/wos.py log "项目名" 进展 "……" --by Claude`，再用 `set` 更新 `next`、`next_due`、`next_test`、`stage` |
 | 见了谁、谁说了什么 | 关系卡片 `## 往来`（`people` 技能） |
-| 谁答应了什么 | 项目或关系卡片的 `## 承诺`：`我答应` ／ `对方答应`，带日期 |
-| 一个不能动的日期 | `## 期限` |
-| 他拍板的一件事 | `## 决定` |
+| 谁答应了什么 | `python3 tools/wos.py log "项目名或人名" 承诺 "我答应 发报价单" --date 2026-12-02`（对方的写「对方答应 …」） |
+| 一个不能动的日期 | `python3 tools/wos.py log "项目名" 期限 "投标截止" --date 2026-12-10` |
+| 他拍板的一件事 | `python3 tools/wos.py log "项目名" 决定 "先做试点，不谈三年总包"` |
+| 要交给别的 AI 的事、别的 AI 交回来的东西 | `handoff` 技能 |
 | 还不算项目的想法 | `想法停车场.md` 加一行（日期＋一句话） |
 | 对成品的不满、「我说过…」 | `水准/反馈记录.md` 记一条；写进这个项目底稿的「长期要求」，立刻生效 |
 | 一句指令（备份、跟进表…） | 对应的技能 |
@@ -64,7 +65,7 @@ python3 tools/wos.py ramble save --pick 1 --title "短标题" --sens 内部
 
 ## 5. 落卡
 
-按 CLAUDE.md 第五节的写法改卡片，然后：
+用 `set`、`log`、`done` 三个命令改卡片（写法见 CLAUDE.md 第五节），然后：
 
 ```
 python3 tools/wos.py check
