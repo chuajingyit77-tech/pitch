@@ -690,7 +690,8 @@ function deltaFrom(kind,payload){
 async function httpError(res){
   let body='';try{body=await res.text()}catch{}
   let msg=body.slice(0,300);try{const j=JSON.parse(body);msg=j.error?.message||j.message||j.error||msg;if(typeof msg!=='string')msg=JSON.stringify(msg).slice(0,300)}catch{}
-  const code=(res.status===401||res.status===403)?'bad_key':res.status===429?'rate_limited':res.status===402?'no_credit':res.status===404?'not_found':res.status>=500?'upstream':'bad_request';
+  const keyish=/api[ _-]?key|API_KEY_INVALID|invalid.{0,20}(key|token)|unauthori[sz]ed|authentication/i.test(msg); // Gemini reports a bad key as HTTP 400
+  const code=(res.status===401||res.status===403||(res.status===400&&keyish))?'bad_key':res.status===429?'rate_limited':res.status===402?'no_credit':res.status===404?'not_found':res.status>=500?'upstream':'bad_request';
   return mkErr(code,msg||('HTTP '+res.status),{status:res.status});
 }
 function buildRequest(seat,system,msgs,effort){
@@ -720,7 +721,8 @@ async function callLLM(seat,system,msgs,{signal,onText,effort='medium'}={}){
   catch(e){if(e.name==='AbortError')throw mkErr('cancelled','cancelled');throw mkErr('network',e.message)}
   if(!res.ok)throw await httpError(res);
   let text='';
-  await readSSE(res,p=>{const d=deltaFrom(kind,p);if(d){text+=d;onText&&onText(text,d)}});
+  try{await readSSE(res,p=>{const d=deltaFrom(kind,p);if(d){text+=d;onText&&onText(text,d)}})}
+  catch(e){if(e?.name==='AbortError'||signal?.aborted)throw mkErr('cancelled','cancelled',{text});if(e?.code)throw Object.assign(e,{text:e.text||text});throw mkErr('network',e?.message||'stream error',{text})}
   if(!text.trim())throw mkErr('empty','empty');
   return text;
 }
@@ -734,7 +736,7 @@ async function fetchModels(provider,key,base){
   const P=PROVIDERS[provider];if(!key)return [];
   if(P.kind==='anthropic'){const r=await fetch('https://api.anthropic.com/v1/models?limit=100',{headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}});if(!r.ok)throw await httpError(r);return (await r.json()).data.map(m=>m.id)}
   if(P.kind==='gemini'){const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':key}});if(!r.ok)throw await httpError(r);return ((await r.json()).models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.replace(/^models\//,''))}
-  const u=(base||P.base).replace(/\/chat\/completions.*$/,'/models');const h={'Authorization':'Bearer '+key};if(P.extra)Object.assign(h,P.extra());
+  const u=(base||P.base).replace(/\/chat\/completions.*$/,'/models');if(!/^https?:\/\//.test(u))throw mkErr('bad_request','缺少接口地址');const h={'Authorization':'Bearer '+key};if(P.extra)Object.assign(h,P.extra());
   const r=await fetch(u,{headers:h});if(!r.ok)throw await httpError(r);const j=await r.json();return (j.data||j.models||[]).map(m=>m.id||m.name).filter(Boolean);
 }
 function errCopy(e){
@@ -757,9 +759,12 @@ function errCopy(e){
 
 // ===================== protocol parsers =====================
 const VC={'做':'yes','改了再做':'fix','不做':'no'};
-function stripTags(t){return t.replace(/<<(VOTE|SCORES)\|[^\n]*?(>>|$)/g,'').replace(/<<[^\n]*$/,'').trimEnd()}
-function parseVote(t){const m=t.match(/<<VOTE\|([^|]+)\|(\d+)\|([^>]*)>>/);if(!m)return null;const v=m[1].trim();return {v:VC[v]?v:'改了再做',conf:Math.max(0,Math.min(100,+m[2]||50)),why:m[3].trim()}}
-function parseScores(t){const m=t.match(/<<SCORES\|([^|]+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)>>/);if(!m)return null;const v=m[1].trim();return {v:VC[v]?v:'改了再做',risk:+m[2],up:+m[3],clear:+m[4],feas:+m[5]}}
+// models drift from the exact tag format: full-width bars, 《》 brackets, spaces, ** or code fences around the line, variant vote words
+function normTags(t){return t.replace(/[｜丨]/g,'|').replace(/《/g,'<<').replace(/》/g,'>>').replace(/<<\s+/g,'<<').replace(/\s+>>/g,'>>')}
+function normVote(v){v=(v||'').replace(/[\s*`_"'“”。！!．.，,]/g,'');if(/不做|不要做|别做|否决|否/.test(v))return '不做';if(/改|调整|修改/.test(v))return '改了再做';if(/做|通过|同意|赞成|可行/.test(v))return '做';return '改了再做'}
+function stripTags(t){return normTags(t).replace(/<<(VOTE|SCORES)\|[^\n]*?(>>|$)/g,'').replace(/<<[^\n]*$/,'').split('\n').map(l=>/^[\s*`_~]*$/.test(l)?'':l).join('\n').replace(/\n{3,}/g,'\n\n').trimEnd()}
+function parseVote(t){const m=normTags(t).match(/<<VOTE\s*\|\s*([^|\n]+?)\s*\|\s*(\d+)\s*\|\s*([^\n]*?)\s*>>/);if(!m)return null;return {v:normVote(m[1]),conf:Math.max(0,Math.min(100,+m[2]||50)),why:m[3].trim()}}
+function parseScores(t){const m=normTags(t).match(/<<SCORES\s*\|\s*([^|\n]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*>>/);if(!m)return null;return {v:normVote(m[1]),risk:+m[2],up:+m[3],clear:+m[4],feas:+m[5]}}
 function pullCue(t){const m=t.match(/\*\*([^*]{6,80})\*\*\s*$/);return m?m[1]:''}
 function parseJSONLoose(t){try{return JSON.parse(t)}catch{}const m=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(m){try{return JSON.parse(m[1])}catch{}}const a=t.indexOf('['),b=t.lastIndexOf(']');if(a>=0&&b>a){try{return JSON.parse(t.slice(a,b+1))}catch{}}return null}
 
@@ -777,11 +782,12 @@ function md(src,m){
   const fl=()=>{if(list){out+='</'+list+'>';list=null}};
   for(const raw of lines){const l=raw.trimEnd();let x;
     if(!l.trim()){fp();fl();continue}
-    if(x=l.match(/^(#{1,6})\s+(.*)$/)){fp();fl();out+=`<h3>${inline(x[2].replace(/[:：]\s*$/,''),m)}</h3>`;continue}
+    if(x=l.match(/^(#{1,6})\s+(.*)$/)){fp();fl();out+=`<h3><span>${inline(x[2].replace(/[:：]\s*$/,''),m)}</span></h3>`;continue}
+    if(x=l.match(/^\*\*([^*]{2,40})\*\*[:：]?$/)){fp();fl();out+=`<h3><span>${inline(x[1],m)}</span></h3>`;continue}
     if(/^(-{3,}|\*{3,})$/.test(l.trim())){fp();fl();out+='<hr>';continue}
     if(x=l.match(/^\s*>\s?(.*)$/)){fp();fl();out+='<blockquote>'+inline(x[1],m)+'</blockquote>';continue}
     if(x=l.match(/^\s*([-*•])\s+(.*)$/)){fp();if(list!=='ul'){fl();list='ul';out+='<ul>'}out+='<li>'+inline(x[2],m)+'</li>';continue}
-    if(x=l.match(/^\s*(\d+)[.、)]\s+(.*)$/)){fp();if(list!=='ol'){fl();list='ol';out+='<ol>'}out+='<li>'+inline(x[2],m)+'</li>';continue}
+    if(x=l.match(/^\s*(\d+)(?:[.)]\s+|、\s*)(.*)$/)){fp();if(list!=='ol'){fl();list='ol';out+='<ol'+(+x[1]>1?' start="'+(+x[1])+'"':'')+'>'}out+='<li>'+inline(x[2],m)+'</li>';continue}
     fl();para.push(l.trim())}
   fp();fl();return out;
 }
@@ -910,14 +916,16 @@ function saveCfg(){try{localStorage.setItem(CFG_KEY,JSON.stringify(CFG))}catch{}
 let sampleFn=null; // claude.ai artifact runtime, if present
 function providersReady(){const r=PROV_ORDER.filter(p=>CFG.keys[p]?.key&&(p!=='custom'||CFG.keys[p]?.base));if(sampleFn)r.unshift('claudeai');return r}
 function provName(p){return p==='claudeai'?'Claude · 本页所在的 claude.ai 账号':p==='demo'?'演示 · 预录文本':(PROVIDERS[p]?.name||p)}
+// a provider's default model: the first of our suggestions that its key can actually see; the raw /models list is only for the picker
+function defaultModel(p){const sug=PROVIDERS[p]?.models||[];const got=CFG.models[p]||[];return sug.find(m=>got.includes(m))||sug[0]||got[0]||''}
 function seatConfig(id){
   const s=CFG.seats[id];const ready=providersReady();
   if(s&&s.provider==='demo')return {provider:'demo'};
-  if(s&&s.provider&&(s.provider==='claudeai'?!!sampleFn:ready.includes(s.provider))&&(s.provider==='claudeai'||s.model)){
-    const k=CFG.keys[s.provider]||{};return {provider:s.provider,model:s.model,key:k.key,base:k.base}}
+  if(s&&s.provider==='claudeai'&&sampleFn)return {provider:'claudeai'};
+  if(s&&s.provider&&ready.includes(s.provider)){const k=CFG.keys[s.provider]||{};return {provider:s.provider,model:s.model||defaultModel(s.provider),key:k.key,base:k.base}}
   if(!ready.length)return {provider:'demo'};
   const p=ready[0];if(p==='claudeai')return {provider:'claudeai'};
-  const k=CFG.keys[p];return {provider:p,model:(CFG.models[p]||PROVIDERS[p].models)[0]||'',key:k.key,base:k.base};
+  const k=CFG.keys[p];return {provider:p,model:defaultModel(p),key:k.key,base:k.base};
 }
 function isDemo(){return SEAT_IDS.every(id=>seatConfig(id).provider==='demo')}
 function makeCall(){
@@ -950,32 +958,34 @@ function renderDrawer(){
   renderSeats();
   $('#swSound').setAttribute('aria-checked',String(!!CFG.sound));
 }
-function renderKeyline(p){
+function renderKeyline(p,edit){
   const k=CFG.keys[p]||{};const kl=$('#kl-'+p);kl.innerHTML='';
-  if(k.key){
+  if(k.key&&!edit){
     kl.innerHTML=`<div class="sealed" title="点击重新填写"><span class="seal still ${k.ok===false?'cracked':''}" style="--rot:-4deg">封</span><span>${maskKey(k.key)}</span></div><button class="tlink test">试印</button><button class="tlink rm">撕掉</button>`;
-    kl.querySelector('.sealed').onclick=()=>{CFG.keys[p]={...k,key:''};renderKeyline(p);kl.querySelector('input')?.focus()};
+    kl.querySelector('.sealed').onclick=()=>{renderKeyline(p,true);kl.querySelector('input')?.focus()};
     kl.querySelector('.rm').onclick=()=>{delete CFG.keys[p];delete CFG.models[p];saveCfg();renderKeyline(p);renderSeats();setSt(p,'未备钥匙','')};
     kl.querySelector('.test').onclick=()=>testProvider(p);
   }else{
     kl.innerHTML=`<input type="password" autocomplete="off" spellcheck="false" placeholder="贴上钥匙 ${PROVIDERS[p].hint}" aria-label="${PROVIDERS[p].name} 钥匙">`;
-    const inp=kl.querySelector('input');
-    const commit=()=>{const v=inp.value.trim();if(!v)return;CFG.keys[p]={...(CFG.keys[p]||{}),key:v,ok:undefined};saveCfg();renderKeyline(p);renderSeats();setSt(p,'已封印','');toast('封印已存');testProvider(p,true)};
-    inp.onblur=commit;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit()}};
+    const inp=kl.querySelector('input');if(edit)inp.value=k.key||'';
+    // an empty blur keeps the old key; the stored key is only replaced by a non-empty value
+    const commit=()=>{const v=inp.value.trim();if(!v){if(k.key)renderKeyline(p);return}if(v===k.key){renderKeyline(p);return}CFG.keys[p]={...(CFG.keys[p]||{}),key:v,ok:undefined};delete CFG.models[p];saveCfg();renderKeyline(p);renderSeats();setSt(p,'已封印','');toast('封印已存');testProvider(p,true)};
+    inp.onblur=commit;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit()}if(e.key==='Escape'&&k.key)renderKeyline(p)};
   }
 }
 function setSt(p,txt,cls){const el=$('#st-'+p);if(el){el.textContent=txt;el.className='st '+(cls||'')}}
 async function testProvider(p,quiet){
-  const k=CFG.keys[p];if(!k?.key)return;setSt(p,'试印中…','');
+  const k=CFG.keys[p];if(!k?.key)return;if(PROVIDERS[p].custom&&!/^https?:\/\//.test(k.base||'')){setSt(p,'先填接口地址','bad');return}setSt(p,'试印中…','');
   try{const list=await fetchModels(p,k.key,k.base);if(list.length){CFG.models[p]=list.slice(0,200);k.ok=true;saveCfg();setSt(p,`通 · ${list.length} 个模型`,'ok');renderSeats();renderKeyline(p);return}}
   catch(e){if(e.code==='bad_key'){k.ok=false;saveCfg();setSt(p,'钥匙被拒','bad');renderKeyline(p);return}
     if(e.code==='network'&&!quiet){setSt(p,'浏览器被拒(CORS)','bad');return}}
   // models endpoint missing or blocked: try one tiny completion
-  try{const s={provider:p,model:(CFG.models[p]||PROVIDERS[p].models)[0],key:k.key,base:k.base};await callLLM(s,'只回复一个字：通',[{role:'user',content:'通'}],{effort:'low'});k.ok=true;saveCfg();setSt(p,'通','ok');renderKeyline(p)}
+  try{const s={provider:p,model:defaultModel(p),key:k.key,base:k.base};await callLLM(s,'只回复一个字：通',[{role:'user',content:'通'}],{effort:'low'});k.ok=true;saveCfg();setSt(p,'通','ok');renderKeyline(p)}
   catch(e){k.ok=e.code==='bad_key'?false:k.ok;saveCfg();setSt(p,e.code==='network'?'浏览器被拒(CORS)':e.code==='bad_key'?'钥匙被拒':e.code==='not_found'?'通 · 换个模型名':'通？'+(e.status||''),e.code==='bad_key'||e.code==='network'?'bad':'');renderKeyline(p)}
 }
 function renderSeats(){
   const S=$('#seatList');S.innerHTML='';const ready=providersReady();
+  if(FORCE_DEMO){const n=document.createElement('p');n.className='stance';n.textContent='当前网址带 #demo：无论下面怎么任命，所有席位都用演示文本。去掉网址里的 #demo 即可接通真实模型。';S.appendChild(n)}
   for(const id of SEAT_IDS){
     const m=id==='chair'?CHAIR:BY_ID[id];const cur=CFG.seats[id]||{};
     const el=document.createElement('div');el.className='seatcfg'+(id==='chair'?' chair':'');el.style.setProperty('--sc',m.color);
@@ -984,22 +994,21 @@ function renderSeats(){
       ...PROV_ORDER.map(p=>`<option value="${p}" ${cur.provider===p?'selected':''} ${ready.includes(p)?'':'disabled'}>${PROVIDERS[p].name}${ready.includes(p)?'':' · 未备钥匙'}</option>`),
       `<option value="demo" ${cur.provider==='demo'?'selected':''}>演示 · 预录文本</option>`].join('');
     const eff=seatConfig(id);
-    el.innerHTML=`<div class="glyph">${m.ch}</div><div class="who">${m.name}<small>${eff.provider==='demo'?'演示模式':eff.provider==='claudeai'?provName('claudeai'):`${provName(eff.provider)} · ${eff.model||'—'}`}</small></div>
+    el.innerHTML=`<div class="glyph">${m.ch}</div><div class="who">${m.name}<small>${eff.provider==='demo'?'演示模式':eff.provider==='claudeai'?provName('claudeai'):`${provName(eff.provider)} · ${esc(eff.model||'—')}`}</small></div>
       <div class="pick"><select class="prov-sel" aria-label="${m.name} 的服务商">${opts}</select><input class="model-in" list="dl-${id}" placeholder="模型 id" value="${esc(cur.model||'')}" ${!cur.provider||cur.provider==='demo'||cur.provider==='claudeai'?'hidden':''} aria-label="${m.name} 的模型"><datalist id="dl-${id}"></datalist></div>`;
     S.appendChild(el);
     const sel=el.querySelector('.prov-sel'),inp=el.querySelector('.model-in'),dl=el.querySelector('datalist');
     const fill=p=>{dl.innerHTML=(CFG.models[p]||PROVIDERS[p]?.models||[]).map(x=>`<option value="${esc(x)}">`).join('')};
     if(cur.provider&&PROVIDERS[cur.provider])fill(cur.provider);
-    sel.onchange=()=>{const p=sel.value;if(p==='auto'){delete CFG.seats[id]}else{CFG.seats[id]={provider:p,model:p==='demo'||p==='claudeai'?'':((CFG.models[p]||PROVIDERS[p].models)[0]||'')}}
+    sel.onchange=()=>{const p=sel.value;if(p==='auto'){delete CFG.seats[id]}else{CFG.seats[id]={provider:p,model:p==='demo'||p==='claudeai'?'':defaultModel(p)}}
       saveCfg();inp.hidden=!(p!=='auto'&&p!=='demo'&&p!=='claudeai');if(PROVIDERS[p])fill(p);inp.value=CFG.seats[id]?.model||'';renderSeats()};
     inp.onchange=()=>{if(CFG.seats[id]){CFG.seats[id].model=inp.value.trim();saveCfg();renderSeats()}};
   }
-  $('#settingsBtn').classList.toggle('armed',providersReady().length>0);
-  $('#demoBanner').hidden=!isDemo();
+  refreshSeatAvailability();
 }
-function refreshSeatAvailability(){$('#settingsBtn').classList.toggle('armed',providersReady().length>0);$('#demoBanner').hidden=!isDemo()}
-$('#presetSame').onclick=()=>{const r=providersReady();if(!r.length){toast('先贴一把钥匙');return}const p=r[0];const model=p==='claudeai'?'':((CFG.models[p]||PROVIDERS[p].models)[0]||'');for(const id of SEAT_IDS)CFG.seats[id]={provider:p,model};saveCfg();renderSeats();toast('五席同一模型')};
-$('#presetMix').onclick=()=>{const r=providersReady();if(r.length<2){toast('至少需要两家钥匙才能混战');return}SEAT_IDS.forEach((id,i)=>{const p=r[i%r.length];CFG.seats[id]={provider:p,model:p==='claudeai'?'':((CFG.models[p]||PROVIDERS[p].models)[0]||'')}});saveCfg();renderSeats();toast('多家混战，各执一席')};
+function refreshSeatAvailability(){$('#settingsBtn').classList.toggle('armed',providersReady().length>0);$('#demoBanner').hidden=!isDemo()||$('#lectern').hidden}
+$('#presetSame').onclick=()=>{const r=providersReady();if(!r.length){toast('先贴一把钥匙');return}const p=r[0];const model=p==='claudeai'?'':defaultModel(p);for(const id of SEAT_IDS)CFG.seats[id]={provider:p,model};saveCfg();renderSeats();toast('五席同一模型')};
+$('#presetMix').onclick=()=>{const r=providersReady();if(r.length<2){toast('至少需要两家钥匙才能混战');return}SEAT_IDS.forEach((id,i)=>{const p=r[i%r.length];CFG.seats[id]={provider:p,model:p==='claudeai'?'':defaultModel(p)}});saveCfg();renderSeats();toast('多家混战，各执一席')};
 $('#presetDemo').onclick=()=>{for(const id of SEAT_IDS)CFG.seats[id]={provider:'demo'};saveCfg();renderSeats();toast('已切换为演示模式')};
 $('#swSound').onclick=()=>{CFG.sound=!CFG.sound;saveCfg();$('#swSound').setAttribute('aria-checked',String(CFG.sound));if(CFG.sound){ensureAudio();knock(1)}};
 $('#wipeAll').onclick=function(){if(this.dataset.arm){localStorage.removeItem(CFG_KEY);localStorage.removeItem(HIST_KEY);CFG=loadCfg();renderDrawer();renderHistory();toast('已清空');this.textContent='清空此设备上的所有钥匙与卷宗';delete this.dataset.arm}else{this.dataset.arm='1';this.textContent='确定清空？再点一次';setTimeout(()=>{delete this.dataset.arm;this.textContent='清空此设备上的所有钥匙与卷宗'},3000)}};
@@ -1041,7 +1050,7 @@ function resetRegister(){for(const m of MEMBERS){const r=rows[m.id];r.className=
 function onSeatText(id,text){
   buf[id]=buf[id]||{};buf[id].text=text;const plain=stripTags(text);buf[id].chars=plain.replace(/\s/g,'').length;
   seatProgress(id,buf[id].chars);tickGlyph(id);
-  if(focus===id&&!stacked){if(!buf[id].raf)buf[id].raf=requestAnimationFrame(()=>{buf[id].raf=0;renderFolio(id,true)})}
+  if(focus===id&&!stacked){if(!buf[id].raf)buf[id].raf=requestAnimationFrame(()=>{buf[id].raf=0;if(focus===id&&!stacked&&rows[id].classList.contains('speaking'))renderFolio(id,true)})}
   else seatSubtitle(id,plain);
 }
 function renderFolio(id,live){
@@ -1126,19 +1135,21 @@ function onChairText(text){const out=$('#eOut');const before=out.childElementCou
   if(out.childElementCount>before&&!reduced)out.lastElementChild.classList.add('wash');setZhupi(text)}
 function setZhupi(text){const m=text.match(/###\s*一句话裁决\s*\n+([\s\S]*?)(?=\n###|$)/);if(!m)return;let s=m[1].replace(/\*\*/g,'').replace(/^[\s\-•]+/,'').trim();const end=s.search(/[。！？!?]/);if(end>0)s=s.slice(0,end+1);$('#zhupi').textContent=s.slice(0,48)}
 function finishChair(text,animate){const out=$('#eOut');out.className='out md';S.verdict=stripTags(text);out.innerHTML=md(S.verdict,'chair');setZhupi(S.verdict);S.scores=parseScores(text);
+  if(!S.scores){const head=(S.verdict.match(/一句话裁决[\s\S]{0,80}/)||[S.verdict.slice(0,80)])[0];const w=head.match(/不做|改了再做|做/);if(w)S.scores={v:normVote(w[0]),risk:null,up:null,clear:null,feas:null}} // no SCORES line: still seal the verdict
   // 行动令 → three slips
   const h=[...out.querySelectorAll('h3')].find(x=>/行动令/.test(x.textContent));
   if(h){const items=[];let n=h.nextElementSibling;const rm=[h];while(n&&!/^H\d$/.test(n.tagName)&&n.tagName!=='HR'){rm.push(n);n.querySelectorAll?.('li').forEach(li=>items.push(li.innerHTML));if(n.tagName==='P')items.push(n.innerHTML);n=n.nextElementSibling}
     const O=$('#orders');O.innerHTML='';const labs=[['今天就做',/今天/],['本周',/本周|这周|一周/],['验证标准',/验证|判定|标准/]];
     for(const [lab,re] of labs){const it=items.find(x=>re.test(x.replace(/<[^>]+>/g,'').slice(0,12)))||'';if(!it)continue;const d=document.createElement('div');d.className='order';d.innerHTML=`<b>${lab}</b>${it.replace(/^[^：:]*[：:]\s*/,'')}`;O.appendChild(d)}
-    if(O.children.length){rm.forEach(x=>x.remove());O.hidden=false}}
+    if(O.children.length>=2){rm.forEach(x=>x.remove());O.hidden=false}else O.innerHTML=''} // keep the prose unless the three slips really cover it
   if(S.scores){showScores(S.scores,animate);greatSeal(S.scores.v,animate)}
   $('#eState').textContent='';
 }
-function showScores(sc,animate){for(const k of ['risk','up','clear','feas']){const el=$(`#scores .score[data-k="${k}"]`);const v=Math.max(0,Math.min(100,sc[k]||0));const bar=el.querySelector('.m i'),n=el.querySelector('.n');
+function showScores(sc,animate){for(const k of ['risk','up','clear','feas']){const el=$(`#scores .score[data-k="${k}"]`);const bar=el.querySelector('.m i'),n=el.querySelector('.n');
+  if(sc[k]==null||isNaN(sc[k])){bar.style.height='0';n.textContent='—';continue}const v=Math.max(0,Math.min(100,+sc[k]));
   if(animate&&!reduced){setTimeout(()=>{bar.style.height=v+'%';tween(n,0,v,700)},{risk:0,up:180,clear:360,feas:540}[k])}else{bar.style.transition='none';bar.style.height=v+'%';n.textContent=v}}}
 function greatSeal(v,animate){const G=$('#great');G.innerHTML='';const s=document.createElement('div');s.className='seal great '+VC[v];if(!animate||reduced)s.classList.add('still');s.innerHTML=v==='改了再做'?'改了<br>再做':v;G.appendChild(s);
-  const d=new Date(S.at);$('#biankuan').textContent=`LLM议会 · 第${histCount()+(S.saved?0:1)}次会议 · ${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`;
+  const d=new Date(S.at);$('#biankuan').textContent=`LLM议会 · 第${meetingNo()}次会议 · ${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`;
   if(animate&&!reduced){setTimeout(()=>{const E=$('#edict');E.classList.add('flashing');document.body.classList.add('shake');thud(.6,true);setTimeout(()=>{E.classList.remove('flashing');document.body.classList.remove('shake')},400)},310)}}
 function resetEdict(){const E=$('#edict');E.hidden=true;E.classList.remove('open','knock','flashing');$('#eOut').innerHTML='';$('#eOut').className='out md';$('#zhupi').textContent='';$('#eState').textContent='';$('#great').innerHTML='';$('#biankuan').textContent='';$('#orders').hidden=true;$('#orders').innerHTML='';
   document.querySelectorAll('#scores .m i').forEach(i=>{i.style.transition='';i.style.height='0'});document.querySelectorAll('#scores .n').forEach(n=>n.textContent='—')}
@@ -1157,7 +1168,7 @@ function foldLectern(q){$('#lectern').hidden=true;$('#demoBanner').hidden=true;c
 function unfoldLectern(){$('#plaque').hidden=true;$('#lectern').hidden=false;$('#demoBanner').hidden=!isDemo()}
 $('#plaque').onclick=()=>$('#plaque').classList.toggle('open');
 $('#plaque').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#plaque').classList.toggle('open')}};
-function resetUI(){resetRegister();resetEdict();$('#tally').hidden=true;$('#gallery').hidden=true;$('#thread').innerHTML='';$('#notes')?.remove();const det=$('#mBody details');if(det){$('#mBody').appendChild($('#log'));det.remove()}$('#log').innerHTML='';$('#mTitle').textContent='议事日志';$('#mStance').hidden=true;$('#fOut').innerHTML='';$('#fCue').textContent='';$('#fFoot').innerHTML='';stacked=false}
+function resetUI(){resetRegister();resetEdict();for(const k in buf)delete buf[k];for(const k in threads)delete threads[k];$('#tally').hidden=true;$('#gallery').hidden=true;$('#thread').innerHTML='';$('#eOut').classList.remove('live');$('#notes')?.remove();const det=$('#mBody details');if(det){$('#mBody').appendChild($('#log'));det.remove()}$('#log').innerHTML='';$('#mTitle').textContent='议事日志';$('#mStance').hidden=true;$('#fOut').innerHTML='';$('#fCue').textContent='';$('#fFoot').innerHTML='';stacked=false}
 
 async function convene(){
   const q=$('#q').value.trim();if(!q){status('先把议题写下来。');$('#q').focus();return}
@@ -1179,7 +1190,7 @@ async function convene(){
   // 第二幕 · 交锋
   setPhase(2,'crossfire');status('交锋 · 议员们在互相驳斥…');addLog('进入交锋');
   try{const raw=await call('chair','crossfire',CROSSFIRE_PROMPT,[{role:'user',content:`【议题】\n${q}\n\n【陈词】\n${transcript}`}],{signal,effort:'low'});
-    const arr=parseJSONLoose(raw);if(Array.isArray(arr))for(const r of arr){if(r&&S.texts[r.from]&&BY_ID[r.to]&&r.to!==r.from&&r.text)S.rebuts[r.from]=r}}
+    let arr=parseJSONLoose(raw);if(arr&&!Array.isArray(arr))arr=Object.values(arr).find(Array.isArray)||null;if(Array.isArray(arr))for(const r of arr){if(r&&S.texts[r.from]&&BY_ID[r.to]&&r.to!==r.from&&r.text)S.rebuts[r.from]=r}}
   catch(e){if(e.code==='cancelled'){adjourn('已休庭。');return}addLog('交锋记录缺失 · '+(e.code||''))}
   const reb=Object.values(S.rebuts);
   if(reb.length){renderNotes();drawThreads(true);reb.forEach((r,i)=>setTimeout(()=>addLog(`${BY_ID[r.from].num} 驳 ${BY_ID[r.to].num}`),180*i));
@@ -1196,12 +1207,17 @@ async function convene(){
   const cross=reb.map(r=>`${BY_ID[r.from].name} → ${BY_ID[r.to].name}：${r.text}`).join('\n')||'（无）';
   try{const text=await call('chair','verdict',CHAIR_PROMPT,[{role:'user',content:`【议题】\n${q}\n\n【陈词】\n${transcript}\n\n【交锋】\n${cross}\n\n【表决】\n${ballots}`}],{signal,effort,onText:onChairText});
     finishChair(text,true);addLog(`裁决「${S.scores?.v||'—'}」`,'vote');S.done=true;saveHistory(S);
-    setPhase(5,'done');status('闭庭。你可以在旁听席继续质询。');$('#fPin').innerHTML='';$('#gallery').hidden=false;buildPicker();ctl=null;$('#stopBtn')?.remove()}
+    setPhase(5,'done');status('闭庭。你可以在旁听席继续质询。');$('#fPin').innerHTML='';$('#gallery').hidden=false;buildPicker();ctl=null;$('#stopBtn')?.remove();newQuestionBtn()}
   catch(e){if(e.text){finishChair(e.text,false)}$('#eState').textContent=e.code==='cancelled'?'已休庭。':errCopy(e);adjourn(e.code==='cancelled'?'已休庭。':'主席裁决失败：'+errCopy(e),e.code!=='cancelled')}
 }
-function adjourn(msg,err){status(msg,err);ctl=null;$('#stopBtn')?.remove();for(const m of MEMBERS)if(rows[m.id].classList.contains('speaking'))seatState(m.id,'failed');
+function adjourn(msg,err){status(msg,err);ctl=null;$('#stopBtn')?.remove();for(const m of MEMBERS)if(rows[m.id].classList.contains('speaking')){seatState(m.id,'failed');if(buf[m.id]?.text&&!S.texts[m.id]){S.texts[m.id]=stripTags(buf[m.id].text);S.votes[m.id]=parseVote(buf[m.id].text)}}
   if(S&&!S.done){S.done=true;if(Object.keys(S.texts).length)saveHistory(S)}
-  document.documentElement.dataset.act='done';const b=document.createElement('button');b.textContent='重新开庭';b.style.cssText='margin-left:10px;color:var(--gold);text-decoration:underline;text-underline-offset:3px';b.onclick=e=>{e.stopPropagation();unfoldLectern();setPhase(0,'idle')};$('#plaqueSt').appendChild(b)}
+  if(!stacked&&rows[focus]){renderFolio(focus,false);$('#fState').textContent=rows[focus].classList.contains('failed')?'缺席':rows[focus].classList.contains('done')?'完稿':''}
+  $('#eOut').classList.remove('live');$('#fPin').innerHTML='';
+  document.documentElement.dataset.act='done';newQuestionBtn('重新开庭')}
+function newQuestionBtn(label){const st=$('#plaqueSt');if(st.querySelector('.newq'))return;const b=document.createElement('button');b.className='newq';b.textContent=label||'新议题';b.style.cssText='margin-left:10px;color:var(--gold);text-decoration:underline;text-underline-offset:3px';
+  b.onclick=e=>{e.stopPropagation();if(ctl)return;unfoldLectern();setPhase(0,'idle');if(!label){$('#q').value='';$('#qcap').textContent='0 字'}$('#q').focus();window.scrollTo({top:0,behavior:reduced?'auto':'smooth'})};st.appendChild(b)}
+function meetingNo(){const h=loadHistory();const i=S?h.findIndex(x=>x.at===S.at):-1;return i>=0?h.length-i:h.length+1}
 
 // ===================== 续录 · follow-up =====================
 const threads={};
@@ -1253,7 +1269,7 @@ function loadSitting(it){if(ctl)return;S={...it,rebuts:it.rebuts||{},votes:it.vo
   (S.log||[]).forEach(l=>{const li=document.createElement('li');li.innerHTML=`<time>${l.t}</time><span>${esc(l.text)}</span>`;$('#log').appendChild(li)});
   showFolio(MEMBERS.find(m=>S.texts[m.id])?.id||'contrarian',false);renderNotes();drawThreads(false);showTally(S.votes,false);
   if(S.verdict){openEdict(false);finishChair(S.verdict+(S.scores?`\n<<SCORES|${S.scores.v}|${S.scores.risk}|${S.scores.up}|${S.scores.clear}|${S.scores.feas}>>`:''),false)}
-  setPhase(5,'done');status('卷宗 · 已归档的会议');$('#gallery').hidden=!canAsk();buildPicker();window.scrollTo({top:0,behavior:reduced?'auto':'smooth'})}
+  setPhase(5,'done');status('卷宗 · 已归档的会议');$('#gallery').hidden=!canAsk();buildPicker();newQuestionBtn();window.scrollTo({top:0,behavior:reduced?'auto':'smooth'})}
 function canAsk(){return !!(sampleFn||providersReady().length||isDemo())}
 
 // ===================== boot =====================
