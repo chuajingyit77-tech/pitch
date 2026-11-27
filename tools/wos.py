@@ -1040,7 +1040,7 @@ def _resolve(args, prefer=""):
     if not prefer and getattr(args, "section", ""):
         prefer = "project" if args.section in ("进展", "决定", "派工") else "relation" if args.section in ("往来", "概况") else ""
     if not prefer and getattr(args, "pairs", None):
-        keys = {re.split(r"\+?=", p, 1)[0] for p in args.pairs}
+        keys = {re.split(r"\+?=", p, maxsplit=1)[0] for p in args.pairs}
         prefer = "project" if keys & PROJECT_ONLY else "relation" if keys & RELATION_ONLY else ""
     card, err = find_card(args.card, prefer)
     if not card:
