@@ -1532,4 +1532,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:  # output was piped into something that stopped reading; not an error
+        sys.exit(0)
