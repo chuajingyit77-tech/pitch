@@ -580,10 +580,12 @@ def is_public_file(rel, proj_sens):
     if rel in ("想法停车场.md", "建议记录.md", "水准/反馈记录.md"):
         # an empty template says nothing; once it holds a row it is private like the rest
         try:
-            rows = [x for x in (ROOT / rel).read_text(encoding="utf-8").split("\n") if x.startswith("|")]
+            lines = [x for x in (ROOT / rel).read_text(encoding="utf-8").split("\n") if x.strip()]
         except OSError:
             return False
-        return len(rows) <= 2
+        rows = [x for x in lines if x.startswith("|")]
+        other = [x for x in lines if not x.startswith(("|", "#", ">"))]
+        return len(rows) <= 2 and not other
     if parts[0] in ("关系", "碎碎念") and rel.endswith(".md"):
         fm, _, _ = parse_card(ROOT / rel)
         return fm.get("sens") == "公开"
