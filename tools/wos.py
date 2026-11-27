@@ -297,15 +297,23 @@ def fmt_value(k, v):
     return json.dumps(v, ensure_ascii=False)
 
 
-def find_card(query):
-    """Resolve a card by path, folder or file name, name or alias. Returns (card, error text)."""
+def find_card(query, prefer=""):
+    """Resolve a card by path, folder or file name, name or alias. Returns (card, error text).
+    prefer: "project" or "relation" — when a name fits both kinds, the command's intent decides."""
     cards = load_cards()
     q = query.strip().strip("/")
-    exact = [c for c in cards if q in (c.rel, c.slug, c.name)]
+
+    def fits(c):
+        return not prefer or (c.kind == "project") == (prefer == "project")
+
+    def narrow(cands):
+        return [c for c in cands if fits(c)] or cands
+
+    exact = [c for c in cards if q in (c.rel, c.slug, c.name) and fits(c)]
     if len(exact) == 1:
         return exact[0], ""
-    hits = [c for c in cards if q and (q in c.name or q in c.slug or
-                                       any(q in str(a) for a in c.fm.get("aliases", [])))]
+    hits = narrow([c for c in cards if q and (q in c.name or q in c.slug or
+                                             any(q in str(a) for a in c.fm.get("aliases", [])))])
     if len(hits) == 1:
         return hits[0], ""
     if not hits:
@@ -1024,8 +1032,17 @@ def cmd_new(args):
     return 0
 
 
-def _resolve(args):
-    card, err = find_card(args.card)
+RELATION_ONLY = set(RELATION_KEYS) - set(PROJECT_KEYS)
+PROJECT_ONLY = set(PROJECT_KEYS) - set(RELATION_KEYS)
+
+
+def _resolve(args, prefer=""):
+    if not prefer and getattr(args, "section", ""):
+        prefer = "project" if args.section in ("进展", "决定", "派工") else "relation" if args.section in ("往来", "概况") else ""
+    if not prefer and getattr(args, "pairs", None):
+        keys = {re.split(r"\+?=", p, 1)[0] for p in args.pairs}
+        prefer = "project" if keys & PROJECT_ONLY else "relation" if keys & RELATION_ONLY else ""
+    card, err = find_card(args.card, prefer)
     if not card:
         print(err)
         return None
@@ -1138,7 +1155,7 @@ def cmd_log(args):
     elif sec == "决定":
         line = "- %s 决定 %s" % (date or t, re.sub(r"^决定\s*", "", text))
     else:
-        line = "- %s %s%s" % (date or t, "〔%s〕 " % by if by else "", text)
+        line = "- %s %s%s" % (date or t, "〔%s〕 " % by if (by and sec == "进展") else "", text)
     append_entry(card, sec, line)
     changes = {"touched": t}
     if card.kind != "project" and sec == "往来":
@@ -1217,7 +1234,7 @@ HANDOFF = """# 任务书：{task}（给 {ai}）
 def cmd_handoff(args):
     """handoff <card> --to AI --task "..."  — paste-ready brief for another AI + an assignment line."""
     cfg = load_config()
-    card = _resolve(args)
+    card = _resolve(args, "project")
     if not card:
         return 1
     if card.kind != "project":
@@ -1286,7 +1303,10 @@ def check_project_docs(card, cfg):
     for f in ("事实表.md", "底稿.md"):
         if (base / f).exists():
             ledger += (base / f).read_text(encoding="utf-8", errors="replace")
-    ledger = ledger.replace(",", "")
+    ledger_nums = set()
+    for line in ledger.split("\n"):
+        for _, num, _ in NUM.findall(DATE_NOISE.sub(" ", line)):
+            ledger_nums.add(num.replace(",", "").rstrip("."))
     banned = list(cfg.get("external_banned_words", []))
     if (base / "底稿.md").exists():
         banned += [x.lstrip("- ").strip() for x in section_lines(
@@ -1314,7 +1334,7 @@ def check_project_docs(card, cfg):
             if sub == "内部" and any(w in line for w in SOFT):
                 continue
             for val in _claims(line):
-                if val not in ledger and val not in missing:
+                if val.rstrip(".") not in ledger_nums and val not in missing:
                     missing.append(val)
         if missing:
             msg = "%s：这些数字不在事实表和底稿里：%s%s" % (rel, "、".join(missing[:8]), " 等" if len(missing) > 8 else "")
@@ -1325,7 +1345,7 @@ def check_project_docs(card, cfg):
 def cmd_doccheck(args):
     cfg = load_config()
     if args.card:
-        card = _resolve(args)
+        card = _resolve(args, "project")
         if not card:
             return 1
         targets = [card]
