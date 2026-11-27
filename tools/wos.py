@@ -571,10 +571,12 @@ def visibility(cfg=None, use_cache=True, timeout=6):
 def is_public_file(rel, proj_sens):
     """rel: posix path under a private root. True if it may be committed while the repo is public."""
     parts = rel.split("/")
-    if parts[-1] == "README.md" or parts[-1] == ".gitkeep":
-        return True
     if parts[0] == "项目" and len(parts) >= 3:
+        # everything inside a project folder follows the card, placeholders included:
+        # the folder name alone already says what the project is
         return proj_sens.get(parts[1]) == "公开"
+    if parts[-1] in ("README.md", ".gitkeep"):
+        return True
     if parts[0] in ("关系", "碎碎念") and rel.endswith(".md"):
         fm, _, _ = parse_card(ROOT / rel)
         return fm.get("sens") == "公开"
@@ -864,6 +866,7 @@ def cmd_backup(args):
         cmd_build(argparse.Namespace(quiet=True))
     except Exception as e:  # views must never block a backup
         print("留意：视图没能重新生成（%s），不影响备份。" % e)
+    withdrawn = []
     excl = [":(exclude)%s" % r for r in PRIVATE_ROOTS]
     git("add", "-A", "--", ".", *excl, check=True)
     ok, priv = private_files()
@@ -875,6 +878,11 @@ def cmd_backup(args):
     else:
         for f in ok:
             git("add", "--", f, check=True)
+        # self-healing: a private file that is already tracked (card re-marked, or an old gap) leaves the tip
+        _, tracked, _ = git("ls-files", "--", *[r for r in PRIVATE_ROOTS if (ROOT / r).exists()])
+        withdrawn = [f for f in tracked.split("\n") if f.strip() and f not in set(ok)]
+        if withdrawn:
+            git("rm", "--cached", "-q", "--", *withdrawn, check=True)
         blocked = private_pending()
     rc, staged, _ = git("diff", "--cached", "--name-only")
     files = [f for f in staged.split("\n") if f.strip()]
@@ -904,6 +912,9 @@ def cmd_backup(args):
     print("备份完成。")
     print("- 分支：%s，提交 %s%s" % (branch, head[:7], "（%d 个文件）" % len(files) if committed else "（没有新改动，已确认远端是最新的）"))
     print("- 仓库：%s" % vis_text(vis))
+    if withdrawn:
+        print("- 从仓库最新版本里撤下了 %d 个不该公开的文件（文件还在本机；以前的提交记录里仍看得到）：%s%s" % (
+            len(withdrawn), "、".join(withdrawn[:4]), " 等" if len(withdrawn) > 4 else ""))
     if blocked:
         print("- 没有备份的私密文件 %d 个（仓库公开时不提交）：%s%s" % (
             len(blocked), "、".join(blocked[:5]), " 等" if len(blocked) > 5 else ""))

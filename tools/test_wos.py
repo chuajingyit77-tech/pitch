@@ -125,6 +125,8 @@ class WosTests(unittest.TestCase):
         self.r.write("项目/open/底稿.md", "# 底稿\n")
         self.r.write("项目/secret/卡片.md", project("客户项目", sens="内部", extra="next: \"x\"\nnext_due: 2026-12-20\n"))
         self.r.write("项目/secret/内部/作战手册.md", "> 内部用，不外发\n")
+        self.r.write("项目/secret/对外/.gitkeep", "")   # even an empty placeholder would publish the folder name
+        self.assertEqual(self.r.wos("new", "project", "--name", "机密案子 6000 台")[0], 0)
         self.r.write("关系/人/lin.md", "---\nname: \"林经理\"\nkind: 客户\nsens: 内部\ncreated: 2026-11-01\n---\n")
         self.r.write("碎碎念/2026-12/a.md", "---\ntitle: \"x\"\nsens: 内部\n---\n\n原话\n")
         self.r.write("想法停车场.md", "# 想法\n- 一个想法\n")
@@ -137,13 +139,27 @@ class WosTests(unittest.TestCase):
         self.assertIn("项目/open/底稿.md", files)
         for f in ("项目/secret/卡片.md", "项目/secret/内部/作战手册.md", "关系/人/lin.md", "碎碎念/2026-12/a.md", "想法停车场.md"):
             self.assertNotIn(f, files, "private file leaked into a public repo: " + f)
-        self.assertIn("没有备份的私密文件 5 个", out)
+        self.assertFalse([f for f in files if f.startswith("项目/secret/") or "机密案子" in f], "a private project's folder name leaked")
+        self.assertIn("没有备份的私密文件 9 个", out)
         self.assertIn("还没进 main", out)
         self.assertFalse(any(f.startswith("视图/") or f.startswith(".wos/") for f in files))
         # the push really reached origin
         rc, remote = sh(self.r.root, "git", "ls-remote", "origin", "refs/heads/claude/test-session")
         rc, head = sh(self.r.root, "git", "rev-parse", "HEAD")
         self.assertEqual(remote.split()[0], head.strip())
+
+    def test_private_file_already_in_a_public_repo_is_withdrawn_from_the_tip(self):
+        self.r = Repo("public")
+        self.r.write("项目/open/卡片.md", project("先公开后改内部", sens="公开", extra="next: \"x\"\nnext_due: 2026-12-20\n"))
+        self.assertEqual(self.r.wos("backup")[0], 0)
+        self.assertIn("项目/open/卡片.md", self.r.committed())
+        self.assertEqual(self.r.wos("set", "先公开后改内部", "sens=内部")[0], 0)
+        rc, out = self.r.wos("backup")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("项目/open/卡片.md", self.r.committed())
+        self.assertTrue((self.r.root / "项目/open/卡片.md").exists(), "the file must stay on disk")
+        self.assertIn("撤下了 1 个不该公开的文件", out)
+        self.assertIn("没有备份的私密文件 1 个", out)
 
     def test_backup_in_private_repo_commits_everything_then_reports_clean(self):
         self.r = Repo("private")
